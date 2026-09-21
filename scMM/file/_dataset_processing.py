@@ -32,6 +32,7 @@ class DatasetProcessingMixin:
         peak_snr: float = 3.0,
         max_zero_frac: float = 0.9,
         debug_hook: DebugHook | None = None,
+        feature_block_size: int | None = 256,
         **kwargs,
     ) -> Self:
         if self.ref_mz is None or not np.isfinite(self.ref_mz) or self.ref_mz <= 0:
@@ -44,6 +45,8 @@ class DatasetProcessingMixin:
             cell_snr=cell_snr,
             peak_snr=peak_snr,
             max_zero_frac=max_zero_frac,
+            feature_block_size=feature_block_size,
+            return_full_baseline=debug_hook is not None,
             **kwargs,
         )
         if debug_hook is not None:

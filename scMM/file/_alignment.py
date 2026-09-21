@@ -16,6 +16,7 @@ def align_frame(
     ms_level: int = 1,
     aggregate: str = "max",
     dtype=np.float64,
+    out=None,
     **kwargs,
 ):
     """Align each selected scan to target m/z values using nearest ppm matches."""
@@ -24,10 +25,20 @@ def align_frame(
     if targets.ndim != 1 or targets.size == 0:
         raise ValueError("mz_list must be a non-empty 1D array-like.")
     sorted_targets, restore_order = _sorted_targets(targets)
+    original_columns = np.argsort(restore_order)
     spectra, frame_ids, retention_times = _collect_spectra(exp, ms_level)
     if not spectra:
         raise ValueError("No spectra found.")
-    values = np.zeros((len(spectra), len(targets)), dtype=np.float32)
+    shape = (len(spectra), len(targets))
+    if out is None:
+        values = np.zeros(shape, dtype=np.float32)
+    else:
+        if not isinstance(out, np.ndarray) or out.dtype != np.float32:
+            raise TypeError("out must be a float32 numpy array")
+        if out.shape != shape or not out.flags.writeable:
+            raise ValueError(f"out must be writable with shape {shape}")
+        values = out
+        values.fill(0)
     peak_options = _peak_options(kwargs)
     for row, spectrum in enumerate(spectra):
         mz, intensity = extract_peaks(spectrum, dtype=dtype, **peak_options)
@@ -40,8 +51,10 @@ def align_frame(
             intensity,
             ppm,
         )
-        _aggregate_target_intensity(values[row], target_indices, matched_intensity, aggregate)
-    frame = pd.DataFrame(values[:, restore_order], index=frame_ids, columns=targets)
+        _aggregate_target_intensity(
+            values[row], original_columns[target_indices], matched_intensity, aggregate
+        )
+    frame = pd.DataFrame(values, index=frame_ids, columns=targets, copy=False)
     frame.index.name = "frame"
     metadata = pd.DataFrame({"rt": retention_times}, index=frame_ids)
     return frame, metadata

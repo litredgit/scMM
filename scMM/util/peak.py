@@ -181,6 +181,8 @@ def find_cell_peaks(
     baseline_stat="median",
     max_zero_frac: float = 0.9,
     n_jobs: int = -1,
+    feature_block_size: int | None = None,
+    return_full_baseline: bool = True,
     **kwargs,
 ):
     """Identify cell-event windows and reduce each to one feature vector."""
@@ -192,6 +194,23 @@ def find_cell_peaks(
         peak_snr,
         max_zero_frac,
     )
+    if feature_block_size is not None:
+        if feature_block_size < 1:
+            raise ValueError("feature_block_size must be positive")
+        return _find_cells_blockwise(
+            data,
+            ref_mz,
+            baseline_filter,
+            baseline_filter_size,
+            cell_snr,
+            peak_snr,
+            dtype,
+            baseline_stat,
+            max_zero_frac,
+            feature_block_size,
+            return_full_baseline,
+            kwargs,
+        )
     inputs, common, n_cells = _detect_cell_windows(
         data,
         ref_mz,
@@ -220,6 +239,65 @@ def find_cell_peaks(
         "window_ranges": [peak.window_range for peak in peaks],
         "zero_frac": zero_fraction,
         "kept_columns": kept_columns,
+    }
+
+
+def _find_cells_blockwise(
+    data,
+    ref_mz,
+    baseline_filter,
+    baseline_filter_size,
+    cell_snr,
+    peak_snr,
+    dtype,
+    baseline_stat,
+    max_zero_frac,
+    block_size,
+    return_full_baseline,
+    filter_kwargs,
+):
+    """Bound temporary frame matrices while retaining legacy peak semantics.
+
+    As with the original implementation, baseline filters must operate
+    independently along each feature's frame axis.
+    """
+    reference_index = int(np.abs(data.columns.astype(float) - ref_mz).argmin())
+    reference = data.iloc[:, [reference_index]].to_numpy(dtype=dtype)
+    reference_baseline = _filter(
+        reference, size=baseline_filter_size, filter=baseline_filter, **filter_kwargs
+    )
+    mask = reference[:, 0] > cell_snr * reference_baseline[:, 0]
+    labels, n_cells = label(mask.astype(np.int8))
+    full_baseline = np.empty(data.shape, dtype=dtype) if return_full_baseline else None
+    common = _common_cell_result(data, mask, labels, full_baseline, reference_index)
+    matrix = np.empty((n_cells, data.shape[1]), dtype=dtype)
+    peaks = []
+    for start in range(0, data.shape[1], block_size):
+        stop = min(start + block_size, data.shape[1])
+        values = data.iloc[:, start:stop].to_numpy(dtype=dtype)
+        baseline = _filter(
+            values, size=baseline_filter_size, filter=baseline_filter, **filter_kwargs
+        )
+        if full_baseline is not None:
+            full_baseline[:, start:stop] = baseline
+        inputs = _CellWindowInputs(values, baseline, reference[:, 0], labels)
+        peaks = [
+            _process_cell_window(i, inputs, baseline_stat, peak_snr) for i in range(1, n_cells + 1)
+        ]
+        for i, peak in enumerate(peaks):
+            matrix[i, start:stop] = peak.intensities
+    if not n_cells:
+        return _empty_cell_result(data, common)
+    frame = pd.DataFrame(matrix, columns=data.columns)
+    zero_fraction = (frame == 0).mean(axis=0)
+    keep = zero_fraction <= max_zero_frac
+    return {
+        **common,
+        "cell_df": frame.loc[:, keep],
+        "peak_frames": np.asarray([p.peak_frame for p in peaks], dtype=int),
+        "window_ranges": [p.window_range for p in peaks],
+        "zero_frac": zero_fraction,
+        "kept_columns": keep,
     }
 
 

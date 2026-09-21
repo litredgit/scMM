@@ -41,6 +41,20 @@ def make_experiment() -> oms.MSExperiment:
     return experiment
 
 
+@pytest.mark.parametrize("aggregate", ["max", "sum"])
+def test_alignment_writes_original_order_into_reused_buffer(aggregate):
+    output = np.full((2, 3), -1, dtype=np.float32)
+    frame, _ = align_frame(
+        make_experiment(), [200.0, 100.0, 150.0], out=output, aggregate=aggregate, distance=1
+    )
+    np.testing.assert_array_equal(frame.values, [[0.0, 10.0, 0.0], [0.0, 20.0, 0.0]])
+    assert np.shares_memory(frame.values, output)
+    with pytest.raises(ValueError, match="shape"):
+        align_frame(make_experiment(), [100.0], out=output)
+    with pytest.raises(TypeError, match="float32"):
+        align_frame(make_experiment(), [100.0], out=np.zeros((2, 1)))
+
+
 def test_prepare_peaks_sorts_filters_and_combines_duplicates() -> None:
     mz, intensity = _prepare_sorted_unique_peaks(
         np.array([200.0, np.nan, 100.0, 200.0]),
