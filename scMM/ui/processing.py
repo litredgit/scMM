@@ -108,6 +108,27 @@ class GuidedProcessingPanel:
             sizing_mode="stretch_width",
         )
         self.overwrite = pn.widgets.Checkbox(label="允许写入已有同名结果", value=False)
+        self.save_button = pn.widgets.Button(
+            label="保存到所选目录",
+            icon="device-floppy",
+            color="success",
+            width=170,
+            height=38,
+            sizing_mode="fixed",
+        )
+        self.confirm_discard = pn.widgets.Checkbox(label="确认删除未保存的临时结果", value=False)
+        self.discard_button = pn.widgets.Button(
+            label="放弃并删除临时结果",
+            icon="trash",
+            color="danger",
+            width=190,
+            height=38,
+            sizing_mode="fixed",
+            disabled=True,
+        )
+        self.save_status = pn.pane.Markdown(
+            "处理完成并查看结果后，可决定是否永久保存。", css_classes=["scmm-card"]
+        )
         self.preflight_button = pn.widgets.Button(
             label="检查参数与存储",
             icon="checklist",
@@ -229,6 +250,37 @@ class GuidedProcessingPanel:
             visible=False,
             sizing_mode="stretch_width",
         )
+        self.save_section = pn.Column(
+            "### 5. 是否保存结果",
+            "结果当前位于任务临时区。可在原始数据相同的服务器挂载范围内选择永久保存位置，或明确放弃。",
+            self.output_select,
+            self.output_selector_area,
+            pn.FlexBox(
+                self.use_current_directory,
+                self.output_directory,
+                gap="10px",
+                align_items="center",
+                sizing_mode="stretch_width",
+            ),
+            pn.FlexBox(
+                self.result_name,
+                self.overwrite,
+                self.save_button,
+                gap="10px",
+                align_items="flex-end",
+                sizing_mode="stretch_width",
+            ),
+            pn.FlexBox(
+                self.confirm_discard,
+                self.discard_button,
+                gap="10px",
+                align_items="center",
+                sizing_mode="stretch_width",
+            ),
+            self.save_status,
+            visible=False,
+            sizing_mode="stretch_width",
+        )
         self._quality_task_id: str | None = None
 
         self._wire_callbacks()
@@ -246,13 +298,6 @@ class GuidedProcessingPanel:
             self.cell_snr,
             self.peak_snr,
             self.n_jobs,
-            gap="10px",
-            align_items="flex-end",
-            sizing_mode="stretch_width",
-        )
-        destinations = pn.FlexBox(
-            self.result_name,
-            self.overwrite,
             gap="10px",
             align_items="flex-end",
             sizing_mode="stretch_width",
@@ -280,18 +325,6 @@ class GuidedProcessingPanel:
             primary,
             self.advanced_toggle,
             self.advanced,
-            "#### 结果目录",
-            "可在原始数据相同的服务器挂载范围内浏览目录；未另选时使用原文件同目录下的 `results/`。",
-            self.output_select,
-            self.output_selector_area,
-            pn.FlexBox(
-                self.use_current_directory,
-                self.output_directory,
-                gap="10px",
-                align_items="center",
-                sizing_mode="stretch_width",
-            ),
-            destinations,
             "### 2. 提交前检查",
             self.preflight_text,
             actions,
@@ -301,24 +334,26 @@ class GuidedProcessingPanel:
             self.status_text,
             self.log_text,
             self.quality_section,
+            self.save_section,
             sizing_mode="stretch_both",
         )
 
-    def set_input(self, storage_label: str | None, input_path: str | None) -> None:
+    def set_input(self, storage_label: str | None, input_path: str | Path | None) -> None:
         """Use a raw-file selection from the preview workflow."""
         self._storage_label = storage_label
-        self._input_path = input_path
+        self._input_path = None if input_path is None else str(input_path)
         if storage_label is None or input_path is None:
             self.input_text.object = "尚未选择输入文件。请先在左侧选择并预览原始数据。"
         else:
-            source = self.storage.resolve_raw_file(storage_label, input_path)
+            source = self.storage.resolve_raw_file(storage_label, self._input_path)
             if self.output_select.value != storage_label:
                 self.output_select.value = storage_label
             self._replace_output_selector(source.parent)
             self._set_output_path(source.parent / "results")
             self.result_name.value = source.stem
             self.input_text.object = (
-                f"**输入存储：** {escape(storage_label)}  \n**原始文件：** `{escape(input_path)}`"
+                f"**输入存储：** {escape(storage_label)}  \n"
+                f"**原始文件：** `{escape(self._input_path)}`"
             )
         self._invalidate_preflight()
 
@@ -351,17 +386,21 @@ class GuidedProcessingPanel:
             self._load_quality(task)
         elif task.status != "succeeded" and self._quality_task_id != task.task_id:
             self.quality_section.visible = False
+            self.save_section.visible = False
 
     def _wire_callbacks(self) -> None:
         self.preset.param.watch(self._apply_preset, "value")
         self.output_select.param.watch(self._on_output_root_change, "value")
         self.use_current_directory.on_click(self._use_current_output_directory)
+        self.save_button.on_click(self._save_result)
+        self.confirm_discard.param.watch(
+            lambda event: setattr(self.discard_button, "disabled", not event.new), "value"
+        )
+        self.discard_button.on_click(self._discard_result)
         self.advanced_toggle.param.watch(
             lambda event: setattr(self.advanced, "visible", event.new), "value"
         )
         parameters = (
-            self.output_select,
-            self.result_name,
             self.ref_mz,
             self.ppm_tol,
             self.resolution,
@@ -372,7 +411,6 @@ class GuidedProcessingPanel:
             self.points_per_fwhm,
             self.baseline_size,
             self.max_zero_frac,
-            self.overwrite,
         )
         for widget in parameters:
             widget.param.watch(self._invalidate_preflight, "value")
@@ -424,7 +462,6 @@ class GuidedProcessingPanel:
             f"**已选结果目录：** `{escape(self.output_select.value)}/{escape(display)}`  "
             f"\n服务器路径：`{escape(str(resolved))}`"
         )
-        self._invalidate_preflight()
 
     def _apply_preset(self, event) -> None:
         params = ProcessingParameters.from_preset(event.new, max(self.ref_mz.value, 1.0))
@@ -451,16 +488,13 @@ class GuidedProcessingPanel:
     def _build_request(self) -> ProcessingRequest:
         if self._storage_label is None or self._input_path is None:
             raise ValueError("请先选择一个原始数据文件")
-        if self._output_path is None:
-            raise ValueError("请选择结果目录")
-        result_name = self.result_name.value.strip() or Path(self._input_path).stem
+        result_name = Path(self._input_path).stem
         return ProcessingRequest(
             storage_label=self._storage_label,
             input_path=self._input_path,
-            output_label=self.output_select.value,
-            output_path=str(self._output_path),
+            output_label=self.outputs.roots[0].label,
             result_name=result_name,
-            overwrite=self.overwrite.value,
+            defer_save=True,
             parameters=self._parameters(),
         )
 
@@ -482,7 +516,8 @@ class GuidedProcessingPanel:
             "✅ **预检通过**  \n"
             f"输入大小：{_human_size(plan.input_size_bytes)}　"
             f"输出可用：{_human_size(plan.free_bytes)}  \n"
-            f"结果目录：`{escape(str(plan.result_path))}`{warnings}"
+            "处理结果将先保存在任务临时区，完成网页查看后再决定是否永久保存。"
+            f"{warnings}"
         )
         self.confirm.disabled = False
         self.confirm.value = False
@@ -543,6 +578,7 @@ class GuidedProcessingPanel:
         except Exception as exc:
             self.quality_section.visible = True
             self.quality_summary.object = f"质量检查文件暂不可用：{escape(str(exc))}"
+            self._configure_save(task)
             return
         summary = report.summary
         warning_text = ""
@@ -572,6 +608,74 @@ class GuidedProcessingPanel:
             download.disabled = not path.is_file()
         self._quality_task_id = task.task_id
         self.quality_section.visible = True
+        self._configure_save(task)
+
+    def _configure_save(self, task) -> None:
+        self.save_section.visible = True
+        if task.exported_path:
+            self.save_status.object = f"✅ **已永久保存：** `{escape(task.exported_path)}`"
+            self.save_button.disabled = True
+            self.confirm_discard.disabled = True
+            self.discard_button.disabled = True
+            return
+        if task.discarded_at:
+            self.save_status.object = "临时结果已按要求删除，不能再保存或下载。"
+            self.save_button.disabled = True
+            self.confirm_discard.disabled = True
+            self.discard_button.disabled = True
+            for download in self.artifact_downloads.values():
+                download.disabled = True
+                download.file = None
+            return
+        source = Path(task.input_path).resolve(strict=True)
+        for root in self.storage.roots:
+            if source.is_relative_to(root.path):
+                if self.output_select.value != root.label:
+                    self.output_select.value = root.label
+                self._replace_output_selector(source.parent)
+                self._set_output_path(source.parent / "results")
+                break
+        self.result_name.value = source.stem
+        self.save_button.disabled = False
+        self.confirm_discard.disabled = False
+        self.discard_button.disabled = not self.confirm_discard.value
+        self.save_status.object = "结果尚未永久保存；当前临时结果仍可在本页面查看和下载。"
+
+    def _save_result(self, _event=None) -> None:
+        if self._active_task_id is None or self._output_path is None:
+            return
+        result_name = self.result_name.value.strip() or Path(self._input_path or "result").stem
+        self.save_button.loading = True
+        try:
+            task = self.tasks.save_result(
+                self._active_task_id,
+                self.storage,
+                self.output_select.value,
+                self._output_path,
+                result_name,
+                overwrite=self.overwrite.value,
+            )
+        except Exception as exc:
+            self.save_status.object = f"❌ **保存失败：** {escape(str(exc))}"
+            return
+        finally:
+            self.save_button.loading = False
+        self._quality_task_id = None
+        self._active_task_id = task.task_id
+        self.poll()
+
+    def _discard_result(self, _event=None) -> None:
+        if self._active_task_id is None or not self.confirm_discard.value:
+            return
+        self.discard_button.loading = True
+        try:
+            task = self.tasks.discard_result(self._active_task_id)
+        except Exception as exc:
+            self.save_status.object = f"❌ **删除失败：** {escape(str(exc))}"
+            return
+        finally:
+            self.discard_button.loading = False
+        self._configure_save(task)
 
     def _safe_result_path(self, value: str) -> Path:
         result = Path(value).resolve(strict=True)
@@ -579,7 +683,10 @@ class GuidedProcessingPanel:
             raise FileNotFoundError(f"不是完整的 scMM 结果目录：{result}")
         in_task_output = any(result.parent == root.path for root in self.outputs.roots)
         in_storage = any(result.parent.is_relative_to(root.path) for root in self.storage.roots)
-        if not in_task_output and not in_storage:
+        in_staging = (
+            result.parent.name == "result" and result.parent.parent.parent == self.tasks.state_root
+        )
+        if not in_task_output and not in_storage and not in_staging:
             raise PermissionError("任务结果不在已配置的服务器目录范围内")
         return result
 

@@ -149,6 +149,7 @@ class ProcessingRequest:
     output_path: str | None = None
     result_name: str | None = None
     overwrite: bool = False
+    defer_save: bool = False
 
 
 @dataclass(frozen=True)
@@ -175,7 +176,10 @@ class ProcessingPlanner:
         source = self.storage.resolve_raw_file(request.storage_label, request.input_path)
         validate_ms_file(source)
         result_name = request.result_name or source.stem
-        if request.output_path is None:
+        if request.defer_save:
+            output_root = self.outputs.root(request.output_label).path
+            target = _resolve_target(output_root, result_name, request.output_label)
+        elif request.output_path is None:
             output_root = self.outputs.root(request.output_label).path
             target = self.outputs.resolve_target(request.output_label, result_name)
         else:
@@ -183,14 +187,14 @@ class ProcessingPlanner:
                 request.output_label, request.output_path
             )
             target = _resolve_target(output_root, result_name, request.output_label)
-        if target.exists() and not request.overwrite:
+        if not request.defer_save and target.exists() and not request.overwrite:
             raise FileExistsError(f"Result already exists: {target}")
 
         disk_usage_path = output_root if output_root.exists() else output_root.parent
         free_bytes = shutil.disk_usage(disk_usage_path).free
         input_size = source.stat().st_size
         warnings: list[str] = []
-        if request.overwrite and target.exists():
+        if not request.defer_save and request.overwrite and target.exists():
             warnings.append("Existing standard result files will be overwritten")
         if free_bytes < max(input_size * 3, 1_000_000_000):
             warnings.append("Output storage has less than the recommended free space")

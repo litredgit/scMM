@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import shutil
 import subprocess
 import sys
 import uuid
@@ -14,7 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from .processing import ProcessingPlan, ProcessingPlanner, ProcessingRequest
+from .processing import ProcessingPlan, ProcessingPlanner, ProcessingRequest, _resolve_target
+from .storage import StorageCatalog
 
 TaskStatus = Literal["queued", "running", "succeeded", "failed"]
 _TERMINAL_STATUSES = frozenset({"succeeded", "failed"})
@@ -42,6 +44,8 @@ class ProcessingTask:
     started_at: str | None = None
     finished_at: str | None = None
     error: str | None = None
+    exported_path: str | None = None
+    discarded_at: str | None = None
 
     @classmethod
     def from_json(cls, path: str | Path):
@@ -74,8 +78,9 @@ class ProcessingTaskManager:
             active = self.active()
             if active is not None:
                 raise TaskBusyError(f"Task {active.task_id} is still {active.status}")
-            plan.output_root.mkdir(exist_ok=True)
-            plan = self.planner.preflight(request)
+            if not request.defer_save:
+                plan.output_root.mkdir(exist_ok=True)
+                plan = self.planner.preflight(request)
             task = self._create_task(request, plan)
             gate_path = Path(task.state_path).with_name("start.ready")
             try:
@@ -172,19 +177,79 @@ class ProcessingTaskManager:
             handle.seek(max(0, size - max_bytes))
             return handle.read().decode("utf-8", errors="replace")
 
+    def save_result(
+        self,
+        task_id: str,
+        storage: StorageCatalog,
+        output_label: str,
+        output_path: str | Path,
+        result_name: str,
+        *,
+        overwrite: bool = False,
+    ) -> ProcessingTask:
+        """Move a completed staged result into a validated server directory."""
+        task = self.get(task_id)
+        source = self._staged_result(task)
+        output_root = storage.resolve_output_directory(output_label, output_path)
+        output_root.mkdir(exist_ok=True)
+        output_root = storage.resolve_output_directory(output_label, output_root)
+        target = _resolve_target(output_root, result_name, output_label)
+        if target.exists() and not overwrite:
+            raise FileExistsError(f"Result already exists: {target}")
+        if target.exists():
+            shutil.copytree(source, target, dirs_exist_ok=True)
+            shutil.rmtree(source)
+        else:
+            shutil.move(str(source), str(target))
+        _update_manifest_result_path(target)
+        return update_task(
+            task.state_path,
+            result_path=str(target.resolve(strict=True)),
+            exported_path=str(target.resolve(strict=True)),
+        )
+
+    def discard_result(self, task_id: str) -> ProcessingTask:
+        """Delete a completed staged result after explicit user confirmation."""
+        task = self.get(task_id)
+        source = self._staged_result(task)
+        shutil.rmtree(source)
+        return update_task(task.state_path, discarded_at=utc_now())
+
+    @staticmethod
+    def _staged_result(task: ProcessingTask) -> Path:
+        if task.status != "succeeded":
+            raise RuntimeError("Only a completed task result can be saved or discarded")
+        if task.exported_path is not None:
+            raise RuntimeError(f"Result has already been saved to {task.exported_path}")
+        if task.discarded_at is not None:
+            raise RuntimeError("Temporary result has already been discarded")
+        task_dir = Path(task.state_path).resolve(strict=True).parent
+        staging_root = task_dir / "result"
+        source = Path(task.result_path).resolve(strict=True)
+        if source.parent != staging_root:
+            raise PermissionError("Task result is not in its managed staging directory")
+        return source
+
     def _create_task(self, request: ProcessingRequest, plan: ProcessingPlan) -> ProcessingTask:
         task_id = uuid.uuid4().hex
         task_dir = self.state_root / task_id
         task_dir.mkdir()
+        if request.defer_save:
+            output_root = task_dir / "result"
+            output_root.mkdir()
+            result_path = output_root / plan.result_path.name
+        else:
+            output_root = plan.output_root
+            result_path = plan.result_path
         request_path = task_dir / "request.json"
         state_path = task_dir / "state.json"
         log_path = task_dir / "worker.log"
         payload = {
             "task_id": task_id,
             "input_path": str(plan.input_path),
-            "output_root": str(plan.output_root),
-            "result_path": str(plan.result_path),
-            "result_name": plan.result_path.name,
+            "output_root": str(output_root),
+            "result_path": str(result_path),
+            "result_name": result_path.name,
             "overwrite": request.overwrite,
             "parameters": asdict(request.parameters),
             "warnings": list(plan.warnings),
@@ -200,7 +265,7 @@ class ProcessingTaskManager:
             state_path=str(state_path),
             log_path=str(log_path),
             input_path=str(plan.input_path),
-            result_path=str(plan.result_path),
+            result_path=str(result_path),
         )
         task.write()
         return task
@@ -227,6 +292,17 @@ def update_task(path: str | Path, **updates: Any) -> ProcessingTask:
     updated = replace(task, updated_at=utc_now(), **updates)
     updated.write()
     return updated
+
+
+def _update_manifest_result_path(result_path: Path) -> None:
+    manifest_path = result_path / "scmm-manifest.json"
+    if not manifest_path.is_file():
+        return
+    with manifest_path.open(encoding="utf-8") as handle:
+        manifest = json.load(handle)
+    manifest["result_path"] = str(result_path.resolve(strict=True))
+    manifest["saved_at"] = utc_now()
+    _write_json_atomic(manifest_path, manifest)
 
 
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:

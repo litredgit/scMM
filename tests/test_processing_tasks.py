@@ -78,6 +78,45 @@ def test_task_manager_creates_selected_output_directory_on_submit(tmp_path: Path
     assert json.loads(Path(task.request_path).read_text())["output_root"] == str(selected)
 
 
+def test_task_manager_stages_then_saves_deferred_result(tmp_path: Path) -> None:
+    manager, request, _ = _manager(tmp_path)
+    request = ProcessingRequest(**{**request.__dict__, "defer_save": True})
+    task = manager._create_task(request, manager.planner.preflight(request))
+    staged = Path(task.result_path)
+    staged.mkdir()
+    (staged / ".meta").write_text("{}", encoding="utf-8")
+    (staged / "scmm-manifest.json").write_text(
+        json.dumps({"result_path": str(staged)}), encoding="utf-8"
+    )
+    update_task(task.state_path, status="succeeded")
+    destination = tmp_path / "raw" / "results"
+    storage = manager.planner.storage
+
+    saved = manager.save_result(task.task_id, storage, "Raw", destination, "renamed")
+
+    assert saved.exported_path == str(destination / "renamed")
+    assert saved.result_path == str(destination / "renamed")
+    assert not staged.exists()
+    manifest = json.loads((destination / "renamed" / "scmm-manifest.json").read_text())
+    assert manifest["result_path"] == str(destination / "renamed")
+    assert "saved_at" in manifest
+
+
+def test_task_manager_discards_deferred_result(tmp_path: Path) -> None:
+    manager, request, _ = _manager(tmp_path)
+    request = ProcessingRequest(**{**request.__dict__, "defer_save": True})
+    task = manager._create_task(request, manager.planner.preflight(request))
+    staged = Path(task.result_path)
+    staged.mkdir()
+    (staged / ".meta").write_text("{}", encoding="utf-8")
+    update_task(task.state_path, status="succeeded")
+
+    discarded = manager.discard_result(task.task_id)
+
+    assert discarded.discarded_at is not None
+    assert not staged.exists()
+
+
 def test_task_manager_blocks_a_second_active_task(tmp_path: Path) -> None:
     manager, request, _ = _manager(tmp_path)
     with (

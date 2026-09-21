@@ -151,6 +151,15 @@ def test_processing_panel_rejects_result_outside_output_root(tmp_path: Path) -> 
         panel._safe_result_path(str(outside))
 
 
+def test_processing_panel_defers_output_selection_until_after_processing(tmp_path: Path) -> None:
+    panel = _panel(tmp_path)
+    request = panel._build_request()
+
+    assert request.defer_save is True
+    assert request.output_path is None
+    assert panel.save_section.visible is False
+
+
 def test_processing_panel_selects_another_server_output_directory(tmp_path: Path) -> None:
     panel = _panel(tmp_path)
     archive = tmp_path / "raw" / "archive"
@@ -161,4 +170,22 @@ def test_processing_panel_selects_another_server_output_directory(tmp_path: Path
 
     assert panel._output_path == archive
     assert str(archive) in panel.output_directory.object
-    assert panel._build_request().output_path == str(archive)
+
+
+def test_processing_panel_configures_save_choice_after_success(tmp_path: Path) -> None:
+    panel = _panel(tmp_path)
+    task = Mock(
+        task_id="c" * 32,
+        status="succeeded",
+        input_path=str(tmp_path / "raw" / "sample.mzML"),
+        exported_path=None,
+        discarded_at=None,
+    )
+
+    panel._configure_save(task)
+
+    assert panel.save_section.visible is True
+    assert panel._output_path == tmp_path / "raw" / "results"
+    assert panel.result_name.value == "sample"
+    assert panel.save_button.disabled is False
+    assert "尚未永久保存" in panel.save_status.object
