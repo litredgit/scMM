@@ -20,6 +20,7 @@ from scMM.application import (
 )
 
 _PLOT_CONFIG = {"displaylogo": False, "responsive": True, "scrollZoom": True}
+_DIRECTORY_ONLY_PATTERN = ".__scmm_directory_selector_no_files__"
 
 _PRESETS = {
     "均衡（推荐起点）": "balanced",
@@ -138,7 +139,7 @@ class GuidedProcessingPanel:
             sizing_mode="fixed",
         )
         self.confirm = pn.widgets.Checkbox(
-            label="我已核对参考离子、参数和输出位置",
+            label="我已核对参考离子和处理参数",
             value=False,
             disabled=True,
         )
@@ -247,12 +248,17 @@ class GuidedProcessingPanel:
                 gap="8px",
                 sizing_mode="stretch_width",
             ),
+            pn.pane.Markdown(
+                "单文件会下载到当前浏览器的默认下载目录，并自动加上结果名称前缀；"
+                "如需在服务器上保留完整结果，请使用下方保存功能。",
+                css_classes=["scmm-hint"],
+            ),
             visible=False,
             sizing_mode="stretch_width",
         )
         self.save_section = pn.Column(
             "### 5. 是否保存结果",
-            "结果当前位于任务临时区。可在原始数据相同的服务器挂载范围内选择永久保存位置，或明确放弃。",
+            "结果当前位于任务临时区。请选择一个服务器文件夹；完整结果（包括质量 CSV/JSON）会保存到该文件夹下的结果名称子目录中。也可明确放弃。",
             self.output_select,
             self.output_selector_area,
             pn.FlexBox(
@@ -321,7 +327,7 @@ class GuidedProcessingPanel:
             "## ③ 处理与结果",
             "按顺序完成参数设置、预检、明确确认和后台提交。关闭页面不会中止已提交任务。",
             self.input_text,
-            "### 1. 参数与输出",
+            "### 1. 处理参数",
             primary,
             self.advanced_toggle,
             self.advanced,
@@ -427,7 +433,7 @@ class GuidedProcessingPanel:
         selector = pn.widgets.FileSelector(
             directory=str(directory),
             root_directory=str(root.path),
-            file_pattern="*.mz*",
+            file_pattern=_DIRECTORY_ONLY_PATTERN,
             only_files=False,
             show_hidden=False,
             size=8,
@@ -613,7 +619,10 @@ class GuidedProcessingPanel:
     def _configure_save(self, task) -> None:
         self.save_section.visible = True
         if task.exported_path:
-            self.save_status.object = f"✅ **已永久保存：** `{escape(task.exported_path)}`"
+            self.save_status.object = (
+                f"✅ **完整结果已永久保存：** `{escape(task.exported_path)}`  \n"
+                "质量 CSV、嵌入坐标和运行清单均位于该结果目录内。"
+            )
             self.save_button.disabled = True
             self.confirm_discard.disabled = True
             self.discard_button.disabled = True

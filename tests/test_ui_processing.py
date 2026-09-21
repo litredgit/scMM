@@ -93,6 +93,7 @@ def test_processing_panel_uses_compact_controls_and_responsive_groups(tmp_path: 
     assert panel._output_selector is not None
     assert panel._output_selector.root_directory == str(tmp_path / "raw")
     assert panel._output_selector.only_files is False
+    assert panel._output_selector.file_pattern == ".__scmm_directory_selector_no_files__"
     assert panel.ref_mz.width == 150
     assert panel.log_text.sizing_mode == "stretch_width"
     assert any(type(item).__name__ == "FlexBox" for item in layout)
@@ -138,7 +139,24 @@ def test_processing_panel_loads_quality_and_safe_result_downloads(tmp_path: Path
     assert panel.quality_section.visible is True
     assert "细胞事件" in panel.quality_summary.object
     assert panel.artifact_downloads["data.csv"].disabled is False
+    assert panel.artifact_downloads["data.csv"].filename == "sample_data.csv"
+    assert panel.artifact_downloads["cell-quality.csv"].filename == "sample_cell-quality.csv"
     assert panel.artifact_downloads["feature_meta.csv"].disabled is True
+
+
+def test_output_selector_lists_directories_but_not_files(tmp_path: Path) -> None:
+    panel = _panel(tmp_path)
+    folder = tmp_path / "raw" / "archive"
+    folder.mkdir()
+    unrelated = tmp_path / "raw" / "visible.mzML"
+    unrelated.write_text("not used", encoding="utf-8")
+    panel._replace_output_selector(tmp_path / "raw")
+    assert panel._output_selector is not None
+
+    options = set(panel._output_selector._selector.options.values())
+
+    assert str(folder) in options
+    assert str(unrelated) not in options
 
 
 def test_processing_panel_rejects_result_outside_output_root(tmp_path: Path) -> None:
