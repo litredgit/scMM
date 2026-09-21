@@ -70,6 +70,22 @@ def test_storage_catalog_validates_root_labels_and_file_types(tmp_path) -> None:
         catalog.resolve_raw_file("Raw", text_file)
 
 
+def test_storage_catalog_resolves_safe_output_directories(tmp_path) -> None:
+    storage = tmp_path / "storage"
+    outside = tmp_path / "outside"
+    storage.mkdir()
+    outside.mkdir()
+    catalog = StorageCatalog([StorageRoot("Raw", storage)])
+
+    assert catalog.resolve_output_directory("Raw", "results") == storage / "results"
+    with pytest.raises(PermissionError, match="outside storage root"):
+        catalog.resolve_output_directory("Raw", outside)
+
+    (storage / "escape").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(PermissionError, match="symbolic link"):
+        catalog.resolve_output_directory("Raw", "escape")
+
+
 def test_raw_preview_calculates_summary_tic_eic_and_spectrum(tmp_path) -> None:
     raw_path = tmp_path / "sample.mzML"
     _write_mzml(raw_path)

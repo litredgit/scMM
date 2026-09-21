@@ -50,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         type=parse_output_root,
         metavar="LABEL=PATH",
-        help="Writable server directory for processed results; repeat for multiple roots",
+        help="Writable directory for task records and legacy results; repeat if needed",
     )
     parser.add_argument("--port", type=int, default=5006, help="Listening port (default: 5006)")
     parser.add_argument(

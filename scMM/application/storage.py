@@ -82,6 +82,27 @@ class StorageCatalog:
             raise ValueError("Only mzML and mzXML raw-data files are supported")
         return resolved
 
+    def resolve_output_directory(self, root_label: str, selected_path: str | Path) -> Path:
+        """Resolve an existing directory or one missing direct child for output."""
+        root = self.root(root_label)
+        candidate = Path(selected_path).expanduser()
+        if not candidate.is_absolute():
+            candidate = root.path / candidate
+        if candidate.is_symlink():
+            raise PermissionError(f"Output directory cannot be a symbolic link: {candidate}")
+        if candidate.exists():
+            resolved = candidate.resolve(strict=True)
+            if not resolved.is_dir():
+                raise NotADirectoryError(resolved)
+        else:
+            parent = candidate.parent.resolve(strict=True)
+            if not parent.is_dir():
+                raise NotADirectoryError(parent)
+            resolved = parent / candidate.name
+        if not resolved.is_relative_to(root.path):
+            raise PermissionError(f"Path is outside storage root {root.label!r}: {resolved}")
+        return resolved
+
     def list_entries(
         self,
         root_label: str,

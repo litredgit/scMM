@@ -59,6 +59,25 @@ def test_task_manager_launches_detached_worker_and_persists_state(tmp_path: Path
     assert json.loads(Path(task.request_path).read_text())["parameters"]["ref_mz"] == 100
 
 
+def test_task_manager_creates_selected_output_directory_on_submit(tmp_path: Path) -> None:
+    manager, request, output = _manager(tmp_path)
+    selected = output.parent / "raw" / "results"
+    request = ProcessingRequest(
+        **{
+            **request.__dict__,
+            "output_label": "Raw",
+            "output_path": str(selected),
+        }
+    )
+
+    with patch("scMM.application.tasks.subprocess.Popen", return_value=Mock(pid=4321)):
+        task = manager.submit(request)
+
+    assert selected.is_dir()
+    assert Path(task.result_path) == selected / "sample"
+    assert json.loads(Path(task.request_path).read_text())["output_root"] == str(selected)
+
+
 def test_task_manager_blocks_a_second_active_task(tmp_path: Path) -> None:
     manager, request, _ = _manager(tmp_path)
     with (

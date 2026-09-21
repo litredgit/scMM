@@ -74,6 +74,8 @@ class ProcessingTaskManager:
             active = self.active()
             if active is not None:
                 raise TaskBusyError(f"Task {active.task_id} is still {active.status}")
+            plan.output_root.mkdir(exist_ok=True)
+            plan = self.planner.preflight(request)
             task = self._create_task(request, plan)
             gate_path = Path(task.state_path).with_name("start.ready")
             try:

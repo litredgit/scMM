@@ -146,6 +146,7 @@ class ProcessingRequest:
     input_path: str
     output_label: str
     parameters: ProcessingParameters
+    output_path: str | None = None
     result_name: str | None = None
     overwrite: bool = False
 
@@ -174,12 +175,19 @@ class ProcessingPlanner:
         source = self.storage.resolve_raw_file(request.storage_label, request.input_path)
         validate_ms_file(source)
         result_name = request.result_name or source.stem
-        target = self.outputs.resolve_target(request.output_label, result_name)
+        if request.output_path is None:
+            output_root = self.outputs.root(request.output_label).path
+            target = self.outputs.resolve_target(request.output_label, result_name)
+        else:
+            output_root = self.storage.resolve_output_directory(
+                request.output_label, request.output_path
+            )
+            target = _resolve_target(output_root, result_name, request.output_label)
         if target.exists() and not request.overwrite:
             raise FileExistsError(f"Result already exists: {target}")
 
-        output_root = self.outputs.root(request.output_label).path
-        free_bytes = shutil.disk_usage(output_root).free
+        disk_usage_path = output_root if output_root.exists() else output_root.parent
+        free_bytes = shutil.disk_usage(disk_usage_path).free
         input_size = source.stat().st_size
         warnings: list[str] = []
         if request.overwrite and target.exists():
@@ -197,6 +205,18 @@ class ProcessingPlanner:
             free_bytes=free_bytes,
             warnings=tuple(warnings),
         )
+
+
+def _resolve_target(output_root: Path, name: str, label: str) -> Path:
+    safe_name = Path(name).name
+    if safe_name != name or safe_name in {"", ".", ".."} or safe_name.startswith("."):
+        raise ValueError(f"Invalid result name: {name!r}")
+    target = output_root / safe_name
+    if target.is_symlink():
+        raise PermissionError(f"Result path cannot be a symbolic link: {target}")
+    if target.exists() and target.resolve(strict=True).parent != output_root:
+        raise PermissionError(f"Output path is outside root {label!r}: {target}")
+    return target
 
 
 __all__ = [

@@ -38,6 +38,7 @@ class GuidedProcessingPanel:
     """Collect, preflight, submit, and recover processing tasks."""
 
     def __init__(self, storage: StorageCatalog, output_roots: tuple[OutputRoot, ...]) -> None:
+        self.storage = storage
         self.outputs = OutputCatalog(output_roots)
         self.planner = ProcessingPlanner(storage, self.outputs)
         self.tasks = ProcessingTaskManager(self.planner, self.outputs.roots[0].path / ".scmm-tasks")
@@ -46,6 +47,8 @@ class GuidedProcessingPanel:
         self._request: ProcessingRequest | None = None
         self._active_task_id: str | None = None
         self._periodic = None
+        self._output_selector: pn.widgets.FileSelector | None = None
+        self._output_path: Path | None = None
 
         self.input_text = pn.pane.Markdown(
             "尚未选择输入文件。请先在左侧选择并预览原始数据。",
@@ -60,9 +63,20 @@ class GuidedProcessingPanel:
         )
         self.output_select = pn.widgets.Select(
             label="结果存储",
-            options=[root.label for root in self.outputs.roots],
+            options=[root.label for root in self.storage.roots],
             width=180,
             sizing_mode=None,
+        )
+        self.output_selector_area = pn.Column(sizing_mode="stretch_width")
+        self.output_directory = pn.pane.Markdown(
+            "尚未选择结果目录。", css_classes=["scmm-card"], sizing_mode="stretch_width"
+        )
+        self.use_current_directory = pn.widgets.Button(
+            label="使用当前浏览目录",
+            icon="folder-check",
+            width=180,
+            height=36,
+            sizing_mode="fixed",
         )
         self.result_name = pn.widgets.TextInput(
             label="结果名称", placeholder="默认使用原始文件名", width=220, sizing_mode=None
@@ -218,6 +232,8 @@ class GuidedProcessingPanel:
         self._quality_task_id: str | None = None
 
         self._wire_callbacks()
+        self._replace_output_selector()
+        self._set_output_path(self.storage.roots[0].path / "results")
         self._reload_tasks()
 
     def panel(self):
@@ -235,7 +251,6 @@ class GuidedProcessingPanel:
             sizing_mode="stretch_width",
         )
         destinations = pn.FlexBox(
-            self.output_select,
             self.result_name,
             self.overwrite,
             gap="10px",
@@ -265,6 +280,17 @@ class GuidedProcessingPanel:
             primary,
             self.advanced_toggle,
             self.advanced,
+            "#### 结果目录",
+            "可在原始数据相同的服务器挂载范围内浏览目录；未另选时使用原文件同目录下的 `results/`。",
+            self.output_select,
+            self.output_selector_area,
+            pn.FlexBox(
+                self.use_current_directory,
+                self.output_directory,
+                gap="10px",
+                align_items="center",
+                sizing_mode="stretch_width",
+            ),
             destinations,
             "### 2. 提交前检查",
             self.preflight_text,
@@ -285,7 +311,12 @@ class GuidedProcessingPanel:
         if storage_label is None or input_path is None:
             self.input_text.object = "尚未选择输入文件。请先在左侧选择并预览原始数据。"
         else:
-            self.result_name.value = Path(input_path).stem
+            source = self.storage.resolve_raw_file(storage_label, input_path)
+            if self.output_select.value != storage_label:
+                self.output_select.value = storage_label
+            self._replace_output_selector(source.parent)
+            self._set_output_path(source.parent / "results")
+            self.result_name.value = source.stem
             self.input_text.object = (
                 f"**输入存储：** {escape(storage_label)}  \n**原始文件：** `{escape(input_path)}`"
             )
@@ -323,6 +354,8 @@ class GuidedProcessingPanel:
 
     def _wire_callbacks(self) -> None:
         self.preset.param.watch(self._apply_preset, "value")
+        self.output_select.param.watch(self._on_output_root_change, "value")
+        self.use_current_directory.on_click(self._use_current_output_directory)
         self.advanced_toggle.param.watch(
             lambda event: setattr(self.advanced, "visible", event.new), "value"
         )
@@ -349,6 +382,50 @@ class GuidedProcessingPanel:
         self.refresh_button.on_click(lambda _event: self._refresh_tasks())
         self.task_select.param.watch(self._select_task, "value")
 
+    def _replace_output_selector(self, directory: Path | None = None) -> None:
+        root = self.storage.root(self.output_select.value)
+        if directory is None or not directory.is_relative_to(root.path):
+            directory = root.path
+        selector = pn.widgets.FileSelector(
+            directory=str(directory),
+            root_directory=str(root.path),
+            file_pattern="*.mz*",
+            only_files=False,
+            show_hidden=False,
+            size=8,
+            sizing_mode="stretch_width",
+        )
+        selector.param.watch(self._on_output_selection, "value")
+        self._output_selector = selector
+        self.output_selector_area[:] = [selector]
+
+    def _on_output_root_change(self, _event) -> None:
+        root = self.storage.root(self.output_select.value)
+        self._replace_output_selector(root.path)
+        self._set_output_path(root.path / "results")
+
+    def _on_output_selection(self, _event) -> None:
+        if self._output_selector is None or len(self._output_selector.value) != 1:
+            return
+        selected = Path(self._output_selector.value[0])
+        if selected.is_dir():
+            self._set_output_path(selected)
+
+    def _use_current_output_directory(self, _event=None) -> None:
+        if self._output_selector is not None:
+            self._set_output_path(Path(self._output_selector.directory))
+
+    def _set_output_path(self, path: Path) -> None:
+        resolved = self.storage.resolve_output_directory(self.output_select.value, path)
+        self._output_path = resolved
+        relative = resolved.relative_to(self.storage.root(self.output_select.value).path)
+        display = "." if relative == Path(".") else str(relative)
+        self.output_directory.object = (
+            f"**已选结果目录：** `{escape(self.output_select.value)}/{escape(display)}`  "
+            f"\n服务器路径：`{escape(str(resolved))}`"
+        )
+        self._invalidate_preflight()
+
     def _apply_preset(self, event) -> None:
         params = ProcessingParameters.from_preset(event.new, max(self.ref_mz.value, 1.0))
         self.ms_peak_snr.value = params.ms_peak_snr_threshold
@@ -374,11 +451,14 @@ class GuidedProcessingPanel:
     def _build_request(self) -> ProcessingRequest:
         if self._storage_label is None or self._input_path is None:
             raise ValueError("请先选择一个原始数据文件")
+        if self._output_path is None:
+            raise ValueError("请选择结果目录")
         result_name = self.result_name.value.strip() or Path(self._input_path).stem
         return ProcessingRequest(
             storage_label=self._storage_label,
             input_path=self._input_path,
             output_label=self.output_select.value,
+            output_path=str(self._output_path),
             result_name=result_name,
             overwrite=self.overwrite.value,
             parameters=self._parameters(),
@@ -497,8 +577,10 @@ class GuidedProcessingPanel:
         result = Path(value).resolve(strict=True)
         if not result.is_dir() or not (result / ".meta").is_file():
             raise FileNotFoundError(f"不是完整的 scMM 结果目录：{result}")
-        if not any(result.parent == root.path for root in self.outputs.roots):
-            raise PermissionError("任务结果不在已配置的输出根目录内")
+        in_task_output = any(result.parent == root.path for root in self.outputs.roots)
+        in_storage = any(result.parent.is_relative_to(root.path) for root in self.storage.roots)
+        if not in_task_output and not in_storage:
+            raise PermissionError("任务结果不在已配置的服务器目录范围内")
         return result
 
 

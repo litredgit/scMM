@@ -61,6 +61,43 @@ def test_processing_preflight_resolves_safe_input_and_output(tmp_path: Path) -> 
     assert plan.input_size_bytes == len(b"<mzML><spectrum></spectrum></mzML>")
 
 
+def test_processing_preflight_accepts_selected_directory_in_storage_root(tmp_path: Path) -> None:
+    planner, source, _ = _planner(tmp_path)
+    selected_parent = source.parent / "batch"
+    selected_parent.mkdir()
+    request = ProcessingRequest(
+        storage_label="Raw",
+        input_path="sample.mzML",
+        output_label="Raw",
+        output_path=str(selected_parent / "results"),
+        parameters=ProcessingParameters(ref_mz=100),
+    )
+
+    plan = planner.preflight(request)
+
+    assert plan.output_root == selected_parent / "results"
+    assert plan.result_path == selected_parent / "results" / "sample"
+    assert not plan.output_root.exists()
+
+
+def test_processing_preflight_rejects_selected_directory_outside_storage(
+    tmp_path: Path,
+) -> None:
+    planner, _, _ = _planner(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    request = ProcessingRequest(
+        storage_label="Raw",
+        input_path="sample.mzML",
+        output_label="Raw",
+        output_path=str(outside),
+        parameters=ProcessingParameters(ref_mz=100),
+    )
+
+    with pytest.raises(PermissionError, match="outside storage root"):
+        planner.preflight(request)
+
+
 def test_processing_preflight_rejects_truncated_input(tmp_path: Path) -> None:
     planner, source, _ = _planner(tmp_path)
     source.write_bytes(b"<indexedmzML><mzML><spectrum></spectrum></mzML>")

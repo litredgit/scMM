@@ -29,6 +29,10 @@ def _panel(tmp_path: Path):
 def test_processing_panel_requires_fresh_preflight_and_confirmation(tmp_path: Path) -> None:
     panel = _panel(tmp_path)
 
+    assert panel._output_path == tmp_path / "raw" / "results"
+    assert "raw/results" in panel.output_directory.object
+    assert not panel._output_path.exists()
+
     panel._preflight()
 
     assert "预检通过" in panel.preflight_text.object
@@ -86,6 +90,9 @@ def test_processing_panel_uses_compact_controls_and_responsive_groups(tmp_path: 
     layout = panel.panel()
 
     assert panel.output_select.width == 180
+    assert panel._output_selector is not None
+    assert panel._output_selector.root_directory == str(tmp_path / "raw")
+    assert panel._output_selector.only_files is False
     assert panel.ref_mz.width == 150
     assert panel.log_text.sizing_mode == "stretch_width"
     assert any(type(item).__name__ == "FlexBox" for item in layout)
@@ -140,5 +147,18 @@ def test_processing_panel_rejects_result_outside_output_root(tmp_path: Path) -> 
     outside.mkdir()
     (outside / ".meta").write_text("{}", encoding="utf-8")
 
-    with pytest.raises(PermissionError, match="输出根目录"):
+    with pytest.raises(PermissionError, match="服务器目录范围"):
         panel._safe_result_path(str(outside))
+
+
+def test_processing_panel_selects_another_server_output_directory(tmp_path: Path) -> None:
+    panel = _panel(tmp_path)
+    archive = tmp_path / "raw" / "archive"
+    archive.mkdir()
+    assert panel._output_selector is not None
+
+    panel._output_selector.value = [str(archive)]
+
+    assert panel._output_path == archive
+    assert str(archive) in panel.output_directory.object
+    assert panel._build_request().output_path == str(archive)
