@@ -25,6 +25,8 @@ class CellClusteringMixin:
     ):
         """Cluster PCA coordinates and save a labeled UMAP figure."""
         method = method.lower()
+        if method in {"kmeans", "dbscan", "agglomerative", "hierarchical"}:
+            return _cluster_centroids(self, method, key_added, random_state, kwargs)
         if method not in {"leiden", "louvain"}:
             raise ValueError("method must be 'leiden' or 'louvain'")
         cluster_values, plot_values = _get_cluster_inputs(self.adata, n_neighbors)
@@ -48,6 +50,39 @@ class CellClusteringMixin:
             cmap,
         )
         return self
+
+
+def _cluster_centroids(engine, method, key_added, random_state, kwargs):
+    from sklearn.cluster import DBSCAN, AgglomerativeClustering, KMeans
+    from sklearn.metrics import calinski_harabasz_score, davies_bouldin_score, silhouette_score
+
+    values = np.asarray(engine.adata.obsm.get("X_pca", engine._get_X()))
+    if method == "kmeans":
+        model = KMeans(random_state=random_state, **kwargs)
+    elif method == "dbscan":
+        model = DBSCAN(**kwargs)
+    else:
+        model = AgglomerativeClustering(**kwargs)
+    labels = model.fit_predict(values)
+    engine.adata.obs[key_added] = pd.Categorical(labels.astype(str))
+    # DBSCAN noise is not a biological cluster and is excluded from scores.
+    included = labels != -1
+    selected, groups = values[included], labels[included]
+    n_clusters = len(np.unique(groups))
+    quality = {
+        "method": method,
+        "n_clusters": n_clusters,
+        "n_cells": len(labels),
+        "n_noise": int((~included).sum()),
+    }
+    if 1 < n_clusters < len(groups):
+        quality.update(
+            silhouette=float(silhouette_score(selected, groups)),
+            calinski_harabasz=float(calinski_harabasz_score(selected, groups)),
+            davies_bouldin=float(davies_bouldin_score(selected, groups)),
+        )
+    engine.adata.uns[f"{key_added}_qc"] = quality
+    return engine
 
 
 def _get_cluster_inputs(adata, n_neighbors: int) -> tuple[np.ndarray, np.ndarray]:

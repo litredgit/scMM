@@ -11,10 +11,13 @@ import pandas as pd
 from ._engine_clustering import CellClusteringMixin
 from ._engine_embedding import EmbeddingMixin
 from ._engine_network import FeatureNetworkMixin
+from ._engine_statistics import StatisticsMixin
 from ._engine_trajectory import TrajectoryMixin
 
 
-class PlotEngine(EmbeddingMixin, TrajectoryMixin, CellClusteringMixin, FeatureNetworkMixin):
+class PlotEngine(
+    EmbeddingMixin, TrajectoryMixin, CellClusteringMixin, FeatureNetworkMixin, StatisticsMixin
+):
     """AnnData-backed entry point for analysis and figure generation.
 
     The public methods are grouped into private mixins by domain.  This class
