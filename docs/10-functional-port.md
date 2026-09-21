@@ -29,7 +29,24 @@
 - 新依赖通过 `supervised` extra 声明；绘图仍使用 `plot` extra。
 - 验证：分析、绘图与轨迹相关测试 26 项通过（警告视为错误）。
 
+## 阶段 3：显式选择的新处理算法
+
+- 原 `load_from_filelist` 默认仍为 `processing_strategy="legacy"`；选择 `shared`
+  或 `independent` 才逐文件提取细胞。新入口 `load_from_directory` 默认 shared。
+- 逐文件基线和零比例过滤的范围与旧算法不同，不能承诺数值等价。
+  independent 以递增 m/z、运行中位数和 ppm 合并，同文件碰撞取最大值。
+- `extraction_method="snr_v1"` 启用扣基线丰度和背景标准差 SNR；
+  `reference_mz=[...]`、`reference_mode` 控制参考组合。参考离子需落在
+  `reference_ppm_tol` 内。`feature_snr_threshold` 与旧 `peak_snr` 含义不同。
+- 保留参考强度/比值、帧编号、来源、采集时间及算法参数；SNR 保存为
+  数据集的 `feature_snr` 表，下一阶段提供持久化和 H5AD layer 映射。
+- RAW 支持文件/目录，转换使用临时空间，两遍 shared 流程仅转换一次；
+  保留当前 XML 完整性检查，拒绝已有或不对应的转换输出，设置转换超时。
+- CLI 保持 `scmm-process` 兼容，新增策略、参考、SNR、MSConvert 参数。
+- 验证覆盖真实 mzML 读取与跨文件事件边界（选峰在此测试中固定以隔离边界行为）、
+  多参考组合、扣基线数值、ppm 合并和转换输出错误；未运行厂商 RAW 转换。
+- 阶段完整回归：174 项通过，警告视为错误；源码 lint 通过。
+
 ## 后续阶段
 
-3. 可选多参考/SNR 算法、逐文件和独立选峰策略、RAW 导入。
 4. H5AD 互操作及旧数据兼容；保留现有数据类和界面架构，记录迁移边界。

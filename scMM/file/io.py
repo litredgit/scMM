@@ -5,6 +5,7 @@ import re
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Literal
 
 import pyopenms as oms
@@ -33,9 +34,21 @@ class InvalidMSFileError(ValueError):
 def load_single_file(
     path: str | Path,
     format: Literal["auto", "mzML", "mzXML"] = "auto",
+    *,
+    msconvert_path=None,
 ) -> tuple[oms.MSExperiment, dict[str, Any]]:
     """Load an mzML/mzXML experiment and its acquisition metadata."""
     path = Path(path).expanduser()
+    if format == "auto" and path.suffix.lower() == ".raw":
+        from .msconvert import convert_raw
+
+        with TemporaryDirectory(prefix="scmm_raw_") as directory:
+            converted = convert_raw(path, directory, executable=msconvert_path)
+            experiment, metadata = load_single_file(converted)
+        metadata.update(
+            name=path.stem, source_file=path.name, path=str(path.resolve()), converted_from_raw=True
+        )
+        return experiment, metadata
     if not path.is_file():
         raise FileNotFoundError(path)
     resolved_format = _resolve_ms_format(path, format)

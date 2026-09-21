@@ -33,22 +33,51 @@ class DatasetProcessingMixin:
         max_zero_frac: float = 0.9,
         debug_hook: DebugHook | None = None,
         feature_block_size: int | None = 256,
+        extraction_method: str = "legacy",
+        reference_mz=None,
+        reference_mode: str = "union",
+        reference_ppm_tol: float = 10.0,
+        feature_snr_threshold: float = 3.0,
+        noise_window: int = 51,
         **kwargs,
     ) -> Self:
         if self.ref_mz is None or not np.isfinite(self.ref_mz) or self.ref_mz <= 0:
             raise ValueError("A positive finite ref_mz is required for preprocessing")
-        result = find_cell_peaks(
-            self.data,
-            self.ref_mz,
-            baseline_filter=baseline_filter,
-            baseline_filter_size=baseline_filter_size,
-            cell_snr=cell_snr,
-            peak_snr=peak_snr,
-            max_zero_frac=max_zero_frac,
-            feature_block_size=feature_block_size,
-            return_full_baseline=debug_hook is not None,
-            **kwargs,
-        )
+        if extraction_method not in {"legacy", "snr_v1"}:
+            raise ValueError("extraction_method must be legacy or snr_v1")
+        if extraction_method == "legacy" and reference_mz is not None:
+            raise ValueError("reference_mz requires extraction_method='snr_v1'")
+        if extraction_method == "snr_v1":
+            from ..util._cell_snr import find_cell_peaks_snr
+
+            result = find_cell_peaks_snr(
+                self.data,
+                self.ref_mz if reference_mz is None else reference_mz,
+                reference_mode=reference_mode,
+                reference_ppm_tol=reference_ppm_tol,
+                baseline_filter=baseline_filter,
+                baseline_window=baseline_filter_size,
+                cell_signal_threshold=cell_snr,
+                feature_snr_threshold=feature_snr_threshold,
+                noise_window=noise_window,
+                max_zero_fraction=max_zero_frac,
+                feature_block_size=feature_block_size or self.data.shape[1],
+                return_full_baseline=debug_hook is not None,
+                **kwargs,
+            )
+        else:
+            result = find_cell_peaks(
+                self.data,
+                self.ref_mz,
+                baseline_filter=baseline_filter,
+                baseline_filter_size=baseline_filter_size,
+                cell_snr=cell_snr,
+                peak_snr=peak_snr,
+                max_zero_frac=max_zero_frac,
+                feature_block_size=feature_block_size,
+                return_full_baseline=debug_hook is not None,
+                **kwargs,
+            )
         if debug_hook is not None:
             debug_hook(
                 "find_cells",
@@ -65,6 +94,32 @@ class DatasetProcessingMixin:
             self.peak_meta.iloc[frames, :],
             index=self.peak_meta.index[frames],
         )
+        if extraction_method == "snr_v1":
+            for i, mz in enumerate(result["reference_mz_matched"]):
+                self.peak_meta[f"reference_intensity_{mz:.8g}"] = result["reference_signal"][
+                    frames, i
+                ]
+                self.peak_meta[f"reference_ratio_{mz:.8g}"] = result["reference_ratio"][frames, i]
+            self.feature_snr = pd.DataFrame(
+                result["feature_snr"], index=self.data.index, columns=self.data.columns
+            )
+        self.file_meta["processing"] = {
+            "extraction_method": extraction_method,
+            "baseline_filter_size": baseline_filter_size,
+            "cell_snr": cell_snr,
+            "peak_snr": peak_snr,
+            "max_zero_frac": max_zero_frac,
+        }
+        if extraction_method == "snr_v1":
+            self.file_meta["processing"].update(
+                reference_mz=np.atleast_1d(
+                    self.ref_mz if reference_mz is None else reference_mz
+                ).tolist(),
+                reference_mode=reference_mode,
+                reference_ppm_tol=reference_ppm_tol,
+                feature_snr_threshold=feature_snr_threshold,
+                noise_window=noise_window,
+            )
         self.file_meta["length"] = self.data.shape[0]
         return self
 

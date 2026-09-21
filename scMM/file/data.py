@@ -46,6 +46,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         ms_peak_snr_threshold: float = 10.0,
         prominence_ratio: float | None = None,
         distance: int = 3,
+        msconvert_path=None,
         **preprocess_kwds,
     ) -> Self:
         """Load, align, and preprocess one mzML/mzXML file."""
@@ -59,6 +60,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
             ms_peak_snr_threshold=ms_peak_snr_threshold,
             prominence_ratio=prominence_ratio,
             distance=distance,
+            msconvert_path=msconvert_path,
         )
         return cls._from_raw_state(state, preprocess_kwds)
 
@@ -75,9 +77,31 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         prominence_ratio: float | None = None,
         n_jobs: int = -1,
         distance: int = 3,
+        processing_strategy: str = "legacy",
+        feature_merge_ppm: float = 10.0,
+        msconvert_path=None,
         **preprocess_kwds,
     ) -> Self:
         """Load and combine all direct mzML/mzXML children of a directory."""
+        if processing_strategy != "legacy":
+            return cls.load_from_directory(
+                dir_path,
+                ref_mz,
+                feature_strategy=processing_strategy,
+                feature_merge_ppm=feature_merge_ppm,
+                msconvert_path=msconvert_path,
+                dtype=dtype,
+                ppm_tol=ppm_tol,
+                resolution=resolution,
+                resample_points_per_fwhm=resample_points_per_fwhm,
+                ms_peak_snr_threshold=ms_peak_snr_threshold,
+                prominence_ratio=prominence_ratio,
+                distance=distance,
+                n_jobs=n_jobs,
+                **preprocess_kwds,
+            )
+        if msconvert_path is not None:
+            raise ValueError("RAW conversion requires shared or independent processing_strategy")
         state = load_raw_directory(
             dir_path,
             ref_mz,
@@ -91,6 +115,13 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
             distance=distance,
         )
         return cls._from_raw_state(state, preprocess_kwds)
+
+    @classmethod
+    def load_from_directory(cls, dir_path, ref_mz, *, feature_strategy="shared", **kwargs):
+        """Opt-in sequential processing with shared or independently picked features."""
+        from ._sequential import load_directory
+
+        return load_directory(cls, dir_path, ref_mz, feature_strategy=feature_strategy, **kwargs)
 
     @classmethod
     def _from_raw_state(cls, state: DatasetState, preprocess_kwds: dict) -> Self:

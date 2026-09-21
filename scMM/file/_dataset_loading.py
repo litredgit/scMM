@@ -119,6 +119,7 @@ def load_raw_file(
     ms_peak_snr_threshold: float = 10.0,
     prominence_ratio: float | None = None,
     distance: int = 3,
+    msconvert_path=None,
 ) -> DatasetState:
     """Load and align one raw file without performing cell preprocessing."""
     config = _raw_config(
@@ -131,10 +132,14 @@ def load_raw_file(
         prominence_ratio,
         distance,
     )
-    experiment, file_meta = load_single_file(str(file_path), format="auto")
+    load_options = {"msconvert_path": msconvert_path} if msconvert_path else {}
+    experiment, file_meta = load_single_file(str(file_path), format="auto", **load_options)
     targets = _pick_common_targets(experiment, config, dtype=config.dtype)
     data, peak_meta = align_frame(experiment, targets, config.ppm_tol, dtype=config.dtype)
     _annotate_single_file_frames(peak_meta, file_meta)
+    peak_meta["source_file"] = Path(file_path).name
+    peak_meta["frame_id"] = peak_meta.index.to_numpy()
+    peak_meta["acquisition_time"] = file_meta["timestamp"] + peak_meta["rt"].to_numpy()
     file_meta["ref_mz"] = ref_mz
     return DatasetState(data, peak_meta, file_meta, ref_mz)
 

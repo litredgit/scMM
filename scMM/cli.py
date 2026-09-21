@@ -25,6 +25,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--peak-snr", type=float, default=3.0)
     parser.add_argument("--jobs", type=int, default=-1, help="Parallel workers (-1 uses all CPUs)")
     parser.add_argument(
+        "--processing-strategy", choices=["legacy", "shared", "independent"], default="legacy"
+    )
+    parser.add_argument("--feature-merge-ppm", type=float, default=10.0)
+    parser.add_argument("--extraction-method", choices=["legacy", "snr_v1"], default="legacy")
+    parser.add_argument(
+        "--reference-mz", nargs="+", type=float, help="Additional SNR-mode reference masses"
+    )
+    parser.add_argument("--reference-mode", choices=["union", "intersection"], default="union")
+    parser.add_argument("--feature-snr", type=float, default=3.0, help="SNR-mode feature threshold")
+    parser.add_argument("--noise-window", type=int, default=51)
+    parser.add_argument("--msconvert", help="MSConvert executable for vendor RAW inputs")
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Replace an existing result directory with the same dataset name",
@@ -51,9 +63,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         "resolution": args.resolution,
         "cell_snr": args.cell_snr,
         "peak_snr": args.peak_snr,
+        "extraction_method": args.extraction_method,
+        "reference_mz": args.reference_mz,
+        "reference_mode": args.reference_mode,
+        "feature_snr_threshold": args.feature_snr,
+        "noise_window": args.noise_window,
+        "msconvert_path": args.msconvert,
     }
-    if input_path.is_dir():
-        data = CyESIData.load_from_filelist(input_path, n_jobs=args.jobs, **common)
+    if input_path.is_dir() and input_path.suffix.lower() != ".raw":
+        data = CyESIData.load_from_filelist(
+            input_path,
+            n_jobs=args.jobs,
+            processing_strategy=args.processing_strategy,
+            feature_merge_ppm=args.feature_merge_ppm,
+            **common,
+        )
     else:
         data = CyESIData.load_from_file(input_path, **common)
 
