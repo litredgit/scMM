@@ -123,3 +123,79 @@ def test_msconvert_rejects_stale_or_unrelated_output(tmp_path, monkeypatch):
     (out / "a.mzML").touch()
     with pytest.raises(FileExistsError):
         msconvert.convert_raw(raw, out, executable=executable)
+
+
+def test_full_synthetic_processing_and_h5ad(tmp_path):
+    import pyopenms as oms
+
+    from scMM.file.io import save_spectra
+
+    spectra = []
+    mz = np.array([149.8, 149.9, 150.0, 150.1, 150.2, 199.8, 199.9, 200.0, 200.1, 200.2])
+    for i in range(31):
+        signal = 20.0 if i in {8, 22} else 1.0
+        spec = oms.MSSpectrum()
+        spec.setMSLevel(1)
+        spec.setRT(float(i))
+        spec.set_peaks((mz, np.array([0, 0, signal, 0, 0, 0, 0, signal * 0.7, 0, 0])))
+        spectra.append(spec)
+    path = save_spectra(spectra, tmp_path / "synthetic.mzML")
+    data = CyESIData.load_from_file(
+        path,
+        150.0,
+        resolution=5000.0,
+        resample_points_per_fwhm=2.0,
+        ppm_tol=500.0,
+        extraction_method="snr_v1",
+        reference_ppm_tol=500.0,
+        baseline_filter_size=5,
+        noise_window=5,
+        show_progress=False,
+    )
+    assert len(data.data) == 2
+    assert np.isfinite(data.data.to_numpy()).all()
+    exported = data.save_h5ad(tmp_path / "synthetic.h5ad")
+    restored = CyESIData.read_h5ad(exported)
+    np.testing.assert_array_equal(restored.data, data.data)
+    np.testing.assert_array_equal(restored.feature_snr, data.feature_snr)
+
+
+@pytest.mark.parametrize("valid", [True, False])
+def test_raw_conversion_keeps_validation_and_cleans_temporary_files(tmp_path, monkeypatch, valid):
+    from pathlib import Path
+
+    import pyopenms as oms
+
+    from scMM.file import msconvert
+    from scMM.file.io import InvalidMSFileError, load_single_file, save_spectra
+
+    raw = tmp_path / "source with spaces.raw"
+    raw.mkdir()
+    executable = tmp_path / "msconvert"
+    executable.touch()
+    converted = []
+
+    def run(command, **options):
+        assert command[1] == str(raw.resolve())
+        assert options["timeout"] == 3600
+        target = Path(command[command.index("--outdir") + 1]) / f"{raw.stem}.mzML"
+        converted.append(target)
+        if valid:
+            spectrum = oms.MSSpectrum()
+            spectrum.setMSLevel(1)
+            spectrum.set_peaks((np.array([100.0]), np.array([20.0])))
+            save_spectra(spectrum, target)
+        else:
+            target.write_text("<mzML>")
+        return SimpleNamespace(stdout="", stderr="")
+
+    monkeypatch.setattr(msconvert.subprocess, "run", run)
+    if valid:
+        exp, metadata = load_single_file(raw, msconvert_path=executable)
+        assert exp.getNrSpectra() == 1
+        assert metadata["source_file"] == raw.name
+        assert metadata["converted_from_raw"]
+    else:
+        with pytest.raises(InvalidMSFileError, match="XML"):
+            load_single_file(raw, msconvert_path=executable)
+    assert converted and not converted[0].exists()

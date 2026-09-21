@@ -110,7 +110,7 @@ class SupervisedAnalyzer:
     def build_pipeline(self, model="logistic", *, smote=False, model_params=None):
         estimator, needs_scale = self._estimator(model, model_params or {})
         steps = []
-        if needs_scale:
+        if needs_scale or smote:
             steps.append(("scale", StandardScaler()))
         if smote:
             try:

@@ -89,6 +89,9 @@ class DatasetProcessingMixin:
                 },
             )
         self.data = result["cell_df"]
+        for attribute in ("feature_snr", "_anndata_template"):
+            if hasattr(self, attribute):
+                delattr(self, attribute)
         frames = result["peak_frames"]
         self.peak_meta = pd.DataFrame(
             self.peak_meta.iloc[frames, :],
@@ -141,6 +144,8 @@ class DatasetProcessingMixin:
         inliers = IsolationForest(**kwargs).fit_predict(self.data) == 1
         self.data = self.data.iloc[inliers, :]
         self.peak_meta = self.peak_meta.iloc[inliers, :]
+        if hasattr(self, "feature_snr"):
+            self.feature_snr = self.feature_snr.iloc[inliers, :]
         return self
 
     def normalize(self, method: str = "total", **norm_kwargs) -> Self:
@@ -165,6 +170,14 @@ class DatasetProcessingMixin:
         self.feature_meta = state.feature_meta
         self.file_meta = state.file_meta
         self.ref_mz = state.ref_mz
+        invalidated = []
+        for attribute in ("feature_snr", "_anndata_template"):
+            if hasattr(self, attribute) or hasattr(other, attribute):
+                invalidated.append(attribute)
+                if hasattr(self, attribute):
+                    delattr(self, attribute)
+        if invalidated:
+            self.file_meta["invalidated_by_alignment"] = invalidated
         return self
 
     def deisotope(
@@ -208,6 +221,12 @@ class DatasetProcessingMixin:
         self.deisotope_result = result
         self.data = result["processed_data"]
         self.feature_meta = result["feature_meta"]
+        if hasattr(self, "feature_snr"):
+            if merge_mode == "sum":
+                del self.feature_snr
+                self.file_meta["feature_snr_invalidated"] = "isotope intensity summation"
+            else:
+                self.feature_snr = self.feature_snr.loc[:, self.data.columns]
         if not hasattr(self, "file_meta") or self.file_meta is None:
             self.file_meta = {}
         self.file_meta["deisotope"] = {

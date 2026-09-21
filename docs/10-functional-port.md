@@ -15,6 +15,10 @@
 - 分块模式逐块执行，`n_jobs` 仅用于旧的非分块路径。
 - 验证：无序目标、空匹配、sum/max、缓冲区复用；三种基线统计和三种
   分块尺寸与旧算法逐元素比较。真实文件的峰值 RSS 尚未测量。
+- 合成基准（Python 3.12，3000 帧 × 1024 特征，3 个细胞事件，n_jobs=1，
+  两个独立进程）：旧路径峰值 RSS 203.6 MiB / 0.728 秒；128 特征分块
+  162.9 MiB / 0.714 秒，峰值 RSS 约降低 20%，输出形状及强度总和一致。
+  该测量包含解释器和输入矩阵，不能外推为真实批处理的固定节省比例。
 
 ## 阶段 2：独立分析
 
@@ -27,6 +31,8 @@
   新聚类的 QC 不把 DBSCAN 噪声算作簇。
 - 差异检验要求非负丰度，以细胞为统计单位；生物重复推断需先按重复汇总。
 - 新依赖通过 `supervised` extra 声明；绘图仍使用 `plot` extra。
+- 集成阶段补齐显式相关网络和双特征散点图；保留现有特征距离嵌入接口，
+  支持分类颜色和常量自变量。相关网络另需 `cluster` extra 的 networkx。
 - 验证：分析、绘图与轨迹相关测试 26 项通过（警告视为错误）。
 
 ## 阶段 3：显式选择的新处理算法
@@ -47,6 +53,92 @@
   多参考组合、扣基线数值、ppm 合并和转换输出错误；未运行厂商 RAW 转换。
 - 阶段完整回归：174 项通过，警告视为错误；源码 lint 通过。
 
-## 后续阶段
+## 阶段 4：H5AD 互操作与兼容
 
-4. H5AD 互操作及旧数据兼容；保留现有数据类和界面架构，记录迁移边界。
+- 保留当前 `CyESIData`，不改为 AnnData 子类。新增 `from_anndata`、`read_h5ad`、
+  `save_h5ad`；原 `save`/`load_from_processed` 的目录格式与覆盖规则不变。
+- 旧目录增加可选 `feature_snr.pkl/csv`。H5AD 使用 `layers["feature_snr"]`，
+  `uns["scmm"]` 保存版本 1 的 scMM 元数据；导入的 AnnData 保留嵌入、图、
+  其他层及 raw，轴子集操作同步这些对象。旧目录只保存原有表和 SNR，
+  不保存全部 AnnData 分析对象；要保留这些对象请使用 H5AD。
+- H5AD 默认拒绝覆盖，临时文件写完再发布；失败不会破坏已有文件。
+- 异常值删除同步 SNR；去同位素 keep_parent 同步特征子集；sum 合并会使
+  SNR 失效，明确移除并记录原因。旧 `alignwith` 合并会移除已失效的
+  SNR/导入分析模板并记录；新顺序批处理则按定义聚合 SNR。
+- 归一化与插补不会重算 SNR；该层表示原始提取时的检测证据。
+- `assign_source_metadata` 按源文件名添加样本注释，默认拒绝覆盖已有字段。
+- Panel 后台任务、审核保存和原始数据预览继续使用已验证的旧流程。
+  新实验算法和分析目前通过 Python/CLI 使用，没有替换网页框架。
+- 可选依赖实测发现原 scikit-learn 1.6 的 Array API 导入冲突；监督学习 extra
+  要求 scikit-learn 1.7。锁定并验证 1.7.2 / imbalanced-learn 0.14.2 / SHAP 0.48.0，
+  覆盖逻辑回归和随机森林的 SMOTE 训练与 SHAP 输出；SMOTE 前统一缩放特征。
+- 增加从合成 mzML 经真实总谱选峰、SNR 提取到 H5AD 重读的端到端测试。
+
+## 使用示例
+
+```python
+from scMM.file.data import CyESIData
+from scMM.analysis import SupervisedAnalyzer, differential_features, render_quality_report
+
+# 目录级内存优化；仍使用旧强度定义。
+data = CyESIData.load_from_directory("raw", ref_mz=734.5929, feature_strategy="shared")
+
+# 新 SNR 和多参考模式必须显式开启。
+data = CyESIData.load_from_directory(
+    "raw",
+    ref_mz=734.5929,
+    feature_strategy="independent",
+    extraction_method="snr_v1",
+    reference_mz=[734.5929, 760.5851],
+    reference_mode="union",
+    feature_snr_threshold=3.0,
+    baseline_filter_size=51,
+    noise_window=51,
+)
+data.assign_source_metadata(
+    {
+        "sample1.mzML": {"condition": "control", "sample": "sample1"},
+        "sample2.mzML": {"condition": "treated", "sample": "sample2"},
+    }
+)
+data.save("results")
+data.save_h5ad("results/processed.h5ad")
+restored = CyESIData.read_h5ad("results/processed.h5ad")
+adata = restored.to_anndata()
+render_quality_report(adata, "results/quality.pdf")
+table = differential_features(adata, "condition", "control", "treated")
+
+# 以下仅展示调用方式；训练和测试及每个 CV fold 都需要包含各类别，
+# 因此实际实验必须有足够的独立样本，不能仅依赖上面的两个示例样本。
+analyzer = SupervisedAnalyzer(adata, "condition", group_key="sample")
+metrics = analyzer.evaluate("logistic", cv=3)
+```
+
+CLI 保留旧命令格式，例如：
+
+```sh
+scmm-process raw results --ref-mz 734.5929 --processing-strategy shared
+scmm-process sample.raw results --ref-mz 734.5929 --msconvert /path/to/msconvert
+scmm-process raw results --ref-mz 734.5929 --processing-strategy independent \
+  --extraction-method snr_v1 --reference-mz 734.5929 760.5851 --feature-snr 3
+uv sync --locked --extra plot --extra supervised --dev
+```
+
+## 保留的验证边界
+
+- 实验性算法和 sequential 策略尚未用真实大批量样本评估检出率、重复性和峰值 RSS。
+- MSConvert 使用模拟进程验证调用和错误处理，没有厂商 RAW 或可执行程序做真实转换。
+- 默认使用旧算法；新旧参数的同名数值不能视为等效阈值。
+- 差异检验以细胞为统计单位；监督分析必须明确独立样本划分和上游处理范围。
+- 未移植来源快照中的 Streamlit 替换、归一化/SDF 回退或 AnnData 子类兼容问题。
+
+## 最终验证（2026-09-21）
+
+- 移植前完整基线 150 项通过；阶段 1 相关测试 47 项通过；阶段 2 完整回归
+  169 项通过；阶段 3 完整回归 174 项通过。
+- 集成后 `pytest -q -W error`：182 项通过，包含 SMOTE/SHAP 可选功能，未跳过。
+- `ruff check .`、`ruff format --check .`、`git diff --check` 和离线锁文件校验通过。
+- 离线构建 sdist/wheel 成功；检查两种发布包均未包含来源快照 `scMM-new`，
+  从 wheel 导入新数据接口及分析模块成功。
+- 当前验证环境为 Python 3.12；Python 3.11 由现有 CI 矩阵继续覆盖，
+  本地未声称完成该版本测试。

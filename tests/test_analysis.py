@@ -57,3 +57,19 @@ def test_quality_pdf_and_new_clustering(tmp_path):
     assert engine.adata.uns["clusters_qc"]["n_clusters"] == 2
     assert hasattr(engine, "compute_trajectory")
     assert len(engine.differential_features("label", "a", "b")) == 5
+    assert engine.plot_feature_scatter("1", "2", color_key="label").is_file()
+    engine.adata.X[:, 2] = engine.adata.X[:, 1] * 2
+    graph, _ = engine.feature_correlation_network(min_abs_correlation=0.99)
+    assert graph.has_edge("1", "2")
+
+
+@pytest.mark.parametrize("model", ["logistic", "random_forest"])
+def test_optional_smote_and_shap(model):
+    pytest.importorskip("shap")
+    pytest.importorskip("imblearn")
+    analyzer = SupervisedAnalyzer(example(), "label", group_key="sample")
+    params = {"n_estimators": 5, "n_jobs": 1} if model == "random_forest" else {}
+    analyzer.evaluate(model, cv=3, smote=True, model_params=params)
+    explanation = analyzer.explain_shap(max_background=8, max_samples=4)
+    assert explanation.values.shape[:2] == (4, 5)
+    assert np.isfinite(explanation.values).all()

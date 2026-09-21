@@ -44,12 +44,13 @@ def render_quality_report(data, output_file):
         axes[1].set_title("Detected features per cell")
         for ax in axes:
             ax.set_ylabel("Cells")
-            ax.legend(fontsize=8)
+            if len(cell):
+                ax.legend(fontsize=8)
         fig.tight_layout()
         pdf.savefig(fig)
         fig.clear()
 
-        for column in reference_columns:
+        for column in reference_columns if len(cell) else ():
             fig = Figure(figsize=(7, 4))
             ax = fig.subplots()
             values = [

@@ -138,3 +138,5 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         self.ref_mz = state.ref_mz
         if state.feature_meta is not None:
             self.feature_meta = state.feature_meta
+        if state.feature_snr is not None:
+            self.feature_snr = state.feature_snr

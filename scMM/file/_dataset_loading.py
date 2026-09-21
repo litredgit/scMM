@@ -34,6 +34,7 @@ class DatasetState:
     file_meta: dict[str, Any]
     ref_mz: float | None
     feature_meta: pd.DataFrame | None = None
+    feature_snr: pd.DataFrame | None = None
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,14 @@ def load_processed_dataset(result_dir: str | Path) -> DatasetState:
     if peak_meta is None:
         peak_meta = pd.DataFrame(index=data.index.copy())
     feature_meta = _normalize_feature_metadata(data, feature_meta)
-    return DatasetState(data, peak_meta, file_meta, file_meta.get("ref_mz"), feature_meta)
+    snr = _read_optional_pickle(result_path / "feature_snr.pkl")
+    if snr is None:
+        snr = _read_optional_csv(result_path / "feature_snr.csv")
+    if snr is not None:
+        if snr.shape != data.shape:
+            raise ValueError("feature_snr shape must match data")
+        snr.index, snr.columns = data.index.copy(), data.columns.copy()
+    return DatasetState(data, peak_meta, file_meta, file_meta.get("ref_mz"), feature_meta, snr)
 
 
 def _read_processed_frames(path: Path):
