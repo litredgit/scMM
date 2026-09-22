@@ -32,8 +32,6 @@ class DatasetProcessingMixin:
         peak_snr: float = 3.0,
         max_zero_frac: float = 0.9,
         debug_hook: DebugHook | None = None,
-        debug_full_baseline: bool = True,
-        progress_callback=None,
         feature_block_size: int | None = 256,
         extraction_method: str = "legacy",
         reference_mz=None,
@@ -41,6 +39,8 @@ class DatasetProcessingMixin:
         reference_ppm_tol: float = 10.0,
         feature_snr_threshold: float = 3.0,
         noise_window: int = 51,
+        debug_full_baseline: bool = True,
+        progress_callback=None,
         **kwargs,
     ) -> Self:
         if self.ref_mz is None or not np.isfinite(self.ref_mz) or self.ref_mz <= 0:

@@ -24,6 +24,39 @@ data = CyESIData.load_from_file(
 `load_from_file()` 完成谱读取、总谱构建、去噪、公共峰提取、扫描对齐和细胞事件识别。
 返回的对象可以通过 `len(data)` 查看细胞数，通过 `data.data.shape` 查看完整矩阵形状。
 
+## 缓存原始数据的细胞提取预览（Python API）
+
+```python
+from pathlib import Path
+from scMM.application import (
+    ProcessingParameters, RawPreviewService, StorageCatalog, StorageRoot,
+)
+
+service = RawPreviewService(StorageCatalog([StorageRoot("Raw", Path("data"))]))
+raw = service.open("Raw", "sample.mzML")
+parameters = ProcessingParameters(ref_mz=734.5929, baseline_filter_size=51)
+preview = raw.cell_detection(parameters)
+# 再次调用仍复用 raw.experiment，不重复读取文件。
+snr_preview = raw.cell_detection(
+    parameters,
+    extraction_method="snr_v1",
+    reference_mz=[734.5929, 760.5851],
+    reference_mode="union",
+)
+apices = snr_preview.traces.loc[snr_preview.traces.cell_apex]
+```
+
+`traces` 包含 frame_id、rt_seconds、cell_window、cell_apex 和 reference_0 等列；
+reference 列按 `preview.reference_mz` 的顺序对应实际匹配 m/z，不采用不明确的 RT/frame 混合轴。
+`window_ranges` 为两端均包含的帧位置区间。SNR 参考需能在 reference_ppm_tol 内匹配。
+使用完整文件的 MS1 扫描，正式提取与预览应传入相同参数；不自动保存，不保留完整基线。
+这仍是完整计算，数据量大时会耗时；当前网页尚未接入此 API。
+
+`preprocess`、`load_from_file` 及 `load_from_directory` 可传
+`progress_callback(value, message)`。单文件 value 表示提取阶段进度，目录为批次进度；
+不是整个耗时的百分比或 ETA。回调错误直接传播。`debug_full_baseline=False` 可减少
+debug hook 的完整基线内存占用；不传时保持旧 debug 行为。
+
 ## 多个原始文件作为一个连续数据集
 
 ```python

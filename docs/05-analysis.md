@@ -10,6 +10,26 @@
 
 ## 初始化
 
+独立监督分析也可直接使用 AnnData，不必创建 PlotEngine：
+
+```python
+from scMM.analysis import SupervisedAnalyzer
+
+analyzer = SupervisedAnalyzer(adata, "condition", group_key="sample")
+result = analyzer.evaluate("logistic", cv=3, calibration_bins=10)
+diagnostics = result["probability_diagnostics"]
+pr_curves = analyzer.precision_recall_curves()
+calibration = analyzer.calibration_curves()
+```
+
+数据须提供足够的独立样本，使 holdout 和各 CV fold 均包含所有类别。
+诊断仅使用 holdout，不新增训练。AP 是 average precision，不是梯形积分 PR AUC；
+`brier_macro` 为每类 one-vs-rest 概率均方误差的无权平均，不是各类别误差之和。
+校准曲线采用 quantile 分箱，重复/空分箱可能使返回点数少于 calibration_bins；
+这只是可靠性诊断，并不重新校准概率。不要据 holdout 反复调参。
+
+## 绘图引擎初始化
+
 推荐从 `CyESIData` 转换：
 
 ```python

@@ -70,12 +70,14 @@ uv sync --locked --all-extras --dev
 uv lock --check
 uv run --locked ruff format --check .
 uv run --locked ruff check .
-uv run --locked pytest -W error
+uv run --locked python -m pytest -W error
 uv build --no-sources
 ```
 
 `pytest -W error` 会把警告提升为错误，有助于尽早发现 pandas、NumPy、scikit-learn 或 PyOpenMS
 升级引入的兼容问题。
+从仓库根目录使用 `python -m pytest`，确保本地 `scripts` 快照工具也位于导入路径；
+部分环境中直接运行 pytest 入口脚本会在收集快照测试时找不到该模块。
 
 只运行相关测试：
 

@@ -11,6 +11,28 @@ from scMM.util._cell_snr import find_cell_peaks_snr
 from scMM.util.peak import find_cell_peaks
 
 
+def test_preprocess_preserves_existing_positional_parameter_order():
+    import inspect
+
+    parameters = list(inspect.signature(CyESIData.preprocess).parameters)
+    assert parameters[:14] == [
+        "self",
+        "baseline_filter",
+        "baseline_filter_size",
+        "cell_snr",
+        "peak_snr",
+        "max_zero_frac",
+        "debug_hook",
+        "feature_block_size",
+        "extraction_method",
+        "reference_mz",
+        "reference_mode",
+        "reference_ppm_tol",
+        "feature_snr_threshold",
+        "noise_window",
+    ]
+
+
 @pytest.mark.parametrize("snr", [False, True])
 @pytest.mark.parametrize("cells", [False, True])
 def test_block_progress_preserves_results_and_propagates_failure(snr, cells):

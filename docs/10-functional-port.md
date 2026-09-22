@@ -7,6 +7,26 @@
 
 后续已建立本地快照仓库，来源管理见 [上游快照](11-upstream-snapshots.md)。
 版本摘要与已知问题入口见 [Changelog](../CHANGELOG.md)。以下保留此前阶段记录。
+GUI 0.2.0 的来源问题与后续范围已纳入 [编号待办](12-upstream-todo.md)，
+不再仅保存在忽略目录下的临时评审文件。
+
+## GUI 0.2.0 来源移植：集成验收（2026-09-22）
+
+- 阶段 A 提交 `db7431d`，阶段 B 提交 `f457375`；未修改 GUI、未移植暂缓的方法、
+  Windows 安装启动或全局线程池补丁。没有新增依赖、修改锁文件或发布版本号。
+- 集成复查将新增 preprocess 参数置于原参数之后，并增加签名回归测试，
+  保留既有位置参数顺序；原默认算法与 debug hook 的完整基线行为不变。
+- `.venv/bin/python -m pytest -q -W error`：209 项通过，无跳过。
+- `.venv/bin/ruff check scMM tests scripts`、
+  `.venv/bin/ruff format --check scMM tests scripts`、`git diff --check` 通过。
+- `uv --cache-dir /tmp/scmm-uv-cache lock --check --offline` 通过。
+- `uv --cache-dir /tmp/scmm-uv-cache build --offline --out-dir /tmp/scmm-port-build-20260922-final`
+  完成 sdist/wheel 构建；检查均不含外部交付目录，wheel 中新 API 可导入。
+- 环境排错记录：直接 pytest 入口收集 scripts 测试失败，改用仓库根目录
+  `python -m pytest` 后通过，开发说明已更新。运行环境缺构建后端时非隔离构建失败，
+  改用 uv 离线隔离构建成功；默认缓存只读时改用临时缓存，没有扩充项目依赖。
+- 本机 Python 3.12；真实样本、厂商 RAW、Windows 和新 GUI 联调未执行，
+  均在编号待办中明确保留，不能将单元测试通过当作这些验证已完成。
 
 ## GUI 0.2.0 来源移植：阶段 B（2026-09-22）
 
