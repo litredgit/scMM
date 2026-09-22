@@ -46,6 +46,8 @@ class ProcessingTask:
     error: str | None = None
     exported_path: str | None = None
     discarded_at: str | None = None
+    progress: float = 0.0
+    progress_message: str = ""
 
     @classmethod
     def from_json(cls, path: str | Path):

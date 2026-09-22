@@ -12,7 +12,18 @@ import pyopenms as oms
 
 from scMM.file.io import load_single_file, sum_spec
 
+from .processing import ProcessingParameters
 from .storage import StorageCatalog
+
+
+@dataclass(frozen=True)
+class CellDetectionPreview:
+    """Production detection traces; RT is always in seconds, frame_id is positional."""
+
+    traces: pd.DataFrame
+    reference_mz: tuple[float, ...]
+    window_ranges: tuple[tuple[int, int], ...]
+    cell_count: int
 
 
 @dataclass(frozen=True)
@@ -49,6 +60,86 @@ class RawFilePreview:
     def ms_levels(self) -> tuple[int, ...]:
         """Return the MS levels represented in the file."""
         return tuple(level for level, _ in self.summary.scans_by_ms_level)
+
+    def cell_detection(
+        self,
+        parameters: ProcessingParameters,
+        *,
+        extraction_method="legacy",
+        reference_mz=None,
+        reference_mode="union",
+        reference_ppm_tol=10.0,
+        feature_snr_threshold=3.0,
+        noise_window=51,
+        feature_block_size=256,
+        progress_callback=None,
+    ) -> CellDetectionPreview:
+        """Preview production cell windows without reopening the raw file.
+
+        Uses full-file MS1 scans and the same alignment and preprocessing as
+        load_from_file. This is a full extraction, not a downsampled approximation.
+        No full frame-by-feature baseline is retained and no dataset is saved.
+        """
+        from scMM.file._dataset_loading import _raw_config, align_raw_experiment
+        from scMM.file.data import CyESIData
+
+        config = _raw_config(
+            parameters.ref_mz,
+            np.float64,
+            parameters.ppm_tol,
+            parameters.resolution,
+            parameters.resample_points_per_fwhm,
+            parameters.ms_peak_snr_threshold,
+            None,
+            3,
+        )
+        state = align_raw_experiment(self.experiment, self.metadata, self.path, config)
+        captured = {}
+
+        def capture(event, payload):
+            if event != "find_cells":
+                return
+            signal = payload["signal"]
+            references = tuple(float(mz) for mz in payload["reference_mz"])
+            traces = pd.DataFrame(
+                {
+                    "frame_id": np.arange(len(signal)),
+                    "rt_seconds": payload["frame_obs"]["rt"].to_numpy(copy=True),
+                    "cell_window": np.asarray(payload["cell_mask"]).copy(),
+                    "cell_apex": np.zeros(len(signal), dtype=bool),
+                }
+            )
+            traces.loc[payload["cell_idx"], "cell_apex"] = True
+            for i, mz in enumerate(references):
+                traces[f"reference_{i}"] = signal[mz].to_numpy(copy=True)
+            captured.update(
+                traces=traces,
+                reference_mz=references,
+                window_ranges=tuple(payload["window_ranges"]),
+                cell_count=len(payload["cell_idx"]),
+            )
+
+        CyESIData._from_raw_state(
+            state,
+            {
+                "baseline_filter_size": parameters.baseline_filter_size,
+                "cell_snr": parameters.cell_snr,
+                "peak_snr": parameters.peak_snr,
+                "max_zero_frac": parameters.max_zero_frac,
+                "n_jobs": parameters.n_jobs,
+                "extraction_method": extraction_method,
+                "reference_mz": reference_mz,
+                "reference_mode": reference_mode,
+                "reference_ppm_tol": reference_ppm_tol,
+                "feature_snr_threshold": feature_snr_threshold,
+                "noise_window": noise_window,
+                "feature_block_size": feature_block_size,
+                "progress_callback": progress_callback,
+                "debug_hook": capture,
+                "debug_full_baseline": False,
+            },
+        )
+        return CellDetectionPreview(**captured)
 
     def total_ion_chromatogram(
         self,

@@ -8,6 +8,25 @@
 后续已建立本地快照仓库，来源管理见 [上游快照](11-upstream-snapshots.md)。
 版本摘要与已知问题入口见 [Changelog](../CHANGELOG.md)。以下保留此前阶段记录。
 
+## GUI 0.2.0 来源移植：阶段 B（2026-09-22）
+
+- legacy 和 snr_v1 新增 `progress_callback(value, message)`，value 为 0–1 的
+  提取阶段完成比例；分块后报告，回调异常直接传播。未分块 legacy 仅报告开始/结束。
+- shared/independent 将文件内进度映射到批次进度，合并成功后才报告总完成。
+  worker 将提取映射到任务 10%–80%，保存/QC 完成后才写入任务完成。
+  进度是阶段比例，不是耗时预测；加载和对齐仍没有细粒度进度。
+- `ProcessingTask` 新增持久化 progress/progress_message，旧 JSON 缺字段时兼容默认值；
+  没有改动 GUI，也未改动审核保存和输出边界。
+- 新增 `RawFilePreview.cell_detection(ProcessingParameters(...), ...)`，复用缓存的
+  MS1 实验及生产选峰/对齐/提取实现，返回参考轨迹、窗口、峰顶、秒制 RT 和细胞数。
+  覆盖旧算法与 SNR union/intersection；不重新打开文件、不自动保存结果。
+- `debug_full_baseline=False` 允许预览不保留完整基线；原有 debug hook 默认仍返回
+  完整基线以维持兼容。预览仍执行完整提取，不能视为轻量抽样或实时保证。
+- 验证：`.venv/bin/pytest -q -W error tests/test_extraction_preview.py tests/test_optional_processing.py tests/test_peak.py tests/test_application.py tests/test_processing_tasks.py`
+  共 58 项通过；含真实解析合成 mzML 与正式提取一致、缓存不变、空细胞、数值不变、
+  回调失败传播、进度单调、任务失败不误报完成及旧任务状态兼容。
+- 厂商 RAW、真实大样本性能及 Windows 本轮未验证；GUI 接入明确暂缓。
+
 ## GUI 0.2.0 来源移植：阶段 A（2026-09-22）
 
 - 来源 `snapshot/SCMM-GUI-0.2.0-source@f961809`；与旧快照 bdce317 和

@@ -25,6 +25,7 @@ def find_cell_peaks_snr(
     return_full_baseline: bool = False,
     show_progress: bool = True,
     reference_ppm_tol: float = 10.0,
+    progress_callback=None,
     **filter_kwargs,
 ):
     """Extract cells using reference EICs and quantify features with true SNR.
@@ -118,6 +119,8 @@ def find_cell_peaks_snr(
         unit="block",
         disable=not show_progress,
     )
+    if progress_callback is not None:
+        progress_callback(0.0, "Extracting SNR cell features")
     for col_start in progress:
         col_stop = min(col_start + feature_block_size, n_features)
         X_block = X[:, col_start:col_stop]
@@ -182,6 +185,8 @@ def find_cell_peaks_snr(
                 detected, corrected_apex, 0.0
             ).astype(output_dtype, copy=False)
             feature_snr[cell_i, col_start:col_stop] = snr.astype(output_dtype, copy=False)
+        if progress_callback is not None:
+            progress_callback(col_stop / n_features, "Extracting SNR cell features")
 
     if n_cells:
         zero_fraction_values = np.mean(cell_matrix == 0, axis=0)

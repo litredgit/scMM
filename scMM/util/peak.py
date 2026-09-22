@@ -183,6 +183,7 @@ def find_cell_peaks(
     n_jobs: int = -1,
     feature_block_size: int | None = None,
     return_full_baseline: bool = True,
+    progress_callback=None,
     **kwargs,
 ):
     """Identify cell-event windows and reduce each to one feature vector."""
@@ -209,8 +210,11 @@ def find_cell_peaks(
             max_zero_frac,
             feature_block_size,
             return_full_baseline,
+            progress_callback,
             kwargs,
         )
+    if progress_callback is not None:
+        progress_callback(0.0, "Extracting cell features")
     inputs, common, n_cells = _detect_cell_windows(
         data,
         ref_mz,
@@ -221,6 +225,8 @@ def find_cell_peaks(
         kwargs,
     )
     if n_cells == 0:
+        if progress_callback is not None:
+            progress_callback(1.0, "Cell feature extraction complete")
         return _empty_cell_result(data, common)
     peaks = Parallel(n_jobs=n_jobs)(
         delayed(_process_cell_window)(label_id, inputs, baseline_stat, peak_snr)
@@ -232,6 +238,8 @@ def find_cell_peaks(
         peaks,
         max_zero_frac,
     )
+    if progress_callback is not None:
+        progress_callback(1.0, "Cell feature extraction complete")
     return {
         **common,
         "cell_df": cell_frame,
@@ -254,6 +262,7 @@ def _find_cells_blockwise(
     max_zero_frac,
     block_size,
     return_full_baseline,
+    progress_callback,
     filter_kwargs,
 ):
     """Bound temporary frame matrices while retaining legacy peak semantics.
@@ -272,6 +281,8 @@ def _find_cells_blockwise(
     common = _common_cell_result(data, mask, labels, full_baseline, reference_index)
     matrix = np.empty((n_cells, data.shape[1]), dtype=dtype)
     peaks = []
+    if progress_callback is not None:
+        progress_callback(0.0, "Extracting cell features")
     for start in range(0, data.shape[1], block_size):
         stop = min(start + block_size, data.shape[1])
         values = data.iloc[:, start:stop].to_numpy(dtype=dtype)
@@ -286,6 +297,8 @@ def _find_cells_blockwise(
         ]
         for i, peak in enumerate(peaks):
             matrix[i, start:stop] = peak.intensities
+        if progress_callback is not None:
+            progress_callback(stop / data.shape[1], "Extracting cell features")
     if not n_cells:
         return _empty_cell_result(data, common)
     frame = pd.DataFrame(matrix, columns=data.columns)

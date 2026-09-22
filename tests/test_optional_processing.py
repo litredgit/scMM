@@ -102,6 +102,8 @@ def test_sequential_file_boundaries_with_real_mzml(tmp_path, monkeypatch, strate
     np.testing.assert_allclose(obj.data, [[20.0], [20.0]])
     assert obj.peak_meta.source_file.tolist() == ["a.mzML", "b.mzML"]
     assert progress[-1] == 1.0
+    assert progress == sorted(progress)
+    assert all(0 <= value <= 1 for value in progress)
     assert obj.file_meta["processing"]["feature_strategy"] == strategy
 
 

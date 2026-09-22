@@ -32,6 +32,8 @@ class DatasetProcessingMixin:
         peak_snr: float = 3.0,
         max_zero_frac: float = 0.9,
         debug_hook: DebugHook | None = None,
+        debug_full_baseline: bool = True,
+        progress_callback=None,
         feature_block_size: int | None = 256,
         extraction_method: str = "legacy",
         reference_mz=None,
@@ -62,7 +64,8 @@ class DatasetProcessingMixin:
                 noise_window=noise_window,
                 max_zero_fraction=max_zero_frac,
                 feature_block_size=feature_block_size or self.data.shape[1],
-                return_full_baseline=debug_hook is not None,
+                return_full_baseline=debug_hook is not None and debug_full_baseline,
+                progress_callback=progress_callback,
                 **kwargs,
             )
         else:
@@ -75,7 +78,8 @@ class DatasetProcessingMixin:
                 peak_snr=peak_snr,
                 max_zero_frac=max_zero_frac,
                 feature_block_size=feature_block_size,
-                return_full_baseline=debug_hook is not None,
+                return_full_baseline=debug_hook is not None and debug_full_baseline,
+                progress_callback=progress_callback,
                 **kwargs,
             )
         if debug_hook is not None:
@@ -86,6 +90,11 @@ class DatasetProcessingMixin:
                     "baseline": result["baseline"],
                     "cell_mask": result["cell_mask"],
                     "cell_idx": result["peak_frames"],
+                    "frame_obs": self.peak_meta,
+                    "reference_mz": result.get(
+                        "reference_mz_matched", [result.get("ref_mz_matched")]
+                    ),
+                    "window_ranges": result["window_ranges"],
                 },
             )
         self.data = result["cell_df"]

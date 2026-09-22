@@ -173,6 +173,38 @@ def test_worker_saves_result_and_reproducibility_manifest(tmp_path: Path) -> Non
     assert manifest["parameters"]["ref_mz"] == 100
     assert (result / "quality-summary.json").is_file()
     assert ProcessingTask.from_json(task.state_path).status == "succeeded"
+    assert ProcessingTask.from_json(task.state_path).progress == 1.0
+    assert callable(loader.call_args.kwargs["progress_callback"])
+
+
+def test_worker_failure_does_not_report_completion(tmp_path):
+    from scMM.application.worker import main
+
+    manager, request, _ = _manager(tmp_path)
+    task = manager._create_task(request, manager.planner.preflight(request))
+
+    def fail(*args, progress_callback, **kwargs):
+        progress_callback(0.5, "Extracting cell features")
+        assert ProcessingTask.from_json(task.state_path).progress == pytest.approx(0.45)
+        raise RuntimeError("extraction failed")
+
+    with patch("scMM.application.worker.CyESIData.load_from_file", side_effect=fail):
+        assert main(["--request", task.request_path, "--state", task.state_path]) == 1
+    state = ProcessingTask.from_json(task.state_path)
+    assert state.status == "failed"
+    assert state.progress < 1
+    assert "extraction failed" in state.error
+
+
+def test_old_task_state_without_progress_loads(tmp_path):
+    manager, request, _ = _manager(tmp_path)
+    task = manager._create_task(request, manager.planner.preflight(request))
+    path = Path(task.state_path)
+    payload = json.loads(path.read_text())
+    payload.pop("progress")
+    payload.pop("progress_message")
+    path.write_text(json.dumps(payload))
+    assert ProcessingTask.from_json(path).progress == 0.0
 
 
 def test_update_task_preserves_unmodified_fields(tmp_path: Path) -> None:

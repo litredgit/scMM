@@ -52,11 +52,18 @@ def run_request(request_path: str | Path, state_path: str | Path) -> Path:
 
     parameters = ProcessingParameters(**payload["parameters"])
     logging.getLogger(__name__).info("Processing %s as task %s", source, state.task_id)
+
+    def report_extraction(value, message):
+        update_task(state_path, progress=0.1 + 0.7 * value, progress_message=message)
+
+    update_task(state_path, progress=0.0, progress_message="Loading and aligning raw data")
     dataset = CyESIData.load_from_file(
         source,
         ref_mz=parameters.ref_mz,
+        progress_callback=report_extraction,
         **parameters.load_kwargs(),
     )
+    update_task(state_path, progress=0.8, progress_message="Saving processed data")
     original_name = dataset.get_name()
     dataset.file_meta["name"] = payload["result_name"]
     dataset.file_meta["source_name"] = original_name
@@ -64,6 +71,7 @@ def run_request(request_path: str | Path, state_path: str | Path) -> Path:
     if result_path.resolve() != expected_result.resolve():
         raise RuntimeError(f"Unexpected result path: {result_path}")
     quality_warnings: list[str] = []
+    update_task(state_path, progress=0.9, progress_message="Generating quality artifacts")
     try:
         quality = build_quality_report(dataset)
         save_quality_report(quality, result_path)
@@ -77,6 +85,8 @@ def run_request(request_path: str | Path, state_path: str | Path) -> Path:
         status="succeeded",
         finished_at=utc_now(),
         result_path=str(result_path.resolve()),
+        progress=1.0,
+        progress_message="Processing complete",
     )
     return result_path
 

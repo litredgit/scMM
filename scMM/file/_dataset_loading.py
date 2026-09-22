@@ -142,14 +142,20 @@ def load_raw_file(
     )
     load_options = {"msconvert_path": msconvert_path} if msconvert_path else {}
     experiment, file_meta = load_single_file(str(file_path), format="auto", **load_options)
+    return align_raw_experiment(experiment, file_meta, file_path, config)
+
+
+def align_raw_experiment(experiment, file_meta, file_path, config: _RawLoadConfig) -> DatasetState:
+    """Share production feature selection/alignment with already-loaded previews."""
+    file_meta = dict(file_meta)
     targets = _pick_common_targets(experiment, config, dtype=config.dtype)
     data, peak_meta = align_frame(experiment, targets, config.ppm_tol, dtype=config.dtype)
     _annotate_single_file_frames(peak_meta, file_meta)
     peak_meta["source_file"] = Path(file_path).name
     peak_meta["frame_id"] = peak_meta.index.to_numpy()
     peak_meta["acquisition_time"] = file_meta["timestamp"] + peak_meta["rt"].to_numpy()
-    file_meta["ref_mz"] = ref_mz
-    return DatasetState(data, peak_meta, file_meta, ref_mz)
+    file_meta["ref_mz"] = config.ref_mz
+    return DatasetState(data, peak_meta, file_meta, config.ref_mz)
 
 
 def load_raw_directory(

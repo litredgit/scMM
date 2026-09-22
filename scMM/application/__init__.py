@@ -16,11 +16,12 @@ from .quality import (
     load_quality_report,
     save_quality_report,
 )
-from .raw_preview import RawFilePreview, RawFileSummary, RawPreviewService
+from .raw_preview import CellDetectionPreview, RawFilePreview, RawFileSummary, RawPreviewService
 from .storage import StorageCatalog, StorageEntry, StorageRoot
 from .tasks import ProcessingTask, ProcessingTaskManager, TaskBusyError, TaskStatus
 
 __all__ = [
+    "CellDetectionPreview",
     "OutputCatalog",
     "OutputRoot",
     "ProcessingParameters",

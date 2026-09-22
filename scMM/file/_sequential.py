@@ -90,6 +90,14 @@ def load_directory(
             if not len(targets):
                 raise ValueError("No features detected in shared spectrum")
         for i, source in enumerate(files):
+
+            def file_progress(value, message, file_index=i, name=source.name):
+                report(
+                    0.4 + 0.55 * (file_index + value) / len(files),
+                    f"{name}: {message}",
+                )
+
+            file_preprocess = {**preprocess, "progress_callback": file_progress}
             if targets is None:
                 obj = cls.load_from_file(
                     paths[source],
@@ -101,7 +109,7 @@ def load_directory(
                     ms_peak_snr_threshold=ms_peak_snr_threshold,
                     prominence_ratio=prominence_ratio,
                     distance=distance,
-                    **preprocess,
+                    **file_preprocess,
                 )
             else:
                 exp, meta = load_single_file(paths[source])
@@ -111,7 +119,7 @@ def load_directory(
                 obs["frame_id"] = obs.index.to_numpy()
                 obs["acquisition_time"] = meta["timestamp"] + obs["rt"].to_numpy()
                 meta["ref_mz"] = ref_mz
-                obj = cls._from_raw_state(DatasetState(frame, obs, meta, ref_mz), preprocess)
+                obj = cls._from_raw_state(DatasetState(frame, obs, meta, ref_mz), file_preprocess)
                 del frame, obs
             obj.file_meta.update(
                 name=source.stem,
@@ -131,7 +139,7 @@ def load_directory(
                 for key, value in metadata.items():
                     obj.peak_meta[key] = value
             objects.append(obj)
-            report(0.4 + 0.6 * (i + 1) / len(files), f"Extracted cells {i + 1}/{len(files)}")
+            report(0.4 + 0.55 * (i + 1) / len(files), f"Extracted cells {i + 1}/{len(files)}")
     result = merge_objects(cls, objects, 0.0 if feature_strategy == "shared" else feature_merge_ppm)
     result.file_meta.update(
         name=root.name,
@@ -145,6 +153,7 @@ def load_directory(
             "ms_peak_snr_threshold": ms_peak_snr_threshold,
         },
     )
+    report(1.0, "Processing complete")
     return result
 
 
