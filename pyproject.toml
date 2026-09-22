@@ -69,7 +69,7 @@ scmm-ui = "scMM.ui.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["scMM*"]
+include = ["scMM", "scMM.*"]
 exclude = ["scMM-new*"]
 
 [tool.pytest.ini_options]
