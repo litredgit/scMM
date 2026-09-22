@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from scipy.special import softmax
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.calibration import calibration_curve
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import RandomForestClassifier
@@ -13,10 +14,12 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
     auc,
+    average_precision_score,
     balanced_accuracy_score,
     classification_report,
     confusion_matrix,
     f1_score,
+    precision_recall_curve,
     roc_curve,
 )
 from sklearn.model_selection import (
@@ -134,7 +137,14 @@ class SupervisedAnalyzer:
         cv=5,
         smote=False,
         model_params=None,
+        calibration_bins=10,
     ):
+        if (
+            isinstance(calibration_bins, bool)
+            or not isinstance(calibration_bins, (int, np.integer))
+            or calibration_bins < 2
+        ):
+            raise ValueError("calibration_bins must be an integer of at least two")
         counts = pd.Series(self.y).value_counts()
         if counts.min() < 2:
             raise ValueError("every class needs at least two observations")
@@ -220,10 +230,28 @@ class SupervisedAnalyzer:
         self.test_groups_ = None if self.groups is None else self.groups[test]
         self.prediction_ = prediction
         self.probabilities_ = probabilities
+        self.calibration_bins_ = int(calibration_bins)
+        binary = self._test_targets()
+        average_precision = {
+            str(name): float(average_precision_score(binary[:, i], probabilities[:, i]))
+            for i, name in enumerate(classes)
+        }
+        brier = {
+            str(name): float(np.mean((probabilities[:, i] - binary[:, i]) ** 2))
+            for i, name in enumerate(classes)
+        }
         self.result_ = {
             "model": model,
             "smote": bool(smote),
             "test_metrics": metrics,
+            "probability_diagnostics": {
+                "average_precision_by_class": average_precision,
+                "average_precision_macro": float(np.mean(list(average_precision.values()))),
+                "brier_by_class": brier,
+                "brier_macro": float(np.mean(list(brier.values()))),
+                "definition": "Held-out one-vs-rest AP and mean squared probability error; "
+                "macro is the unweighted class mean (not summed multiclass Brier).",
+            },
             "cv_metrics": {
                 key.replace("test_", ""): {
                     "mean": float(np.nanmean(value)),
@@ -242,6 +270,49 @@ class SupervisedAnalyzer:
             ),
         }
         return self.result_
+
+    def _test_targets(self):
+        self._require_fitted()
+        return (self.y_test_[:, None] == self.classes_[None, :]).astype(int)
+
+    def precision_recall_curves(self):
+        """Held-out one-vs-rest curves; AP is not trapezoidal PR AUC."""
+        binary = self._test_targets()
+        curves = {}
+        for i, name in enumerate(self.classes_):
+            precision, recall, thresholds = precision_recall_curve(
+                binary[:, i], self.probabilities_[:, i]
+            )
+            curves[str(name)] = {
+                "precision": precision,
+                "recall": recall,
+                "thresholds": thresholds,
+                "average_precision": float(
+                    average_precision_score(binary[:, i], self.probabilities_[:, i])
+                ),
+            }
+        return curves
+
+    def calibration_curves(self):
+        """Quantile-bin reliability data, not a fitted probability calibrator.
+
+        Empty/duplicate bins are omitted by sklearn. Held-out observations must
+        not subsequently be used to tune the model on the basis of these curves.
+        """
+        binary = self._test_targets()
+        curves = {}
+        for i, name in enumerate(self.classes_):
+            observed, predicted = calibration_curve(
+                binary[:, i],
+                self.probabilities_[:, i],
+                n_bins=self.calibration_bins_,
+                strategy="quantile",
+            )
+            curves[str(name)] = {
+                "fraction_of_positives": observed,
+                "mean_predicted_probability": predicted,
+            }
+        return curves
 
     def roc_curves(self):
         self._require_fitted()

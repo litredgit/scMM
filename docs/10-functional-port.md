@@ -1,9 +1,26 @@
-# scMM-new 功能移植记录
+# 上游源码功能移植工作日志
 
 来源：未跟踪的 `scMM-new/` 源码快照；用户指定共同基点
 `e0357ac3833e0fa5a00e93944ff0a9ef9d5f6485`，移植前 develop 为 `e983aef`。
 按功能移植，保留当前目录存储、CLI、Panel 后台任务及轨迹分析接口。
 不将来源快照打包或提交为正式模块。
+
+后续已建立本地快照仓库，来源管理见 [上游快照](11-upstream-snapshots.md)。
+版本摘要与已知问题入口见 [Changelog](../CHANGELOG.md)。以下保留此前阶段记录。
+
+## GUI 0.2.0 来源移植：阶段 A（2026-09-22）
+
+- 来源 `snapshot/SCMM-GUI-0.2.0-source@f961809`；与旧快照 bdce317 和
+  当前维护版 babc6ae 三方比较，并阅读全部 17 页 PDF。
+- 按用户要求暂缓 GUI、已知有问题的方法及 Windows 安装启动，仅移植独立后端能力。
+- 新增 held-out one-vs-rest PR/AP、quantile 校准曲线、每类及宏平均 Brier；
+  AP 不命名为梯形积分 PR AUC，宏 Brier 明确为逐类均方误差的平均值。
+- 保留既有按组 holdout/CV、SMOTE 边界检查和失败即报错；诊断不新增拟合，
+  三折 CV 加 holdout 模型仍共四次 fit，不导入重复 CV 的上游实现。
+- 校准曲线仅作可靠性诊断，不执行概率校准或使用 holdout 调参。
+- 验证：`.venv/bin/pytest -q -W error tests/test_analysis.py tests/test_probability_diagnostics.py`
+  共 11 项通过，覆盖二/多分类、分组、缺失标签、常量概率、分箱参数和未拟合调用。
+- LDA/PLS-DA 潜变量写回及概率空间 R2/Q2 暂缓，后续先解决能力检查和定义问题。
 
 ## 阶段 1：保持算法的内存优化
 
