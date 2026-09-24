@@ -1,4 +1,5 @@
 import json
+import os
 
 import numpy as np
 import pandas as pd
@@ -95,8 +96,9 @@ def test_h5ad_history_safe_save_and_read(tmp_path):
         state.save_h5ad(catalog, "云盘", ".", "结果.h5ad")
     with pytest.raises(ValueError):
         state.save_h5ad(catalog, "云盘", ".", "../escape.h5ad")
-    with pytest.raises(ValueError, match="Windows"):
-        catalog.resolve("云盘", "C:\\data\\result.h5ad")
+    if os.name != "nt":
+        with pytest.raises(ValueError, match="Windows"):
+            catalog.resolve("云盘", "C:\\data\\result.h5ad")
 
 
 @pytest.mark.parametrize("model,params", [("lda", {}), ("plsda", {})])

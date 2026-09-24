@@ -79,6 +79,16 @@ ANALYSIS_SPECS = {
     "test_size": (0.2, float, (0.01, 0.99), "holdout 比例；训练和测试均须包含所有类别。"),
     "cv": (5, int, (2, 100), "交叉验证折数，受每类样本数和独立组数限制。"),
     "calibration_bins": (10, int, (2, 1000), "校准曲线的 quantile 分箱数，不执行概率重新校准。"),
+    "network_method": (
+        "pearson",
+        str,
+        ("pearson", "spearman", "kendall"),
+        "特征相关系数；不代表因果或轨迹。",
+    ),
+    "network_threshold": (0.7, float, (0.0, 1.0), "保留绝对相关系数不小于该值的边。"),
+    "network_top_features": (50, int, (1, 1000), "按方差选取前 N 个特征，限制相关矩阵与绘图规模。"),
+    "shap_background": (100, int, (1, 1000), "从训练集抽取 SHAP 背景样本，不重新训练模型。"),
+    "shap_samples": (100, int, (1, 1000), "最多解释的测试集样本数；跨样本和类别平均绝对 SHAP。"),
 }
 
 

@@ -60,13 +60,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Additional browser origin accepted by Panel; repeat when needed",
     )
     parser.add_argument("--show", action="store_true", help="Open a local browser after launch")
+    parser.add_argument(
+        "--config", type=Path, help="JSON workbench defaults; overrides SCMM_UI_CONFIG"
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Validate configuration and run the Panel server."""
     args = build_parser().parse_args(argv)
+    from scMM.application.parameters import load_defaults
+
+    defaults = load_defaults(args.config)
     root_specs = args.storage or [("当前目录", Path.cwd())]
+    cloud = Path("/home/crs/data")
+    if cloud.is_dir() and "云盘" not in {label for label, _ in root_specs}:
+        root_specs = [*root_specs, ("云盘", cloud)]
     roots = tuple(StorageRoot(label, path) for label, path in root_specs)
     output_specs = args.output
     if output_specs is None:
@@ -93,7 +102,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
     if args.allow_websocket_origin:
         serve_options["websocket_origin"] = args.allow_websocket_origin
-    pn.serve(lambda: create_app(roots, outputs), **serve_options)
+    pn.serve(lambda: create_app(roots, outputs, defaults=defaults), **serve_options)
     return 0
 
 

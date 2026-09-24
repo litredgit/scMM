@@ -1,5 +1,6 @@
 """Feature comparisons on nonnegative, unscaled abundance matrices."""
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -84,3 +85,29 @@ def marker_features(data, cluster_key="cluster", **kwargs):
         table.insert(0, "cluster", cluster)
         tables.append(table)
     return pd.concat(tables, ignore_index=True)
+
+
+def feature_correlation_network(
+    data, *, method="pearson", min_abs_correlation=0.7, top_features=None, layer=None
+):
+    """Variance-selected feature correlation graph; not a trajectory or causal graph."""
+    if method not in {"pearson", "spearman", "kendall"}:
+        raise ValueError("unknown correlation method")
+    if not 0 <= min_abs_correlation <= 1:
+        raise ValueError("min_abs_correlation must be between zero and one")
+    matrix = data.layers[layer] if layer else data.X
+    matrix = matrix.toarray() if hasattr(matrix, "toarray") else np.asarray(matrix)
+    selected = np.arange(data.n_vars)
+    if top_features is not None:
+        if isinstance(top_features, bool) or int(top_features) != top_features or top_features < 1:
+            raise ValueError("top_features must be a positive integer")
+        selected = np.argsort(np.nanvar(matrix, axis=0))[-int(top_features) :]
+    corr = pd.DataFrame(matrix[:, selected], columns=data.var_names[selected]).corr(method=method)
+    graph = nx.Graph()
+    graph.add_nodes_from(corr.columns)
+    for i, left in enumerate(corr.columns):
+        for j in range(i + 1, len(corr.columns)):
+            value = float(corr.iloc[i, j])
+            if np.isfinite(value) and abs(value) >= min_abs_correlation:
+                graph.add_edge(left, corr.columns[j], correlation=value, weight=abs(value))
+    return graph, corr

@@ -1,6 +1,10 @@
 """Additional analysis methods without replacing trajectory capabilities."""
 
-from ..analysis.statistics import differential_features, marker_features
+from ..analysis.statistics import (
+    differential_features,
+    feature_correlation_network,
+    marker_features,
+)
 
 
 class StatisticsMixin:
@@ -14,31 +18,12 @@ class StatisticsMixin:
         self, *, method="pearson", min_abs_correlation=0.7, top_features=None
     ):
         """Return an explicit correlation graph, separate from feature-distance embedding."""
-        import networkx as nx
-        import numpy as np
-        import pandas as pd
-
-        if method not in {"pearson", "spearman", "kendall"}:
-            raise ValueError("unknown correlation method")
-        if not 0 <= min_abs_correlation <= 1:
-            raise ValueError("min_abs_correlation must be between zero and one")
-        X = self._get_X()
-        selected = np.arange(self.adata.n_vars)
-        if top_features is not None:
-            if int(top_features) < 1:
-                raise ValueError("top_features must be positive")
-            selected = np.argsort(np.nanvar(X, axis=0))[-int(top_features) :]
-        corr = pd.DataFrame(X[:, selected], columns=self.adata.var_names[selected]).corr(
-            method=method
+        return feature_correlation_network(
+            self.adata,
+            method=method,
+            min_abs_correlation=min_abs_correlation,
+            top_features=top_features,
         )
-        graph = nx.Graph()
-        graph.add_nodes_from(corr.columns)
-        for i, left in enumerate(corr.columns):
-            for j in range(i + 1, len(corr.columns)):
-                value = float(corr.iloc[i, j])
-                if np.isfinite(value) and abs(value) >= min_abs_correlation:
-                    graph.add_edge(left, corr.columns[j], correlation=value, weight=abs(value))
-        return graph, corr
 
     def plot_feature_scatter(
         self, feature_a, feature_b, *, color_key=None, regression=True, output_file=None

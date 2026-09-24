@@ -116,3 +116,30 @@ def supervised_figures(analyzer):
         title="Holdout 校准诊断（不重新拟合）", xaxis_title="预测概率", yaxis_title="实际阳性比例"
     )
     return roc, pr, calibration
+
+
+def network_figure(graph):
+    """Deterministic layout with signed edges and isolated nodes retained."""
+    import networkx as nx
+
+    positions = nx.spring_layout(graph, seed=42)
+    figure = go.Figure()
+    for positive, color, label in ((True, "#d95f02", "正相关"), (False, "#1b9e77", "负相关")):
+        x, y = [], []
+        for a, b, attrs in graph.edges(data=True):
+            if (attrs["correlation"] >= 0) == positive:
+                x.extend([positions[a][0], positions[b][0], None])
+                y.extend([positions[a][1], positions[b][1], None])
+        figure.add_trace(go.Scatter(x=x, y=y, mode="lines", line={"color": color}, name=label))
+    figure.add_trace(
+        go.Scatter(
+            x=[positions[n][0] for n in graph],
+            y=[positions[n][1] for n in graph],
+            text=list(graph),
+            mode="markers",
+            name="特征",
+            hovertemplate="%{text}<extra></extra>",
+        )
+    )
+    figure.update_layout(title="特征相关网络（不代表因果或轨迹）", showlegend=True)
+    return figure

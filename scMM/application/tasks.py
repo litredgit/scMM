@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import shutil
@@ -17,6 +16,17 @@ from typing import Any, Literal
 
 from .processing import ProcessingPlan, ProcessingPlanner, ProcessingRequest, _resolve_target
 from .storage import StorageCatalog
+
+try:
+    import fcntl
+except ImportError:  # Windows reading/analysis must not import a Linux-only module.
+    fcntl = None
+
+
+def background_tasks_supported() -> bool:
+    """Windows read/analysis support does not imply detached-worker support."""
+    return fcntl is not None and sys.platform.startswith("linux")
+
 
 TaskStatus = Literal["queued", "running", "succeeded", "failed"]
 _TERMINAL_STATUSES = frozenset({"succeeded", "failed"})
@@ -75,6 +85,8 @@ class ProcessingTaskManager:
 
     def submit(self, request: ProcessingRequest) -> ProcessingTask:
         """Preflight and launch a worker detached from the Panel session."""
+        if not background_tasks_supported():
+            raise RuntimeError("Background extraction is currently supported only on Linux")
         plan = self.planner.preflight(request)
         with self._locked():
             active = self.active()
@@ -129,6 +141,8 @@ class ProcessingTaskManager:
 
     def get(self, task_id: str) -> ProcessingTask:
         """Return reconciled state for one task ID."""
+        if not background_tasks_supported():
+            raise RuntimeError("Background task recovery is currently supported only on Linux")
         if not task_id or Path(task_id).name != task_id:
             raise ValueError(f"Invalid task ID: {task_id!r}")
         path = self.state_root / task_id / "state.json"
@@ -152,6 +166,8 @@ class ProcessingTaskManager:
 
     def list(self) -> tuple[ProcessingTask, ...]:
         """Return known tasks, newest first."""
+        if not background_tasks_supported():
+            return ()
         tasks = []
         for path in self.state_root.glob("*/state.json"):
             try:
@@ -274,6 +290,8 @@ class ProcessingTaskManager:
 
     @contextmanager
     def _locked(self):
+        if not background_tasks_supported():
+            raise RuntimeError("Background task locking is currently supported only on Linux")
         with self._lock_path.open("a+b") as handle:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
             try:

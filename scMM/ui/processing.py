@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from html import escape
 from pathlib import Path
 
@@ -18,6 +19,8 @@ from scMM.application import (
     StorageCatalog,
     load_quality_report,
 )
+from scMM.application.parameters import PROCESSING_HELP
+from scMM.application.tasks import background_tasks_supported
 
 _PLOT_CONFIG = {"displaylogo": False, "responsive": True, "scrollZoom": True}
 _DIRECTORY_ONLY_PATTERN = ".__scmm_directory_selector_no_files__"
@@ -38,7 +41,9 @@ _STATUS_LABELS = {
 class GuidedProcessingPanel:
     """Collect, preflight, submit, and recover processing tasks."""
 
-    def __init__(self, storage: StorageCatalog, output_roots: tuple[OutputRoot, ...]) -> None:
+    def __init__(
+        self, storage: StorageCatalog, output_roots: tuple[OutputRoot, ...], defaults=None
+    ) -> None:
         self.storage = storage
         self.outputs = OutputCatalog(output_roots)
         self.planner = ProcessingPlanner(storage, self.outputs)
@@ -96,6 +101,47 @@ class GuidedProcessingPanel:
             label="基线窗口", value=50, start=1, end=100_000, width=140, sizing_mode=None
         )
         self.max_zero_frac = _float_input("最大零值比例", 0.9, step=0.01)
+        self.extra_parameters = {
+            "mz_min": pn.widgets.FloatInput(label="提取 m/z 下限", value=100.0),
+            "mz_max": pn.widgets.FloatInput(label="提取 m/z 上限", value=1000.0),
+            "extraction_method": pn.widgets.Select(label="提取算法", options=["legacy", "snr_v1"]),
+            "reference_mz": pn.widgets.TextInput(label="SNR 参考 m/z（逗号分隔，空为 ref_mz）"),
+            "reference_mode": pn.widgets.Select(
+                label="参考组合", options=["union", "intersection"]
+            ),
+            "reference_ppm_tol": pn.widgets.FloatInput(label="参考匹配 ppm", value=10.0),
+            "feature_snr_threshold": pn.widgets.FloatInput(label="SNR 特征阈值", value=3.0),
+            "noise_window": pn.widgets.IntInput(label="噪声窗口（帧）", value=51, start=2),
+            "feature_block_size": pn.widgets.IntInput(label="特征分块数", value=256, start=1),
+        }
+        self.parameter_widgets = {
+            "ref_mz": self.ref_mz,
+            "ppm_tol": self.ppm_tol,
+            "resolution": self.resolution,
+            "cell_snr": self.cell_snr,
+            "peak_snr": self.peak_snr,
+            "n_jobs": self.n_jobs,
+            "ms_peak_snr_threshold": self.ms_peak_snr,
+            "resample_points_per_fwhm": self.points_per_fwhm,
+            "baseline_filter_size": self.baseline_size,
+            "max_zero_frac": self.max_zero_frac,
+            **self.extra_parameters,
+        }
+        self.defaults = defaults or ProcessingParameters(ref_mz=100.0)
+        for key, value in asdict(self.defaults).items():
+            self.parameter_widgets[key].value = (
+                ", ".join(map(str, value)) if key == "reference_mz" else value
+            )
+        self.parameter_help = pn.Accordion(
+            (
+                "参数含义、单位与算法差异",
+                pn.pane.Markdown(
+                    "\n\n".join(f"**{key}**：{text}" for key, text in PROCESSING_HELP.items())
+                ),
+            ),
+            active=[],
+        )
+        self.progress = pn.indicators.Progress(label="处理进度", value=0, max=100)
         self.advanced_toggle = pn.widgets.Toggle(
             label="显示高级参数", icon="adjustments", width=150, height=36, sizing_mode="fixed"
         )
@@ -104,6 +150,7 @@ class GuidedProcessingPanel:
             self.points_per_fwhm,
             self.baseline_size,
             self.max_zero_frac,
+            *self.extra_parameters.values(),
             gap="10px",
             visible=False,
             sizing_mode="stretch_width",
@@ -293,6 +340,12 @@ class GuidedProcessingPanel:
         self._replace_output_selector()
         self._set_output_path(self.storage.roots[0].path / "results")
         self._reload_tasks()
+        if not background_tasks_supported():
+            self.preflight_button.disabled = True
+            self.submit_button.disabled = True
+            self.preflight_text.object = (
+                "此平台仅开放读取、预览和分析；后台提取任务暂只支持 Linux。"
+            )
 
     def panel(self):
         """Return the processing and task-status page."""
@@ -324,13 +377,14 @@ class GuidedProcessingPanel:
             sizing_mode="stretch_width",
         )
         return pn.Column(
-            "## ③ 处理与结果",
+            "## 原始数据处理与审核保存",
             "按顺序完成参数设置、预检、明确确认和后台提交。关闭页面不会中止已提交任务。",
             self.input_text,
             "### 1. 处理参数",
             primary,
             self.advanced_toggle,
             self.advanced,
+            self.parameter_help,
             "### 2. 提交前检查",
             self.preflight_text,
             actions,
@@ -338,6 +392,7 @@ class GuidedProcessingPanel:
             "### 3. 任务状态",
             task_header,
             self.status_text,
+            self.progress,
             self.log_text,
             self.quality_section,
             self.save_section,
@@ -387,6 +442,9 @@ class GuidedProcessingPanel:
         if task.error:
             details.append(f"**错误：** {escape(task.error)}")
         self.status_text.object = "  \n".join(details)
+        self.progress.value = round(100 * max(0.0, min(1.0, task.progress)))
+        if task.progress_message:
+            self.status_text.object += f"  \n**阶段：** {escape(task.progress_message)}"
         self.log_text.value = self.tasks.read_log(task.task_id)
         if task.status == "succeeded" and self._quality_task_id != task.task_id:
             self._load_quality(task)
@@ -406,18 +464,7 @@ class GuidedProcessingPanel:
         self.advanced_toggle.param.watch(
             lambda event: setattr(self.advanced, "visible", event.new), "value"
         )
-        parameters = (
-            self.ref_mz,
-            self.ppm_tol,
-            self.resolution,
-            self.cell_snr,
-            self.peak_snr,
-            self.n_jobs,
-            self.ms_peak_snr,
-            self.points_per_fwhm,
-            self.baseline_size,
-            self.max_zero_frac,
-        )
+        parameters = tuple(self.parameter_widgets.values())
         for widget in parameters:
             widget.param.watch(self._invalidate_preflight, "value")
         self.confirm.param.watch(self._update_submit_state, "value")
@@ -470,7 +517,12 @@ class GuidedProcessingPanel:
         )
 
     def _apply_preset(self, event) -> None:
-        params = ProcessingParameters.from_preset(event.new, max(self.ref_mz.value, 1.0))
+        params = ProcessingParameters.from_preset(
+            event.new,
+            self.defaults.ref_mz,
+            mz_min=self.defaults.mz_min,
+            mz_max=self.defaults.mz_max,
+        )
         self.ms_peak_snr.value = params.ms_peak_snr_threshold
         self.cell_snr.value = params.cell_snr
         self.peak_snr.value = params.peak_snr
@@ -478,18 +530,12 @@ class GuidedProcessingPanel:
         self._invalidate_preflight()
 
     def _parameters(self) -> ProcessingParameters:
-        return ProcessingParameters(
-            ref_mz=self.ref_mz.value,
-            ppm_tol=self.ppm_tol.value,
-            resolution=self.resolution.value,
-            resample_points_per_fwhm=self.points_per_fwhm.value,
-            ms_peak_snr_threshold=self.ms_peak_snr.value,
-            cell_snr=self.cell_snr.value,
-            peak_snr=self.peak_snr.value,
-            baseline_filter_size=self.baseline_size.value,
-            max_zero_frac=self.max_zero_frac.value,
-            n_jobs=self.n_jobs.value,
+        values = {key: widget.value for key, widget in self.parameter_widgets.items()}
+        text = values["reference_mz"].strip()
+        values["reference_mz"] = (
+            tuple(float(v.strip()) for v in text.replace("，", ",").split(",")) if text else ()
         )
+        return ProcessingParameters(**values)
 
     def _build_request(self) -> ProcessingRequest:
         if self._storage_label is None or self._input_path is None:
@@ -553,7 +599,9 @@ class GuidedProcessingPanel:
         self.preflight_text.object = "输入或参数已变化，请重新执行预检。"
 
     def _update_submit_state(self, _event=None) -> None:
-        self.submit_button.disabled = self._request is None or not self.confirm.value
+        self.submit_button.disabled = (
+            not background_tasks_supported() or self._request is None or not self.confirm.value
+        )
 
     def _refresh_tasks(self) -> None:
         self._reload_tasks(select_id=self._active_task_id)

@@ -64,6 +64,9 @@ def test_quality_pdf_and_new_clustering(tmp_path):
 
 
 @pytest.mark.parametrize("model", ["logistic", "random_forest"])
+@pytest.mark.filterwarnings(
+    "ignore:The set_(bad|under|over) function will be deprecated:PendingDeprecationWarning:shap.plots.colors._colors"
+)
 def test_optional_smote_and_shap(model):
     pytest.importorskip("shap")
     pytest.importorskip("imblearn")

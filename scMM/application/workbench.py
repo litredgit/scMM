@@ -18,6 +18,7 @@ from sklearn.impute import KNNImputer, SimpleImputer
 from scMM.analysis import SupervisedAnalyzer, differential_features
 from scMM.analysis.embedding import reduce_dimension
 from scMM.analysis.quality import quality_metrics
+from scMM.analysis.statistics import feature_correlation_network, marker_features
 from scMM.file.data import CyESIData
 from scMM.util.normalize import normalize
 
@@ -87,10 +88,15 @@ class AnalysisWorkspace:
         metadata = candidate.uns.setdefault("scmm_workbench", {})
         if not isinstance(metadata, dict):
             raise ValueError("invalid scmm_workbench metadata")
+        if metadata.get("schema_version", 1) != 1:
+            raise ValueError("unsupported scmm_workbench schema version")
+        metadata["schema_version"] = 1
         if "original_layer" not in metadata:
             layer = self._layer_key(candidate, "input")
             candidate.layers[layer] = candidate.X.copy()
             metadata["original_layer"] = layer
+        if metadata["original_layer"] not in candidate.layers:
+            raise ValueError("preprocessing input layer is missing")
         metadata.setdefault("history_json", "[]")
         # Validate serialized history before replacing a usable session.
         if not isinstance(json.loads(metadata["history_json"]), list):
@@ -315,6 +321,7 @@ class AnalysisWorkspace:
 
     def train(self, label_key, *, group_key=None, layer=None, model="logistic", **options):
         self.results.pop("supervised", None)
+        self.results.pop("shap", None)
         token = self.token
         analyzer = SupervisedAnalyzer(
             self.require_data(),
@@ -326,6 +333,46 @@ class AnalysisWorkspace:
         analyzer.evaluate(model, **options)
         self.put_result("supervised", analyzer, token)
         return analyzer
+
+    def markers(self, group_key, *, method="mannwhitney", layer=None):
+        self.results.pop("markers", None)
+        token = self.token
+        result = {"group_key": group_key, "method": method, "layer": layer}
+        result["table"] = marker_features(
+            self.require_data(), group_key, method=method, layer=layer
+        )
+        self.put_result("markers", result, token)
+        return result
+
+    def network(self, **options):
+        self.results.pop("network", None)
+        token = self.token
+        graph, corr = feature_correlation_network(self.require_data(), **options)
+        table = pd.DataFrame(
+            [(a, b, attrs["correlation"]) for a, b, attrs in graph.edges(data=True)],
+            columns=["source", "target", "correlation"],
+        )
+        result = {"graph": graph, "correlation": corr, "table": table, "parameters": options}
+        self.put_result("network", result, token)
+        return result
+
+    def explain_shap(self, **options):
+        self.results.pop("shap", None)
+        token = self.token
+        analyzer = self.result("supervised")
+        explanation = analyzer.explain_shap(**options)
+        values = np.abs(explanation.values)
+        if values.ndim not in (2, 3):
+            raise ValueError("Unsupported SHAP value shape")
+        importance = values.mean(axis=(0, 2) if values.ndim == 3 else 0)
+        table = pd.DataFrame({"feature_id": analyzer.feature_names, "mean_abs_shap": importance})
+        result = {
+            "table": table.sort_values("mean_abs_shap", ascending=False),
+            "parameters": options,
+            "obs_names": analyzer.shap_obs_names_.tolist(),
+        }
+        self.put_result("shap", result, token)
+        return result
 
     def save_latent(self, key):
         analyzer = self.result("supervised")
@@ -368,6 +415,37 @@ class AnalysisWorkspace:
         snapshot = data.copy()
         snapshot.uns["scmm_workbench"].update(
             dataset_id=self.dataset_id, revision=self.revision, source=self.source
+        )
+        reports = {}
+        for name in ("markers", "network", "shap"):
+            if name in self.results:
+                result = self.result(name)
+                reports[name] = {
+                    **{
+                        k: v
+                        for k, v in result.items()
+                        if k not in {"table", "graph", "correlation"}
+                    },
+                    "table": result["table"].to_dict(orient="records"),
+                }
+                if name == "network":
+                    reports[name]["nodes"] = list(result["graph"].nodes)
+        if "differential" in self.results:
+            result = self.result("differential")
+            reports["differential"] = {
+                **{key: value for key, value in result.items() if key != "table"},
+                "table": result["table"].to_dict(orient="records"),
+            }
+        if "supervised" in self.results:
+            analyzer = self.result("supervised")
+            reports["supervised"] = {
+                "diagnostics": analyzer.result_,
+                "train_obs": analyzer.train_obs_names_.tolist(),
+                "test_obs": analyzer.test_obs_names_.tolist(),
+                "classes": analyzer.classes_.tolist(),
+            }
+        snapshot.uns["scmm_workbench"]["reports_json"] = json.dumps(
+            reports, default=lambda v: v.tolist()
         )
         with NamedTemporaryFile(dir=folder, suffix=".h5ad", delete=False) as handle:
             temporary = Path(handle.name)

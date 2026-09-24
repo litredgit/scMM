@@ -69,6 +69,8 @@ def test_processing_panel_submits_and_recovers_task_status(tmp_path: Path) -> No
         input_path="/raw/sample.mzML",
         result_path="/results/sample",
         error=None,
+        progress=0.25,
+        progress_message="Extracting cell features",
     )
 
     with (

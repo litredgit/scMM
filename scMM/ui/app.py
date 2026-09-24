@@ -17,8 +17,10 @@ from scMM.application import (
     StorageCatalog,
     StorageRoot,
 )
+from scMM.application.parameters import load_defaults
 
 from .processing import GuidedProcessingPanel
+from .workbench import WorkbenchPanels
 
 pn.extension("plotly", notifications=True, sizing_mode="stretch_width")
 
@@ -165,8 +167,10 @@ class PreviewWorkspace:
         self,
         roots: tuple[StorageRoot, ...],
         output_roots: tuple[OutputRoot, ...],
+        defaults=None,
     ) -> None:
         self.catalog = StorageCatalog(roots)
+        self.defaults = defaults or load_defaults()
         self.service = RawPreviewService(self.catalog)
         self.preview: RawFilePreview | None = None
         self.tic = pd.DataFrame()
@@ -254,7 +258,48 @@ class PreviewWorkspace:
             width=128,
             sizing_mode="fixed",
         )
-        self.processing = GuidedProcessingPanel(self.catalog, output_roots)
+        self.processing = GuidedProcessingPanel(
+            self.catalog, output_roots, self.defaults.processing
+        )
+        analysis_roots = list(roots)
+        for root in output_roots:
+            if root.path not in {r.path for r in analysis_roots}:
+                analysis_roots.append(StorageRoot(f"输出 · {root.label}", root.path))
+        self.analysis = WorkbenchPanels(
+            StorageCatalog(analysis_roots),
+            self.defaults,
+            self.processing,
+            on_replace=self._clear_raw_view,
+        )
+        self.more_references = pn.widgets.TextInput(label="附加 EIC m/z（逗号分隔）")
+        self.scan_index = pn.widgets.IntInput(label="绝对扫描索引（从 0 开始）", value=0, start=0)
+        self.scan_button = pn.widgets.Button(label="显示单扫描谱")
+        self.scan_pane = pn.pane.Plotly(_empty_figure("单扫描谱"), height=320)
+        self.cell_button = pn.widgets.Button(label="使用正式处理参数预览细胞", color="primary")
+        self.cell_pane = pn.pane.Plotly(_empty_figure("细胞窗口与峰顶"), height=380)
+        self.cell_status = pn.pane.Markdown("先打开原始数据，并在数据页确认提取参数。")
+        self.cell_frame = pd.DataFrame()
+        self.cell_download = pn.widgets.FileDownload(
+            label="下载细胞预览 CSV",
+            filename="cell_preview.csv",
+            callback=lambda: _csv_buffer(self.cell_frame),
+            disabled=True,
+        )
+        self.scan_button.on_click(self._show_scan)
+        self.cell_button.on_click(self._preview_cells)
+        for widget in (
+            self.ms_level,
+            self.target_mz,
+            self.ppm,
+            self.rt_range,
+            self.mz_min,
+            self.mz_max,
+            self.average_spectrum,
+            self.more_references,
+        ):
+            widget.param.watch(lambda _: self._invalidate_raw_plots(), "value")
+        for widget in self.processing.parameter_widgets.values():
+            widget.param.watch(lambda _: self._invalidate_cells(), "value")
 
         self.tabs = pn.Tabs(dynamic=True, sizing_mode="stretch_both")
         self._build_tabs()
@@ -302,19 +347,45 @@ class PreviewWorkspace:
             self.spectrum_pane,
             sizing_mode="stretch_both",
         )
-        processing_page = self.processing.panel()
+        preview_page.extend(
+            [
+                self.more_references,
+                pn.Row(self.scan_index, self.scan_button),
+                self.scan_pane,
+                "细胞预览使用完整 MS1 数据和数据页的提取范围，不使用图形裁剪范围。",
+                pn.Row(self.cell_button, self.cell_download),
+                self.cell_status,
+                self.cell_pane,
+            ]
+        )
+        self.analysis.data_page.extend([selection_page, self.processing.panel()])
+        task_page = pn.Column(
+            "## 任务与日志",
+            self.processing.task_select,
+            self.processing.refresh_button,
+            self.processing.status_text,
+            self.processing.progress,
+            self.processing.log_text,
+            self.processing.quality_section,
+            self.processing.save_section,
+        )
         self.tabs.extend(
             [
-                ("① 数据选择", selection_page),
+                ("① 数据与处理", self.analysis.data_page),
                 ("② 原始数据预览", preview_page),
-                ("③ 处理与结果", processing_page),
+                ("③ 预处理与 QC", self.analysis.preprocess_page),
+                ("④ 降维与聚类", self.analysis.discovery_page),
+                ("⑤ 差异分析", self.analysis.differential_page),
+                ("⑥ 监督分析", self.analysis.supervised_page),
+                ("⑦ 结果", self.analysis.results_page),
+                ("⑧ 任务与日志", task_page),
             ]
         )
 
     def sidebar(self) -> pn.Column:
         """Build the guided control column."""
         return pn.Column(
-            "### 1. 选择数据",
+            "### 1. 选择原始谱",
             self.root_select,
             self.selector_area,
             self.load_button,
@@ -354,6 +425,10 @@ class PreviewWorkspace:
 
     def _on_file_selection(self, _event) -> None:
         selected = self._selector.value if self._selector is not None else []
+        if self.preview is not None and (
+            len(selected) != 1 or str(self.preview.path) != str(selected[0])
+        ):
+            self._clear_raw_view()
         self.load_button.disabled = len(selected) != 1
         if len(selected) == 1:
             selected_path = str(selected[0])
@@ -372,6 +447,7 @@ class PreviewWorkspace:
         self.load_button.loading = True
         try:
             preview = self.service.open(self.root_select.value, self._selector.value[0])
+            self._invalidate_cells()
             self.preview = preview
             self._configure_controls(preview)
             self._calculate_all()
@@ -399,6 +475,8 @@ class PreviewWorkspace:
         self.mz_min.value = mz_min
         self.mz_max.value = mz_max
         self.target_mz.value = (mz_min + mz_max) / 2
+        self.scan_index.param.update(end=max(0, summary.scan_count - 1), value=0)
+        self.scan_pane.object = _empty_figure("单扫描谱")
         for widget in (
             self.ms_level,
             self.target_mz,
@@ -427,8 +505,13 @@ class PreviewWorkspace:
         rt_range = tuple(self.rt_range.value)
         ms_level = int(self.ms_level.value)
         self.tic = self.preview.total_ion_chromatogram(ms_level=ms_level, rt_range=rt_range)
-        self.eic = self.preview.extracted_ion_chromatogram(
-            self.target_mz.value,
+        references = [self.target_mz.value]
+        if self.more_references.value.strip():
+            references.extend(
+                float(v.strip()) for v in self.more_references.value.replace("，", ",").split(",")
+            )
+        self.eic = self.preview.extracted_ion_chromatograms(
+            references,
             ppm_tolerance=self.ppm.value,
             ms_level=ms_level,
             rt_range=rt_range,
@@ -441,11 +524,18 @@ class PreviewWorkspace:
             normalize=self.average_spectrum.value,
         )
         self.tic_pane.object = _chromatogram_figure(self.tic, "总离子流图（TIC）", _ACCENT)
-        self.eic_pane.object = _chromatogram_figure(
-            self.eic,
-            f"提取离子流图（{self.target_mz.value:.5f} ± {self.ppm.value:g} ppm）",
-            "#C2410C",
+        figure = go.Figure()
+        for reference, frame in self.eic.groupby("reference_mz", sort=False):
+            frame = _peak_preserving_downsample(frame, 30_000, "intensity")
+            figure.add_scattergl(
+                x=frame.rt_seconds, y=frame.intensity, name=f"m/z {reference:g}", mode="lines"
+            )
+        figure.update_layout(
+            title=f"多参考 EIC（± {self.ppm.value:g} ppm）",
+            xaxis_title="RT（秒）",
+            yaxis_title="Intensity",
         )
+        self.eic_pane.object = _style_figure(figure)
         spectrum_title = "平均谱" if self.average_spectrum.value else "合并谱"
         self.spectrum_pane.object = _spectrum_figure(self.spectrum, spectrum_title)
         stem = self.preview.path.stem
@@ -457,6 +547,92 @@ class PreviewWorkspace:
         self.spectrum_download.disabled = self.spectrum.empty
         self._update_summary()
 
+    def _invalidate_cells(self):
+        self.cell_frame = pd.DataFrame()
+        self.cell_download.disabled = True
+        self.cell_download.data = None
+        self.cell_pane.object = _empty_figure("参数或数据已改变，请重新预览细胞")
+        self.cell_status.object = "使用数据页的正式提取参数；改变参数后旧预览失效。"
+
+    def _invalidate_raw_plots(self):
+        self.tic = pd.DataFrame()
+        self.eic = pd.DataFrame()
+        self.spectrum = pd.DataFrame()
+        for download in (self.tic_download, self.eic_download, self.spectrum_download):
+            download.disabled = True
+            download.data = None
+        for pane in (self.tic_pane, self.eic_pane, self.spectrum_pane):
+            pane.object = _empty_figure("参数已改变，请应用范围并刷新")
+
+    def _clear_raw_view(self):
+        self.preview = None
+        self.tic = pd.DataFrame()
+        self.eic = pd.DataFrame()
+        self.spectrum = pd.DataFrame()
+        for download in (self.tic_download, self.eic_download, self.spectrum_download):
+            download.disabled = True
+            download.data = None
+        for pane in (self.tic_pane, self.eic_pane, self.spectrum_pane):
+            pane.object = _empty_figure("请打开原始数据")
+        self.summary.object = "尚未加载原始数据。"
+        if hasattr(self, "cell_pane"):
+            self._invalidate_cells()
+            self.scan_pane.object = _empty_figure("单扫描谱")
+
+    def _show_scan(self, _event=None):
+        if self.preview is None:
+            self.cell_status.object = "请先打开原始数据。"
+            return
+        try:
+            frame, metadata = self.preview.single_spectrum(self.scan_index.value)
+            title = f"Scan {metadata['scan_index']} · MS{metadata['ms_level']} · RT={metadata['rt_seconds']:g} 秒"
+            self.scan_pane.object = _spectrum_figure(frame, title)
+        except Exception as exc:
+            self.cell_status.object = str(exc)
+
+    def _preview_cells(self, _event=None):
+        self._invalidate_cells()
+        if self.preview is None:
+            self.cell_status.object = "请先打开原始数据。"
+            return
+        self.cell_button.loading = True
+        try:
+            result = self.preview.cell_detection(self.processing._parameters())
+            frame = result.traces
+            figure = go.Figure()
+            for i, mass in enumerate(result.reference_mz):
+                display = _peak_preserving_downsample(frame, 30_000, f"reference_{i}")
+                figure.add_scattergl(
+                    x=display.rt_seconds,
+                    y=display[f"reference_{i}"],
+                    name=f"m/z {mass:g}",
+                    mode="lines",
+                )
+                peaks = frame.loc[frame.cell_apex]
+                figure.add_scatter(
+                    x=peaks.rt_seconds,
+                    y=peaks[f"reference_{i}"],
+                    mode="markers",
+                    name=f"峰顶 {mass:g}",
+                )
+            for start, stop in result.window_ranges:
+                figure.add_vrect(
+                    x0=frame.rt_seconds.iloc[start],
+                    x1=frame.rt_seconds.iloc[stop],
+                    fillcolor="green",
+                    opacity=0.12,
+                    line_width=0,
+                )
+            figure.update_layout(title="细胞窗口与参考峰顶", xaxis_title="RT（秒）")
+            self.cell_frame = frame
+            self.cell_download.disabled = False
+            self.cell_pane.object = figure
+            self.cell_status.object = f"检出 {result.cell_count} 个细胞；与正式提取共享参数和实现。"
+        except Exception as exc:
+            self.cell_status.object = f"预览失败：{exc}"
+        finally:
+            self.cell_button.loading = False
+
     def _use_clicked_mz(self, event) -> None:
         data = event.new
         if not data or not data.get("points"):
@@ -466,17 +642,7 @@ class PreviewWorkspace:
             return
         self.target_mz.value = float(point["x"])
         if self.preview is not None:
-            self.eic = self.preview.extracted_ion_chromatogram(
-                self.target_mz.value,
-                ppm_tolerance=self.ppm.value,
-                ms_level=int(self.ms_level.value),
-                rt_range=tuple(self.rt_range.value),
-            )
-            self.eic_pane.object = _chromatogram_figure(
-                self.eic,
-                f"提取离子流图（{self.target_mz.value:.5f} ± {self.ppm.value:g} ppm）",
-                "#C2410C",
-            )
+            self._refresh_all(None)
 
     def _update_summary(self) -> None:
         if self.preview is None:
@@ -498,9 +664,10 @@ class PreviewWorkspace:
 def create_app(
     roots: tuple[StorageRoot, ...],
     output_roots: tuple[OutputRoot, ...],
+    defaults=None,
 ):
     """Create an isolated guided UI session for configured storage roots."""
-    workspace = PreviewWorkspace(tuple(roots), tuple(output_roots))
+    workspace = PreviewWorkspace(tuple(roots), tuple(output_roots), defaults=defaults)
     template = pn.template.FastListTemplate(
         title="scMM 数据查看",
         accent_base_color=_ACCENT,

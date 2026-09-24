@@ -5,6 +5,10 @@
 下游分析的高层入口是 `scMM.plot.engine.PlotEngine`。它内部使用 AnnData 保存矩阵、细胞元数据、
 特征元数据、低维坐标和分析结果。
 
+现也可在 [多页工作台](13-workbench.md) 使用这些分析能力。统一 `reduce_dimension`
+入口明确支持当前 X 或所选 obsm，不替换下文原有 pca/umap API；实验轨迹及概率空间 R2/Q2
+继续暂缓，理由见 [决策说明](14-deferred-methods.md)。
+
 公开入口仍集中在 `PlotEngine`，实现则按降维、轨迹、细胞聚类和特征网络四个领域拆分。各领域
 共享同一份 `adata` 和图目录，因此方法链及结果键保持一致；维护单个算法时无需理解整个绘图类。
 

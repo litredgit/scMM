@@ -10,6 +10,32 @@
 GUI 0.2.0 的来源问题与后续范围已纳入 [编号待办](12-upstream-todo.md)，
 不再仅保存在忽略目录下的临时评审文件。
 
+## 工作台完善：阶段 3 与集成验收（2026-09-24）
+
+- 前两阶段分别提交 `f1ec61f`（范围与默认参数）和 `86d6d29`（数据生命周期与分析后端）。
+- 接入八页 Panel 工作台、帮助/JSON 默认值、结果目录/H5AD 读取、云盘标签、历史层、
+  降维/聚类、全局 FDR 火山/小提琴图、监督诊断、潜变量、审核保存和持久进度。
+- 原始谱整合多 EIC、绝对索引单谱、细胞窗口和峰顶；复用缓存，正式检测参数改变后旧预览失效。
+- 用户追加确认 Marker、相关网络和 SHAP 一起接入：复用既有算法，抽出独立相关网络函数，
+  增加层选择、方差 Top-N、带符号边、孤立节点显示、真实 SHAP 和全部特征 CSV；
+  所有结果绑定修订和参数，H5AD 保存报告，不保存可执行模型。
+- 用户确认 Windows 最小兼容：缺少 fcntl 不阻断导入和分析，非 Linux 明确禁用后台任务。
+  新进程模拟缺失 fcntl 验证通过；没有 Windows 实机、安装器、启动脚本或线程池补丁。
+- 云盘 `/home/crs/data` 当前只读；按用户“先完成代码”未改系统挂载，保存代码完成但实际云盘发布待验收。
+- 阶段后端/UI 相关测试 26 项通过，包含真实 SHAP、Marker/网络导出、H5AD 报告和参数失效。
+- `.venv/bin/python -m pytest -q -W error`：245 项通过，无跳过。
+  SHAP 配色模块调用 Matplotlib 的 set_bad/set_under/set_over 触发 PendingDeprecationWarning，
+  在两个 SHAP 测试中按消息、类别及来源模块定向过滤；未修改全局/生产警告处理。
+- `.venv/bin/ruff check scMM tests scripts`、`.venv/bin/ruff format --check scMM tests scripts`、
+  `git diff --check` 和 `uv --cache-dir /tmp/scmm-uv-cache lock --check --offline` 用于集成检查。
+- `uv --cache-dir /tmp/scmm-uv-cache build --offline --out-dir /tmp/scmm-workbench-build.zZIgRu`
+  成功生成 sdist/wheel；没有新增依赖、锁文件变化或发布版本号变更。
+- 本机服务 HTTP 返回 200；八页 Bokeh 离线构建、切换和文档序列化通过。
+  Python WebSocket 客户端缺 Panel 自定义模型注册，后续诊断受工具审批服务额度限制未完成；
+  已停止临时服务。不宣称真实浏览器、Windows 或云盘部署验收完成。
+- 使用说明见 [工作台](13-workbench.md)，轨迹与 R2/Q2 的数值问题、含义及决策方向见
+  [暂缓方法](14-deferred-methods.md)。此前日志保留为历史状态，不以旧“GUI 暂缓”描述当前功能。
+
 ## 工作台完善：阶段 2（2026-09-24）
 
 - 新增会话数据 ID/修订号，换数据、矩阵变换、筛选等使派生结果失效，拒绝旧任务结果写回。

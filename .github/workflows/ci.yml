@@ -31,7 +31,7 @@ jobs:
           uv run --locked ruff format --check .
           uv run --locked ruff check .
       - name: Test
-        run: uv run --locked pytest -W error
+        run: uv run --locked python -m pytest -W error
       - name: Build distributions
         if: matrix.python-version == '3.12'
         run: uv build --no-sources
