@@ -21,6 +21,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ref-mz", type=float, required=True, help="Reference ion m/z")
     parser.add_argument("--ppm-tol", type=float, default=10.0, help="Alignment tolerance in ppm")
     parser.add_argument("--resolution", type=float, default=35_000.0)
+    parser.add_argument("--mz-min", type=float, default=100.0, help="Extraction m/z lower bound")
+    parser.add_argument("--mz-max", type=float, default=1000.0, help="Extraction m/z upper bound")
     parser.add_argument("--cell-snr", type=float, default=5.0)
     parser.add_argument("--peak-snr", type=float, default=3.0)
     parser.add_argument("--jobs", type=int, default=-1, help="Parallel workers (-1 uses all CPUs)")
@@ -61,6 +63,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "ref_mz": args.ref_mz,
         "ppm_tol": args.ppm_tol,
         "resolution": args.resolution,
+        "mz_range": (args.mz_min, args.mz_max),
         "cell_snr": args.cell_snr,
         "peak_snr": args.peak_snr,
         "extraction_method": args.extraction_method,

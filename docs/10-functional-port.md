@@ -10,6 +10,15 @@
 GUI 0.2.0 的来源问题与后续范围已纳入 [编号待办](12-upstream-todo.md)，
 不再仅保存在忽略目录下的临时评审文件。
 
+## 工作台完善：阶段 1（2026-09-24）
+
+- 用户确认八页工作台、预处理 layers 历史、全局 FDR、零值仅隐藏显示、提取 m/z 范围；
+  外部 JSON 默认值纳入实现。轨迹及 R2/Q2 继续暂缓，Windows 安装适配不移植。
+- 进一步确认 Windows 为服务端原生路径，不新增浏览器上传；云盘允许经确认保存。
+- 第一阶段实现范围参数贯通、生产/预览参数共享、单谱/多 EIC 后端和 JSON 校验。
+- `.venv/bin/python -m pytest -q -W error tests/test_workbench_parameters.py tests/test_processing_application.py tests/test_optional_processing.py tests/test_extraction_preview.py tests/test_data.py tests/test_io.py tests/test_ui_processing.py`：74 项通过。
+- JSON 未知键、错误类型、非法范围明确失败；兼容旧处理参数错误提示。
+
 ## GUI 0.2.0 来源移植：集成验收（2026-09-22）
 
 - 阶段 A 提交 `db7431d`，阶段 B 提交 `f457375`；未修改 GUI、未移植暂缓的方法、

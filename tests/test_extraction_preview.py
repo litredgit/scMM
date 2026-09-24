@@ -122,7 +122,7 @@ def test_cached_preview_matches_real_file_processing(tmp_path, monkeypatch, meth
         reference_mz=[150.0, 200.0] if method == "snr_v1" else None,
         noise_window=5,
     )
-    actual = CyESIData.load_from_file(path, params.ref_mz, **params.load_kwargs(), **options)
+    actual = CyESIData.load_from_file(path, params.ref_mz, **{**params.load_kwargs(), **options})
     preview = RawPreviewService(StorageCatalog([StorageRoot("Raw", tmp_path)])).open(
         "Raw",
         path,

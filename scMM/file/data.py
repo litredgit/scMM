@@ -47,6 +47,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         prominence_ratio: float | None = None,
         distance: int = 3,
         msconvert_path=None,
+        mz_range=(100.0, 1000.0),
         **preprocess_kwds,
     ) -> Self:
         """Load, align, and preprocess one mzML/mzXML file."""
@@ -61,6 +62,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
             prominence_ratio=prominence_ratio,
             distance=distance,
             msconvert_path=msconvert_path,
+            mz_range=mz_range,
         )
         return cls._from_raw_state(state, preprocess_kwds)
 
@@ -80,6 +82,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         processing_strategy: str = "legacy",
         feature_merge_ppm: float = 10.0,
         msconvert_path=None,
+        mz_range=(100.0, 1000.0),
         **preprocess_kwds,
     ) -> Self:
         """Load and combine all direct mzML/mzXML children of a directory."""
@@ -90,6 +93,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
                 feature_strategy=processing_strategy,
                 feature_merge_ppm=feature_merge_ppm,
                 msconvert_path=msconvert_path,
+                mz_range=mz_range,
                 dtype=dtype,
                 ppm_tol=ppm_tol,
                 resolution=resolution,
@@ -113,6 +117,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
             prominence_ratio=prominence_ratio,
             n_jobs=n_jobs,
             distance=distance,
+            mz_range=mz_range,
         )
         return cls._from_raw_state(state, preprocess_kwds)
 

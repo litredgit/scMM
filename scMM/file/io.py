@@ -169,6 +169,7 @@ def sum_spectrum_from_file(
     ms_level: int = 1,
     resolution_200: float = 35000.0,
     points_per_fwhm: float = 5.0,
+    mz_range=(100.0, 1000.0),
 ) -> oms.MSSpectrum:
     """Load one MS file and return its summed spectrum."""
     experiment, _ = load_single_file(path, format="auto")
@@ -177,6 +178,7 @@ def sum_spectrum_from_file(
         ms_level=ms_level,
         resolution_200=resolution_200,
         points_per_fwhm=points_per_fwhm,
+        mz_range=mz_range,
     )
 
 

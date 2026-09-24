@@ -47,6 +47,7 @@ class _RawLoadConfig:
     snr_threshold: float
     prominence_ratio: float | None
     distance: int
+    mz_range: tuple[float, float] = (100.0, 1000.0)
 
 
 def load_processed_dataset(result_dir: str | Path) -> DatasetState:
@@ -128,6 +129,7 @@ def load_raw_file(
     prominence_ratio: float | None = None,
     distance: int = 3,
     msconvert_path=None,
+    mz_range=(100.0, 1000.0),
 ) -> DatasetState:
     """Load and align one raw file without performing cell preprocessing."""
     config = _raw_config(
@@ -139,6 +141,7 @@ def load_raw_file(
         ms_peak_snr_threshold,
         prominence_ratio,
         distance,
+        mz_range,
     )
     load_options = {"msconvert_path": msconvert_path} if msconvert_path else {}
     experiment, file_meta = load_single_file(str(file_path), format="auto", **load_options)
@@ -155,6 +158,7 @@ def align_raw_experiment(experiment, file_meta, file_path, config: _RawLoadConfi
     peak_meta["frame_id"] = peak_meta.index.to_numpy()
     peak_meta["acquisition_time"] = file_meta["timestamp"] + peak_meta["rt"].to_numpy()
     file_meta["ref_mz"] = config.ref_mz
+    file_meta["mz_range"] = list(config.mz_range)
     return DatasetState(data, peak_meta, file_meta, config.ref_mz)
 
 
@@ -170,6 +174,7 @@ def load_raw_directory(
     prominence_ratio: float | None = None,
     n_jobs: int = -1,
     distance: int = 3,
+    mz_range=(100.0, 1000.0),
 ) -> DatasetState:
     """Load and align a directory of raw files without cell preprocessing."""
     config = _raw_config(
@@ -181,6 +186,7 @@ def load_raw_directory(
         ms_peak_snr_threshold,
         prominence_ratio,
         distance,
+        mz_range,
     )
     directory = Path(dir_path).expanduser()
     files = discover_ms_files(directory)
@@ -190,7 +196,9 @@ def load_raw_directory(
         delayed(_align_frame_from_file)(path, targets, config.ppm_tol, config.dtype)
         for path in files
     )
-    return combine_aligned_files(directory.name, ref_mz, alignments)
+    state = combine_aligned_files(directory.name, ref_mz, alignments)
+    state.file_meta["mz_range"] = list(config.mz_range)
+    return state
 
 
 def _raw_config(
@@ -202,9 +210,11 @@ def _raw_config(
     snr_threshold,
     prominence_ratio,
     distance,
+    mz_range=(100.0, 1000.0),
 ) -> _RawLoadConfig:
     if not np.isfinite(ref_mz) or ref_mz <= 0:
         raise ValueError("ref_mz must be a positive finite number")
+    mz_range = validate_mz_range(mz_range, ref_mz)
     return _RawLoadConfig(
         ref_mz,
         dtype,
@@ -214,7 +224,18 @@ def _raw_config(
         snr_threshold,
         prominence_ratio,
         distance,
+        mz_range,
     )
+
+
+def validate_mz_range(mz_range, ref_mz=None):
+    """Validate an inclusive feature-selection range, independently of plot limits."""
+    values = np.asarray(mz_range, dtype=float)
+    if values.shape != (2,) or not np.isfinite(values).all() or not 0 < values[0] < values[1]:
+        raise ValueError("mz_range requires two finite positive ascending bounds")
+    if ref_mz is not None and not values[0] <= ref_mz <= values[1]:
+        raise ValueError("reference m/z must be inside mz_range")
+    return tuple(float(value) for value in values)
 
 
 def discover_ms_files(directory: Path) -> list[str]:
@@ -236,6 +257,7 @@ def _pick_common_targets(experiment, config: _RawLoadConfig, *, dtype=None) -> n
         experiment,
         resolution_200=config.resolution,
         points_per_fwhm=config.points_per_fwhm,
+        mz_range=config.mz_range,
     )
     denoised = filter_spectrum(summed, snr_threshold=config.snr_threshold)
     peak_options = {
@@ -245,7 +267,7 @@ def _pick_common_targets(experiment, config: _RawLoadConfig, *, dtype=None) -> n
     if dtype is not None:
         peak_options["dtype"] = dtype
     targets, _ = extract_peaks(denoised, **peak_options)
-    return targets
+    return targets[(targets >= config.mz_range[0]) & (targets <= config.mz_range[1])]
 
 
 def _directory_targets(files: list[str], config: _RawLoadConfig, n_jobs: int) -> np.ndarray:
@@ -259,6 +281,7 @@ def _directory_targets(files: list[str], config: _RawLoadConfig, n_jobs: int) ->
             path,
             resolution_200=config.resolution,
             points_per_fwhm=config.points_per_fwhm,
+            mz_range=config.mz_range,
         )
         for path in files
     )

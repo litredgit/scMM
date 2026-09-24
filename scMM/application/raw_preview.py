@@ -65,13 +65,13 @@ class RawFilePreview:
         self,
         parameters: ProcessingParameters,
         *,
-        extraction_method="legacy",
+        extraction_method=None,
         reference_mz=None,
-        reference_mode="union",
-        reference_ppm_tol=10.0,
-        feature_snr_threshold=3.0,
-        noise_window=51,
-        feature_block_size=256,
+        reference_mode=None,
+        reference_ppm_tol=None,
+        feature_snr_threshold=None,
+        noise_window=None,
+        feature_block_size=None,
         progress_callback=None,
     ) -> CellDetectionPreview:
         """Preview production cell windows without reopening the raw file.
@@ -92,6 +92,7 @@ class RawFilePreview:
             parameters.ms_peak_snr_threshold,
             None,
             3,
+            (parameters.mz_min, parameters.mz_max),
         )
         state = align_raw_experiment(self.experiment, self.metadata, self.path, config)
         captured = {}
@@ -127,19 +128,53 @@ class RawFilePreview:
                 "peak_snr": parameters.peak_snr,
                 "max_zero_frac": parameters.max_zero_frac,
                 "n_jobs": parameters.n_jobs,
-                "extraction_method": extraction_method,
-                "reference_mz": reference_mz,
-                "reference_mode": reference_mode,
-                "reference_ppm_tol": reference_ppm_tol,
-                "feature_snr_threshold": feature_snr_threshold,
-                "noise_window": noise_window,
-                "feature_block_size": feature_block_size,
+                "extraction_method": extraction_method or parameters.extraction_method,
+                "reference_mz": reference_mz
+                if reference_mz is not None
+                else (parameters.reference_mz or None),
+                "reference_mode": reference_mode or parameters.reference_mode,
+                "reference_ppm_tol": parameters.reference_ppm_tol
+                if reference_ppm_tol is None
+                else reference_ppm_tol,
+                "feature_snr_threshold": parameters.feature_snr_threshold
+                if feature_snr_threshold is None
+                else feature_snr_threshold,
+                "noise_window": parameters.noise_window if noise_window is None else noise_window,
+                "feature_block_size": parameters.feature_block_size
+                if feature_block_size is None
+                else feature_block_size,
                 "progress_callback": progress_callback,
                 "debug_hook": capture,
                 "debug_full_baseline": False,
             },
         )
         return CellDetectionPreview(**captured)
+
+    def single_spectrum(self, scan_index: int) -> tuple[pd.DataFrame, dict]:
+        """Read an absolute zero-based scan index from the cached experiment."""
+        if isinstance(scan_index, bool) or not isinstance(scan_index, int):
+            raise ValueError("scan_index must be an integer")
+        if not 0 <= scan_index < self.experiment.getNrSpectra():
+            raise ValueError("scan_index is outside the loaded experiment")
+        spectrum = self.experiment[scan_index]
+        mz, intensity = spectrum.get_peaks()
+        return pd.DataFrame({"mz": mz, "intensity": intensity}), {
+            "scan_index": scan_index,
+            "rt_seconds": float(spectrum.getRT()),
+            "ms_level": int(spectrum.getMSLevel()),
+        }
+
+    def extracted_ion_chromatograms(self, references, **kwargs) -> pd.DataFrame:
+        """Long-form EICs from the same cached scans, without reloading the file."""
+        references = np.atleast_1d(references).astype(float)
+        if references.ndim != 1 or not len(references):
+            raise ValueError("at least one reference m/z is required")
+        frames = []
+        for reference in np.unique(references):
+            frame = self.extracted_ion_chromatogram(float(reference), **kwargs)
+            frame["reference_mz"] = reference
+            frames.append(frame)
+        return pd.concat(frames, ignore_index=True)
 
     def total_ion_chromatogram(
         self,

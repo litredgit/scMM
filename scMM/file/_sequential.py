@@ -8,7 +8,12 @@ import pandas as pd
 import pyopenms as oms
 
 from ..util.peak import filter_spectrum
-from ._dataset_loading import DatasetState, _annotate_single_file_frames, make_feature_metadata
+from ._dataset_loading import (
+    DatasetState,
+    _annotate_single_file_frames,
+    make_feature_metadata,
+    validate_mz_range,
+)
 from .io import align_frame, extract_peaks, load_single_file, sum_spec
 from .msconvert import convert_raw
 
@@ -31,6 +36,7 @@ def load_directory(
     n_jobs=1,
     progress_callback=None,
     metadata_by_file=None,
+    mz_range=(100.0, 1000.0),
     **preprocess,
 ):
     if feature_strategy not in {"shared", "independent"}:
@@ -39,6 +45,7 @@ def load_directory(
         raise ValueError("feature_merge_ppm must be finite and nonnegative")
     if not np.isfinite(ref_mz) or ref_mz <= 0:
         raise ValueError("ref_mz must be positive and finite")
+    mz_range = validate_mz_range(mz_range, ref_mz)
     root = Path(directory).expanduser()
     if not root.is_dir():
         raise NotADirectoryError(root)
@@ -73,7 +80,10 @@ def load_directory(
             for i, source in enumerate(files):
                 exp, _ = load_single_file(paths[source])
                 summed = sum_spec(
-                    exp, resolution_200=resolution, points_per_fwhm=resample_points_per_fwhm
+                    exp,
+                    resolution_200=resolution,
+                    points_per_fwhm=resample_points_per_fwhm,
+                    mz_range=mz_range,
                 )
                 mz, intensity = summed.get_peaks()
                 if grid is None:
@@ -86,6 +96,7 @@ def load_directory(
             summed.set_peaks((grid, total))
             filtered = filter_spectrum(summed, snr_threshold=ms_peak_snr_threshold)
             targets, _ = extract_peaks(filtered, **peak_options)
+            targets = targets[(targets >= mz_range[0]) & (targets <= mz_range[1])]
             del summed, filtered, grid, total
             if not len(targets):
                 raise ValueError("No features detected in shared spectrum")
@@ -109,6 +120,7 @@ def load_directory(
                     ms_peak_snr_threshold=ms_peak_snr_threshold,
                     prominence_ratio=prominence_ratio,
                     distance=distance,
+                    mz_range=mz_range,
                     **file_preprocess,
                 )
             else:
@@ -119,6 +131,7 @@ def load_directory(
                 obs["frame_id"] = obs.index.to_numpy()
                 obs["acquisition_time"] = meta["timestamp"] + obs["rt"].to_numpy()
                 meta["ref_mz"] = ref_mz
+                meta["mz_range"] = list(mz_range)
                 obj = cls._from_raw_state(DatasetState(frame, obs, meta, ref_mz), file_preprocess)
                 del frame, obs
             obj.file_meta.update(
@@ -151,6 +164,7 @@ def load_directory(
             "resolution": resolution,
             "resample_points_per_fwhm": resample_points_per_fwhm,
             "ms_peak_snr_threshold": ms_peak_snr_threshold,
+            "mz_range": list(mz_range),
         },
     )
     report(1.0, "Processing complete")

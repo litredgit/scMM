@@ -29,8 +29,38 @@ class ProcessingParameters:
     baseline_filter_size: int = 50
     max_zero_frac: float = 0.9
     n_jobs: int = 1
+    mz_min: float = 100.0
+    mz_max: float = 1000.0
+    extraction_method: str = "legacy"
+    reference_mz: tuple[float, ...] = ()
+    reference_mode: str = "union"
+    reference_ppm_tol: float = 10.0
+    feature_snr_threshold: float = 3.0
+    noise_window: int = 51
+    feature_block_size: int = 256
 
     def __post_init__(self) -> None:
+        from scMM.file._dataset_loading import validate_mz_range
+
+        if not math.isfinite(self.ref_mz) or self.ref_mz <= 0:
+            raise ValueError("ref_mz must be a positive finite number")
+        validate_mz_range((self.mz_min, self.mz_max), self.ref_mz)
+        if self.extraction_method not in {"legacy", "snr_v1"}:
+            raise ValueError("extraction_method must be legacy or snr_v1")
+        if self.reference_mode not in {"union", "intersection"}:
+            raise ValueError("reference_mode must be union or intersection")
+        if self.reference_mz and self.extraction_method != "snr_v1":
+            raise ValueError("multiple references require snr_v1")
+        for reference in self.reference_mz:
+            if not math.isfinite(reference):
+                raise ValueError("reference masses must be finite")
+            validate_mz_range((self.mz_min, self.mz_max), reference)
+        for key in ("noise_window", "feature_block_size", "baseline_filter_size", "n_jobs"):
+            value = getattr(self, key)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"{key} must be an integer")
+        if self.noise_window < 2 or self.feature_block_size < 1:
+            raise ValueError("noise_window >= 2 and feature_block_size >= 1 required")
         positive = {
             "ref_mz": self.ref_mz,
             "ppm_tol": self.ppm_tol,
@@ -39,6 +69,8 @@ class ProcessingParameters:
             "ms_peak_snr_threshold": self.ms_peak_snr_threshold,
             "cell_snr": self.cell_snr,
             "peak_snr": self.peak_snr,
+            "reference_ppm_tol": self.reference_ppm_tol,
+            "feature_snr_threshold": self.feature_snr_threshold,
         }
         for name, value in positive.items():
             if not math.isfinite(value) or value <= 0:
@@ -78,6 +110,8 @@ class ProcessingParameters:
         """Return keyword arguments consumed by ``CyESIData.load_from_file``."""
         values = asdict(self)
         values.pop("ref_mz")
+        values["mz_range"] = (values.pop("mz_min"), values.pop("mz_max"))
+        values["reference_mz"] = values["reference_mz"] or None
         return values
 
 
