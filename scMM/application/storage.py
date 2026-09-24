@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 SUPPORTED_RAW_SUFFIXES = frozenset({".mzml", ".mzxml"})
 
@@ -65,6 +66,10 @@ class StorageCatalog:
     def resolve(self, root_label: str, selected_path: str | Path) -> Path:
         """Resolve a selected path and reject traversal or symlink escapes."""
         root = self.root(root_label)
+        if os.name != "nt" and PureWindowsPath(str(selected_path)).is_absolute():
+            raise ValueError(
+                "Windows paths require a Windows server; on Linux select the mounted path"
+            )
         candidate = Path(selected_path).expanduser()
         if not candidate.is_absolute():
             candidate = root.path / candidate

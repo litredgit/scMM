@@ -63,6 +63,9 @@ class PLSDAClassifier(ClassifierMixin, BaseEstimator):
         indices = np.argmax(self.predict_proba(X), axis=1)
         return self.classes_[indices]
 
+    def transform(self, X):
+        return self.model_.transform(X)
+
 
 class SupervisedAnalyzer:
     """Leakage-aware classification, validation, ROC and SHAP analysis."""
@@ -292,6 +295,32 @@ class SupervisedAnalyzer:
                 ),
             }
         return curves
+
+    @property
+    def supports_latent_scores(self):
+        self._require_fitted()
+        estimator = self.model_.named_steps["model"]
+        return isinstance(estimator, PLSDAClassifier) or (
+            isinstance(estimator, LinearDiscriminantAnalysis) and estimator.solver != "lsqr"
+        )
+
+    def latent_scores(self):
+        """Scores of labeled observations; scaling is fitted on training data only."""
+        self._require_fitted()
+        if not self.supports_latent_scores:
+            raise ValueError("latent scores require PLS-DA or LDA with svd/eigen (not lsqr)")
+        values = self.X.copy()
+        for name, step in self.model_.named_steps.items():
+            if name not in {"model", "smote"}:
+                values = step.transform(values)
+        scores = np.asarray(self.model_.named_steps["model"].transform(values))
+        if scores.ndim == 1:
+            scores = scores[:, None]
+        return pd.DataFrame(
+            scores,
+            index=self.obs_names,
+            columns=[f"component_{i + 1}" for i in range(scores.shape[1])],
+        )
 
     def calibration_curves(self):
         """Quantile-bin reliability data, not a fitted probability calibrator.

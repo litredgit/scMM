@@ -10,6 +10,12 @@ from sklearn.preprocessing import StandardScaler
 class EmbeddingMixin:
     """Provide dimensionality-reduction methods for a PlotEngine-like object."""
 
+    def reduce_dimension(self, method="pca", **kwargs):
+        """Unified explicit X/obsm input; existing pca/umap APIs remain unchanged."""
+        from scMM.analysis.embedding import reduce_dimension
+
+        return reduce_dimension(self.adata, method, **kwargs)
+
     def pca(
         self,
         n_components: int = 50,
