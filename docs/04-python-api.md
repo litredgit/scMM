@@ -29,7 +29,10 @@ data = CyESIData.load_from_file(
 ```python
 from pathlib import Path
 from scMM.application import (
-    ProcessingParameters, RawPreviewService, StorageCatalog, StorageRoot,
+    ProcessingParameters,
+    RawPreviewService,
+    StorageCatalog,
+    StorageRoot,
 )
 
 service = RawPreviewService(StorageCatalog([StorageRoot("Raw", Path("data"))]))

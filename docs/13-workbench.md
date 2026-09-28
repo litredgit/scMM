@@ -1,5 +1,8 @@
 # 多页工作台使用与数据安全
 
+> 本文描述 2026-09-24 的八页版本。2026-09-28 起当前 worktree 已替换为
+> [项目式六步工作流](15-project-redesign.md)，不再以八个标签作为网页入口。
+
 [文档索引](README.md) · [已知问题与待办](12-upstream-todo.md) · [暂缓算法说明](14-deferred-methods.md)
 
 ## 启动、云盘和 Windows 路径
