@@ -113,7 +113,7 @@ Linux 的 `/home/crs/data` 存在时另以“云盘”加入；保存仍须用�
 界面层不实现科学计算算法。这样可以独立测试数值和文件权限，也可在不改底层流程的情况下调整
 Panel 页面。
 
-第三个引导页当前已完成：
+原第三个引导页的处理功能现已分布到“数据与处理”和“任务与日志”页：
 
 1. 处理参数预检，并把实验相关参数组织为少量预设加高级选项。
 2. 使用单机后台进程执行 `CyESIData` 工作流，显示并恢复任务状态和日志；不引入集群队列。
@@ -130,3 +130,31 @@ Panel 页面。
 
 计算任务将与 Panel 回调分开，避免浏览器断开导致处理被中止。实验室规模下可以先限制同一时间
 运行一个重任务，待实际使用出现并发需求后再增加队列，而无需预先部署复杂调度系统。
+
+## 更新代码后网页仍是旧界面
+
+常驻 Python 服务不会自动重新导入更新后的代码。Git 提交、更新文件或刷新浏览器不等于
+更新正在运行的进程。若页面仍只有旧的三个标签，先核对端口对应的进程、启动时间、工作目录和环境。
+
+本机使用用户级 `scmm-ui.service`，检查方式：
+
+```sh
+systemctl --user status scmm-ui.service --no-pager
+systemctl --user show scmm-ui.service -p ExecStart -p WorkingDirectory -p MainPID -p ActiveEnterTimestamp
+journalctl --user -u scmm-ui.service -n 30 --no-pager
+```
+
+确认没有进行中的任务，并先保存需要保留的会话结果后，重启该服务加载代码：
+
+```sh
+systemctl --user restart scmm-ui.service
+systemctl --user status scmm-ui.service --no-pager
+```
+
+重启会断开网页连接并清空未保存的会话分析，但不删除已保存文件。只有修改 service 文件时
+才需要先执行 `systemctl --user daemon-reload`；只修改 Python 代码不需要。
+随后重新打开原地址或刷新页面，检查八个工作台标签。HTTP 200 本身不足以证明已加载新版，
+还应检查实际页面或 WebSocket 文档的标签。
+
+2026-09-28 本机实例已核实：原进程自 09-21 启动，在线仅三个旧标签；重启后同一 5006 端口
+返回八页工作台和云盘选项。启动配置中的通配 WebSocket origin 仍有安全警告，未自动改变现有访问策略。
