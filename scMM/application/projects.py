@@ -29,7 +29,7 @@ PROJECT_ROOT = Path("/home/crs/data/results")
 @contextmanager
 def project_lock(folder):
     """Cross-process save lock; released by the OS after a crashed writer."""
-    with (Path(folder) / ".project.lock").open("a+b") as handle:
+    with child_path(folder, ".project.lock").open("a+b") as handle:
         if os.name == "nt":
             import msvcrt
 
@@ -83,6 +83,7 @@ class Project:
     manifest: dict
     workspace: AnalysisWorkspace = field(default_factory=AnalysisWorkspace)
     saved_reports: dict = field(default_factory=dict)
+    views: dict = field(default_factory=dict)
     dirty: bool = False
     saved_token: tuple | None = None
 
@@ -118,10 +119,16 @@ class Project:
         self.dirty = True
 
     def validate_samples(self):
+        if not str(self.manifest["name"]).strip():
+            raise ValueError("Project name is required")
         names = [s["name"].strip() for s in self.samples]
         if any(not name for name in names) or len(names) != len(set(names)):
             raise ValueError("Sample names must be nonempty and unique")
+        if len({s["id"] for s in self.samples}) != len(self.samples):
+            raise ValueError("Duplicate sample IDs")
         for sample in self.samples:
+            if not re.fullmatch(r"[a-f0-9]{32}", sample["id"]):
+                raise ValueError("Invalid sample ID")
             if sample["parameters"] is not None:
                 ProcessingParameters(**sample["parameters"])
 
@@ -162,6 +169,13 @@ class ProjectStore:
         result = json.loads(path.read_text(encoding="utf-8"))
         if result.get("schema_version") != 1 or not isinstance(result.get("samples"), list):
             raise ValueError("Unsupported or invalid project manifest")
+        if (
+            not isinstance(result.get("name"), str)
+            or not isinstance(result.get("saved_at"), str)
+            or not isinstance(result.get("revision"), int)
+            or not isinstance(result.get("artifacts"), dict)
+        ):
+            raise ValueError("Incomplete project manifest")
         return result
 
     def create(self, name, defaults=None):
@@ -198,6 +212,8 @@ class ProjectStore:
         folder = self._folder(folder)
         manifest = self._manifest(folder)
         project = Project(folder, manifest)
+        project.validate_samples()
+        ProcessingParameters(**manifest["parameters"])
         artifacts = manifest["artifacts"]
         if artifacts:
             data = read_h5ad(child_path(folder, artifacts["current"]))
@@ -208,6 +224,8 @@ class ProjectStore:
             project.saved_reports = json.loads(
                 data.uns.get("scmm_workbench", {}).get("reports_json", "{}")
             )
+            if "views" in artifacts:
+                project.views = json.loads(child_path(folder, artifacts["views"]).read_text())
         project.saved_token = project.workspace.token
         return project
 
@@ -220,6 +238,7 @@ class ProjectStore:
             if disk["revision"] != project.manifest["revision"]:
                 raise RuntimeError("Project was saved by another session; reopen before saving")
             candidate = deepcopy(project.manifest)
+            saved_reports = dict(project.saved_reports)
             if project.workspace.data is not None:
                 snapshot = child_path(folder, f"snapshots/{uuid4().hex}")
                 snapshot.mkdir()
@@ -237,11 +256,14 @@ class ProjectStore:
                 candidate["artifacts"] = {
                     "current": str(current.relative_to(folder)),
                     "baseline": str((snapshot / "baseline.h5ad").relative_to(folder)),
+                    "views": str((snapshot / "views.json").relative_to(folder)),
                 }
+                write_json(snapshot / "views.json", project.views)
+                saved = read_h5ad(current)
+                saved_reports = json.loads(saved.uns["scmm_workbench"]["reports_json"])
             candidate.update(revision=disk["revision"] + 1, saved_at=utc_now())
             write_json(folder / "project.json", candidate)
             project.manifest = candidate
-            if project.saved_token != project.workspace.token:
-                project.saved_reports = {}
+            project.saved_reports = saved_reports
             project.saved_token = project.workspace.token
             project.dirty = False

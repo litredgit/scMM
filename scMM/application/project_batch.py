@@ -5,8 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
+import threading
 import traceback
 from dataclasses import asdict
 from pathlib import Path
@@ -77,19 +79,65 @@ def read_batch(path):
 
 
 def batches(project):
-    return sorted(child_path(project.folder, "processing").glob("*/state.json"), reverse=True)
+    root = child_path(project.folder, "processing")
+    paths = [
+        p
+        for p in root.glob("*/state.json")
+        if p.resolve().is_relative_to(root) and not p.parent.is_symlink()
+    ]
+    return sorted(
+        paths, key=lambda p: json.loads(p.read_text()).get("created_at", ""), reverse=True
+    )
 
 
-def submit(project, storage):
+def submit(project, storage, *, retry_path=None):
     if not background_tasks_supported():
         raise RuntimeError("Project extraction currently requires Linux")
     request = preflight(project, storage)
+    prior = None
+    if retry_path is not None:
+        retry_path = Path(retry_path).resolve(strict=True)
+        if retry_path not in [p.resolve() for p in batches(project)]:
+            raise ValueError("Retry batch does not belong to this project")
+        prior = read_batch(retry_path)
+        if prior["status"] in {"queued", "running"}:
+            raise ValueError("Cannot retry an active batch")
+        previous = json.loads(retry_path.with_name("request.json").read_text())
+
+        def scientific_request(value):
+            return {
+                "feature_strategy": value["feature_strategy"],
+                "parameters": value["parameters"],
+                "feature_merge_ppm": value["feature_merge_ppm"],
+                "samples": [
+                    {k: v for k, v in sample.items() if k != "preview"}
+                    for sample in value["samples"]
+                ],
+            }
+
+        if json.dumps(scientific_request(previous), sort_keys=True) != json.dumps(
+            scientific_request(request), sort_keys=True
+        ):
+            raise ValueError(
+                "Retry requires unchanged sample metadata and parameters; start a new batch"
+            )
     with project_lock(project.folder):
         if any(read_batch(path)["status"] in {"queued", "running"} for path in batches(project)):
             raise RuntimeError("This project already has an active extraction batch")
         folder = child_path(project.folder, f"processing/{uuid4().hex}")
         folder.mkdir()
         path = folder / "state.json"
+        if prior is not None:
+            request["initial_results"] = []
+            for row in prior["samples"]:
+                if row["status"] == "succeeded":
+                    output = child_path(retry_path.parent, row["output"])
+                    shutil.copy2(output, folder / output.name)
+                    request["initial_results"].append(row)
+            targets = retry_path.with_name("shared_features.npy")
+            if targets.exists():
+                shutil.copy2(targets, folder / "shared_features.npy")
+                request["reuse_shared_features"] = True
         request["created_at"] = utc_now()
         write_json(folder / "request.json", request)
         write_json(
@@ -120,6 +168,9 @@ def submit(project, storage):
             state = json.loads(path.read_text())
             write_json(path, {**state, "pid": process.pid})
             (folder / "start.ready").touch()
+            threading.Thread(
+                target=process.wait, daemon=True, name="scmm-project-worker-reaper"
+            ).start()
         except Exception as exc:
             write_json(path, {"status": "failed", "message": str(exc), "samples": []})
             raise
@@ -146,6 +197,8 @@ def run_batch(path):
             for sample in request["samples"]
         ],
     }
+    previous = {r["id"]: r for r in request.get("initial_results", [])}
+    state["samples"] = [previous.get(row["id"], row) for row in state["samples"]]
 
     def report(message):
         state["message"] = message
@@ -155,7 +208,9 @@ def run_batch(path):
     try:
         targets = None
         base = ProcessingParameters(**request["parameters"])
-        if request["feature_strategy"] == "shared":
+        if request.get("reuse_shared_features"):
+            targets = np.load(path.parent / "shared_features.npy", allow_pickle=False)
+        elif request["feature_strategy"] == "shared":
             grid, total = None, None
             for i, sample in enumerate(request["samples"]):
                 if (path.parent / "stop.requested").exists():
@@ -191,7 +246,7 @@ def run_batch(path):
             np.save(path.parent / "shared_features.npy", targets)
         for i, sample in enumerate(request["samples"]):
             row = state["samples"][i]
-            if row["status"] == "failed":
+            if row["status"] in {"failed", "succeeded"}:
                 continue
             if (path.parent / "stop.requested").exists():
                 state["status"] = "stopped"

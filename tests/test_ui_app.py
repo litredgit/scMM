@@ -57,12 +57,13 @@ def test_create_app_returns_template_with_isolated_session(tmp_path) -> None:
     app = create_app(
         (StorageRoot("Raw", tmp_path),),
         (OutputRoot("Results", output),),
+        project_root=output,
     )
 
     assert type(app).__name__ == "FastListTemplate"
-    assert app.title == "scMM 数据查看"
-    assert app.sidebar_width == 680
-    assert 'id = "scmm-sidebar-resizer"' in app.sidebar_footer
+    assert app.title == "scMM 实验项目"
+    assert app.sidebar_width == 230
+    assert len(app.sidebar) == 1
 
 
 def test_sidebar_restores_default_controls_and_panel_file_selector(tmp_path) -> None:

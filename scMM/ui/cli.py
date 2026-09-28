@@ -70,6 +70,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Validate configuration and run the Panel server."""
     args = build_parser().parse_args(argv)
     from scMM.application.parameters import load_defaults
+    from scMM.application.projects import PROJECT_ROOT
 
     defaults = load_defaults(args.config)
     root_specs = args.storage or [("当前目录", Path.cwd())]
@@ -79,8 +80,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     roots = tuple(StorageRoot(label, path) for label, path in root_specs)
     output_specs = args.output
     if output_specs is None:
-        default_output = Path.cwd() / "results"
-        default_output.mkdir(parents=True, exist_ok=True)
+        default_output = PROJECT_ROOT
         output_specs = [("处理结果", default_output)]
     outputs = tuple(OutputRoot(label, path) for label, path in output_specs)
 
@@ -98,7 +98,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "address": args.address,
         "port": args.port,
         "show": args.show,
-        "title": "scMM 数据查看",
+        "title": "scMM 实验项目",
     }
     if args.allow_websocket_origin:
         serve_options["websocket_origin"] = args.allow_websocket_origin

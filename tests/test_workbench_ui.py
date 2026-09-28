@@ -40,11 +40,11 @@ def _load(ui, path):
     assert ui.state.data is not None, ui.status.object
 
 
-def test_eight_pages_h5ad_differential_and_lifecycle(tmp_path):
+def test_reusable_views_h5ad_differential_and_lifecycle(tmp_path):
     path = tmp_path / "数据.h5ad"
     _dataset(path)
     workspace = _workspace(tmp_path)
-    assert len(workspace.tabs) == 8
+    assert len(workspace.tabs) == 2
     ui = workspace.analysis
     _load(ui, path)
     assert ui.group_a.value == "a"
@@ -223,7 +223,7 @@ def test_all_pages_build_and_serialize_bokeh_documents(tmp_path):
     document = Document()
     root = workspace.tabs.get_root(document)
     document.add_root(root)
-    for index in range(8):
+    for index in range(len(workspace.tabs)):
         workspace.tabs.active = index
         document.validate()
         serialized = document.to_json()

@@ -161,7 +161,11 @@ class AnalysisWorkspace:
         metadata["history_json"] = json.dumps(history, ensure_ascii=False)
         self.data = candidate
         self.revision += 1
-        self.results.clear()
+        if clear_derived:
+            self.results.clear()
+        else:
+            # Additive embeddings/annotations do not alter existing analysis inputs.
+            self.results = {key: (self.token, value) for key, (_, value) in self.results.items()}
 
     def normalize(self, method):
         candidate = self.require_data().copy()

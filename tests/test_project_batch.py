@@ -1,4 +1,6 @@
 import json
+import os
+import time
 from dataclasses import asdict
 
 import numpy as np
@@ -7,7 +9,13 @@ import pytest
 
 from scMM.application import StorageCatalog, StorageRoot
 from scMM.application.processing import ProcessingParameters
-from scMM.application.project_batch import preflight, read_batch, reviewed_dataset, run_batch
+from scMM.application.project_batch import (
+    preflight,
+    read_batch,
+    reviewed_dataset,
+    run_batch,
+    submit,
+)
 from scMM.application.projects import ProjectStore, write_json
 from scMM.file.io import save_spectra
 
@@ -79,3 +87,30 @@ def test_failure_continues_and_shared_parameters_checked(tmp_path):
     run_batch(folder / "state.json")
     state = json.loads((folder / "state.json").read_text())
     assert [r["status"] for r in state["samples"]] == ["failed", "succeeded"], state
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Linux project workers")
+def test_detached_batch_and_retry_reuse_successes(tmp_path):
+    project, catalog = setup_project(tmp_path)
+    path = submit(project, catalog)
+    deadline = time.monotonic() + 30
+    while read_batch(path)["status"] in {"queued", "running"} and time.monotonic() < deadline:
+        time.sleep(0.1)
+    state = read_batch(path)
+    assert state["status"] == "completed", state
+    assert all(row["status"] == "succeeded" for row in state["samples"]), state
+    # Simulate a recorded per-sample failure; the retry must retain the other output.
+    state["samples"][1]["status"] = "failed"
+    write_json(path, state)
+    retry = submit(project, catalog, retry_path=path)
+    deadline = time.monotonic() + 30
+    while read_batch(retry)["status"] in {"queued", "running"} and time.monotonic() < deadline:
+        time.sleep(0.1)
+    retried = read_batch(retry)
+    assert retried["status"] == "completed", retried
+    assert all(row["status"] == "succeeded" for row in retried["samples"]), retried
+    first_name = state["samples"][0]["output"]
+    assert (path.parent / first_name).read_bytes() == (retry.parent / first_name).read_bytes()
+    assert (path.parent / "shared_features.npy").read_bytes() == (
+        retry.parent / "shared_features.npy"
+    ).read_bytes()
