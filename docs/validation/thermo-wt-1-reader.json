@@ -1,0 +1,52 @@
+{
+  "raw_path": "/home/crs/data/crs/data/260922/wt-1.RAW",
+  "mzml_path": "/home/crs/data/crs/data/260922/wt-1.mzML",
+  "direct_stream": {
+    "file_bytes": 342915724,
+    "scans": 4302,
+    "profile_points": 81059698,
+    "elapsed_seconds_including_startup": 2.558055647998117,
+    "scans_per_second": 1681.746057153471,
+    "points_per_second": 31688011.972466547,
+    "python_rss_bytes": 170790912,
+    "children_rss_bytes": 409018368,
+    "tree_rss_bytes": 579809280,
+    "instrument": "Q Exactive Orbitrap",
+    "creation_time_unspecified": "2026-09-22T16:04:29.9770000",
+    "memory_sampling_seconds": 0.01,
+    "cache_condition": "uncontrolled OS/filesystem cache; no cache eviction"
+  },
+  "comparison": {
+    "raw_scans": 4302,
+    "mzml_scans": 4302,
+    "compared_scans": 4302,
+    "raw_profile_points": 81059698,
+    "mismatch_scan_counts": {
+      "scan_number": 0,
+      "ms_level": 0,
+      "profile": 0,
+      "point_count": 0,
+      "rt_exact": 1,
+      "rt_over_1ns": 0,
+      "mz_exact": 4302,
+      "intensity_exact": 0,
+      "mz_float32": 0,
+      "intensity_float32": 0
+    },
+    "max_absolute_error": {
+      "rt_seconds": 5.684341886080802e-14,
+      "mz": 6.103515238464752e-05,
+      "intensity": 0.0
+    },
+    "different_intensity_points": 0,
+    "examples": [],
+    "raw_creation_time_unspecified": "2026-09-22T16:04:29.9770000",
+    "mzml_creation_time_openms": "2026-09-22 08:04:29",
+    "mzml_array_encoding_counts": {
+      "mz_float32": 4302,
+      "mz_float64": 0,
+      "intensity_float32": 4302,
+      "intensity_float64": 0
+    }
+  }
+}
