@@ -20,7 +20,7 @@ from scMM.application.projects import ProjectStore, write_json
 from scMM.file.io import save_spectra
 
 
-def setup_project(tmp_path):
+def setup_project(tmp_path, *, storage_label="data", sample_names=("a", "b")):
     spectra = []
     for i in range(31):
         s = oms.MSSpectrum()
@@ -34,8 +34,10 @@ def setup_project(tmp_path):
     save_spectra(spectra, tmp_path / "b.mzML")
     store = ProjectStore(tmp_path)
     project = store.create("batch")
-    catalog = StorageCatalog((StorageRoot("data", tmp_path),))
-    project.add_files(catalog, "data", ["a.mzML", "b.mzML"])
+    catalog = StorageCatalog((StorageRoot(storage_label, tmp_path),))
+    project.add_files(catalog, storage_label, ["a.mzML", "b.mzML"])
+    for sample, name in zip(project.samples, sample_names, strict=True):
+        sample["name"] = name
     project.manifest["parameters"] = asdict(
         ProcessingParameters(
             ref_mz=150.0,
@@ -85,7 +87,7 @@ def test_failure_continues_and_shared_parameters_checked(tmp_path):
     folder.mkdir()
     write_json(folder / "request.json", request)
     run_batch(folder / "state.json")
-    state = json.loads((folder / "state.json").read_text())
+    state = json.loads((folder / "state.json").read_text(encoding="utf-8"))
     assert [r["status"] for r in state["samples"]] == ["failed", "succeeded"], state
 
 
@@ -114,3 +116,20 @@ def test_detached_batch_and_retry_reuse_successes(tmp_path):
     assert (path.parent / "shared_features.npy").read_bytes() == (
         retry.parent / "shared_features.npy"
     ).read_bytes()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Linux project workers")
+def test_detached_batch_reads_unicode_request_under_ascii_locale(tmp_path, monkeypatch):
+    project, catalog = setup_project(
+        tmp_path, storage_label="原始数据", sample_names=("对照一", "处理一")
+    )
+    monkeypatch.setenv("LANG", "C")
+    monkeypatch.setenv("LC_ALL", "C")
+    monkeypatch.setenv("PYTHONUTF8", "0")
+    path = submit(project, catalog)
+    deadline = time.monotonic() + 30
+    while read_batch(path)["status"] in {"queued", "running"} and time.monotonic() < deadline:
+        time.sleep(0.1)
+    state = read_batch(path)
+    assert state["status"] == "completed", (state, (path.parent / "worker.log").read_bytes())
+    assert [row["name"] for row in state["samples"]] == ["对照一", "处理一"]

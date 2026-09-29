@@ -64,7 +64,7 @@ def preflight(project, storage):
 
 def read_batch(path):
     path = Path(path)
-    state = json.loads(path.read_text())
+    state = json.loads(path.read_text(encoding="utf-8"))
     if state["status"] in {"queued", "running"} and state.get("pid"):
         command = Path(f"/proc/{state['pid']}/cmdline")
         try:
@@ -86,7 +86,9 @@ def batches(project):
         if p.resolve().is_relative_to(root) and not p.parent.is_symlink()
     ]
     return sorted(
-        paths, key=lambda p: json.loads(p.read_text()).get("created_at", ""), reverse=True
+        paths,
+        key=lambda p: json.loads(p.read_text(encoding="utf-8")).get("created_at", ""),
+        reverse=True,
     )
 
 
@@ -102,7 +104,7 @@ def submit(project, storage, *, retry_path=None):
         prior = read_batch(retry_path)
         if prior["status"] in {"queued", "running"}:
             raise ValueError("Cannot retry an active batch")
-        previous = json.loads(retry_path.with_name("request.json").read_text())
+        previous = json.loads(retry_path.with_name("request.json").read_text(encoding="utf-8"))
 
         def scientific_request(value):
             return {
@@ -165,7 +167,7 @@ def submit(project, storage, *, retry_path=None):
                     start_new_session=True,
                 )
             # Worker owns state after release; persist PID before allowing it to proceed.
-            state = json.loads(path.read_text())
+            state = json.loads(path.read_text(encoding="utf-8"))
             write_json(path, {**state, "pid": process.pid})
             (folder / "start.ready").touch()
             threading.Thread(
@@ -186,7 +188,7 @@ def stop_after_current(path):
 
 def run_batch(path):
     path = Path(path)
-    request = json.loads((path.parent / "request.json").read_text())
+    request = json.loads((path.parent / "request.json").read_text(encoding="utf-8"))
     state = {
         "status": "running",
         "pid": os.getpid(),
@@ -333,7 +335,7 @@ def reviewed_dataset(path, selected_ids):
     objects = [
         CyESIData.read_h5ad(child_path(path.parent, rows[key]["output"])) for key in selected_ids
     ]
-    request = json.loads((path.parent / "request.json").read_text())
+    request = json.loads((path.parent / "request.json").read_text(encoding="utf-8"))
     ppm = 0.0 if request["feature_strategy"] == "shared" else request["feature_merge_ppm"]
     result = merge_objects(CyESIData, objects, ppm).to_anndata()
     result.uns["project_batch"] = {
@@ -356,4 +358,17 @@ if __name__ == "__main__":
         if time.monotonic() > deadline:
             raise TimeoutError("Worker start gate timeout")
         time.sleep(0.05)
-    run_batch(state_path)
+    try:
+        run_batch(state_path)
+    except Exception as exc:
+        traceback.print_exc()
+        write_json(
+            state_path,
+            {
+                "status": "failed",
+                "pid": os.getpid(),
+                "created_at": utc_now(),
+                "message": f"Worker startup failed: {exc}",
+                "samples": [],
+            },
+        )

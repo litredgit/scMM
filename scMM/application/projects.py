@@ -225,7 +225,9 @@ class ProjectStore:
                 data.uns.get("scmm_workbench", {}).get("reports_json", "{}")
             )
             if "views" in artifacts:
-                project.views = json.loads(child_path(folder, artifacts["views"]).read_text())
+                project.views = json.loads(
+                    child_path(folder, artifacts["views"]).read_text(encoding="utf-8")
+                )
         project.saved_token = project.workspace.token
         return project
 
