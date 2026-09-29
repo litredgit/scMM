@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
-SUPPORTED_RAW_SUFFIXES = frozenset({".mzml", ".mzxml"})
+SUPPORTED_RAW_SUFFIXES = frozenset({".raw", ".mzml", ".mzxml"})
 
 
 @dataclass(frozen=True)
@@ -79,12 +79,12 @@ class StorageCatalog:
         return resolved
 
     def resolve_raw_file(self, root_label: str, selected_path: str | Path) -> Path:
-        """Resolve a readable mzML/mzXML file below a configured root."""
+        """Resolve a Thermo RAW or mzML/mzXML file below a configured root."""
         resolved = self.resolve(root_label, selected_path)
         if not resolved.is_file():
             raise FileNotFoundError(f"Not a file: {resolved}")
         if resolved.suffix.lower() not in SUPPORTED_RAW_SUFFIXES:
-            raise ValueError("Only mzML and mzXML raw-data files are supported")
+            raise ValueError("Only Thermo RAW, mzML and mzXML raw-data files are supported")
         return resolved
 
     def resolve_output_directory(self, root_label: str, selected_path: str | Path) -> Path:

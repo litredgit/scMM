@@ -11,6 +11,8 @@ import pandas as pd
 import pyopenms as oms
 
 from scMM.file.io import load_single_file, sum_spec
+from scMM.file.readers.base import spectrum_iterator
+from scMM.file.readers.source import ThermoRawSource
 
 from .processing import ProcessingParameters
 from .storage import StorageCatalog
@@ -48,7 +50,7 @@ class RawFilePreview:
     def __init__(
         self,
         path: Path,
-        experiment: oms.MSExperiment,
+        experiment: oms.MSExperiment | ThermoRawSource,
         metadata: dict[str, object],
     ) -> None:
         self.path = path
@@ -74,7 +76,7 @@ class RawFilePreview:
         feature_block_size=None,
         progress_callback=None,
     ) -> CellDetectionPreview:
-        """Preview production cell windows without reopening the raw file.
+        """Preview production cell windows (RAW sources reopen for each pass).
 
         Uses full-file MS1 scans and the same alignment and preprocessing as
         load_from_file. This is a full extraction, not a downsampled approximation.
@@ -151,12 +153,21 @@ class RawFilePreview:
         return CellDetectionPreview(**captured)
 
     def single_spectrum(self, scan_index: int) -> tuple[pd.DataFrame, dict]:
-        """Read an absolute zero-based scan index from the cached experiment."""
+        """Read a zero-based scan index; RAW scans stream sequentially to it."""
         if isinstance(scan_index, bool) or not isinstance(scan_index, int):
             raise ValueError("scan_index must be an integer")
         if not 0 <= scan_index < self.experiment.getNrSpectra():
             raise ValueError("scan_index is outside the loaded experiment")
-        spectrum = self.experiment[scan_index]
+        if isinstance(self.experiment, ThermoRawSource):
+            with spectrum_iterator(self.experiment) as scans:
+                for index, candidate in enumerate(scans):
+                    if index == scan_index:
+                        spectrum = candidate
+                        break
+                else:
+                    raise ValueError("scan_index is outside the RAW stream")
+        else:
+            spectrum = self.experiment[scan_index]
         mz, intensity = spectrum.get_peaks()
         return pd.DataFrame({"mz": mz, "intensity": intensity}), {
             "scan_index": scan_index,
@@ -165,7 +176,7 @@ class RawFilePreview:
         }
 
     def extracted_ion_chromatograms(self, references, **kwargs) -> pd.DataFrame:
-        """Long-form EICs from the same cached scans, without reloading the file."""
+        """Long-form EICs using the same calculation for XML and streaming RAW."""
         references = np.atleast_1d(references).astype(float)
         if references.ndim != 1 or not len(references):
             raise ValueError("at least one reference m/z is required")
@@ -185,15 +196,16 @@ class RawFilePreview:
         """Return total ion intensity for each selected scan."""
         _validate_ms_level(ms_level)
         rows = []
-        for scan_index, spectrum in _selected_spectra(self.experiment, ms_level, rt_range):
-            _, intensity = spectrum.get_peaks()
-            rows.append(
-                {
-                    "scan_index": scan_index,
-                    "rt_seconds": float(spectrum.getRT()),
-                    "intensity": float(np.nansum(intensity)),
-                }
-            )
+        with spectrum_iterator(_selected_spectra(self.experiment, ms_level, rt_range)) as scans:
+            for scan_index, spectrum in scans:
+                _, intensity = spectrum.get_peaks()
+                rows.append(
+                    {
+                        "scan_index": scan_index,
+                        "rt_seconds": float(spectrum.getRT()),
+                        "intensity": float(np.nansum(intensity)),
+                    }
+                )
         return pd.DataFrame(rows, columns=["scan_index", "rt_seconds", "intensity"])
 
     def extracted_ion_chromatogram(
@@ -213,19 +225,20 @@ class RawFilePreview:
         delta = target_mz * ppm_tolerance * 1e-6
         lower, upper = target_mz - delta, target_mz + delta
         rows = []
-        for scan_index, spectrum in _selected_spectra(self.experiment, ms_level, rt_range):
-            mz, intensity = spectrum.get_peaks()
-            mz = np.asarray(mz, dtype=np.float64)
-            intensity = np.asarray(intensity, dtype=np.float64)
-            valid = np.isfinite(mz) & np.isfinite(intensity)
-            selected_intensity = intensity[valid & (mz >= lower) & (mz <= upper)]
-            rows.append(
-                {
-                    "scan_index": scan_index,
-                    "rt_seconds": float(spectrum.getRT()),
-                    "intensity": float(selected_intensity.sum()),
-                }
-            )
+        with spectrum_iterator(_selected_spectra(self.experiment, ms_level, rt_range)) as scans:
+            for scan_index, spectrum in scans:
+                mz, intensity = spectrum.get_peaks()
+                mz = np.asarray(mz, dtype=np.float64)
+                intensity = np.asarray(intensity, dtype=np.float64)
+                valid = np.isfinite(mz) & np.isfinite(intensity)
+                selected_intensity = intensity[valid & (mz >= lower) & (mz <= upper)]
+                rows.append(
+                    {
+                        "scan_index": scan_index,
+                        "rt_seconds": float(spectrum.getRT()),
+                        "intensity": float(selected_intensity.sum()),
+                    }
+                )
         return pd.DataFrame(rows, columns=["scan_index", "rt_seconds", "intensity"])
 
     def summed_spectrum(
@@ -240,17 +253,15 @@ class RawFilePreview:
     ) -> pd.DataFrame:
         """Return a summed or average profile spectrum over selected scans."""
         _validate_ms_level(ms_level)
-        selected = oms.MSExperiment()
-        for _, spectrum in _selected_spectra(self.experiment, ms_level, rt_range):
-            selected.addSpectrum(spectrum)
-        spectrum = sum_spec(
-            selected,
-            mz_range=mz_range,
-            resolution_200=resolution_200,
-            points_per_fwhm=points_per_fwhm,
-            ms_level=ms_level,
-            normalize=normalize,
-        )
+        with spectrum_iterator(_selected_spectra(self.experiment, ms_level, rt_range)) as scans:
+            spectrum = sum_spec(
+                (spectrum for _, spectrum in scans),
+                mz_range=mz_range,
+                resolution_200=resolution_200,
+                points_per_fwhm=points_per_fwhm,
+                ms_level=ms_level,
+                normalize=normalize,
+            )
         mz, intensity = spectrum.get_peaks()
         return pd.DataFrame(
             {
@@ -278,18 +289,19 @@ class RawFilePreview:
         accumulated = np.zeros(bins, dtype=np.float64)
         selected_count = 0
         scale = bins / (mz_max - mz_min)
-        for _, spectrum in _selected_spectra(self.experiment, ms_level, rt_range):
-            selected_count += 1
-            mz, intensity = spectrum.get_peaks()
-            mz = np.asarray(mz, dtype=np.float64)
-            intensity = np.asarray(intensity, dtype=np.float64)
-            valid = np.isfinite(mz) & np.isfinite(intensity) & (mz >= mz_min) & (mz <= mz_max)
-            selected_mz = mz[valid]
-            if selected_mz.size == 0:
-                continue
-            indices = np.floor((selected_mz - mz_min) * scale).astype(np.int64)
-            np.minimum(indices, bins - 1, out=indices)
-            np.add.at(accumulated, indices, intensity[valid])
+        with spectrum_iterator(_selected_spectra(self.experiment, ms_level, rt_range)) as scans:
+            for _, spectrum in scans:
+                selected_count += 1
+                mz, intensity = spectrum.get_peaks()
+                mz = np.asarray(mz, dtype=np.float64)
+                intensity = np.asarray(intensity, dtype=np.float64)
+                valid = np.isfinite(mz) & np.isfinite(intensity) & (mz >= mz_min) & (mz <= mz_max)
+                selected_mz = mz[valid]
+                if selected_mz.size == 0:
+                    continue
+                indices = np.floor((selected_mz - mz_min) * scale).astype(np.int64)
+                np.minimum(indices, bins - 1, out=indices)
+                np.add.at(accumulated, indices, intensity[valid])
         if selected_count == 0:
             raise ValueError("No spectra found.")
         if normalize:
@@ -314,23 +326,24 @@ class RawPreviewService:
 
 def _summarize(
     path: Path,
-    experiment: oms.MSExperiment,
+    experiment: oms.MSExperiment | ThermoRawSource,
     metadata: dict[str, object],
 ) -> RawFileSummary:
     levels: Counter[int] = Counter()
     retention_times: list[float] = []
     mz_min: float | None = None
     mz_max: float | None = None
-    for spectrum in experiment:
-        levels[int(spectrum.getMSLevel())] += 1
-        retention_times.append(float(spectrum.getRT()))
-        mz, _ = spectrum.get_peaks()
-        finite_mz = np.asarray(mz, dtype=np.float64)
-        finite_mz = finite_mz[np.isfinite(finite_mz)]
-        if finite_mz.size:
-            local_min, local_max = float(finite_mz.min()), float(finite_mz.max())
-            mz_min = local_min if mz_min is None else min(mz_min, local_min)
-            mz_max = local_max if mz_max is None else max(mz_max, local_max)
+    with spectrum_iterator(experiment) as scans:
+        for spectrum in scans:
+            levels[int(spectrum.getMSLevel())] += 1
+            retention_times.append(float(spectrum.getRT()))
+            mz, _ = spectrum.get_peaks()
+            finite_mz = np.asarray(mz, dtype=np.float64)
+            finite_mz = finite_mz[np.isfinite(finite_mz)]
+            if finite_mz.size:
+                local_min, local_max = float(finite_mz.min()), float(finite_mz.max())
+                mz_min = local_min if mz_min is None else min(mz_min, local_min)
+                mz_max = local_max if mz_max is None else max(mz_max, local_max)
     return RawFileSummary(
         name=str(metadata.get("name", path.stem)),
         path=path,
@@ -351,7 +364,7 @@ def _validate_ms_level(ms_level: int) -> None:
 
 
 def _selected_spectra(
-    experiment: oms.MSExperiment,
+    experiment: oms.MSExperiment | ThermoRawSource,
     ms_level: int,
     rt_range: tuple[float, float] | None,
 ):
@@ -361,10 +374,11 @@ def _selected_spectra(
             raise ValueError("rt_range must contain finite values in ascending order")
     else:
         rt_min = rt_max = None
-    for scan_index, spectrum in enumerate(experiment):
-        rt = float(spectrum.getRT())
-        if spectrum.getMSLevel() != ms_level:
-            continue
-        if rt_min is not None and not (rt_min <= rt <= rt_max):
-            continue
-        yield scan_index, spectrum
+    with spectrum_iterator(experiment) as scans:
+        for scan_index, spectrum in enumerate(scans):
+            rt = float(spectrum.getRT())
+            if spectrum.getMSLevel() != ms_level:
+                continue
+            if rt_min is not None and not (rt_min <= rt <= rt_max):
+                continue
+            yield scan_index, spectrum

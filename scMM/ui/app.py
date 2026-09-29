@@ -423,6 +423,7 @@ class ProjectWorkspace:
                 (
                     "添加多个原始文件",
                     pn.Column(
+                        "支持 Thermo RAW（profile）、mzML 和 mzXML；其他文件不会被加入项目。",
                         self.file_root,
                         self.file_browser,
                         self.button("添加所选文件", self._add_files),
@@ -493,7 +494,7 @@ class ProjectWorkspace:
         self.files = pn.widgets.FileSelector(
             str(root.path),
             root_directory=str(root.path),
-            file_pattern="*.mz*",
+            file_pattern="*",
             only_files=True,
             height=250,
         )

@@ -80,7 +80,7 @@ def validate_ms_file(
     path: str | Path,
     format: Literal["auto", "mzML", "mzXML"] = "auto",
 ) -> None:
-    """Quickly reject truncated XML files or files without spectrum records.
+    """Check RAW reader availability/header or reject malformed XML files.
 
     The check reads only the document header, tail, and data up to the first
     spectrum tag. It is intended for interactive preflight; OpenMS remains the
@@ -89,6 +89,12 @@ def validate_ms_file(
     path = Path(path).expanduser()
     if not path.is_file():
         raise FileNotFoundError(path)
+    if format == "auto" and path.suffix.lower() == ".raw":
+        from .readers.source import ThermoRawSource
+
+        # Header-only preflight; full profile/scan validation occurs while reading.
+        ThermoRawSource(path)
+        return
     resolved_format = _resolve_ms_format(path, format)
     try:
         with path.open("rb") as handle:

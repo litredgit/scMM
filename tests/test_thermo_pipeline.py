@@ -68,6 +68,112 @@ OPTIONS = dict(
 )
 
 
+def test_raw_web_preview_matches_xml(raw_pair):
+    from scMM.application import RawPreviewService, StorageCatalog, StorageRoot
+    from scMM.file.io import validate_ms_file
+
+    raw, xml = raw_pair
+    catalog = StorageCatalog([StorageRoot("data", raw.parent)])
+    assert catalog.resolve_raw_file("data", raw) == raw
+    assert raw.name in [entry.name for entry in catalog.list_entries("data")]
+    validate_ms_file(raw)
+    service = RawPreviewService(catalog)
+    direct, baseline = (service.open("data", path) for path in (raw, xml))
+    assert direct.summary.scan_count == baseline.summary.scan_count
+    for operation, kwargs in [
+        ("total_ion_chromatogram", {}),
+        ("extracted_ion_chromatogram", {"target_mz": 150.0}),
+        ("binned_spectrum", {"mz_range": (140, 210), "bins": 100}),
+        ("summed_spectrum", {"mz_range": (140, 210), "resolution_200": 5000}),
+    ]:
+        pd.testing.assert_frame_equal(
+            getattr(direct, operation)(**kwargs), getattr(baseline, operation)(**kwargs)
+        )
+    for index in (0, 15, 30):
+        actual, meta = direct.single_spectrum(index)
+        expected, expected_meta = baseline.single_spectrum(index)
+        pd.testing.assert_frame_equal(actual, expected, check_dtype=False)
+        assert meta == expected_meta
+
+
+def test_raw_web_reader_closes_on_early_scan_and_preview_error(raw_pair, monkeypatch):
+    from scMM.application import RawPreviewService, StorageCatalog, StorageRoot
+
+    raw, _ = raw_pair
+    readers = []
+    cls = raw_source.ThermoRawReader
+
+    def factory(*args, **kwargs):
+        reader = cls(*args, **kwargs)
+        readers.append(reader)
+        return reader
+
+    monkeypatch.setattr(raw_source, "ThermoRawReader", factory)
+    preview = RawPreviewService(StorageCatalog([StorageRoot("data", raw.parent)])).open("data", raw)
+    preview.single_spectrum(0)
+
+    def fail(*args, **kwargs):
+        raise ValueError("preview failure")
+
+    monkeypatch.setattr(np, "nansum", fail)
+    with pytest.raises(ValueError, match="preview failure"):
+        preview.total_ion_chromatogram()
+    assert len(readers) == 4
+    assert all(r.process.poll() is not None and r.process.stdout.closed for r in readers)
+
+
+def test_raw_web_project_entry(raw_pair, tmp_path, monkeypatch):
+    from scMM.application import StorageRoot
+    from scMM.ui.app import ProjectWorkspace
+
+    raw, _ = raw_pair
+    ui = ProjectWorkspace((StorageRoot("data", tmp_path),), project_root=tmp_path)
+    ui.name.value = "RAW UI"
+    ui._create()
+    ui.files.value = [str(raw)]
+    ui._add_files()
+    ui._open_raw()
+    assert ui.components.preview.summary.scan_count == 31
+    assert not ui.components.tic.empty
+    monkeypatch.setattr(thermo_raw, "reader_command", lambda: ["/nonexistent/scmm-reader"])
+    with pytest.raises(ValueError, match="原始文件读取失败"):
+        ui._open_raw()
+    assert ui.components.preview is None
+    assert ui.components.tic.empty
+    assert ui.components.cell_download.disabled
+
+
+@pytest.mark.parametrize("strategy", ["shared", "independent"])
+def test_raw_project_batch(raw_pair, tmp_path, strategy):
+    from dataclasses import asdict
+
+    from scMM.application import StorageCatalog, StorageRoot
+    from scMM.application.processing import ProcessingParameters
+    from scMM.application.project_batch import preflight, read_batch, reviewed_dataset, run_batch
+    from scMM.application.projects import ProjectStore, write_json
+
+    raw, _ = raw_pair
+    catalog = StorageCatalog([StorageRoot("data", tmp_path)])
+    (tmp_path / "projects").mkdir()
+    project = ProjectStore(tmp_path / "projects").create("RAW regression")
+    project.add_files(catalog, "data", [raw])
+    project.manifest["feature_strategy"] = strategy
+    project.manifest["parameters"] = asdict(
+        ProcessingParameters(**{k: v for k, v in OPTIONS.items() if k != "show_progress"})
+    )
+    request = preflight(project, catalog)
+    request["created_at"] = "test"
+    folder = project.folder / "processing" / "test"
+    folder.mkdir()
+    write_json(folder / "request.json", request)
+    run_batch(folder / "state.json")
+    state = read_batch(folder / "state.json")
+    assert state["status"] == "completed", state
+    assert state["samples"][0]["status"] == "succeeded", state
+    result = reviewed_dataset(folder / "state.json", [project.samples[0]["id"]])
+    assert result.n_obs > 0
+
+
 def test_source_reopens_and_preserves_time_and_frame_semantics(raw_pair, monkeypatch):
     raw, _xml = raw_pair
     source, meta = load_single_file(raw)

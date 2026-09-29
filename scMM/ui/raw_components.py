@@ -3,6 +3,7 @@
 # ruff: noqa: RUF001
 from __future__ import annotations
 
+from html import escape
 from io import BytesIO
 from pathlib import Path
 
@@ -183,7 +184,7 @@ class PreviewWorkspace:
         self.root_select = pn.widgets.Select(label="数据存储", options=labels, value=labels[0])
         self.selector_area = pn.Column(sizing_mode="stretch_width")
         self.selection_text = pn.pane.Markdown(
-            "<span class='scmm-hint'>请选择一个 mzML 或 mzXML 文件。</span>"
+            "<span class='scmm-hint'>请选择 Thermo RAW（profile）、mzML 或 mzXML 文件。</span>"
         )
         self.load_button = pn.widgets.Button(
             label="打开并预览",
@@ -393,7 +394,7 @@ class PreviewWorkspace:
         selector = pn.widgets.FileSelector(
             directory=str(root.path),
             root_directory=str(root.path),
-            file_pattern="*.mz*",
+            file_pattern="*",
             only_files=True,
             show_hidden=False,
             size=10,
@@ -422,7 +423,7 @@ class PreviewWorkspace:
             self.selection_text.object = "一次只能预览一个文件，请只保留一个选择。"
             self.processing.set_input(None, None)
         else:
-            self.selection_text.object = "请选择一个 mzML 或 mzXML 文件。"
+            self.selection_text.object = "请选择 Thermo RAW（profile）、mzML 或 mzXML 文件。"
             self.processing.set_input(None, None)
 
     def _load_selected(self, _event) -> None:
@@ -438,6 +439,8 @@ class PreviewWorkspace:
             self.tabs.active = 1
             pn.state.notifications.success(f"已加载 {preview.path.name}", duration=3000)
         except Exception as exc:  # Panel callbacks need to report errors in the session.
+            self._clear_raw_view()
+            self.summary.object = f"原始文件加载失败：{escape(str(exc))}"
             pn.state.notifications.error(f"加载失败：{exc}", duration=8000)
         finally:
             self.load_button.loading = False

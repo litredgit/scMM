@@ -81,7 +81,7 @@
   本轮预览为完整提取，仅减少重复读取和完整基线保留，并不保证实时响应。
 - [ ] **VAL-02 厂商 RAW**：已增加 Thermo .NET 8 profile 直接读取，并对 Q Exactive
   的 wt-1 做全扫描与处理验证（见 [阶段日志](16-thermo-raw.md)）；更多仪器/采集方法仍待验证。
-  RawPreviewService 仍只开放 mzML/mzXML，本阶段没有新增 RAW 浏览器预览。
+  网页已最小接入 Thermo profile RAW，复用既有预览和项目提取；真实验收见上述日志。
 - [ ] **VAL-03 环境**：本轮本机 Python 3.12；Python 3.11 由 CI 矩阵验证，Windows 未实测。
 - [ ] **VAL-06 浏览器验收**：新六步工作台通过离线构建及 Chromium 实际页面操作，覆盖项目打开、
   原始谱页面、预处理、分析、结果和保存；并非真实实验全流程验收。旧八页入口已替换，

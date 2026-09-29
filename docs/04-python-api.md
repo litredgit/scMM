@@ -45,7 +45,8 @@ shared/independent 仍串行。独立的 `batch_process()` 旧助手仍仅扫描
 
 `msconvert_path` / `--msconvert` 不再用于自动 RAW 转换；如确需转换，请在处理外显式
 调用 `scMM.file.msconvert.convert_raw()`。不支持 Thermo RAW 的环境仍可直接读取已有 mzML。
-安装位置、协议、结果差异和验证见 [Thermo RAW 日志](16-thermo-raw.md)。本阶段不含 RAW 网页入口。
+安装位置、协议、结果差异和验证见 [Thermo RAW 日志](16-thermo-raw.md)。
+网页项目入口现亦支持 Thermo profile RAW，复用本节后台路径。
 
 ## 缓存原始数据的细胞提取预览（Python API）
 
@@ -62,7 +63,7 @@ service = RawPreviewService(StorageCatalog([StorageRoot("Raw", Path("data"))]))
 raw = service.open("Raw", "sample.mzML")
 parameters = ProcessingParameters(ref_mz=734.5929, baseline_filter_size=51)
 preview = raw.cell_detection(parameters)
-# 再次调用仍复用 raw.experiment，不重复读取文件。
+# XML 复用内存中的 experiment；RAW 每遍重新流式读取，不缓存全部原始谱。
 snr_preview = raw.cell_detection(
     parameters,
     extraction_method="snr_v1",
@@ -76,7 +77,7 @@ apices = snr_preview.traces.loc[snr_preview.traces.cell_apex]
 reference 列按 `preview.reference_mz` 的顺序对应实际匹配 m/z，不采用不明确的 RT/frame 混合轴。
 `window_ranges` 为两端均包含的帧位置区间。SNR 参考需能在 reference_ppm_tol 内匹配。
 使用完整文件的 MS1 扫描，正式提取与预览应传入相同参数；不自动保存，不保留完整基线。
-这仍是完整计算，数据量大时会耗时；当前网页尚未接入此 API。
+这仍是完整计算，数据量大时会耗时；网页的细胞检测预览使用此 API。
 
 `preprocess`、`load_from_file` 及 `load_from_directory` 可传
 `progress_callback(value, message)`。单文件 value 表示提取阶段进度，目录为批次进度；
