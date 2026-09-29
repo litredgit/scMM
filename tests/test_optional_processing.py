@@ -163,7 +163,7 @@ def test_full_synthetic_processing_and_h5ad(tmp_path):
 
 
 @pytest.mark.parametrize("valid", [True, False])
-def test_raw_conversion_keeps_validation_and_cleans_temporary_files(tmp_path, monkeypatch, valid):
+def test_explicit_raw_conversion_keeps_xml_validation(tmp_path, monkeypatch, valid):
     from pathlib import Path
 
     import pyopenms as oms
@@ -192,12 +192,15 @@ def test_raw_conversion_keeps_validation_and_cleans_temporary_files(tmp_path, mo
         return SimpleNamespace(stdout="", stderr="")
 
     monkeypatch.setattr(msconvert.subprocess, "run", run)
+    # Conversion remains a standalone explicit utility, never an automatic reader path.
+    result = msconvert.convert_raw(raw, tmp_path / "converted", executable=executable)
     if valid:
-        exp, metadata = load_single_file(raw, msconvert_path=executable)
+        exp, metadata = load_single_file(result)
         assert exp.getNrSpectra() == 1
-        assert metadata["source_file"] == raw.name
-        assert metadata["converted_from_raw"]
+        assert metadata["name"] == raw.stem
     else:
         with pytest.raises(InvalidMSFileError, match="XML"):
-            load_single_file(raw, msconvert_path=executable)
-    assert converted and not converted[0].exists()
+            load_single_file(result)
+    assert converted and converted[0].exists()
+    with pytest.raises(ValueError, match="convert explicitly"):
+        load_single_file(raw, msconvert_path=executable)

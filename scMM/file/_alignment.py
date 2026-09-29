@@ -7,6 +7,7 @@ import pandas as pd
 import pyopenms as oms
 
 from ._spectrum import extract_peaks
+from .readers.base import spectrum_iterator
 
 
 def align_frame(
@@ -26,34 +27,42 @@ def align_frame(
         raise ValueError("mz_list must be a non-empty 1D array-like.")
     sorted_targets, restore_order = _sorted_targets(targets)
     original_columns = np.argsort(restore_order)
-    spectra, frame_ids, retention_times = _collect_spectra(exp, ms_level)
-    if not spectra:
-        raise ValueError("No spectra found.")
-    shape = (len(spectra), len(targets))
-    if out is None:
-        values = np.zeros(shape, dtype=np.float32)
-    else:
+    if out is not None:
         if not isinstance(out, np.ndarray) or out.dtype != np.float32:
             raise TypeError("out must be a float32 numpy array")
-        if out.shape != shape or not out.flags.writeable:
-            raise ValueError(f"out must be writable with shape {shape}")
-        values = out
-        values.fill(0)
+        if out.ndim != 2 or out.shape[1] != len(targets) or not out.flags.writeable:
+            raise ValueError("out must be writable with shape (selected scans, targets)")
+    rows, frame_ids, retention_times = [], [], []
     peak_options = _peak_options(kwargs)
-    for row, spectrum in enumerate(spectra):
-        mz, intensity = extract_peaks(spectrum, dtype=dtype, **peak_options)
-        if mz.size == 0:
-            continue
-        mz, intensity = _sort_extracted_peaks(mz, intensity)
-        target_indices, matched_intensity = _match_target_peaks(
-            sorted_targets,
-            mz,
-            intensity,
-            ppm,
-        )
-        _aggregate_target_intensity(
-            values[row], original_columns[target_indices], matched_intensity, aggregate
-        )
+    with spectrum_iterator(exp) as spectra:
+        for frame_id, spectrum in enumerate(spectra):
+            if spectrum.getMSLevel() != ms_level:
+                continue
+            row = np.zeros(len(targets), dtype=np.float32)
+            mz, intensity = extract_peaks(spectrum, dtype=dtype, **peak_options)
+            if mz.size:
+                mz, intensity = _sort_extracted_peaks(mz, intensity)
+                target_indices, matched_intensity = _match_target_peaks(
+                    sorted_targets,
+                    mz,
+                    intensity,
+                    ppm,
+                )
+                _aggregate_target_intensity(
+                    row, original_columns[target_indices], matched_intensity, aggregate
+                )
+            rows.append(row)
+            frame_ids.append(frame_id)
+            retention_times.append(spectrum.getRT())
+    if not rows:
+        raise ValueError("No spectra found.")
+    if out is None:
+        values = np.asarray(rows, dtype=np.float32)
+    else:
+        if out.shape != (len(rows), len(targets)):
+            raise ValueError(f"out must be writable with shape {(len(rows), len(targets))}")
+        values = out
+        values[:] = rows
     frame = pd.DataFrame(values, index=frame_ids, columns=targets, copy=False)
     frame.index.name = "frame"
     metadata = pd.DataFrame({"rt": retention_times}, index=frame_ids)
@@ -72,17 +81,6 @@ def _sorted_targets(targets: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     restore_order = np.empty_like(order)
     restore_order[order] = np.arange(order.size)
     return targets[order], restore_order
-
-
-def _collect_spectra(experiment, ms_level: int):
-    spectra, frame_ids, retention_times = [], [], []
-    for frame_id, spectrum in enumerate(experiment):
-        if spectrum.getMSLevel() != ms_level:
-            continue
-        spectra.append(spectrum)
-        frame_ids.append(frame_id)
-        retention_times.append(spectrum.getRT())
-    return spectra, frame_ids, retention_times
 
 
 def _peak_options(kwargs: dict) -> dict:

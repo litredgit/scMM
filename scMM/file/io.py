@@ -5,7 +5,6 @@ import re
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any, Literal
 
 import pyopenms as oms
@@ -36,19 +35,22 @@ def load_single_file(
     format: Literal["auto", "mzML", "mzXML"] = "auto",
     *,
     msconvert_path=None,
-) -> tuple[oms.MSExperiment, dict[str, Any]]:
-    """Load an mzML/mzXML experiment and its acquisition metadata."""
+    raw_timezone=None,
+):
+    """Return an XML experiment or reopenable profile RAW source, plus metadata.
+
+    XML behavior is unchanged. RAW never uses an automatic format converter.
+    """
     path = Path(path).expanduser()
     if format == "auto" and path.suffix.lower() == ".raw":
-        from .msconvert import convert_raw
+        from .readers.source import ThermoRawSource
 
-        with TemporaryDirectory(prefix="scmm_raw_") as directory:
-            converted = convert_raw(path, directory, executable=msconvert_path)
-            experiment, metadata = load_single_file(converted)
-        metadata.update(
-            name=path.stem, source_file=path.name, path=str(path.resolve()), converted_from_raw=True
-        )
-        return experiment, metadata
+        if msconvert_path is not None:
+            raise ValueError(
+                "RAW now uses ThermoRawReader; convert explicitly with convert_raw if needed"
+            )
+        source = ThermoRawSource(path, timezone=raw_timezone)
+        return source, dict(source.metadata)
     if not path.is_file():
         raise FileNotFoundError(path)
     resolved_format = _resolve_ms_format(path, format)
@@ -170,9 +172,12 @@ def sum_spectrum_from_file(
     resolution_200: float = 35000.0,
     points_per_fwhm: float = 5.0,
     mz_range=(100.0, 1000.0),
+    *,
+    raw_timezone=None,
 ) -> oms.MSSpectrum:
     """Load one MS file and return its summed spectrum."""
-    experiment, _ = load_single_file(path, format="auto")
+    options = {"raw_timezone": raw_timezone} if raw_timezone is not None else {}
+    experiment, _ = load_single_file(path, format="auto", **options)
     return sum_spec(
         experiment,
         ms_level=ms_level,

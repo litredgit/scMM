@@ -8,6 +8,8 @@ import numpy as np
 import pyopenms as oms
 from scipy.signal import find_peaks
 
+from .readers.base import spectrum_iterator
+
 
 @dataclass(frozen=True)
 class _PeakConfig:
@@ -124,18 +126,19 @@ def _accumulate_spectra(
 ) -> tuple[np.ndarray, int]:
     accumulated = np.zeros_like(grid, dtype=np.float64)
     count = 0
-    for spectrum in experiment:
-        if spectrum.getMSLevel() != ms_level:
-            continue
-        mz, intensity = _prepare_sorted_unique_peaks(*spectrum.get_peaks())
-        if mz.size == 0 or mz[-1] < mz_min or mz[0] > mz_max:
-            continue
-        if zero_outside:
-            interpolated = np.interp(grid, mz, intensity, left=0.0, right=0.0)
-        else:
-            interpolated = np.interp(grid, mz, intensity)
-        accumulated += interpolated
-        count += 1
+    with spectrum_iterator(experiment) as spectra:
+        for spectrum in spectra:
+            if spectrum.getMSLevel() != ms_level:
+                continue
+            mz, intensity = _prepare_sorted_unique_peaks(*spectrum.get_peaks())
+            if mz.size == 0 or mz[-1] < mz_min or mz[0] > mz_max:
+                continue
+            if zero_outside:
+                interpolated = np.interp(grid, mz, intensity, left=0.0, right=0.0)
+            else:
+                interpolated = np.interp(grid, mz, intensity)
+            accumulated += interpolated
+            count += 1
     return accumulated, count
 
 

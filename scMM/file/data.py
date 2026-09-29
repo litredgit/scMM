@@ -48,9 +48,10 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         distance: int = 3,
         msconvert_path=None,
         mz_range=(100.0, 1000.0),
+        raw_timezone=None,
         **preprocess_kwds,
     ) -> Self:
-        """Load, align, and preprocess one mzML/mzXML file."""
+        """Load, align, and preprocess one mzML/mzXML or profile Thermo RAW file."""
         state = load_raw_file(
             file_path,
             ref_mz,
@@ -63,6 +64,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
             distance=distance,
             msconvert_path=msconvert_path,
             mz_range=mz_range,
+            raw_timezone=raw_timezone,
         )
         return cls._from_raw_state(state, preprocess_kwds)
 
@@ -77,15 +79,16 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         resample_points_per_fwhm: float = 5.0,
         ms_peak_snr_threshold: float = 10.0,
         prominence_ratio: float | None = None,
-        n_jobs: int = -1,
+        n_jobs: int | None = None,
         distance: int = 3,
         processing_strategy: str = "legacy",
         feature_merge_ppm: float = 10.0,
         msconvert_path=None,
         mz_range=(100.0, 1000.0),
+        raw_timezone=None,
         **preprocess_kwds,
     ) -> Self:
-        """Load and combine all direct mzML/mzXML children of a directory."""
+        """Combine direct XML/RAW files; default RAW workers=1, XML workers=all."""
         if processing_strategy != "legacy":
             return cls.load_from_directory(
                 dir_path,
@@ -94,6 +97,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
                 feature_merge_ppm=feature_merge_ppm,
                 msconvert_path=msconvert_path,
                 mz_range=mz_range,
+                raw_timezone=raw_timezone,
                 dtype=dtype,
                 ppm_tol=ppm_tol,
                 resolution=resolution,
@@ -105,7 +109,9 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
                 **preprocess_kwds,
             )
         if msconvert_path is not None:
-            raise ValueError("RAW conversion requires shared or independent processing_strategy")
+            raise ValueError(
+                "Automatic RAW conversion was removed; use ThermoRawReader or convert explicitly"
+            )
         state = load_raw_directory(
             dir_path,
             ref_mz,
@@ -118,6 +124,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
             n_jobs=n_jobs,
             distance=distance,
             mz_range=mz_range,
+            raw_timezone=raw_timezone,
         )
         return cls._from_raw_state(state, preprocess_kwds)
 

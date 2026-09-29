@@ -1,5 +1,6 @@
 """Lossless per-scan values with the accessors used by scMM algorithms."""
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import numpy as np
@@ -22,3 +23,15 @@ class Spectrum:
 
     def getMSLevel(self):
         return self.ms_level
+
+
+@contextmanager
+def spectrum_iterator(source):
+    """Close generator-backed pipes even if a downstream algorithm raises."""
+    iterator = iter(source)
+    try:
+        yield iterator
+    finally:
+        close = getattr(iterator, "close", None)
+        if close is not None:
+            close()

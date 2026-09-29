@@ -14,9 +14,9 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the command-line argument parser."""
     parser = argparse.ArgumentParser(
         prog="scmm-process",
-        description="Process a CyESI mzML/mzXML file or a directory of files.",
+        description="Process a CyESI mzML/mzXML or profile Thermo RAW file/directory.",
     )
-    parser.add_argument("input", type=Path, help="Input mzML/mzXML file or directory")
+    parser.add_argument("input", type=Path, help="Input mzML/mzXML/Thermo RAW file or directory")
     parser.add_argument("output", type=Path, help="Directory in which to save the result")
     parser.add_argument("--ref-mz", type=float, required=True, help="Reference ion m/z")
     parser.add_argument("--ppm-tol", type=float, default=10.0, help="Alignment tolerance in ppm")
@@ -25,7 +25,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mz-max", type=float, default=1000.0, help="Extraction m/z upper bound")
     parser.add_argument("--cell-snr", type=float, default=5.0)
     parser.add_argument("--peak-snr", type=float, default=3.0)
-    parser.add_argument("--jobs", type=int, default=-1, help="Parallel workers (-1 uses all CPUs)")
+    parser.add_argument(
+        "--jobs", type=int, default=None, help="File workers: default RAW=1, XML=all; -1=all CPUs"
+    )
     parser.add_argument(
         "--processing-strategy", choices=["legacy", "shared", "independent"], default="legacy"
     )
@@ -37,7 +39,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reference-mode", choices=["union", "intersection"], default="union")
     parser.add_argument("--feature-snr", type=float, default=3.0, help="SNR-mode feature threshold")
     parser.add_argument("--noise-window", type=int, default=51)
-    parser.add_argument("--msconvert", help="MSConvert executable for vendor RAW inputs")
+    parser.add_argument("--msconvert", help="Removed: convert explicitly before processing instead")
+    parser.add_argument(
+        "--raw-timezone", help="RAW acquisition timezone (env SCMM_RAW_TIMEZONE or Asia/Shanghai)"
+    )
     parser.add_argument(
         "--overwrite",
         action="store_true",
@@ -50,6 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command-line data processing workflow."""
     args = build_parser().parse_args(argv)
+    if args.msconvert is not None:
+        raise ValueError("--msconvert automatic conversion was removed; RAW is read directly")
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -73,6 +80,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "noise_window": args.noise_window,
         "msconvert_path": args.msconvert,
     }
+    if args.raw_timezone is not None:
+        common["raw_timezone"] = args.raw_timezone
     if input_path.is_dir() and input_path.suffix.lower() != ".raw":
         data = CyESIData.load_from_filelist(
             input_path,

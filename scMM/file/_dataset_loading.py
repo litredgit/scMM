@@ -130,6 +130,7 @@ def load_raw_file(
     distance: int = 3,
     msconvert_path=None,
     mz_range=(100.0, 1000.0),
+    raw_timezone=None,
 ) -> DatasetState:
     """Load and align one raw file without performing cell preprocessing."""
     config = _raw_config(
@@ -144,6 +145,8 @@ def load_raw_file(
         mz_range,
     )
     load_options = {"msconvert_path": msconvert_path} if msconvert_path else {}
+    if raw_timezone is not None:
+        load_options["raw_timezone"] = raw_timezone
     experiment, file_meta = load_single_file(str(file_path), format="auto", **load_options)
     return align_raw_experiment(experiment, file_meta, file_path, config)
 
@@ -172,9 +175,10 @@ def load_raw_directory(
     resample_points_per_fwhm: float = 5.0,
     ms_peak_snr_threshold: float = 10.0,
     prominence_ratio: float | None = None,
-    n_jobs: int = -1,
+    n_jobs: int | None = None,
     distance: int = 3,
     mz_range=(100.0, 1000.0),
+    raw_timezone=None,
 ) -> DatasetState:
     """Load and align a directory of raw files without cell preprocessing."""
     config = _raw_config(
@@ -191,11 +195,24 @@ def load_raw_directory(
     directory = Path(dir_path).expanduser()
     files = discover_ms_files(directory)
     logger.info("Detected %d MS files in %s", len(files), directory)
-    targets = _directory_targets(files, config, n_jobs)
+    load_options = {"raw_timezone": raw_timezone} if raw_timezone is not None else {}
+    n_jobs = (
+        (1 if any(Path(p).suffix.lower() == ".raw" for p in files) else -1)
+        if n_jobs is None
+        else n_jobs
+    )
+    signatures = {path: _file_signature(path) for path in files}
+    targets = _directory_targets(files, config, n_jobs, **load_options)
+    for path in files:
+        if signatures[path] != _file_signature(path):
+            raise ValueError(f"MS file changed during shared feature selection: {path}")
     alignments = Parallel(n_jobs=n_jobs)(
-        delayed(_align_frame_from_file)(path, targets, config.ppm_tol, config.dtype)
+        delayed(_align_frame_from_file)(path, targets, config.ppm_tol, config.dtype, **load_options)
         for path in files
     )
+    for path in files:
+        if signatures[path] != _file_signature(path):
+            raise ValueError(f"MS file changed during alignment: {path}")
     state = combine_aligned_files(directory.name, ref_mz, alignments)
     state.file_meta["mz_range"] = list(config.mz_range)
     return state
@@ -238,17 +255,22 @@ def validate_mz_range(mz_range, ref_mz=None):
     return tuple(float(value) for value in values)
 
 
+def _file_signature(path):
+    stat = Path(path).stat()
+    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns
+
+
 def discover_ms_files(directory: Path) -> list[str]:
-    """Return sorted direct mzML/mzXML children of a directory."""
+    """Return sorted direct mzML/mzXML/Thermo RAW files (not vendor directories)."""
     if not directory.is_dir():
         raise NotADirectoryError(directory)
     files = sorted(
         str(path)
         for path in directory.iterdir()
-        if path.is_file() and path.suffix.lower() in {".mzml", ".mzxml"}
+        if path.is_file() and path.suffix.lower() in {".mzml", ".mzxml", ".raw"}
     )
     if not files:
-        raise FileNotFoundError(f"No mzML or mzXML files found in {directory}")
+        raise FileNotFoundError(f"No mzML, mzXML or Thermo RAW files found in {directory}")
     return files
 
 
@@ -270,7 +292,9 @@ def _pick_common_targets(experiment, config: _RawLoadConfig, *, dtype=None) -> n
     return targets[(targets >= config.mz_range[0]) & (targets <= config.mz_range[1])]
 
 
-def _directory_targets(files: list[str], config: _RawLoadConfig, n_jobs: int) -> np.ndarray:
+def _directory_targets(
+    files: list[str], config: _RawLoadConfig, n_jobs: int, **load_options
+) -> np.ndarray:
     logger.info(
         "Summing spectra (resolution=%s, points_per_fwhm=%s)",
         config.resolution,
@@ -282,14 +306,15 @@ def _directory_targets(files: list[str], config: _RawLoadConfig, n_jobs: int) ->
             resolution_200=config.resolution,
             points_per_fwhm=config.points_per_fwhm,
             mz_range=config.mz_range,
+            **load_options,
         )
         for path in files
     )
     return _pick_common_targets(pack_specs(spectra), config)
 
 
-def _align_frame_from_file(file_path: str, targets, ppm_tol: int, dtype) -> dict:
-    experiment, file_meta = load_single_file(file_path, format="auto")
+def _align_frame_from_file(file_path: str, targets, ppm_tol: int, dtype, **load_options) -> dict:
+    experiment, file_meta = load_single_file(file_path, format="auto", **load_options)
     logger.info("Aligning frames from MS file %s", file_path)
     data, peak_meta = align_frame(experiment, targets, ppm_tol, dtype=dtype)
     return {"file_meta": file_meta, "data": data, "peak_meta": peak_meta}
