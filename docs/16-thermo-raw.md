@@ -17,6 +17,7 @@
 | 2 | Python reader、异常和资源回收测试 | 完成 |
 | 3 | 单文件/目录接入、流式对齐及回归 | 完成；见续接日志 |
 | 4 | 全扫描对照、下游语义、性能和文档 | 完成；单个真实 RAW + 合成目录回归 |
+| 5 | 主仓库同步、服务部署和验收 | 完成 |
 
 ## 依赖与部署
 
@@ -214,5 +215,21 @@ PYTHONPATH=. /home/crs/scMM/.venv/bin/python tools/validate_thermo_pipeline.py \
 - 全量 296 项自动测试通过；真实测试覆盖用户提供的单个 Q Exactive 文件。
   多文件目录策略用合成 RAW 流 + 真实 mzML 测试，未做多份真实 RAW 的并发压力测试。
 - GUI、Windows、其他厂商、centroid 支持、复杂缓存仍暂缓；无自动格式转换。
-- 本轮没有改主仓库或部署 5006。功能已在当前 worktree 的 Python/CLI 可用；
-  调用时确保使用当前源码（例如 `PYTHONPATH=.`），不要误用主仓库的可编辑安装。
+- 阶段 4 完成时尚未改主仓库或 5006；随后按用户要求执行阶段 5，现主仓库亦可直接使用。
+
+## 阶段 5：主仓库与服务收尾（2026-09-29）
+
+- 用户明确要求同步主仓库并更新服务。确认两处工作树干净、develop 可快进后，
+  `/home/crs/scMM` 从 `7055c20` 快进至 `4eeb8e7`；部署说明另提交并同步。
+- `scmm-ui.service` 于 **08:40:41 UTC** 重启成功，PID 213122，状态 active/running。
+  未改变监听地址、端口、存储根目录或 websocket-origin 策略；既有通配符警告仍在。
+- 同一用户 systemd 临时验证单元确认 Python 实际导入主仓库源码，并在无额外
+  reader 路径配置下读完 4,302 scans / 81,059,698 points；默认时区 Asia/Shanghai，
+  backend 为 thermo_rawfilereader，退出码 0。验证单元已退出并自动回收。
+- 主仓库完整回归 **296 passed**（`-W error`）；未新增 Python 依赖，不需重建 venv。
+- 实际 Chromium 访问 5006：HTTP 200、标题 `scMM 实验项目`、项目首页及六步导航、
+  常驻日志控件加载正常，页面脚本错误 0，项目根目录 `/home/crs/data/results` 正确。
+  未创建、修改或删除用户项目。验收截图 `/tmp/scmm-thermo-deployed-home.png`。
+- 本轮批准的 RAW 读取/处理/验证/部署任务已收尾。GUI RAW 入口、Windows、其他厂商、
+  centroid、复杂缓存、多份真实 RAW 并发压力测试仍为明确范围外/后续项，未擅自扩展。
+- 原有同步分析阻塞、快照自动清理、轨迹和 R2/Q2 的暂缓状态不变。

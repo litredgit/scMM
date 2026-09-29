@@ -7,6 +7,8 @@
 
 ### Thermo RAW 处理入口接入 — 2026-09-29
 
+- 已同步主仓库 develop 并重启 5006；主仓库回归、systemd RAW 读取与实际浏览器验收通过。
+
 - `CyESIData.load_from_file()`、三种目录策略和 CLI 直接读取 Thermo profile RAW，
   不自动转换 mzML；严格拒绝 centroid，保留完整 float64 profile。
 - 默认 Asia/Shanghai 解释 RAW 采集时间，可通过参数/环境变量覆盖，保留亚秒精度。
