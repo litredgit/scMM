@@ -15,8 +15,8 @@
 |---|---|---|
 | 1 | 依赖、C# reader、协议与真实文件初验 | 完成 |
 | 2 | Python reader、异常和资源回收测试 | 完成 |
-| 3 | 单文件/目录接入、流式对齐及回归 | 待执行 |
-| 4 | 全扫描对照、下游语义、性能和文档 | 待执行 |
+| 3 | 单文件/目录接入、流式对齐及回归 | 用户要求适时暂停；草稿未合入 |
+| 4 | 全扫描对照、下游语义、性能和文档 | 读取层对照完成；下游待阶段 3 |
 
 ## 依赖与部署
 
@@ -65,3 +65,63 @@
 - 2026-09-29 用户进一步确认：默认采集时区 `Asia/Shanghai`（显式可覆盖）；
   RAW 保留 float64，接受以现有 32 位 mzML 作量化感知验证，并单独报告下游差异。
 - reader 已部署至 `/home/crs/.local/share/scmm/thermo-reader`，未改线上服务。
+
+## 暂停点与续接（2026-09-29）
+
+用户因限额要求适时暂停。已验证的代码提交：
+
+- `73d57f6`：C# reader、固定依赖与协议。
+- `f1a3d28`：Python reader、20 项新测试、全扫描对照及验证脚本。
+
+**尚未切换 `CyESIData.load_from_file()` / 目录处理的 RAW 路径**；旧入口仍使用原转换逻辑。
+当前可用的是显式底层流式入口：
+
+```python
+from scMM.file.readers import ThermoRawReader
+
+with ThermoRawReader("/home/crs/data/crs/data/260922/wt-1.RAW") as reader:
+    for spectrum in reader:
+        mz, intensity = spectrum.get_peaks()
+        # 逐 scan 消费，不要 list(reader) 缓存整份原始谱。
+```
+
+默认从用户目录寻找部署 DLL 和 .NET；可用 `SCMM_THERMO_READER` / `SCMM_DOTNET`
+指定路径。数组是只读 bytes 视图，离开上下文后仍有效；如需修改请显式复制。
+reader 为单次上下文，提前退出会回收子进程。第一阶段只验证 Linux。
+
+### 后续实施顺序
+
+1. 添加可重新打开的 RAW source，两遍处理分别顺序读取；校验文件未在两遍之间变化。
+2. 按已确认的 `Asia/Shanghai` 解释无时区采集时间，提供显式覆盖并记录来源；
+   保留亚秒精度，不为匹配 mzML 而截断。现有 mzML 时间行为不变。
+3. 接入实际 `CyESIData.load_from_file()`、shared/independent 目录路径；
+   对齐消费迭代器，不再收集原始 spectrum；原数学算法、frame 编号、输出格式不变。
+4. 清除自动 RAW→临时 mzML 路径；旧 `msconvert_path` 的迁移行为须明确记录并测试，
+   不允许在 direct reader 失败时隐式回退。
+5. 增加流式生命周期/两遍/下游语义测试；在真实文件上比较完整处理结果及耗时/内存。
+   不将 float32 对照的差异隐藏在宽泛容差中。最后总结、分阶段提交。
+
+阶段 3 的未验证草稿保存于 `/tmp/scmm-thermo-stage3-draft.patch`，已从工作树撤回；
+它仅供续接参考，尚未覆盖目录处理、算法异常回收及兼容测试，**不能直接当成完成代码**。
+即使 /tmp 被清理，也可按以上步骤重建。主仓库、5006 服务、原始数据均未修改。
+
+### 复现验证
+
+```bash
+PYTHONPATH=. /home/crs/scMM/.venv/bin/python -m pytest -q -W error
+PYTHONPATH=. /home/crs/scMM/.venv/bin/python tools/validate_thermo_raw.py \
+  /home/crs/data/crs/data/260922/wt-1.RAW \
+  /home/crs/data/crs/data/260922/wt-1.mzML \
+  --report /tmp/scmm-thermo-new-report.json
+```
+
+验证脚本需要 psutil（本机 7.2.2），不覆盖已有报告；JSON 仅为诊断统计，不作谱图中转。
+它先测 direct 读取，再加载完整 mzML 对照；当前不是下游生产验收自动放行工具。
+SDK 8.0.425 与 NuGet 缓存位于 `~/.local/share/scmm/dotnet` / `nuget`；
+官方包与许可保存于 `~/.local/share/scmm/thermo-packages`。重新编译使用
+`dotnet restore --locked-mode`（该本地包源加官方 NuGet 源），随后 Release publish。
+
+输入文件 SHA-256：
+
+- RAW：`f604eeb601b3db97e947bc398ebeb2e0ad258d2322a873b0e9d5e95f1a38bff5`
+- mzML：`fd2f7a7250b7c90b52c2aa9c51af9bb7f07e995a4f42de994d569373a267fa6f`
