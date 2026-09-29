@@ -105,3 +105,37 @@ def test_additive_embedding_keeps_unrelated_results(tmp_path):
     ui.project.workspace.reduce("pca", store_key="X_pca")
     assert "differential" in ui.project.workspace.results
     assert not ui.project.workspace.result("differential")["table"].empty
+
+
+def test_task_dock_preserves_errors_and_is_not_in_page_flow(tmp_path):
+    ui = workspace(tmp_path)
+
+    def fail():
+        raise ValueError("test failure")
+
+    ui.run(fail)
+    assert ui.error_notice.visible
+    ui.run(lambda: None)
+    assert "test failure" in ui.error_notice.object
+    assert "test failure" in ui.event_log.value
+    assert ui.message not in ui.panel.objects
+    assert ui.task_status not in ui.panel.objects
+    ui._clear_error()
+    assert not ui.error_notice.visible
+    assert "test failure" in ui.event_log.value
+    doc = Document()
+    root = ui.task_dock.get_root(doc)
+    doc.add_root(root)
+    assert doc.to_json()
+    ui.task_dock._cleanup(root)
+
+
+def test_plot_ratios_and_analysis_errors(tmp_path):
+    ui = workspace(tmp_path)
+    assert ui.components.tic_pane.aspect_ratio == 2
+    assert ui.analysis.embedding_plot.aspect_ratio == 1
+    assert ui.analysis.volcano.aspect_ratio == 4 / 3
+    assert ui.analysis.volcano.height is None
+    ui.analysis.status.object = "❌ 测试报错"
+    assert "测试报错" in ui.error_notice.object
+    assert ui.error_notice.visible

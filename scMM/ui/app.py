@@ -6,6 +6,7 @@ import json
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import asdict
+from datetime import datetime
 from html import escape
 from io import BytesIO
 from pathlib import Path
@@ -30,6 +31,7 @@ from scMM.application.project_batch import (
 from scMM.application.projects import PROJECT_ROOT, ProjectStore, child_path
 from scMM.application.workbench import read_dataset
 
+from .layout import CONTENT_STYLE, TaskDock, fit_plot
 from .raw_components import PreviewWorkspace
 
 STEPS = [
@@ -130,6 +132,33 @@ class ProjectWorkspace:
         self.header = pn.pane.Markdown("选择或新建一个实验项目。")
         self.message = pn.pane.Markdown("")
         self.task_status = pn.pane.Markdown("任务：尚未打开项目")
+        self.events = []
+        self.event_log = pn.widgets.TextAreaInput(
+            label="操作记录（可选择复制）", disabled=True, height=180
+        )
+        self.log = pn.widgets.TextAreaInput(
+            label="处理日志尾部（最近 30 KB，可选择复制）", disabled=True, height=260
+        )
+        self.follow_log = pn.widgets.Checkbox(
+            label="实时更新日志（阅读旧内容时可暂停）", value=True
+        )
+        self.error_notice = pn.pane.Alert("", alert_type="danger", visible=False)
+        self.task_dock = TaskDock(
+            content=pn.Column(
+                "### 任务与日志",
+                self.task_status,
+                self.message,
+                self.error_notice,
+                self.button("清除错误提示", self._clear_error),
+                self.event_log,
+                self.follow_log,
+                self.log,
+                pn.widgets.FileDownload(
+                    label="下载完整任务日志", filename="worker.log", callback=self._download_log
+                ),
+                sizing_mode="stretch_width",
+            )
+        )
         self.body = pn.Column(sizing_mode="stretch_width")
         self.navigation = pn.widgets.RadioButtonGroup(
             options=STEPS, value=STEPS[0], orientation="vertical"
@@ -154,11 +183,10 @@ class ProjectWorkspace:
         self.footer = pn.Row(self.previous, pn.Spacer(), self.next)
         self.panel = pn.Column(
             pn.Row(self.header, self.save_button),
-            self.message,
             self.body,
             self.footer,
-            pn.layout.Divider(),
-            self.task_status,
+            self.task_dock,
+            stylesheets=[CONTENT_STYLE],
         )
         self._refresh_home()
         self.render()
@@ -174,9 +202,31 @@ class ProjectWorkspace:
             self.message.object = "操作完成。"
         except Exception as exc:
             self.message.object = f"❌ {escape(str(exc))}"
+        self._record(self.message.object)
         if self.project is not None:
             self._refresh_reports()
         self.refresh_header()
+
+    def _clear_error(self):
+        self.error_notice.visible = False
+        self.task_dock.label = "任务与日志（点击展开 / 收起）"
+
+    def _download_log(self):
+        if not self.project or not hasattr(self, "batch_select") or not self.batch_select.value:
+            return BytesIO(b"")
+        path = Path(self.batch_select.value).with_name("worker.log")
+        return BytesIO(path.read_bytes() if path.exists() else b"")
+
+    def _record(self, message):
+        if not message:
+            return
+        self.events.append(f"{datetime.now().strftime('%H:%M:%S')} {message}")
+        self.events = self.events[-100:]
+        self.event_log.value = "\n".join(self.events)
+        if "❌" in message or "失败" in message:
+            self.error_notice.object = message
+            self.error_notice.visible = True
+            self.task_dock.label = "❌ 有错误待查看 — 点击展开任务日志"
 
     def _refresh_home(self):
         previous = self.project_select.value
@@ -216,6 +266,11 @@ class ProjectWorkspace:
             defaults=self.defaults,
         )
         self.analysis = self.components.analysis
+        for name in ("tic_pane", "eic_pane", "spectrum_pane", "scan_pane", "cell_pane"):
+            fit_plot(getattr(self.components, name), "spectrum")
+        self.analysis.status.param.watch(lambda e: self._record(e.new), "object")
+        self.analysis.status.visible = False
+        self.log.value = ""
         self.analysis.state = project.workspace
         self.analysis.refresh()
         for name, value in project.views.get("settings", {}).items():
@@ -626,7 +681,6 @@ class ProjectWorkspace:
         self.batch_table = pn.pane.DataFrame(pd.DataFrame(), height=230, index=False)
         self.preflight_details = pn.pane.JSON({}, depth=1)
         self.included = pn.widgets.MultiChoice(label="审核纳入的成功样本", options={})
-        self.log = pn.widgets.TextAreaInput(label="处理日志", disabled=True, height=180)
         self.batch_qc = pn.Column()
         self.batch_select.param.watch(lambda _: self.poll(), "value")
         self.batch_page = pn.Column(
@@ -642,7 +696,6 @@ class ProjectWorkspace:
             self.button("重试未成功样本（须先检查并确认，参数保持不变）", self._retry),
             self.batch_table,
             self.button("停止后续样本（当前样本继续）", self._stop),
-            pn.Accordion(("任务日志", self.log)),
             self.included,
             self.button("比较所选成功样本的 QC", self._batch_qc),
             self.batch_qc,
@@ -732,7 +785,7 @@ class ProjectWorkspace:
             raise ValueError("无成功样本可比较")
         frame = pd.concat(frames, ignore_index=True)
         self.batch_qc[:] = [
-            pn.pane.Plotly(px.box(frame, x="sample", y=field, points=False), height=320)
+            fit_plot(pn.pane.Plotly(px.box(frame, x="sample", y=field, points=False)))
             for field in ("total_intensity", "detected_features")
         ]
 
@@ -764,6 +817,7 @@ class ProjectWorkspace:
     def poll(self):
         if not self.project or not hasattr(self, "batch_select") or not self.batch_select.value:
             self.task_status.object = "任务：无所选批次"
+            self.log.value = ""
             return
         try:
             state = read_batch(self.batch_select.value)
@@ -785,12 +839,25 @@ class ProjectWorkspace:
             self.included.options = options
             self.included.value = selected
             path = Path(self.batch_select.value).with_name("worker.log")
-            if path.exists():
+            failures = "\n".join(
+                f"{row['name']}: {row['error']}" for row in state["samples"] if row.get("error")
+            )
+            if state["status"] in {"failed", "interrupted"}:
+                failures = f"{state['status']}: {state.get('message', '')}\n{failures}"
+            if failures and failures != getattr(self, "_last_batch_error", None):
+                self._record(f"任务失败：{escape(failures)}")
+            self._last_batch_error = failures
+            if path.exists() and self.follow_log.value:
                 with path.open("rb") as handle:
                     handle.seek(max(0, path.stat().st_size - 30000))
-                    self.log.value = handle.read().decode(errors="replace")
+                    value = handle.read().decode(errors="replace")
+                    if self.log.value != value:
+                        self.log.value = value
         except Exception as exc:
             self.task_status.object = f"任务读取失败：{escape(str(exc))}"
+            if self.task_status.object != getattr(self, "_last_poll_error", None):
+                self._record(self.task_status.object)
+            self._last_poll_error = self.task_status.object
 
     def _preprocess_page(self):
         a = self.analysis
@@ -1140,7 +1207,15 @@ class ProjectWorkspace:
         self.report_download.data = None
         self.project_download.data = None
         self.saved_views[:] = [
-            pn.Accordion((f"已保存图形：{name}", pn.pane.Plotly(pio.from_json(value), height=380)))
+            pn.Accordion(
+                (
+                    f"已保存图形：{name}",
+                    fit_plot(
+                        pn.pane.Plotly(pio.from_json(value)),
+                        "square" if name in {"embedding_plot", "network_plot"} else "analysis",
+                    ),
+                )
+            )
             for name, value in self.project.views.get("figures", {}).items()
         ]
 
@@ -1227,6 +1302,9 @@ class ProjectWorkspace:
 
 def create_app(roots, output_roots=(), defaults=None, *, project_root=PROJECT_ROOT):
     pn.extension("plotly", "tabulator", notifications=True)
+    dock_css = "#main .pn-wrapper { contain: none !important; overflow: visible !important; }"
+    if dock_css not in pn.config.raw_css:
+        pn.config.raw_css.append(dock_css)
     workspace = ProjectWorkspace(roots, project_root=project_root, defaults=defaults)
     template = pn.template.FastListTemplate(
         title="scMM 实验项目",

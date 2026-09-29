@@ -22,13 +22,17 @@ from .analysis_plots import (
     violin_figure,
     volcano_figure,
 )
+from .layout import fit_plot
 
 
 def _plot(title):
-    return pn.pane.Plotly(
-        go.Figure(layout={"title": title}),
-        height=380,
-        config={"displaylogo": False, "toImageButtonOptions": {"format": "svg"}},
+    return fit_plot(
+        pn.pane.Plotly(
+            go.Figure(layout={"title": title}),
+            height=380,
+            config={"displaylogo": False, "toImageButtonOptions": {"format": "svg"}},
+        ),
+        "square" if title in {"嵌入", "特征相关网络"} else "analysis",
     )
 
 
