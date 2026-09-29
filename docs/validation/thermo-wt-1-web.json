@@ -1,0 +1,36 @@
+{
+  "raw": "/home/crs/data/crs/data/260922/wt-1.RAW",
+  "reference_mz": 760.5847,
+  "parameters": {
+    "ref_mz": 760.5847,
+    "ppm_tol": 10.0,
+    "resolution": 35000.0,
+    "resample_points_per_fwhm": 5.0,
+    "ms_peak_snr_threshold": 10.0,
+    "cell_snr": 5.0,
+    "peak_snr": 3.0,
+    "baseline_filter_size": 50,
+    "max_zero_frac": 0.9,
+    "n_jobs": 1,
+    "mz_min": 100.0,
+    "mz_max": 1000.0,
+    "extraction_method": "legacy",
+    "reference_mz": [],
+    "reference_mode": "union",
+    "reference_ppm_tol": 10.0,
+    "feature_snr_threshold": 3.0,
+    "noise_window": 51,
+    "feature_block_size": 256
+  },
+  "scans": 4302,
+  "cells": 307,
+  "features": 622,
+  "tic_rows": 4302,
+  "preview_matches_python": true,
+  "scan_indices": [
+    0,
+    2150,
+    4301
+  ],
+  "isolated_project_root": "/tmp/scmm-raw-web-qxf0eb0_"
+}

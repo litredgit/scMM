@@ -5,7 +5,8 @@
 - 2026-09-29：用户批准 Thermo RawFileReader → C# → 二进制管道 → NumPy。
 - 保留 `CyESIData.load_from_file()`；不新增 SCData 类、不改下游数学算法。
 - 严格 profile；任何 centroid scan 报错，不跳过、不转换。
-- 无 GUI、XIC、RAW 写入、自动 mzML 转换、复杂缓存或 scan 级并行。
+- 初始阶段不含 GUI；随后用户批准阶段 6 最小接入网页，复用 Python TIC/EIC 等预览。
+  reader 不新增 XIC、RAW 写入、自动 mzML 转换、复杂缓存或 scan 级并行。
 - 对照为用户自行转换的同目录 `wt-1.mzML`，不安装 msconvert。
 - 验证输入：`/home/crs/data/crs/data/260922/wt-1.RAW`（只读）。
 
@@ -18,6 +19,7 @@
 | 3 | 单文件/目录接入、流式对齐及回归 | 完成；见续接日志 |
 | 4 | 全扫描对照、下游语义、性能和文档 | 完成；单个真实 RAW + 合成目录回归 |
 | 5 | 主仓库同步、服务部署和验收 | 完成 |
+| 6 | RAW 网页最小接入、真实对照与再次部署 | 完成；见文末 |
 
 ## 依赖与部署
 
@@ -243,7 +245,29 @@ PYTHONPATH=. /home/crs/scMM/.venv/bin/python tools/validate_thermo_pipeline.py \
 - 合并谱改用迭代器；RAW 单扫描顺序读取至零基索引后关闭 reader；全部预览遍历
   显式回收迭代器，避免异常时留下子进程。加载失败清空旧预览，避免误用上次结果。
 - 合成流验证 RAW/XML 的 TIC、EIC、分箱谱、合并谱及首/中/末扫描一致；覆盖网页项目
-  入口、两种项目批量策略、提前关闭和计算异常。首轮完整回归 301 项通过；真实网页
-  验收与部署记录随后补充。
+  入口、两种项目批量策略、提前关闭、计算异常和加载失败清空。完整回归 301 项通过，
+  Ruff 检查/格式检查和 diff 检查通过。代码与首阶段日志提交 `bf5b012`。
 - 已知限制：每次 RAW 预览会重新流式读取，同步计算期间页面可能等待；单扫描不是随机
   访问。保持 float64/profile，不保证与 32 位 mzML 数值完全相等。Windows 等暂缓不变。
+
+### 真实网页对照与部署
+
+- Chromium 在仅监听 localhost:5218 的隔离项目打开真实 `wt-1.RAW`；项目位于
+  `/tmp/scmm-raw-web-qxf0eb0_`，不改用户实验项目。网页预览读到 4,302 个扫描，
+  以 760.5847、legacy、100–1000 m/z 及现有默认参数得到 307 个细胞。
+- 对照独立 `CyESIData.load_from_file()` 正式处理，结果为 307 × 622；细胞窗口、
+  峰顶帧位置、RT 和参考信号数组精确一致。首/中/末扫描索引 0、2150、4301 可读取。
+  参数和结果见 [机器报告](validation/thermo-wt-1-web.json)。参考信号比较使用算法
+  实际匹配的 m/z 列，不把用户输入值错误地当成特征列名。
+- 实际浏览器页面脚本错误 0；截图保留在 `/tmp/scmm-raw-web-preview.png` 和
+  `/tmp/scmm-raw-web-cells.png`。此验证不是 RAW 与 32 位 mzML 的精确等价证明。
+  多 RAW 项目批量策略使用合成流回归，未做多份真实 RAW 的并发压力测试。
+- 主仓库 develop 从 `8b0c461` 快进至 `bf5b012`，随后同步本验收记录。
+  服务于 **13:46:35 UTC** 重启，PID 229548，active。未改变服务网络配置或项目目录。
+  部署前未发现活跃的后台提取任务；主仓库再次完整回归 **301 passed**（`-W error`）。
+- 正式 5006 浏览器首页 HTTP 200、标题正确、脚本错误 0；只读验收未打开或修改用户项目。
+  用户 systemd 临时单元确认 RAW 预检、RawPreviewService 汇总和首扫描成功：
+  4,302 scans、backend thermo_rawfilereader、首扫描 16,749 points，退出码 0。
+- 隔离 5218 服务已关闭，临时 systemd 验证单元自动回收；保留报告/截图，未删除用户数据。
+  使用新入口需刷新网页建立新会话。同步预览等待、快照清理、轨迹/R2/Q2 和 Windows
+  等原有限制不变。
