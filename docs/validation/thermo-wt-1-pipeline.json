@@ -1,0 +1,437 @@
+{
+  "parameters": {
+    "ref_mz": 760.5847,
+    "raw_timezone": "Asia/Shanghai",
+    "other_processing_parameters": "CyESIData defaults; no scientific interpretation"
+  },
+  "prior_revision": "9d07a2e",
+  "runs": {
+    "raw": {
+      "mode": "raw",
+      "input": "/home/crs/data/crs/data/260922/wt-1.RAW",
+      "elapsed_seconds": 93.89230913610663,
+      "aligned_shape": [
+        4302,
+        5192
+      ],
+      "cell_shape": [
+        307,
+        622
+      ],
+      "file_metadata": {
+        "name": "wt-1",
+        "timestamp": 1790064269.977,
+        "instrument": "Q Exactive Orbitrap",
+        "source_file": "wt-1.RAW",
+        "path": "/home/crs/data/crs/data/260922/wt-1.RAW",
+        "converted_from_raw": false,
+        "reader_backend": "thermo_rawfilereader",
+        "reader_protocol": "SCMMRAW1",
+        "acquisition_time_original": "2026-09-22T16:04:29.9770000",
+        "acquisition_timezone": "Asia/Shanghai",
+        "include_reference_and_exception_data": true,
+        "ref_mz": 760.5847,
+        "mz_range": [
+          100.0,
+          1000.0
+        ],
+        "processing": {
+          "extraction_method": "legacy",
+          "baseline_filter_size": 50,
+          "cell_snr": 5.0,
+          "peak_snr": 3.0,
+          "max_zero_frac": 0.9
+        },
+        "length": 307
+      },
+      "python_rss_bytes": 485879808,
+      "children_rss_bytes": 409411584,
+      "tree_rss_bytes": 718000128,
+      "memory_notes": "10ms sampled RSS includes shared pages, mapped RAW and debug matrix copy"
+    },
+    "xml": {
+      "mode": "xml",
+      "input": "/home/crs/data/crs/data/260922/wt-1.mzML",
+      "elapsed_seconds": 91.83371895190794,
+      "aligned_shape": [
+        4302,
+        5196
+      ],
+      "cell_shape": [
+        307,
+        622
+      ],
+      "file_metadata": {
+        "name": "wt-1",
+        "timestamp": 1790064269.0,
+        "instrument": "Q Exactive",
+        "ref_mz": 760.5847,
+        "mz_range": [
+          100.0,
+          1000.0
+        ],
+        "processing": {
+          "extraction_method": "legacy",
+          "baseline_filter_size": 50,
+          "cell_snr": 5.0,
+          "peak_snr": 3.0,
+          "max_zero_frac": 0.9
+        },
+        "length": 307
+      },
+      "python_rss_bytes": 1741807616,
+      "children_rss_bytes": 0,
+      "tree_rss_bytes": 1741807616,
+      "memory_notes": "10ms sampled RSS includes shared pages, mapped RAW and debug matrix copy"
+    },
+    "raw-float32-diagnostic": {
+      "mode": "raw-float32-diagnostic",
+      "input": "/home/crs/data/crs/data/260922/wt-1.RAW",
+      "elapsed_seconds": 95.29771784006152,
+      "aligned_shape": [
+        4302,
+        5196
+      ],
+      "cell_shape": [
+        307,
+        622
+      ],
+      "file_metadata": {
+        "name": "wt-1",
+        "timestamp": 1790064269.977,
+        "instrument": "Q Exactive Orbitrap",
+        "source_file": "wt-1.RAW",
+        "path": "/home/crs/data/crs/data/260922/wt-1.RAW",
+        "converted_from_raw": false,
+        "reader_backend": "thermo_rawfilereader",
+        "reader_protocol": "SCMMRAW1",
+        "acquisition_time_original": "2026-09-22T16:04:29.9770000",
+        "acquisition_timezone": "Asia/Shanghai",
+        "include_reference_and_exception_data": true,
+        "ref_mz": 760.5847,
+        "mz_range": [
+          100.0,
+          1000.0
+        ],
+        "processing": {
+          "extraction_method": "legacy",
+          "baseline_filter_size": 50,
+          "cell_snr": 5.0,
+          "peak_snr": 3.0,
+          "max_zero_frac": 0.9
+        },
+        "length": 307
+      },
+      "python_rss_bytes": 455966720,
+      "children_rss_bytes": 409214976,
+      "tree_rss_bytes": 721039360,
+      "memory_notes": "10ms sampled RSS includes shared pages, mapped RAW and debug matrix copy"
+    },
+    "xml-prior": {
+      "mode": "xml-prior",
+      "input": "/home/crs/data/crs/data/260922/wt-1.mzML",
+      "elapsed_seconds": 93.3520524649648,
+      "aligned_shape": [
+        4302,
+        5196
+      ],
+      "cell_shape": [
+        307,
+        622
+      ],
+      "file_metadata": {
+        "name": "wt-1",
+        "timestamp": 1790064269.0,
+        "instrument": "Q Exactive",
+        "ref_mz": 760.5847,
+        "mz_range": [
+          100.0,
+          1000.0
+        ],
+        "processing": {
+          "extraction_method": "legacy",
+          "baseline_filter_size": 50,
+          "cell_snr": 5.0,
+          "peak_snr": 3.0,
+          "max_zero_frac": 0.9
+        },
+        "length": 307
+      },
+      "python_rss_bytes": 2956095488,
+      "children_rss_bytes": 0,
+      "tree_rss_bytes": 2956095488,
+      "memory_notes": "10ms sampled RSS includes shared pages, mapped RAW and debug matrix copy"
+    }
+  },
+  "comparisons": {
+    "xml_vs_xml-prior": {
+      "aligned": {
+        "left_shape": [
+          4302,
+          5196
+        ],
+        "right_shape": [
+          4302,
+          5196
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "targets": {
+        "left_shape": [
+          5196
+        ],
+        "right_shape": [
+          5196
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "frame_rt": {
+        "left_shape": [
+          4302
+        ],
+        "right_shape": [
+          4302
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "cells": {
+        "left_shape": [
+          307,
+          622
+        ],
+        "right_shape": [
+          307,
+          622
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "cell_targets": {
+        "left_shape": [
+          622
+        ],
+        "right_shape": [
+          622
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "cell_frames": {
+        "left_shape": [
+          307
+        ],
+        "right_shape": [
+          307
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "cell_rt": {
+        "left_shape": [
+          307
+        ],
+        "right_shape": [
+          307
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "matched_cells": {
+        "mutual_feature_tolerance_ppm": 1.0,
+        "matched_features": 622,
+        "common_cell_frames": 307,
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference": 0.0
+      }
+    },
+    "raw-float32-diagnostic_vs_xml": {
+      "aligned": {
+        "left_shape": [
+          4302,
+          5196
+        ],
+        "right_shape": [
+          4302,
+          5196
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "targets": {
+        "left_shape": [
+          5196
+        ],
+        "right_shape": [
+          5196
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "frame_rt": {
+        "left_shape": [
+          4302
+        ],
+        "right_shape": [
+          4302
+        ],
+        "exact": false,
+        "different_elements": 1,
+        "max_absolute_difference_by_position": 5.684341886080802e-14
+      },
+      "cells": {
+        "left_shape": [
+          307,
+          622
+        ],
+        "right_shape": [
+          307,
+          622
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "cell_targets": {
+        "left_shape": [
+          622
+        ],
+        "right_shape": [
+          622
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "cell_frames": {
+        "left_shape": [
+          307
+        ],
+        "right_shape": [
+          307
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "cell_rt": {
+        "left_shape": [
+          307
+        ],
+        "right_shape": [
+          307
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "matched_cells": {
+        "mutual_feature_tolerance_ppm": 1.0,
+        "matched_features": 622,
+        "common_cell_frames": 307,
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference": 0.0
+      }
+    },
+    "raw_vs_xml": {
+      "aligned": {
+        "left_shape": [
+          4302,
+          5192
+        ],
+        "right_shape": [
+          4302,
+          5196
+        ],
+        "exact": false
+      },
+      "targets": {
+        "left_shape": [
+          5192
+        ],
+        "right_shape": [
+          5196
+        ],
+        "exact": false
+      },
+      "frame_rt": {
+        "left_shape": [
+          4302
+        ],
+        "right_shape": [
+          4302
+        ],
+        "exact": false,
+        "different_elements": 1,
+        "max_absolute_difference_by_position": 5.684341886080802e-14
+      },
+      "cells": {
+        "left_shape": [
+          307,
+          622
+        ],
+        "right_shape": [
+          307,
+          622
+        ],
+        "exact": false,
+        "different_elements": 68,
+        "max_absolute_difference_by_position": 192354.171875
+      },
+      "cell_targets": {
+        "left_shape": [
+          622
+        ],
+        "right_shape": [
+          622
+        ],
+        "exact": false,
+        "different_elements": 620,
+        "max_absolute_difference_by_position": 0.0038613170701182753
+      },
+      "cell_frames": {
+        "left_shape": [
+          307
+        ],
+        "right_shape": [
+          307
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "cell_rt": {
+        "left_shape": [
+          307
+        ],
+        "right_shape": [
+          307
+        ],
+        "exact": true,
+        "different_elements": 0,
+        "max_absolute_difference_by_position": 0.0
+      },
+      "matched_cells": {
+        "mutual_feature_tolerance_ppm": 1.0,
+        "matched_features": 621,
+        "common_cell_frames": 307,
+        "exact": false,
+        "different_elements": 16,
+        "max_absolute_difference": 192354.171875
+      }
+    }
+  }
+}

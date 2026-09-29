@@ -16,7 +16,7 @@
 | 1 | 依赖、C# reader、协议与真实文件初验 | 完成 |
 | 2 | Python reader、异常和资源回收测试 | 完成 |
 | 3 | 单文件/目录接入、流式对齐及回归 | 完成；见续接日志 |
-| 4 | 全扫描对照、下游语义、性能和文档 | 真实文件端到端验证中 |
+| 4 | 全扫描对照、下游语义、性能和文档 | 完成；单个真实 RAW + 合成目录回归 |
 
 ## 依赖与部署
 
@@ -159,3 +159,60 @@ batch = CyESIData.load_from_directory("raw_only", ref_mz=760.5847, feature_strat
 
 CLI 同样支持 `scmm-process sample.RAW results --ref-mz 760.5847
 --raw-timezone Asia/Shanghai`。以上参考值是本次 wt-1 用户指定值，不是通用默认。
+
+## 阶段 4：真实端到端验证与交付
+
+阶段 3 提交：`f551542`。验证使用参考离子 **760.5847**、默认 m/z 100–1000、
+分辨率 35000、legacy 细胞提取与其余现有默认参数。没有改科学算法或全局参考离子默认值。
+脚本：[validate_thermo_pipeline.py](../tools/validate_thermo_pipeline.py)；
+完整统计：[thermo-wt-1-pipeline.json](validation/thermo-wt-1-pipeline.json)。
+
+| 路径 | 耗时 | 进程树采样峰值 RSS | 对齐矩阵 | 最终细胞矩阵 |
+|---|---:|---:|---:|---:|
+| RAW 直接读取，float64 | 93.89 s | 685 MiB | 4302 × 5192 | 307 × 622 |
+| 现有 32 位 mzML，新流式对齐 | 91.83 s | 1661 MiB | 4302 × 5196 | 307 × 622 |
+| 现有 mzML，9d07a2e 旧对齐 | 93.35 s | 2819 MiB | 4302 × 5196 | 307 × 622 |
+
+每条路径使用独立 Python 进程；包含文件读取、合谱、提峰、对齐和细胞提取，
+不包含事先生成 mzML 的转换耗时。10ms RSS 采样包含共享/映射页及相同的验证矩阵副本，
+不等于独占物理内存；缓存未清空，单次测量不作速度承诺。收益主要是降低内存并移除中转文件。
+
+### 精确性与已知差异
+
+- **mzML 行为保持**：新旧对齐的特征轴、完整对齐矩阵、最终细胞矩阵、细胞帧和 RT
+  均精确相等；不是仅比较形状。
+- **编码差异归因通过**：验证脚本单独启用 float32 RAW 量化后，特征轴、完整矩阵及
+  细胞矩阵与用户提供 mzML 精确相等；唯一的单 scan RT 序列化差仍为约 5.7e-14 秒。
+  量化只在验证脚本中，不进入生产 reader，也不生成临时 mzML。
+- **生产 RAW 与 32 位 mzML 并非逐项相等**：两者细胞数、最终特征数、细胞帧和细胞 RT
+  相同，但完整选峰分别为 5192/5196 个。最终特征中心也存在偏移，不能仅按列位置
+  将两条结果混为同一特征轴。
+- 最终 622 个特征中，采用仅用于诊断的 1 ppm 双向最近邻匹配，有 621 对可匹配；
+  这些共同特征 × 307 个共同细胞中，16 个强度元素不同，最大绝对差 192354.171875。
+  该差异不被宽泛容差抹掉，也不宣称对所有下游分析无影响；完整的 float32 复现实验
+  支持其来自输入编码差异。按用户决定，生产路径仍保留 float64。
+- RAW 绝对采集时间已按 Asia/Shanghai 解释；在本机 UTC 环境中与 XML 相差 0.977 秒，
+  原因为 RAW 保留亚秒而 XML/OpenMS 对照只到整秒。原始时刻与所用时区都记录在来源中。
+- 原始 4,302 个 scan、81,059,698 个 profile 点均保留；读取层强度精确匹配对照，
+  reference/exception peaks 明确包含。下游仍执行原有合谱/提峰/细胞处理，不应混淆为 reader 在做 centroid。
+
+### 复现端到端检查
+
+```bash
+PYTHONPATH=. /home/crs/scMM/.venv/bin/python tools/validate_thermo_pipeline.py \
+  /home/crs/data/crs/data/260922/wt-1.RAW \
+  /home/crs/data/crs/data/260922/wt-1.mzML \
+  --ref-mz 760.5847 --report /tmp/scmm-thermo-pipeline-new.json
+```
+
+此脚本需仓库包含基线提交 9d07a2e、已安装 reader 和 psutil。临时 NPZ 只用于保存
+验证矩阵，结束即清理；Git 中只保留汇总报告，不包含私人 RAW/mzML/矩阵。
+任一 mzML 旧/新或量化 RAW 对照的数值断言失败，会返回非零退出码并保留报告。
+
+### 验证边界
+
+- 全量 296 项自动测试通过；真实测试覆盖用户提供的单个 Q Exactive 文件。
+  多文件目录策略用合成 RAW 流 + 真实 mzML 测试，未做多份真实 RAW 的并发压力测试。
+- GUI、Windows、其他厂商、centroid 支持、复杂缓存仍暂缓；无自动格式转换。
+- 本轮没有改主仓库或部署 5006。功能已在当前 worktree 的 Python/CLI 可用；
+  调用时确保使用当前源码（例如 `PYTHONPATH=.`），不要误用主仓库的可编辑安装。

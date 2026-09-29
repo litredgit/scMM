@@ -5,13 +5,25 @@
 
 ## Unreleased — 2026-09-28
 
+### Thermo RAW 处理入口接入 — 2026-09-29
+
+- `CyESIData.load_from_file()`、三种目录策略和 CLI 直接读取 Thermo profile RAW，
+  不自动转换 mzML；严格拒绝 centroid，保留完整 float64 profile。
+- 默认 Asia/Shanghai 解释 RAW 采集时间，可通过参数/环境变量覆盖，保留亚秒精度。
+- 两遍流式读取、文件变更检查、下游异常回收；对齐不再积累整份原始谱。
+- 默认含 RAW 的 legacy 目录使用单个文件 worker；mzML 原读取路径保留。
+- 全量 296 项测试通过；GUI、Windows、其他厂商 RAW 仍不在本阶段范围。
+- wt-1（参考 760.5847）得到 307 × 622；mzML 新旧结果精确相等。
+  RAW float64 与 32 位 mzML 有已记录的特征/强度差异，诊断量化后完全复现 mzML；
+  生产不降精度。完整处理采样峰值 RSS 约 685 MiB（新 mzML 1661 MiB、旧 mzML 2819 MiB）。
+
 ### Thermo RAW reader 基础阶段 — 2026-09-29
 
 - 新增独立 .NET 8 profile reader、二进制协议及 NumPy 流式读取，包含完整
   reference/exception peaks；有超时、协议校验、stderr 排空和子进程回收。
 - 固定依赖，保留真实扫描对照、读取性能记录和 20 项新增测试；全量 283 项通过。
-- **尚未接入 CyESIData/目录/GUI**；按用户要求暂停于已验证阶段，
-  [续接记录](docs/16-thermo-raw.md)明确未完成范围。
+- 此处为前两阶段历史；随后已接入 CyESIData/目录，GUI 仍暂缓。
+  [续接记录](docs/16-thermo-raw.md)包含验证证据与边界。
 
 ### 网页布局优化 — 2026-09-29
 

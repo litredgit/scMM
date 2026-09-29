@@ -24,6 +24,29 @@ data = CyESIData.load_from_file(
 `load_from_file()` 完成谱读取、总谱构建、去噪、公共峰提取、扫描对齐和细胞事件识别。
 返回的对象可以通过 `len(data)` 查看细胞数，通过 `data.data.shape` 查看完整矩阵形状。
 
+### Thermo profile RAW 直接读取
+
+已部署独立 .NET 8 reader 后，上述入口同样接受 `.raw`（大小写不敏感），不经临时 mzML：
+
+```python
+data = CyESIData.load_from_file("wt-1.RAW", ref_mz=760.5847, raw_timezone="Asia/Shanghai")
+batch = CyESIData.load_from_directory("raw_only", ref_mz=760.5847, feature_strategy="shared")
+```
+
+760.5847 是本次 wt-1 的用户指定参考值，其他实验应自行指定。RAW 默认采集时区为
+Asia/Shanghai，显式 `raw_timezone` 优先于 `SCMM_RAW_TIMEZONE` 环境变量。
+reader 保留完整 profile，遇到 centroid 扫描报错；现有下游提峰等算法保持原样。
+合谱与对齐顺序重读，不把全部原始谱放入内存；最终矩阵仍需内存。
+
+`load_from_filelist()` 的 legacy/shared/independent 均支持 RAW；目录不递归，建议输入
+目录只放需要处理的文件，不要同时放同一样本的 RAW 和验证 mzML（不会自动去重）。
+默认含 RAW 的 legacy 目录串行，纯 XML 沿用全 CPU；显式 `n_jobs` 覆盖；
+shared/independent 仍串行。独立的 `batch_process()` 旧助手仍仅扫描 XML。
+
+`msconvert_path` / `--msconvert` 不再用于自动 RAW 转换；如确需转换，请在处理外显式
+调用 `scMM.file.msconvert.convert_raw()`。不支持 Thermo RAW 的环境仍可直接读取已有 mzML。
+安装位置、协议、结果差异和验证见 [Thermo RAW 日志](16-thermo-raw.md)。本阶段不含 RAW 网页入口。
+
 ## 缓存原始数据的细胞提取预览（Python API）
 
 ```python

@@ -168,7 +168,7 @@ uv run --locked scmm-process INPUT OUTPUT --ref-mz REF_MZ [options]
 | `--resolution` | `35000.0` | m/z 200 分辨率 |
 | `--cell-snr` | `5.0` | 细胞检测阈值 |
 | `--peak-snr` | `3.0` | 细胞内特征检测阈值 |
-| `--jobs` | `-1` | 目录模式并行数 |
+| `--jobs` | 自动 | legacy 目录：含 RAW 默认 1，纯 XML 默认全部 CPU；shared/independent 仍串行 |
 | `--overwrite` | 关闭 | 允许覆盖同名标准结果文件 |
 | `--verbose` | 关闭 | 启用 DEBUG 日志 |
 
