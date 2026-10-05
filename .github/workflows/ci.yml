@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [refined]
+    branches: [develop, refined]
   pull_request:
 
 permissions:
