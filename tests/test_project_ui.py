@@ -15,6 +15,18 @@ def workspace(tmp_path):
     return ui
 
 
+def test_unsaved_guard_tracks_applied_changes_and_save(tmp_path):
+    ui = workspace(tmp_path)
+    ui.refresh_header()
+    assert not ui.unsaved_guard.dirty
+    ui.project.dirty = True
+    ui.refresh_header()
+    assert ui.unsaved_guard.dirty
+    ui._save()
+    ui.refresh_header()
+    assert not ui.unsaved_guard.dirty
+
+
 def test_project_steps_preflight_persistence_and_reset(tmp_path):
     ui = workspace(tmp_path)
     with pytest.raises(ValueError, match="先审核"):

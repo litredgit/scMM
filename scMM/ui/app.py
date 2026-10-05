@@ -31,8 +31,9 @@ from scMM.application.project_batch import (
 from scMM.application.projects import PROJECT_ROOT, ProjectStore, child_path
 from scMM.application.workbench import read_dataset
 
-from .layout import CONTENT_STYLE, TaskDock, fit_plot
-from .raw_components import PreviewWorkspace
+from .layout import CONTENT_STYLE, TaskDock, UnsavedGuard, fit_plot
+from .project_views import ProjectRawViews
+from .raw_components import PreviewWorkspace as PreviewWorkspace
 
 STEPS = [
     "项目首页",
@@ -101,23 +102,6 @@ TASK_LABELS = {
 }
 
 
-class ProjectRawViews(PreviewWorkspace):
-    def _invalidate_cells(self):
-        if self.preview is None:
-            return super()._invalidate_cells()
-        self.cell_download.disabled = True
-        self.cell_download.data = None
-        self.cell_status.object = "参数已改变；下图为旧参数结果，请重新预览后确认。"
-
-    def _invalidate_raw_plots(self):
-        if self.preview is None:
-            return super()._invalidate_raw_plots()
-        for download in (self.tic_download, self.eic_download, self.spectrum_download):
-            download.disabled = True
-            download.data = None
-        self.summary.object = "显示参数已改变；下图尚未刷新。"
-
-
 class ProjectWorkspace:
     def __init__(self, roots, *, project_root=PROJECT_ROOT, defaults=None):
         self.store = ProjectStore(project_root)
@@ -130,6 +114,7 @@ class ProjectWorkspace:
         self._periodic = None
         self._checked = self._candidate = None
         self.header = pn.pane.Markdown("选择或新建一个实验项目。")
+        self.unsaved_guard = UnsavedGuard(height=0, margin=0)
         self.message = pn.pane.Markdown("")
         self.task_status = pn.pane.Markdown("任务：尚未打开项目")
         self.events = []
@@ -182,6 +167,7 @@ class ProjectWorkspace:
         )
         self.footer = pn.Row(self.previous, pn.Spacer(), self.next)
         self.panel = pn.Column(
+            self.unsaved_guard,
             pn.Row(self.header, self.save_button),
             self.body,
             self.footer,
@@ -550,6 +536,8 @@ class ProjectWorkspace:
         basic = ["extraction_method", "ref_mz", "mz_min", "mz_max", "cell_snr", "peak_snr"]
         self.raw_page = pn.Column(
             "## ② 原始谱检查",
+            "打开文件、细胞检测和靠后 RAW 单扫描可能需要等待；细胞预览执行完整提取，"
+            "不是快速估算。计算期间请勿重复点击，当前预览不能后台运行或立即取消。",
             self.raw_sample,
             self.button("打开所选样本", self._open_raw),
             self.parameter_note,
@@ -686,6 +674,8 @@ class ProjectWorkspace:
         self.batch_select.param.watch(lambda _: self.poll(), "value")
         self.batch_page = pn.Column(
             "## ③ 提取与审核",
+            "处理结束不等于已建立当前数据：请检查各样本状态与 QC，选择成功样本，"
+            "点击“确认纳入并建立当前数据”，再进入预处理或分析。",
             self.strategy,
             "共同特征要求统一范围、合谱与对齐参数。单样本失败继续其他样本；共同特征构建失败则停止整批。",
             self.button("检查全部样本与实际参数", self._preflight),
@@ -697,6 +687,7 @@ class ProjectWorkspace:
             self.button("重试未成功样本（须先检查并确认，参数保持不变）", self._retry),
             self.batch_table,
             self.button("停止后续样本（当前样本继续）", self._stop),
+            "停止请求不会立即中断当前读取或计算；已完成样本保留，等待当前阶段结束后停止后续样本。",
             self.included,
             self.button("比较所选成功样本的 QC", self._batch_qc),
             self.batch_qc,
@@ -822,7 +813,8 @@ class ProjectWorkspace:
             return
         try:
             state = read_batch(self.batch_select.value)
-            self.task_status.object = f"任务：**{escape(TASK_LABELS.get(state['status'], state['status']))}** · {escape(state.get('message', ''))}"
+            batch_id = Path(self.batch_select.value).parent.name
+            self.task_status.object = f"任务：**{escape(TASK_LABELS.get(state['status'], state['status']))}** · {escape(state.get('message', ''))}\n\n批次 ID：`{escape(batch_id)}`。报错时请同时提供此 ID 和完整任务日志。"
             self.batch_table.object = pd.DataFrame(
                 [
                     {
@@ -1147,6 +1139,8 @@ class ProjectWorkspace:
         show()
         self.analysis_page = pn.Column(
             "## ⑤ 分析",
+            "分析在当前会话同步运行，大数据的降维或 SHAP 可能较慢；运行结束前请勿刷新页面。"
+            "参数变化后旧图仅供对照，需重新计算才能下载对应结果。",
             "每组单一来源时仅作细胞级探索；细胞数不是独立生物重复，FDR 不能修复该问题。",
             self.purpose,
             self.source_summary,
@@ -1186,6 +1180,8 @@ class ProjectWorkspace:
         )
         self.results_page = pn.Column(
             "## ⑥ 结果与保存",
+            "离开前请确认页顶显示“已保存”。关闭提醒由浏览器控制，不保证每次出现；"
+            "尚未应用的表单编辑不等于已保存参数。保存大型数据到云盘可能需要等待。",
             "项目保存用于继续工作，下载不替代项目保存。模型对象不保存，继续模型运算需重新训练。",
             self.button("保存项目", self._save),
             pn.Row(a.matrix_download, a.diff_download, a.model_download),
@@ -1292,6 +1288,7 @@ class ProjectWorkspace:
 
     def refresh_header(self):
         self.save_button.disabled = self.project is None
+        self.unsaved_guard.dirty = bool(self.project and self.project.unsaved)
         if self.project:
             p = self.project
             self.header.object = f"### {escape(p.manifest['name'])}\n{'● 有未保存修改' if p.unsaved else '✓ 已保存'} · {p.manifest['saved_at']}"

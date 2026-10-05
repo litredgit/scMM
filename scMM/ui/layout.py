@@ -26,6 +26,25 @@ CONTENT_STYLE = """
 """
 
 
+class UnsavedGuard(pn.reactive.ReactiveHTML):
+    """Best-effort browser warning only; never saves or cancels a worker."""
+
+    dirty = param.Boolean(default=False)
+    _template = '<span id="guard" aria-hidden="true"></span>'
+    _scripts: ClassVar[dict] = {
+        "render": """
+          state.warn = (event) => {
+            if (data.dirty) {
+              event.preventDefault();
+              event.returnValue = '';
+            }
+          };
+          window.addEventListener('beforeunload', state.warn);
+        """,
+        "remove": "window.removeEventListener('beforeunload', state.warn);",
+    }
+
+
 class TaskDock(pn.reactive.ReactiveHTML):
     content = param.ClassSelector(class_=pn.viewable.Viewable)
     label = param.String(default="任务与日志（点击展开 / 收起）")

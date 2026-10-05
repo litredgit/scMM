@@ -4,6 +4,11 @@
 
 ## 代码结构
 
+当前入口为 `ui/app.py` 的项目工作台；`ui/project_views.py` 管理项目原始谱展示，
+`ui/layout.py` 管理响应式布局及未保存离页提示。项目持久化与批次编排分别在
+`application/projects.py` 和 `application/project_batch.py`，RAW 流读取在 `file/readers/`。
+下列树保留其他模块职责，使用流程以 [当前网页指南](17-current-web-guide.md) 为准。
+
 ```text
 scMM/
 ├── cli.py                 # scmm-process 命令行入口
