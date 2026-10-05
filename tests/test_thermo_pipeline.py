@@ -83,6 +83,7 @@ def test_raw_web_preview_matches_xml(raw_pair):
     for operation, kwargs in [
         ("total_ion_chromatogram", {}),
         ("extracted_ion_chromatogram", {"target_mz": 150.0}),
+        ("extracted_ion_chromatograms", {"references": [200.0, 150.0, 150.0]}),
         ("binned_spectrum", {"mz_range": (140, 210), "bins": 100}),
         ("summed_spectrum", {"mz_range": (140, 210), "resolution_200": 5000}),
     ]:

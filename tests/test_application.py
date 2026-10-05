@@ -5,6 +5,7 @@ import pyopenms as oms
 import pytest
 
 from scMM.application import RawPreviewService, StorageCatalog, StorageRoot
+from scMM.application.raw_preview import RawFilePreview
 
 
 def _make_experiment() -> oms.MSExperiment:
@@ -25,6 +26,41 @@ def _make_experiment() -> oms.MSExperiment:
 
 def _write_mzml(path: Path) -> None:
     oms.MzMLFile().store(str(path), _make_experiment())
+
+
+def test_multi_eic_reads_once_and_matches_individual_eics(tmp_path):
+    import pandas as pd
+
+    path = tmp_path / "sample.mzML"
+    _write_mzml(path)
+    preview = RawFilePreview(path, _make_experiment(), {})
+    references = [100.1, 100.0, 100.1]
+    expected = pd.concat(
+        [
+            preview.extracted_ion_chromatogram(ref).assign(reference_mz=ref)
+            for ref in sorted(set(references))
+        ],
+        ignore_index=True,
+    )
+
+    class CountingSource:
+        passes = 0
+
+        def __iter__(self):
+            self.passes += 1
+            yield from _make_experiment()
+
+    source = CountingSource()
+    preview.experiment = source
+    pd.testing.assert_frame_equal(preview.extracted_ion_chromatograms(references), expected)
+    assert source.passes == 1
+    empty = preview.extracted_ion_chromatograms(references, rt_range=(30, 40))
+    assert empty.empty
+    assert list(empty.columns) == list(expected.columns)
+    for invalid in ([100, float("nan")], [0], []):
+        with pytest.raises(ValueError):
+            preview.extracted_ion_chromatograms(invalid)
+    assert source.passes == 2  # Invalid input must fail before opening a stream.
 
 
 def test_storage_catalog_lists_only_directories_and_raw_files(tmp_path) -> None:

@@ -175,16 +175,37 @@ class RawFilePreview:
             "ms_level": int(spectrum.getMSLevel()),
         }
 
-    def extracted_ion_chromatograms(self, references, **kwargs) -> pd.DataFrame:
-        """Long-form EICs using the same calculation for XML and streaming RAW."""
+    def extracted_ion_chromatograms(
+        self, references, *, ppm_tolerance=5.0, ms_level=1, rt_range=None
+    ) -> pd.DataFrame:
+        """Compute all EICs in one pass, retaining reference-major output order."""
         references = np.atleast_1d(references).astype(float)
         if references.ndim != 1 or not len(references):
             raise ValueError("at least one reference m/z is required")
-        frames = []
-        for reference in np.unique(references):
-            frame = self.extracted_ion_chromatogram(float(reference), **kwargs)
-            frame["reference_mz"] = reference
-            frames.append(frame)
+        if not np.isfinite(references).all() or (references <= 0).any():
+            raise ValueError("target_mz must be a positive finite number")
+        if not np.isfinite(ppm_tolerance) or ppm_tolerance <= 0:
+            raise ValueError("ppm_tolerance must be a positive finite number")
+        _validate_ms_level(ms_level)
+        references = np.unique(references)
+        delta = references * ppm_tolerance * 1e-6
+        lower, upper = references - delta, references + delta
+        rows = [[] for _ in references]
+        with spectrum_iterator(_selected_spectra(self.experiment, ms_level, rt_range)) as scans:
+            for scan_index, spectrum in scans:
+                mz, intensity = spectrum.get_peaks()
+                mz = np.asarray(mz, dtype=np.float64)
+                intensity = np.asarray(intensity, dtype=np.float64)
+                valid = np.isfinite(mz) & np.isfinite(intensity)
+                for i in range(len(references)):
+                    value = intensity[valid & (mz >= lower[i]) & (mz <= upper[i])].sum()
+                    rows[i].append((scan_index, float(spectrum.getRT()), float(value)))
+        frames = [
+            pd.DataFrame(values, columns=["scan_index", "rt_seconds", "intensity"]).assign(
+                reference_mz=reference
+            )
+            for reference, values in zip(references, rows, strict=True)
+        ]
         return pd.concat(frames, ignore_index=True)
 
     def total_ion_chromatogram(
