@@ -1,6 +1,6 @@
 # 数据模型与输出文件
 
-[返回文档索引](README.md) · [Python API](04-python-api.md)
+[返回文档索引](README.md) · [Python API](python-api.md)
 
 ## `CyESIData` 数据模型
 
@@ -154,11 +154,22 @@ AnnData
 `adata.raw` 是调用 `to_anndata()` 时的数据快照，不一定是原始仪器强度：如果先对 `CyESIData`
 归一化或去同位素，raw 同样反映变换后的数据。
 
+## 当前网页项目保存
+
+六步网页使用 `ProjectStore`，项目位于 `/home/crs/data/results`，与 CLI/API 的标准结果目录不同。
+`project.json` 记录样本、参数、修订号和当前产物引用；`processing/` 保存批次请求、状态及日志，
+`snapshots/` 保存发布所需的 `current.h5ad`、`baseline.h5ad` 和 `views.json`。
+
+点击“保存项目”先写完整快照再发布清单，跨会话保存检查修订冲突。重载恢复当前数据和完整
+预处理起点，图和报告为只读记录，不恢复可执行模型；界面只提供一个当前版本，不提供历史分支。
+快照尚不自动清理，重复保存会增加占用，不应手动删除清单引用的文件。
+原始谱仅引用路径、不复制；项目保存不能替代原始文件备份。操作入口见[网页指南](workflow.md)。
+
 ## 输出可重复性清单
 
 每次正式运行建议同时归档：
 
-1. 原始 mzML/mzXML 的只读副本或校验和。
+1. 原始 Thermo RAW / mzML / mzXML 的只读副本或校验和。
 2. `uv.lock` 和 `pyproject.toml`。
 3. Git 提交 ID：`git rev-parse HEAD`。
 4. Notebook 参数单元或单独的参数 YAML/JSON。
@@ -186,4 +197,4 @@ project/
 本仓库根目录的 `scMM_workflow.ipynb` 是通用模板；实验专用副本可以放到分析项目中，避免把
 大量执行输出和本地路径写回软件仓库。
 
-下一步：[常见问题与调优](07-troubleshooting.md)。
+下一步：[常见问题与调优](troubleshooting.md)。

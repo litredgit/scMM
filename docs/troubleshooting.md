@@ -1,6 +1,6 @@
 # 常见问题与参数调优
 
-[返回文档索引](README.md) · [参数参考](03-parameters.md)
+[返回文档索引](README.md) · [参数参考](parameters.md)
 
 ## 推荐的调参顺序
 
@@ -230,3 +230,15 @@ engine.adata.uns["metabolite_trends"]["pooled"]
 
 如果问题仍无法定位，使用 `LOG_LEVEL="DEBUG"` 或 CLI `--verbose`，并记录输入文件数量、扫描数、
 细胞数、特征数和出错阶段。
+
+## 网页任务与服务
+
+- **提取完成但无法分析**：在“提取与审核”选择成功样本，确认纳入并建立当前数据。
+- **同步操作长时间等待**：预览、分析与保存仍同步；不要重复提交。后台批次状态不是同步操作的进度或 ETA。
+- **停止后仍在运行**：停止仅阻止后续样本，当前读取/计算需完成。
+- **刷新后结果消失**：未保存会话不会自动恢复；主动保存项目后再离开，未应用表单不属于已保存参数。
+- **Worker no longer running**：提供完整批次 ID 和下载的 worker 日志。中文 JSON 在无 locale 的 systemd 环境
+  曾触发 ASCII 解码错误，现已统一 UTF-8 并写回启动失败状态；不能把所有退出都归为旧问题。
+- **更新后界面没变或 origin 403**：核对服务工作目录、启动时间、访问主机名与 WebSocket origin；
+  `localhost` 与 `127.0.0.1` 可能需要分别配置，见[服务部署](installation.md#更新常驻服务)。
+- **Thermo reader / .NET 缺失或 centroid 报错**：检查[RAW 依赖与范围](thermo-raw.md)，失败不自动转换。

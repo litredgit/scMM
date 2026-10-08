@@ -1,77 +1,28 @@
-# scMM 文档索引
+# scMM 文档
 
-本文档按实际使用顺序组织。首次使用建议依次阅读 1–3；需要脚本化或深入分析时再阅读后续章节。
+按“开始使用 → 查参考 → 维护”组织，共 10 篇主题文档。项目功能摘要见[首页](../README.md)，
+变化与验收记录见[CHANGELOG](../CHANGELOG.md)。
 
-## 入门
+## 开始使用
 
-1. [安装与环境配置](01-installation.md)
-   - uv 锁定环境、可编辑安装、Jupyter 内核、可选依赖和安装验证。
-2. [参数化 Notebook 工作流](02-notebook-workflow.md)
-   - 输入准备、运行顺序、功能开关、输出位置和典型配置。
-3. [参数默认值、含义与推荐](03-parameters.md)
-   - Notebook、CLI、原始谱预处理、去同位素、注释和分析参数的完整参考。
+1. [安装与部署](installation.md)：uv 环境、RAW 外部依赖、网页启动和服务更新。
+2. [工作流程](workflow.md)：网页六步项目与 Notebook，从输入到审核、分析和保存。
+3. [排错与调参](troubleshooting.md)：输入、检测、分析、任务、服务和内存问题。
 
-## 使用与分析
+## 按需查阅
 
-- [当前网页使用指南](17-current-web-guide.md)：六步操作、保存重载、等待提示和排错入口。
-- [项目式网页：六步工作流与实施记录](15-project-redesign.md)：当前 worktree 的网页入口与项目保存。
-  09/13 中的八页布局保留为前一版历史，部署和统计原则仍适用。
-
-4. [Python API 与批处理](04-python-api.md)
-   - 单文件、多文件、已有结果、批量独立处理、数据集合并和方法链。
-5. [降维、聚类与时间分析](05-analysis.md)
-   - AnnData、PCA、UMAP、Leiden/Louvain、Palantir、轨迹、代谢速度和趋势聚类。
-6. [数据模型与输出文件](06-data-and-output.md)
-   - `CyESIData` 的四类数据、保存目录、字段语义和可重复性建议。
-
-## 维护与排错
-
-- [Thermo RAW 直接读取阶段日志](16-thermo-raw.md)：依赖、协议、验证与暂停续接点。
-
-7. [常见问题与参数调优](07-troubleshooting.md)
-   - 未检出细胞、特征过多/过少、内存、重复保存、依赖错误和分析异常。
-8. [开发与质量检查](08-development.md)
-   - 测试、格式检查、构建、代码结构和贡献前检查。
-9. [实验室网页 UI 与部署](09-web-ui.md)
-   - 挂载目录选择、TIC/EIC/合并谱预览、后台处理、质量检查、结果下载和 Tailscale 访问。
-10. [功能移植、兼容性与新 API](10-functional-port.md)
-    - 分阶段记录、可选 SNR/批处理策略、监督分析、H5AD 互操作与验证边界。
-11. [外部源码快照的本地版本管理](11-upstream-snapshots.md)
-    - 接收目录、快照标签、版本比较、后续导入与本地备份。
-12. [上游合并：已知问题与待办](12-upstream-todo.md)
-    - 已完成的后端及工作台、暂缓算法与 Windows 适配、部署验证边界。
-13. [多页工作台使用与数据安全](13-workbench.md)
-    - 云盘、原生路径、JSON 默认值、结果生命周期、历史层和分析页面。
-14. [暂缓轨迹与 R2/Q2 的决策说明](14-deferred-methods.md)
-    - 上游真实计算、风险、复现证据及后续可选方案。
-
-维护分支的版本摘要见 [Changelog](../CHANGELOG.md)。
-
-## 快速选择入口
-
-| 目标 | 推荐入口 |
+| 文档 | 内容 |
 |---|---|
-| 第一次处理一份数据 | [参数化 Notebook](02-notebook-workflow.md) |
-| 在服务器批量预处理 | [CLI 或批处理 API](04-python-api.md) |
-| 查询某个参数默认值 | [参数参考](03-parameters.md) |
-| 理解生成的 CSV/pickle | [数据与输出](06-data-and-output.md) |
-| 调整 UMAP、轨迹或趋势 | [下游分析](05-analysis.md) |
-| 处理结果异常或报错 | [排错指南](07-troubleshooting.md) |
-| 从浏览器查看并处理服务器原始谱 | [网页 UI](09-web-ui.md) |
+| [参数参考](parameters.md) | 默认值、单位、算法区别、CLI 和网页 JSON 配置 |
+| [Python API 与批处理](python-api.md) | 文件/目录处理、变换、注释、合并、保存和 CLI |
+| [分析](analysis.md) | 统计解释、监督诊断、降维聚类、时间轨迹和绘图 |
+| [数据与输出](data-output.md) | 数据模型、标准目录、H5AD、项目快照和可重复性 |
+| [Thermo RAW 技术说明](thermo-raw.md) | helper 部署、二进制协议、精度差异及真实样本报告 |
 
-## 核心数据流
+## 维护
 
-```text
-Thermo profile RAW / mzML / mzXML
-  └─ 变分辨率 m/z 网格与合并谱
-      └─ 合并谱去噪和公共峰提取
-          └─ 每个扫描帧对齐到公共 m/z 轴
-              └─ 参考离子通道识别细胞事件
-                  └─ 细胞 × 特征矩阵
-                      ├─ 去同位素 / 异常值 / 填补 / 归一化
-                      ├─ SDF 精确质量候选注释
-                      └─ PCA / UMAP / 聚类 / 时间轨迹 / 趋势
-```
+- [开发指南](development.md)：模块职责、测试与发布、上游快照和历史文档追溯。
+- [待办与验收边界](roadmap.md)：优先验收、工程改进、暂缓方法及长期约束。
 
-所有高层处理都围绕 `scMM.file.data.CyESIData` 展开；下游分析围绕
-`scMM.plot.engine.PlotEngine` 和 AnnData 展开。
+当前网页是六步项目工作台，项目固定保存于 `/home/crs/data/results`；CLI/API 输出由调用参数决定。
+RAW 仅支持 Thermo profile，读取保留 float64。详细旧阶段日志保存在 Git 历史，当前文档只描述最终行为。

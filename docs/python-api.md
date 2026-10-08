@@ -1,6 +1,6 @@
 # Python API 与批处理
 
-[返回文档索引](README.md) · [参数参考](03-parameters.md)
+[返回文档索引](README.md) · [参数参考](parameters.md)
 
 ## 单个原始文件
 
@@ -45,7 +45,7 @@ shared/independent 仍串行。独立的 `batch_process()` 旧助手仍仅扫描
 
 `msconvert_path` / `--msconvert` 不再用于自动 RAW 转换；如确需转换，请在处理外显式
 调用 `scMM.file.msconvert.convert_raw()`。不支持 Thermo RAW 的环境仍可直接读取已有 mzML。
-安装位置、协议、结果差异和验证见 [Thermo RAW 日志](16-thermo-raw.md)。
+安装位置、协议、结果差异和验证见 [Thermo RAW 技术说明](thermo-raw.md)。
 网页项目入口现亦支持 Thermo profile RAW，复用本节后台路径。
 
 ## 缓存原始数据的细胞提取预览（Python API）
@@ -324,4 +324,4 @@ reconstructed, noise_sigma = peak_recon(
 - 这些工具不会自动更新 `CyESIData` 的 `peak_meta` 或 `feature_meta`，因此不应把返回矩阵直接替换
   `data.data`，除非已经确认维度和语义保持一致。
 
-下一步：[下游分析](05-analysis.md) 和 [数据输出](06-data-and-output.md)。
+下一步：[下游分析](analysis.md) 和 [数据输出](data-output.md)。

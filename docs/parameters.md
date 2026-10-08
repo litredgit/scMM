@@ -1,6 +1,6 @@
 # 参数默认值、含义与推荐
 
-[返回文档索引](README.md) · [Notebook 工作流](02-notebook-workflow.md)
+[返回文档索引](README.md) · [Notebook 工作流](workflow.md)
 
 本页区分三类默认值：
 
@@ -187,4 +187,42 @@ Notebook 或 Python API。
 
 合并会原地修改参考对象；未匹配位置填 0。批次校正不是该步骤的一部分。
 
-下一步：[Python API](04-python-api.md) 或 [分析方法](05-analysis.md)。
+## 网页默认参数
+
+用 `scmm-ui --config workbench.json` 或 `SCMM_UI_CONFIG` 指定，命令行优先。
+
+```json
+{
+  "processing": {
+    "ref_mz": 734.5929,
+    "mz_min": 100.0,
+    "mz_max": 1000.0,
+    "extraction_method": "snr_v1",
+    "reference_mz": [734.5929, 760.5851],
+    "reference_mode": "union",
+    "baseline_filter_size": 51,
+    "feature_snr_threshold": 3.0,
+    "feature_block_size": 256
+  },
+  "analysis": {
+    "normalization": "total",
+    "reduction": "pca",
+    "n_components": 2,
+    "n_neighbors": 15,
+    "perplexity": 30.0,
+    "random_state": 42,
+    "model": "logistic",
+    "cv": 3,
+    "calibration_bins": 10
+  }
+}
+```
+
+只覆盖明确写出的键，省略项使用后端默认值。未知节/键、错误类型、非法枚举、非有限数值和
+互相矛盾的范围在启动时明确失败，不静默忽略。设置的是新会话默认值，不自动加载数据或执行分析。
+完整处理键与帮助以 `scMM/application/parameters.py` 为准；analysis 键也在同一模块定义。
+更改文件后重新启动服务才能应用；界面手工更改不会写回 JSON。
+
+`cell_snr` 是参考信号/基线比值；legacy 的 `peak_snr` 与 snr_v1 的
+`feature_snr_threshold` 含义不同。界面展开“参数含义、单位与算法差异”可查看全部解释。
+手动选择“灵敏/严格”等预设会重新设置相应阈值，实际生效值以控件和任务清单为准。
