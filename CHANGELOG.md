@@ -12,6 +12,8 @@
 - 按用户要求更新 AGENTS 协作约定：任务完成并检查后更新开发服务供验收，保留未提交修改；明确验收通过后才提交、推送并部署生产及更新服务，验收确认作为对应范围的发布授权。同步文档索引、安装与开发说明，修复原 roadmap 章节引用。
 - 本轮本机文档验证：`.venv/bin/python -m pytest tests/test_documentation.py -W error -q` 30 项通过；14 份 Markdown 的本地链接/章节锚点/代码围栏、待办原编号在活动清单或验收归档中的完整性、涉及模块路径及 Git 差异检查通过。发布前 `.venv/bin/python -m pytest -W error -q` 完整回归 320 项、全仓 Ruff 检查/格式检查、`uv lock --check --offline` 和离线 sdist/wheel 构建通过；指定 Python 3.12 的 wheel 隔离安装与 `scmm-process --help` 通过，临时目录自动选择解释器的首次离线安装因 NumPy 缓存不可用失败，改用项目支持的解释器后通过。产物仅存临时目录，远端 CI 单独核对。
 - 按本轮开发验收服务授权，于 12:12:41 UTC 重启 5007 `scmm-dev.service`，active/running、首页 HTTP 200，实际 cwd 为开发 worktree；重启前无开发连接、活跃任务或处理 worker。验收前 5006 生产 PID 与启动时间未变，文档修改保持未提交。用户随后明确反馈“验收通过”，确认本轮 roadmap 和协作流程文档，按约定进入提交、推送及生产发布流程。
+- 已提交并推送 `dev` 的 `7796ca1`；`python3 scripts/scmm_env.py release` 将生产 `main` 从 `74e7ad3` 快进到同一提交，锁定检查 153 个生产依赖，健康检查通过后推送 `main`。发布前生产 worktree 干净，无生产浏览器连接、未结束任务或处理 worker；未修改实验数据。5006 于北京时间 20:19:01（12:19:01 UTC）更新启动，active/running、首页 HTTP 200；实际 cwd、虚拟环境、项目根及缓存/预设/临时路径符合生产配置，5007 PID 与启动时间未变。
+- 本次核对 `8eb69d0` 和 `74e7ad3` 对应的 main/dev CI 均为 success；`7796ca1` 的 [main CI](https://github.com/litredgit/scMM/actions/runs/37929237616) 与 [dev CI](https://github.com/litredgit/scMM/actions/runs/37929186892) 已触发，记录时仍运行，未记为通过。实际发布结果作为后续纯文档提交同步 dev/main，不再次重启服务；运行程序与依赖保持已部署的 `7796ca1` 内容。
 
 原工作台事项的验收范围如下；当前操作与默认参数见 [工作流程](docs/workflow.md#网页六步项目流程)和 [网页参数](docs/parameters.md#网页默认参数)。
 
