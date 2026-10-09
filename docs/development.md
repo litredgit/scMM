@@ -183,6 +183,7 @@ PY
 ```python
 from scMM.util.normalize import register_norm
 
+
 @register_norm("custom")
 def norm_custom(X, params):
     scale = params.get("scale", 1.0)
@@ -197,6 +198,7 @@ def norm_custom(X, params):
 
 ```python
 from scMM.plot.embedding import register_dim
+
 
 @register_dim("custom")
 def run_custom(X, params):
