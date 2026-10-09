@@ -2,6 +2,10 @@
 
 [返回文档索引](README.md) · [参数参考](parameters.md)
 
+本页提供提取/预览、变换/注释、保存与互操作、批处理/合并及底层工具的调用示例。
+参数完整默认值查参数参考，文件格式查 [数据与输出](data-output.md)，下游方法查 [分析](analysis.md)。
+下例中的参考离子均为示例，须按实验选择。
+
 ## 单个原始文件
 
 ```python
@@ -33,7 +37,7 @@ data = CyESIData.load_from_file("wt-1.RAW", ref_mz=760.5847, raw_timezone="Asia/
 batch = CyESIData.load_from_directory("raw_only", ref_mz=760.5847, feature_strategy="shared")
 ```
 
-760.5847 是本次 wt-1 的用户指定参考值，其他实验应自行指定。RAW 默认采集时区为
+760.5847 来自历史 wt-1 对照实验，其他实验应自行指定。RAW 默认采集时区为
 Asia/Shanghai，显式 `raw_timezone` 优先于 `SCMM_RAW_TIMEZONE` 环境变量。
 reader 保留完整 profile，遇到 centroid 扫描报错；现有下游提峰等算法保持原样。
 合谱与对齐顺序重读，不把全部原始谱放入内存；最终矩阵仍需内存。
@@ -97,8 +101,9 @@ data = CyESIData.load_from_filelist(
 )
 ```
 
-该方法先从目录中所有直接子文件构建一个合并谱和公共特征轴，然后并行对齐每个文件。文件按
-采集时间排序，所有细胞共享 0–1 的全局 `time`。它适合属于同一连续实验的多段采集。
+本例使用默认 legacy 策略，先从目录直接子文件构建合并谱和公共特征轴，再按 `n_jobs` 对齐文件；
+文件按采集时间排序，所有细胞共享 0–1 的全局 `time`。它适合属于同一连续实验的多段采集。
+RAW 的自动并发与其他目录策略见 [批处理模式](#目录处理与批处理模式)。
 
 ## 重新载入已有结果
 
@@ -204,17 +209,19 @@ same_data = CyESIData.load_from_processed(result_dir)
 adata = data.to_anndata()
 ```
 
-映射关系：
+`adata.raw` 是转换时的矩阵快照，不保证为仪器原始强度。完整映射及层/嵌入的保存含义见
+[AnnData 映射](data-output.md#anndata-映射)。细胞 ID 会重建为稳定唯一名称，原索引保存在 `obs["source_index"]`。
 
-- `data.data` → `adata.X`
-- `data.peak_meta` → `adata.obs`
-- `data.feature_meta` → `adata.var`
-- 原始矩阵快照 → `adata.raw`
+## 目录处理与批处理模式
 
-细胞 ID 会重建为 `cell_0`、`cell_1` 等稳定唯一名称；原始 DataFrame 索引保存在
-`adata.obs["source_index"]`。
+先区分目录加载（返回一个数据集）与旧 `batch_process()` 助手（写多个单文件结果）：
 
-## 两种批处理模式的区别
+| 入口 | 特征定义与执行方式 | 输出 |
+|---|---|---|
+| `load_from_filelist(..., processing_strategy="legacy")` | 整目录合谱，共同特征轴；文件 worker 默认 RAW=1/XML=全部 CPU | 一个连续数据集 |
+| `load_from_directory(..., feature_strategy="shared")` | 共同特征、顺序逐文件；等价 `load_from_filelist(..., processing_strategy="shared")` | 一个合并数据集 |
+| `load_from_directory(..., feature_strategy="independent")` | 各文件独立选峰，再按 ppm 合并；也可从 `load_from_filelist` 指定 | 一个合并数据集 |
+| `batch_process()` 后 `concat()` | 旧 XML 助手，每文件独立结果，可文件间并行；再显式合并 | 多个单文件目录及合并结果 |
 
 ### 模式 A：共享公共峰轴
 
@@ -282,13 +289,14 @@ uv run --locked scmm-process raw-data/ results \
   --verbose
 ```
 
-CLI 的目录模式等价于 `load_from_filelist()`，不是 `batch_process()`。它输出一个合并数据集。
+CLI 的目录模式调用 `load_from_filelist()`，不是 `batch_process()`；可用 `--processing-strategy`
+选择表中的 legacy/shared/independent。它输出一个合并数据集；完整选项见 [CLI 参数](parameters.md#cli-参数)。
 
 ## 底层谱工具
 
 高级工作流不能满足时，可以组合 `scMM.file.io`：
 
-- `load_single_file()`：按扩展名自动读取 mzML/mzXML 和文件元数据；也可用 `format` 显式指定。
+- `load_single_file()`：按扩展名读取 mzML/mzXML/Thermo profile RAW 和文件元数据；也可用 `format` 显式指定。
 - `sum_spec()`：在变分辨率 Orbitrap 网格上汇总谱。
 - `sum_spectrum_from_file()`：读取并汇总单文件。
 - `extract_peaks()`：从汇总谱提取质心峰。

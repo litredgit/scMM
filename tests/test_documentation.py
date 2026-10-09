@@ -8,6 +8,7 @@ import pytest
 
 ROOT = Path(__file__).parents[1]
 MARKDOWN_FILES = (
+    ROOT / "AGENTS.md",
     ROOT / "README.md",
     ROOT / "CHANGELOG.md",
     *sorted((ROOT / "docs").glob("*.md")),

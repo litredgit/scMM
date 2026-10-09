@@ -2,11 +2,13 @@
 
 [返回文档索引](README.md) · [参数参考](parameters.md)
 
+本页按故障症状给出诊断顺序；安装/服务配置查 [安装部署](installation.md)，参数定义查参数参考。
+
 ## 推荐的调参顺序
 
 一次只调整一类参数，并记录细胞数、特征数、零值比例和代表性图形：
 
-1. 确认 mzML/mzXML 可读、MS level 和质量范围正确。
+1. 确认原始文件可读、MS level 和质量范围正确；Thermo profile RAW 先检查外部 reader。
 2. 确认 `REF_MZ` 附近确实有稳定峰。
 3. 调整 `CELL_SNR`，先得到可信的细胞事件。
 4. 调整 `MS_PEAK_SNR`、`PEAK_SNR` 和 `MAX_ZERO_FRAC`，控制特征质量。
@@ -32,9 +34,10 @@ uv run --locked python -c "import pyopenms, numpy, pandas, anndata"
 解释器应位于仓库的 `.venv`。Notebook 中还应检查右上角内核是否为 `scMM`/`scmm`，或直接
 选择 `.venv/bin/python`；终端中的环境不会自动切换已经打开的 Notebook 内核。
 
-### 输入目录没有发现 mzML/mzXML
+### 输入目录没有发现原始文件
 
-- 只支持 `.mzML`、`.mzXML`，扩展名大小写均可。
+- `load_from_filelist()`/`load_from_directory()` 与 CLI 支持 `.mzML`、`.mzXML`、Thermo profile `.raw`，扩展名大小写均可。
+- 旧 `batch_process()` 助手仍只扫描 XML；读取 RAW 时使用上述入口，并核对 [外部依赖](installation.md#thermo-raw-额外依赖)。
 - `load_from_filelist()` 和 `batch_process()` 只扫描目录直接子文件，不递归。
 - 检查 `INPUT_PATH` 是否误指向上一级目录。
 - 已处理目录应包含 `.meta`；否则 `INPUT_KIND="auto"` 会把它当作原始目录。
@@ -42,7 +45,8 @@ uv run --locked python -c "import pyopenms, numpy, pandas, anndata"
 ### `No spectra found`
 
 常见原因是文件为空、目标 MS level 不存在，或所有扫描都落在底层汇总函数默认 m/z 范围之外。
-先用 PyOpenMS 检查谱数和 MS level；需要非默认质量范围时使用底层 `sum_spec(mz_range=...)`。
+XML 用 PyOpenMS、RAW 用 reader 检查谱数和 MS level；高层加载可设置 `mz_range`，CLI 可设置
+`--mz-min`/`--mz-max`。网页显示范围不改变提取范围，参数解释见 [参数参考](parameters.md#原始谱与细胞检测)。
 
 ## 细胞事件识别
 
@@ -155,13 +159,16 @@ display(audit["final_table"])
 
 ### UMAP 报近邻数错误
 
-`n_neighbors` 必须至少为 2 且小于细胞数。Notebook 会自动截断；直接调用 API 时需手动设置：
+`n_neighbors` 必须至少为 2 且小于细胞数。Notebook 会调整该值，网页及统一 API 明确报错，需手动设置：
 
 ```python
 n_neighbors = min(15, adata.n_obs - 1)
 ```
 
 少于 3 个细胞不适合运行 UMAP。
+
+若报 PCA 输入维数过大，网页 UMAP 默认使用 PCA 20 维输入；应在参数中明确减小维数或关闭 PCA 输入。
+不同降维入口的默认值和处理边界见 [分析](analysis.md#统一降维入口)。
 
 ### 缺少 Leiden/Louvain 依赖
 

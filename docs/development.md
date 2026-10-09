@@ -2,6 +2,9 @@
 
 [返回文档索引](README.md) · [安装说明](installation.md)
 
+本页负责模块分工、扩展方式、兼容性回归、检查与发布流程。主要设计和协作规则见
+[AGENTS.md](../AGENTS.md)，环境安装见安装说明；实现进展不在本页维护。
+
 ## 代码结构
 
 当前入口为 `ui/app.py` 的项目工作台；`ui/project_views.py` 管理项目原始谱展示，
@@ -16,6 +19,8 @@ scMM/
 │   ├── projects.py        # 项目清单、快照、修订冲突和保存重载
 │   ├── project_batch.py   # 多样本持久 worker、重试及审核合并
 │   ├── workbench.py       # 数据身份、预处理、分析与结果生命周期
+│   ├── preview_cache.py   # 完整预览/共同特征的身份校验与复用
+│   ├── preferences.py     # 全局预设、显式保存与 CPU 默认值
 │   ├── parameters.py      # 参数定义、帮助与 JSON 默认值
 │   ├── storage.py         # 挂载目录白名单、路径解析和越界防护
 │   ├── raw_preview.py     # TIC、EIC、合并谱和原始文件摘要
@@ -28,6 +33,8 @@ scMM/
 │   ├── app.py             # 项目首页及六步工作流
 │   ├── project_views.py   # 项目原始谱展示与预览编排
 │   ├── raw_components.py  # 可复用的原始谱及分析控件
+│   ├── file_browser.py    # 根目录内的浏览、搜索与跨目录选择
+│   ├── presentation.py    # 表格、图形与数值显示
 │   ├── analysis_plots.py  # 分析结果图形
 │   ├── layout.py          # 任务栏、图表比例和离页提醒
 │   ├── workbench.py       # 分析页面控件
@@ -101,15 +108,15 @@ uv build --no-sources
 只运行相关测试：
 
 ```bash
-uv run --locked pytest tests/test_data.py -q
-uv run --locked pytest tests/test_io.py -q
-uv run --locked pytest tests/test_trajectory.py -q
+uv run --locked python -m pytest tests/test_data.py -q
+uv run --locked python -m pytest tests/test_io.py -q
+uv run --locked python -m pytest tests/test_trajectory.py -q
 ```
 
 覆盖率：
 
 ```bash
-uv run --locked pytest --cov=scMM --cov-report=term-missing
+uv run --locked python -m pytest --cov=scMM --cov-report=term-missing
 ```
 
 文档修改可单独运行以下检查，验证本地链接、Python 示例和 Notebook 基本约定：
@@ -176,6 +183,17 @@ PY
   保存时先写快照、后发布清单，并检查修订冲突。批量提取必须在独立 worker 中执行，
   使用持久状态恢复；预览和分析当前仍同步执行，后台化见[待办清单](roadmap.md)。
 
+## 兼容性回归边界
+
+以下编号用于相关修改及上游移植的回归审阅，不表示未完成缺陷：
+
+- **REG-01**：保留 group_key holdout/CV、SMOTE 最小样本及非有限输入检查，失败必须报错。
+- **REG-02**：保留旧目录兼容、H5AD raw/层/嵌入保真、原子发布和默认防覆盖，不整体替换数据容器。
+- **REG-03**：保留 XML 完整性、RAW 超时/协议/资源回收、归一化零值、SDF、reference ppm 与 SNR 定义；直接 reader 失败不隐式转换。
+- **REG-04**：保留 frame_id/ms_level/native_id 已验证的元数据路径。
+- **REG-05**：保留持久任务、审核合并、主动保存及存储目录边界。
+- **VAL-04**：holdout PR/AP、校准和 Brier 不可在反复调参后继续解释为独立测试；细胞数不等于生物重复数。
+
 ## 添加归一化方法
 
 归一化方法通过注册表扩展：
@@ -218,11 +236,10 @@ def run_custom(X, params):
 
 ## 发布前检查
 
+先同步锁定环境并完成 [完整验证](#完整验证)，再用本次构建的 wheel 检查独立安装入口。
+核对 dist 中选中的文件确为本次产物：
+
 ```bash
-uv lock --check
-uv sync --locked --all-extras --dev
-uv run --locked pytest -W error
-uv build --no-sources
 uv run --isolated --no-project \
   --with "$(find dist -maxdepth 1 -name '*.whl' -print -quit)" \
   scmm-process --help
@@ -260,12 +277,12 @@ git clone --bare /tmp/scmm-upstream-备份日期.bundle /tmp/scmm-upstream-resto
 
 ## 文档维护与历史追溯
 
-当前行为按主题写入使用/参考文档；未完成事项只在[待办](roadmap.md)维护，完成后移入说明。
-提交、验证及部署摘要记录在 [CHANGELOG](../CHANGELOG.md)，原始机器报告留在 `docs/validation/`。
-不要把历史测试数量或部署状态当作本次验证。
+文档职责及任务结束后的更新选择以 [AGENTS.md](../AGENTS.md#文档职责与更新时机) 为准，
+不在本页重复维护另一套规则。文档变动后检查本地链接/锚点、Python 示例和 Notebook 基本约定；
+检查结果记到 CHANGELOG，原始机器报告留在 `docs/validation/`。
 
-2026-10-08 将原 17 篇编号文档合并为 10 篇主题文档。旧八页教程、实施日志及暂停续接信息
-从当前导航移除，详细历史可在整理前提交 `bc3e35d` 查看，例如：
+旧编号教程、实施日志和暂停续接信息不再作为活跃文档；需要详细历史时从 Git 查看。
+原 17 篇编号文档整理前基线为 `bc3e35d`，例如：
 
 ```sh
 git show bc3e35d:docs/10-functional-port.md

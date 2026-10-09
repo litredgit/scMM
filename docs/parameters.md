@@ -2,11 +2,12 @@
 
 [返回文档索引](README.md) · [Notebook 工作流](workflow.md)
 
-本页区分三类默认值：
+本页集中维护默认值、单位和参数含义，区分四类入口；操作顺序见 [工作流程](workflow.md)，调用示例见 [API](python-api.md)。
 
 - **Notebook 默认值**：`scMM_workflow.ipynb` 顶部参数单元中的值。
 - **Python API 默认值**：函数签名中的值。
 - **CLI 默认值**：`uv run --locked scmm-process --help` 显示的值。
+- **网页默认值**：应用层默认配置与全局预设；项目/样本已保存值及手工应用参数另有优先级。
 
 推荐值是起始范围，不是仪器或实验的通用最优值。最终参数应由标准品、空白、批内质控和已知
 参考离子验证。
@@ -24,7 +25,7 @@
 
 ## 原始谱与细胞检测
 
-这些参数只在输入为原始 mzML/mzXML 时使用。
+这些参数用于原始 mzML/mzXML 和 Thermo profile RAW 的提取；RAW 的额外依赖见 [安装说明](installation.md#thermo-raw-额外依赖)。
 
 | Notebook 参数 | API 参数 | 默认值 | 含义 | 推荐与调优方向 |
 |---|---|---:|---|---|
@@ -39,7 +40,7 @@
 | `PEAK_SNR` | `peak_snr` | `3.0` | 单个细胞事件内特征峰相对基线的阈值 | 2–5 可作为调试范围；越低矩阵越密但噪声越多 |
 | `BASELINE_FILTER_SIZE` | `baseline_filter_size` | `50` | 沿扫描帧方向估计基线的中值滤波窗口 | 应明显宽于单个细胞事件；慢漂移可增大，快速基线变化可减小 |
 | `MAX_ZERO_FRAC` | `max_zero_frac` | `0.90` | 允许特征为零的最大细胞比例 | `0.90` 表示至少约 10% 细胞检出；探索稀有特征时可升至 0.95–0.99 |
-| `N_JOBS` | `n_jobs` | `-1` | 多文件或部分特征处理的并行工作数 | `-1` 使用所有 CPU；共享服务器或内存紧张时设置 1–4 |
+| `N_JOBS` | `n_jobs` | Notebook `-1`；目录 API `None` | 多文件或部分特征处理的并行工作数 | legacy 目录 API 自动选择 RAW=1/XML=全部 CPU；`-1` 显式使用全部 CPU；网页默认值另见下节 |
 
 ### 合并谱底层去噪参数
 
@@ -161,11 +162,18 @@ uv run --locked scmm-process INPUT OUTPUT --ref-mz REF_MZ [options]
 
 | 参数 | 默认值 | 含义 |
 |---|---:|---|
-| `INPUT` | 必填 | 单个 mzML/mzXML 或原始文件目录 |
+| `INPUT` | 必填 | 单个 mzML/mzXML/Thermo profile RAW 或原始文件目录 |
 | `OUTPUT` | 必填 | 保存根目录；内部还会创建数据集名目录 |
 | `--ref-mz` | 必填 | 参考离子 m/z |
 | `--ppm-tol` | `10.0` | 对齐容差 ppm |
 | `--resolution` | `35000.0` | m/z 200 分辨率 |
+| `--mz-min` / `--mz-max` | `100.0` / `1000.0` | 正式提取 m/z 范围，包含边界 |
+| `--processing-strategy` | `legacy` | `legacy`/`shared`/`independent` 目录处理策略，见 [API](python-api.md#目录处理与批处理模式) |
+| `--feature-merge-ppm` | `10.0` | 独立特征轴合并容差 |
+| `--extraction-method` | `legacy` | `legacy` 或 `snr_v1` 细胞提取算法 |
+| `--reference-mz` / `--reference-mode` | 省略 / `union` | SNR 多参考离子及窗口 `union`/`intersection` |
+| `--feature-snr` / `--noise-window` | `3.0` / `51` | SNR 特征阈值及背景噪声窗口帧数 |
+| `--raw-timezone` | 环境变量或 `Asia/Shanghai` | RAW 采集时区 |
 | `--cell-snr` | `5.0` | 细胞检测阈值 |
 | `--peak-snr` | `3.0` | 细胞内特征检测阈值 |
 | `--jobs` | 自动 | legacy 目录：含 RAW 默认 1，纯 XML 默认全部 CPU；shared/independent 仍串行 |
@@ -174,6 +182,7 @@ uv run --locked scmm-process INPUT OUTPUT --ref-mz REF_MZ [options]
 
 CLI 只负责原始数据预处理和保存，不执行归一化、去同位素或下游分析。需要这些步骤时使用
 Notebook 或 Python API。
+`--msconvert` 已移除自动转换功能，传入时明确报错；手动转换见 [RAW 调用说明](python-api.md#thermo-profile-raw-直接读取)。
 
 ## 特征轴合并参数
 
@@ -196,6 +205,10 @@ Notebook 或 Python API。
 网页 `n_jobs` 默认逻辑 CPU 数的四分之一向下取整，至少为 1，且不超过进程可用 CPU 数。
 首次读取原始文件时 m/z 下限向下、上限向上取整到 10 的倍数；共同特征采用各文件范围的并集，独立模式使用各文件范围。
 手动应用的参数优先；自动范围不冻结其他项目默认参数。UMAP 默认 PCA 输入为 20 维，维数不足时需手动调整。
+
+网页分析的默认选择：着色优先有效 group、其次 sample；特征按平均强度降序。
+火山图标签默认 FDR≤0.05、abs(log2FC)≥1，FDR 优先/效应量辅助排序，最多标注前 10 个特征；阈值、数量和排序可调整。
+小提琴图每次最多 12 个，默认包含零值。它们是显示设置，不改变检验和数值导出。
 
 用 `scmm-ui --config workbench.json` 或 `SCMM_UI_CONFIG` 指定，命令行优先。
 

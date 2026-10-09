@@ -2,6 +2,9 @@
 
 [返回文档索引](README.md)
 
+本页负责环境安装、启动配置与服务更新；网页操作见 [工作流程](workflow.md)，
+参数含义见 [参数参考](parameters.md)，reader 构建与协议见 [RAW 技术说明](thermo-raw.md)。
+
 ## 推荐方式：uv
 
 先按 [uv 官方安装说明](https://docs.astral.sh/uv/getting-started/installation/) 安装 uv，然后在仓库
@@ -19,12 +22,7 @@ uv 会读取 `.python-version`，在需要时安装 Python 3.12，并根据 `uv.
 范围；PyOpenMS 3.3 没有 CPython 3.13 wheel，因此在新 PyOpenMS 版本通过部署机器的 CPU、原始谱
 读写和完整测试前，不应只为追新版本移除这些上限。
 
-日常拉取代码后严格复用锁文件：
-
-```bash
-uv sync --locked --all-extras --dev
-```
-
+日常拉取代码后重复上述同步命令，严格复用锁文件。
 只有明确升级依赖时才运行 `uv lock --upgrade`，并将 `pyproject.toml` 与 `uv.lock` 的变更一起审阅、
 测试和提交。`uv sync` 默认精确同步，会移除未声明的包，因此临时工具优先使用 `uvx` 或
 `uv run --with <package>`。
@@ -88,7 +86,7 @@ uv sync --locked --extra ui
 uv run --locked python -c "import scMM, pyopenms, anndata; print('scMM environment ready')"
 uv run --locked scmm-process --help
 uv run --locked scmm-ui --help
-uv run --locked pytest -q
+uv run --locked python -m pytest -q
 ```
 
 如果入口不存在，先运行 `uv sync --locked --all-extras --dev`，并确认命令从包含 `pyproject.toml`
@@ -105,12 +103,15 @@ uv run --locked pytest -q
 
 ## 网页服务部署
 
-网页面向实验室内网使用。项目根目录固定为 `/home/crs/data/results`，必须存在且可写。
+网页面向实验室内网使用。项目根目录默认为 `/home/crs/data/results`，可用 `--project-root` 指定，必须存在且可写。
 `--storage` 可重复指定已挂载的服务器目录，Linux 上 `/home/crs/data` 存在时会另加入“云盘”。
 读取前解析真实路径，拒绝逃逸根目录的路径或符号链接；浏览器电脑的本地路径不能直接使用。
 导入旧结果时含 pickle 的目录须明确信任。`--output` 只保留旧任务兼容，不改变项目根目录。
 
-本机启动：
+本机唯一项目服务为 5006 的 `scmm-ui.service`。已有服务时直接访问或按下节检查状态；
+以下命令用于首次部署或已获授权的配置替换，不同时启动第二个项目服务。
+
+本地访问配置：
 
 ```bash
 uv run --locked scmm-ui --storage "原始数据=/mnt/ms-data" --port 5006 --show
@@ -131,9 +132,9 @@ Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；
 
 ## 服务约定与隔离检验
 
-本机仅保留 5006 的 `scmm-ui.service` 作为项目网页服务；原 5007 独立检验服务已停止。
+本机仅保留 5006 的 `scmm-ui.service` 作为项目网页服务。
 后续在 5006 中建立隔离检验项目，原始输入和输出使用专门检验目录，保留真实实验项目的数据及配置。
-历史合成项目和浏览器证据的位置见 [检验记录](roadmap.md#独立端口检验步骤)，不自动迁移到默认项目根。
+历史合成项目和浏览器证据的位置见 [CHANGELOG 检验记录](../CHANGELOG.md#历史独立环境与检验步骤)，不自动迁移到默认项目根。
 
 `--project-root` 可指定项目根，`SCMM_PREFERENCES` 可指定预设文件，`--isolated-storage` 只开放
 明确配置的存储根。这些参数用于服务配置；修改常驻服务配置前须核对会话与任务，按授权执行，

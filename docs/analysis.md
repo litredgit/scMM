@@ -2,12 +2,20 @@
 
 [返回文档索引](README.md) · [参数参考](parameters.md)
 
-下游分析的高层入口是 `scMM.plot.engine.PlotEngine`。它内部使用 AnnData 保存矩阵、细胞元数据、
-特征元数据、低维坐标和分析结果。
+本页解释分析方法、统计边界及调用方式；网页操作顺序见 [工作流程](workflow.md)，
+Notebook 运行开关与网页参数默认值见 [参数参考](parameters.md)。
 
-网页提供降维、聚类、差异/Marker、相关网络和监督分析；下文时间轨迹主要通过 Python/Notebook 使用。
-统一 `reduce_dimension` 遵循 X/obsm，原 `pca/umap` API 保留。上游实验轨迹及概率 R2/Q2
-继续暂缓，定义与原因见[待办决策](roadmap.md#暂缓方法的依据)。
+## 入口选择
+
+| 入口 | 数据/状态 | 适用范围 |
+|---|---|---|
+| 网页分析工作台 | 当前项目 AnnData，结果绑定数据修订与参数 | 交互降维、聚类、差异/Marker、相关网络、监督及 SHAP |
+| `scMM.analysis` | 显式传入 AnnData | 统一降维、统计及独立监督分析 |
+| `PlotEngine` | 内部 AnnData，保存图形与分析结果 | Notebook 的 PCA/UMAP、聚类、时间轨迹和代谢趋势 |
+| `scMM.plot.embedding` / `msplot` | 显式输入数据或谱 | 轻量降维与原始谱绘图 |
+
+这些接口的默认值与输出语义不同，不能互换解释。时间轨迹主要通过 Python/Notebook 使用；
+上游实验轨迹及概率空间 R2/Q2 的定义见 [方法依据](#暂缓方法的依据)，恢复条件见 [roadmap](roadmap.md#明确暂缓)。
 
 ## 统计解释与网页分析
 
@@ -21,13 +29,14 @@ Marker 使用当前分组列，逐簇对其余已标记细胞比较；每个比�
 阈值作用于绝对相关系数，边保留正负号；常数特征相关为 NaN、不连边，孤立节点仍显示。
 网络不是因果图、细胞邻接图或轨迹；完整相关矩阵保留在本次会话，导出报告记录节点和阈值后边表。
 
-降维输入是明确选择的 X 或 obsm，不自动偷偷替换成 PCA。已有输出键不能被工作台静默覆盖。
-邻居数、维数或 perplexity 不适合当前样本数时会报错，需手动调整。
+工作台降维输入是明确选择的 X 或 obsm；UMAP 默认启用可见的 PCA 输入选项，可关闭或修改。
+已有输出键不能被工作台静默覆盖；邻居数、维数或 perplexity 不适合当前样本数时明确报错。
+统一 API 与 PlotEngine 的区别见下方入口说明。
 
 监督分析按所选独立样本列划分训练/测试和 CV；不选时是细胞级划分，可能存在泄漏。
 全数据插补/选特征引入的泄漏不能靠分组划分自动补救。潜变量仅对 PLS-DA 和支持 transform 的
 LDA 开放；lsqr 仍可做分类。未标注细胞的潜变量为 NaN，额外保存 train/test/unlabeled 标识。
-AP 不标为梯形 PR AUC，Brier 宏平均定义和校准诊断说明见 [分析说明](analysis.md)。
+AP 不标为梯形 PR AUC，Brier 宏平均定义和校准诊断说明见 [概率诊断](#监督模型与概率诊断)。
 
 SHAP 复用已训练模型及其训练折拟合的预处理：背景抽自训练集、解释样本抽自测试集，
 可通过 `shap_background`/`shap_samples` 调整上限，种子沿用 `random_state`。
@@ -56,7 +65,32 @@ calibration = analyzer.calibration_curves()
 校准曲线采用 quantile 分箱，重复/空分箱可能使返回点数少于 calibration_bins；
 这只是可靠性诊断，并不重新校准概率。不要据 holdout 反复调参。
 
-## 绘图引擎初始化
+## 统一降维入口
+
+`scMM.analysis.embedding.reduce_dimension()` 计算并写入指定 `obsm` 键，参数记录在对应 `uns` 中。
+它显式选择 X 或已有嵌入；API 的 `pca_components=None` 不预先做 PCA，网页 UMAP 默认显式请求 PCA 20 维。
+输入维数、邻居数及 perplexity 不合法时明确报错，不截断。以下维数必须适合实际细胞/特征规模：
+
+```python
+from scMM.analysis.embedding import reduce_dimension
+
+embedding = reduce_dimension(
+    adata,
+    method="umap",
+    use_rep="X",
+    pca_components=20,
+    n_neighbors=15,
+    random_state=42,
+    store_key="X_umap_review",
+)
+```
+
+工作台还检查已有键不可覆盖。下方 PlotEngine 的 `pca()` 及 `umap()` 是保留的 Notebook 接口，
+部分小样本参数由该接口或 Notebook 调整，不能套用统一 API 的默认值。
+
+## Notebook 与 PlotEngine
+
+### 绘图引擎初始化
 
 推荐从 `CyESIData` 转换：
 
@@ -76,7 +110,7 @@ engine = PlotEngine(df, "results/figures", obs=cell_meta, var=feature_meta)
 图目录会自动创建。大多数绘图方法把 SVG 写入该目录并返回 `self`；数值结果保存在
 `engine.adata.obsm` 或 `engine.adata.uns`。
 
-## PCA
+### PCA
 
 ```python
 X_pca = engine.pca(
@@ -99,7 +133,7 @@ X_pca = engine.pca(
 解释方差比例和处理参数保存在 `adata.uns["X_pca_params"]`。如果输入已按特征 z-score，仍可
 考虑 `scale=False`，避免重复标准化。
 
-## UMAP
+### UMAP
 
 ```python
 X_umap = engine.umap(
@@ -124,7 +158,7 @@ X_umap = engine.umap(
 
 UMAP 是可视化和近邻结构模型，不应仅凭图上距离断言精确生物学时间或连续动力学。
 
-## 细胞聚类
+### 细胞聚类
 
 ```python
 engine.cluster_cells(
@@ -145,7 +179,7 @@ engine.cluster_cells(
 
 建议报告 PCA 维数、近邻数、算法、分辨率和随机种子，并检查不同参数下结论是否稳定。
 
-## 实验时间与伪时间
+### 实验时间与伪时间
 
 原始加载自动创建的 `obs["time"]` 表示采集进程：
 
@@ -162,7 +196,7 @@ adata = data.to_anndata()
 这只有在“整个采集跨度确实对应 12 小时”时才成立。离散实验组时间不应简单假定细胞在组内
 均匀变化。
 
-## Palantir 伪时间
+### Palantir 伪时间
 
 ```python
 engine.run_palantir(
@@ -190,7 +224,7 @@ API 默认值：
 起始细胞应由实验先验、时间或标志物确定，而不是为了得到期望轨迹而挑选。结果默认写入
 `obs["palantir_pseudotime"]` 和 `obsm["palantir_branch_probs"]`。
 
-## 滑动窗口轨迹
+### 滑动窗口轨迹
 
 ```python
 engine.compute_trajectory(
@@ -220,7 +254,7 @@ engine.compute_trajectory(
 Notebook 使用实验 `time` 而非 Palantir 伪时间，并采用更大的 1000/300 窗口作为高细胞数
 CyESI 数据的起点。
 
-## 代谢速度
+### 代谢速度
 
 ```python
 engine.metabolic_velocity(
@@ -243,7 +277,7 @@ engine.metabolic_velocity(
 
 如果窗口内所有时间相同，回归分母为零，该窗口无法产生有效速度。
 
-## 代谢趋势
+### 代谢趋势
 
 ```python
 engine.plot_metabolite_trends(
@@ -267,7 +301,7 @@ engine.plot_metabolite_trends(
 `adata.uns["metabolite_trends"]`。热图为了可视化会对每一行做 z-score，因此颜色表示相对趋势，
 不是原始强度。
 
-## 趋势聚类
+### 趋势聚类
 
 ```python
 engine.plot_trend_clusters(
@@ -283,7 +317,7 @@ engine.plot_trend_clusters(
 相关距离适合比较曲线形状；欧氏距离同时受幅度影响。无法形成有限趋势的特征会标记为无效，
 不应强制归入某个生物学簇。
 
-## 特征网络
+### 特征网络
 
 ```python
 embedding = engine.feature_network(
@@ -414,5 +448,32 @@ configure_plotting("fonts/MyFont.ttf")  # 可选自定义字体
 ```
 
 字体路径必须指向存在的文件。为了结果可重复，正式图形应记录字体文件或使用环境中稳定可用的字体。
+
+## 暂缓方法的依据
+
+问题来自上游 `f961809`，未移入当前项目；现有 Palantir 与时间分析接口保留。
+
+| 上游名称 | 实际计算及边界 |
+|---|---|
+| diffusion / DPT | SpectralEmbedding 后到根的欧氏距离，不等同于完整 DPT 方法 |
+| graph / kNN geodesic | 欧氏 kNN 图最短路；需定义断连分量和缺失值规则 |
+| PCA pseudotime | PC1 到根的绝对差，根两侧折到同一方向，不表示分支命运 |
+| PAGA-like | 簇中心最小生成树距离加细胞到簇中心距离，不保证指定根为起点 |
+
+反例：`X=[0,2,4,10,12,14]`，前三/后三各一簇，根为第一个细胞，cluster graph 约输出
+`[0.167,0,0.167,1,0.833,1]`。直接减根值会产生负值，截断又会合并不同位置。
+恢复前应确定根、方向、分支和断连语义；可以保留现有方法、明确命名为实验性图距离，或按指定参考重新实现。
+重复坐标邻居按索引排除自身已修复，不表示这些轨迹方法已验收。
+
+上游 R2/Q2 在 one-hot 标签 Y 与类别概率 P 上计算方差加权 `r2_score`：
+
+```text
+1 - Σ(Y - P)² / Σ(Y - 训练集类别比例)²
+```
+
+R2 用训练概率，Q2 用训练集 OOF 概率；既不是 X 的解释方差，也不是独立 holdout 结果，
+不能直接标成泛指的 PLS R2X/R2Y/Q2。负值表示弱于常数类别比例基准。
+若确需新增，应明确命名、响应编码/缩放和基准，采用单轮分组 CV 同时生成指标与 OOF，
+避免上游 cross_validate + cross_val_predict 重复拟合。当前已有 holdout ROC、PR/AP、Brier 和校准诊断。
 
 下一步：[数据模型与输出](data-output.md)。

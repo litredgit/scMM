@@ -2,6 +2,10 @@
 
 [文档索引](README.md) · [安装部署](installation.md) · [Python API](python-api.md)
 
+本页负责外部 reader 的构建、读取协议和数值精度；常规 Python 环境/服务管理见安装部署，
+使用调用见 API，阶段实现及部署进展见 [CHANGELOG](../CHANGELOG.md)。
+下方真实对照是有固定输入和条件的历史证据，不是当前服务或跨仪器支持状态。
+
 ## 支持范围与运行行为
 
 Thermo RawFileReader → C# helper → 二进制管道 → NumPy 已接入单文件、三种目录策略、CLI 和网页。
@@ -70,7 +74,7 @@ reader 是单次上下文；数组为只读 bytes 视图，退出后仍有效，
 [读取报告](validation/thermo-wt-1-reader.json)确认所有强度精确一致，m/z 经 float32 舍入后与
 用户提供的 ProteoWizard 32 位 mzML 精确一致；单个 RT 差约 5.7e-14 秒。
 
-阶段 3 提交：`f551542`。验证使用参考离子 **760.5847**、默认 m/z 100–1000、
+对照实现基线：`f551542`。验证使用参考离子 **760.5847**、默认 m/z 100–1000、
 分辨率 35000、legacy 细胞提取与其余现有默认参数。没有改科学算法或全局参考离子默认值。
 脚本：[validate_thermo_pipeline.py](../tools/validate_thermo_pipeline.py)；
 完整统计：[thermo-wt-1-pipeline.json](validation/thermo-wt-1-pipeline.json)。
@@ -104,12 +108,12 @@ reader 是单次上下文；数组为只读 bytes 视图，退出后仍有效，
 - 原始 4,302 个 scan、81,059,698 个 profile 点均保留；读取层强度精确匹配对照，
   reference/exception peaks 明确包含。下游仍执行原有合谱/提峰/细胞处理，不应混淆为 reader 在做 centroid。
 
-### 网页与部署验收
+### 网页预览数值对照
 
 [网页报告](validation/thermo-wt-1-web.json)记录同参数预览与 Python 正式处理的窗口、峰顶帧、RT
 及参考信号精确一致，结果为 307 × 622；首/中/末扫描均可读，Chromium 页面脚本错误 0。
-09-29 主仓库回归 301 项通过，5006 首页及 systemd reader 验收完成；后续部署摘要见
-[CHANGELOG](../CHANGELOG.md)。这不代表多真实 RAW 压力测试、更多仪器或 Windows 已验收。
+运行环境及部署验收记录见 [CHANGELOG](../CHANGELOG.md#thermo-raw-网页入口--2026-09-29)。
+该单样本对照不代表多真实 RAW 压力测试、更多仪器或 Windows 已验收。
 
 ### 复现
 

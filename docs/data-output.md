@@ -2,6 +2,9 @@
 
 [返回文档索引](README.md) · [Python API](python-api.md)
 
+本页集中定义数据结构、持久化文件及恢复边界；保存调用见 API，网页保存操作见 [工作流程](workflow.md#保存和离开)。
+标准数据集目录、Notebook 图目录与网页项目目录是三种不同输出，以下分别说明。
+
 ## `CyESIData` 数据模型
 
 一个处理后的数据集由四部分组成。
@@ -156,7 +159,7 @@ AnnData
 
 ## 当前网页项目保存
 
-六步网页使用 `ProjectStore`，项目位于 `/home/crs/data/results`，与 CLI/API 的标准结果目录不同。
+六步网页使用 `ProjectStore`，项目默认位于 `/home/crs/data/results`（可由 `--project-root` 指定），与 CLI/API 的标准结果目录不同。
 `project.json` 记录样本、参数、修订号和当前产物引用；`processing/` 保存批次请求、状态及日志，
 `snapshots/` 保存发布所需的 `current.h5ad`、`baseline.h5ad` 和 `views.json`。
 
