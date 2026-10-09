@@ -23,7 +23,7 @@ from .storage import StorageCatalog, StorageRoot
 from .tasks import utc_now
 from .workbench import AnalysisWorkspace
 
-PROJECT_ROOT = Path("/home/crs/data/results")
+PROJECT_ROOT = Path("~/data/results").expanduser()
 
 
 @contextmanager

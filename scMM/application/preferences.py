@@ -15,7 +15,9 @@ def cpu_default():
 
 
 def preferences_path():
-    return Path(os.environ.get("SCMM_PREFERENCES", "/home/crs/data/results/.scmm-preferences.json"))
+    return Path(
+        os.environ.get("SCMM_PREFERENCES", "~/data/results/.scmm-preferences.json")
+    ).expanduser()
 
 
 def load_preferences():

@@ -200,7 +200,7 @@ Notebook 或 Python API。
 
 网页首次创建项目的参考离子来自全局细胞类型预设：哺乳动物 `760.5851`（初始默认）、藻类 `734.5929`、细菌 `690.5069`。
 可修改、新增预设并显式保存；项目保留自己的参数，后续修改全局预设不会覆盖旧项目。
-全局预设默认写入 `/home/crs/data/results/.scmm-preferences.json`，可通过 `SCMM_PREFERENCES` 指定服务独立配置文件。
+全局预设默认写入 `~/data/results/.scmm-preferences.json`，可通过 `SCMM_PREFERENCES` 指定服务独立配置文件。
 
 网页 `n_jobs` 默认逻辑 CPU 数的四分之一向下取整，至少为 1，且不超过进程可用 CPU 数。
 首次读取原始文件时 m/z 下限向下、上限向上取整到 10 的倍数；共同特征采用各文件范围的并集，独立模式使用各文件范围。

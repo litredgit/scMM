@@ -159,7 +159,7 @@ AnnData
 
 ## 当前网页项目保存
 
-六步网页使用 `ProjectStore`，项目默认位于 `/home/crs/data/results`（可由 `--project-root` 指定），与 CLI/API 的标准结果目录不同。
+六步网页使用 `ProjectStore`，项目默认位于 `~/data/results`（可由 `--project-root` 指定），与 CLI/API 的标准结果目录不同。
 `project.json` 记录样本、参数、修订号和当前产物引用；`processing/` 保存批次请求、状态及日志，
 `snapshots/` 保存发布所需的 `current.h5ad`、`baseline.h5ad` 和 `views.json`。
 

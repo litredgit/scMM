@@ -75,6 +75,9 @@ scMM/
 
 ## 开发环境
 
+日常修改在 `dev` worktree，`main` worktree 专用于生产；目录、服务与发布/回滚命令见
+[开发与生产分离](installation.md#开发与生产分离)。5007 用于开发检验，5006 用于正式实验。
+
 ```bash
 uv sync --locked --all-extras --dev
 ```
@@ -125,7 +128,7 @@ uv run --locked python -m pytest --cov=scMM --cov-report=term-missing
 uv run --locked python -m pytest tests/test_documentation.py -q
 ```
 
-CI 对 develop/refined 的 push 和 pull request 执行 Python 3.11/3.12 矩阵。
+CI 对 dev/main/refined 的 push 和 pull request 执行 Python 3.11/3.12 矩阵。
 本机通过与远端 CI 通过应分别记录，不以配置存在代替实际验收。
 
 ## Notebook 检查
@@ -258,7 +261,7 @@ uv run --isolated --no-project \
 ```sh
 uv run --locked python scripts/import_upstream_snapshot.py 新交付目录 --name 新版本名称 --received-date YYYY-MM-DD
 git log --oneline vendor/snapshots
-git diff develop vendor/snapshots -- scMM/
+git diff dev vendor/snapshots -- scMM/
 git --git-dir=.upstream-snapshots.git show snapshots:.snapshot.json
 ```
 
@@ -268,7 +271,7 @@ git --git-dir=.upstream-snapshots.git show snapshots:.snapshot.json
 脚本不执行交付代码、不切换当前分支或改暂存区，但需要 Git 对象/引用与 `.git/info/exclude` 写权限。
 按功能审阅移植，不直接整体合并快照分支。
 
-快照标签留在本地裸仓库，普通推送 develop 不会备份它们。使用新的文件名导出并另存到其他磁盘：
+快照标签留在本地裸仓库，普通推送 dev 不会备份它们。使用新的文件名导出并另存到其他磁盘：
 
 ```sh
 git --git-dir=.upstream-snapshots.git bundle create /tmp/scmm-upstream-备份日期.bundle --all

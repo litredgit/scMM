@@ -80,7 +80,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     defaults = load_defaults(args.config)
     root_specs = args.storage or [("当前目录", Path.cwd())]
-    cloud = Path("/home/crs/data")
+    cloud = Path("~/data").expanduser()
     if (
         not args.isolated_storage
         and cloud.is_dir()

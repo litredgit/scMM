@@ -36,7 +36,8 @@ uv sync --locked --all-extras --dev
 该命令根据 `pyproject.toml` 和已提交的 `uv.lock` 创建项目专用 `.venv`，并以可编辑模式安装
 scMM。后续命令统一通过 `uv run` 执行，无需手工激活环境。
 
-本机项目网页统一使用 5006 服务；访问方式和服务管理见 [安装部署](docs/installation.md#网页服务部署)。
+本机生产网页使用 main / 5006，开发使用 dev / 5007，Python 环境及结果分别隔离；
+启动、发布与回滚见 [安装部署](docs/installation.md#开发与生产分离)。
 网页操作见 [六步流程](docs/workflow.md#网页六步项目流程)。
 自动化处理可直接使用命令行（参考离子必须按实验修改）：
 

@@ -247,5 +247,5 @@ engine.adata.uns["metabolite_trends"]["pooled"]
 - **Worker no longer running**：提供完整批次 ID 和下载的 worker 日志。中文 JSON 在无 locale 的 systemd 环境
   曾触发 ASCII 解码错误，现已统一 UTF-8 并写回启动失败状态；不能把所有退出都归为旧问题。
 - **更新后界面没变或 origin 403**：核对服务工作目录、启动时间、访问主机名与 WebSocket origin；
-  `localhost` 与 `127.0.0.1` 可能需要分别配置，见[服务部署](installation.md#更新常驻服务)。
+  `localhost` 与 `127.0.0.1` 可能需要分别配置，见[服务部署](installation.md#发布更新与回滚)。
 - **Thermo reader / .NET 缺失或 centroid 报错**：检查[RAW 依赖与范围](thermo-raw.md)，失败不自动转换。

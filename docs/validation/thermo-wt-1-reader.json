@@ -1,6 +1,6 @@
 {
-  "raw_path": "/home/crs/data/crs/data/260922/wt-1.RAW",
-  "mzml_path": "/home/crs/data/crs/data/260922/wt-1.mzML",
+  "raw_path": "~/data/crs/data/260922/wt-1.RAW",
+  "mzml_path": "~/data/crs/data/260922/wt-1.mzML",
   "direct_stream": {
     "file_bytes": 342915724,
     "scans": 4302,

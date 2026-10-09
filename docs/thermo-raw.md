@@ -24,7 +24,7 @@ RAW source 可重开，合谱与对齐分别顺序读取；两遍之间校验身
 
 ## 依赖与部署
 
-- 隔离 SDK：`/home/crs/.local/share/scmm/dotnet`，.NET SDK 8.0.425。
+- 隔离 SDK：`~/.local/share/scmm/dotnet`，.NET SDK 8.0.425。
 - Thermo 包：RawFileReader / Data 8.0.42；官方仓库固定提交
   `cd0a429a9894c13cc8bc0a5a10d54f5b7eb991bb`。
 - 官方来源：<https://github.com/thermofisherlsms/RawFileReader>。

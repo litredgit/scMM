@@ -8,7 +8,7 @@
   "runs": {
     "raw": {
       "mode": "raw",
-      "input": "/home/crs/data/crs/data/260922/wt-1.RAW",
+      "input": "~/data/crs/data/260922/wt-1.RAW",
       "elapsed_seconds": 93.89230913610663,
       "aligned_shape": [
         4302,
@@ -23,7 +23,7 @@
         "timestamp": 1790064269.977,
         "instrument": "Q Exactive Orbitrap",
         "source_file": "wt-1.RAW",
-        "path": "/home/crs/data/crs/data/260922/wt-1.RAW",
+        "path": "~/data/crs/data/260922/wt-1.RAW",
         "converted_from_raw": false,
         "reader_backend": "thermo_rawfilereader",
         "reader_protocol": "SCMMRAW1",
@@ -51,7 +51,7 @@
     },
     "xml": {
       "mode": "xml",
-      "input": "/home/crs/data/crs/data/260922/wt-1.mzML",
+      "input": "~/data/crs/data/260922/wt-1.mzML",
       "elapsed_seconds": 91.83371895190794,
       "aligned_shape": [
         4302,
@@ -86,7 +86,7 @@
     },
     "raw-float32-diagnostic": {
       "mode": "raw-float32-diagnostic",
-      "input": "/home/crs/data/crs/data/260922/wt-1.RAW",
+      "input": "~/data/crs/data/260922/wt-1.RAW",
       "elapsed_seconds": 95.29771784006152,
       "aligned_shape": [
         4302,
@@ -101,7 +101,7 @@
         "timestamp": 1790064269.977,
         "instrument": "Q Exactive Orbitrap",
         "source_file": "wt-1.RAW",
-        "path": "/home/crs/data/crs/data/260922/wt-1.RAW",
+        "path": "~/data/crs/data/260922/wt-1.RAW",
         "converted_from_raw": false,
         "reader_backend": "thermo_rawfilereader",
         "reader_protocol": "SCMMRAW1",
@@ -129,7 +129,7 @@
     },
     "xml-prior": {
       "mode": "xml-prior",
-      "input": "/home/crs/data/crs/data/260922/wt-1.mzML",
+      "input": "~/data/crs/data/260922/wt-1.mzML",
       "elapsed_seconds": 93.3520524649648,
       "aligned_shape": [
         4302,

@@ -103,13 +103,13 @@ uv run --locked python -m pytest -q
 
 ## 网页服务部署
 
-网页面向实验室内网使用。项目根目录默认为 `/home/crs/data/results`，可用 `--project-root` 指定，必须存在且可写。
-`--storage` 可重复指定已挂载的服务器目录，Linux 上 `/home/crs/data` 存在时会另加入“云盘”。
+网页面向实验室内网使用。项目根目录默认为 `~/data/results`，可用 `--project-root` 指定，必须存在且可写。
+`--storage` 可重复指定已挂载的服务器目录，Linux 上 `~/data` 存在时会另加入“云盘”。
 读取前解析真实路径，拒绝逃逸根目录的路径或符号链接；浏览器电脑的本地路径不能直接使用。
 导入旧结果时含 pickle 的目录须明确信任。`--output` 只保留旧任务兼容，不改变项目根目录。
 
-本机唯一项目服务为 5006 的 `scmm-ui.service`。已有服务时直接访问或按下节检查状态；
-以下命令用于首次部署或已获授权的配置替换，不同时启动第二个项目服务。
+本机生产服务为 5006 的 `scmm-ui.service`，开发服务为 5007 的 `scmm-dev.service`。
+两者使用独立 worktree、`.venv` 和运行目录；日常操作见下节。以下命令展示通用启动参数。
 
 本地访问配置：
 
@@ -130,33 +130,116 @@ uv run --locked scmm-ui \
 外部默认参数用 `--config workbench.json` 或 `SCMM_UI_CONFIG` 配置，格式见[参数参考](parameters.md#网页默认参数)。
 Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；缺少 fcntl 的最小兼容不代表完整 Windows 支持。
 
-## 服务约定与隔离检验
+## 开发与生产分离
 
-本机仅保留 5006 的 `scmm-ui.service` 作为项目网页服务。
-后续在 5006 中建立隔离检验项目，原始输入和输出使用专门检验目录，保留真实实验项目的数据及配置。
-历史合成项目和浏览器证据的位置见 [CHANGELOG 检验记录](../CHANGELOG.md#历史独立环境与检验步骤)，不自动迁移到默认项目根。
+本机保留原仓库作为开发 worktree，新增相邻的生产 worktree，共享 Git 对象和原始输入。
+`develop` 已更名为 `dev`，`refined` 等历史分支保留。两套虚拟环境分别按同一份 `uv.lock`
+同步；生产使用 `--all-extras --no-dev`，开发使用 `--all-extras --dev`。
 
-`--project-root` 可指定项目根，`SCMM_PREFERENCES` 可指定预设文件，`--isolated-storage` 只开放
-明确配置的存储根。这些参数用于服务配置；修改常驻服务配置前须核对会话与任务，按授权执行，
-不要为检验自行启动第二个项目服务。
+| 配置 | 生产 | 开发 |
+|---|---|---|
+| 分支 / 目录 | `main` / `~/scMM-prod` | `dev` / `~/scMM` |
+| Python 环境 | `~/scMM-prod/.venv` | `~/scMM/.venv` |
+| 端口 / 用户级服务 | 5006 / `scmm-ui.service` | 5007 / `scmm-dev.service` |
+| 原始输入（仅引用） | `~/data` | 同左 |
+| 项目、分析结果及旧任务输出 | `~/data/results`（保留已有项目） | `~/.local/state/scmm/dev/results` |
+| 缓存 / 临时文件 | `~/.local/state/scmm/prod/cache` / `prod/tmp` | `~/.local/state/scmm/dev/cache` / `dev/tmp` |
+| 全局预设 | `~/data/results/.scmm-preferences.json` | `~/.local/state/scmm/dev/preferences.json` |
 
-## 更新常驻服务
+项目内的预览缓存、批次状态和快照随各自的项目根隔离。启动器另行设置 `XDG_CACHE_HOME`、
+`UV_CACHE_DIR`、`NUMBA_CACHE_DIR`、`MPLCONFIGDIR` 和 `TMPDIR`，后台 worker 继承这些配置。
+原始数据根沿用现有挂载，其中的生产结果子目录仍可被浏览，但开发保存和任务输出固定写入开发根；
+不自动复制、迁移或清理已有结果。直接调用 Python API/Notebook 时仍应明确指定开发结果路径。
+.NET/Thermo helper 是独立的共享外部依赖，不由分支切换或回滚管理。
 
-更新代码不会自动替换运行中的 Python 进程。采用用户级 `scmm-ui.service` 的部署可先检查：
+统一入口为 [scripts/scmm_env.py](../scripts/scmm_env.py)，仅依赖 Linux 的 Python 3.10+ 标准库、
+Git、uv、systemd 和 `ss`；scMM 本身仍使用 `.venv` 中的 Python 3.12。
+配置默认由上述路径推导；可在 `~/.config/scmm/environments.json` 覆盖
+`dev`、`prod`、`raw`、`prod_results`、`state`、`address`、`origins`，或用 `--config` 指定文件。
+现有访问配置沿用 `0.0.0.0` 和 origin `*`；网络访问策略仍见 [NET-01](roadmap.md#工程改进待设计与实现)。
+配置与运行数据不提交到 Git。不同用户/机器先创建对应 worktree，再安装服务：
 
 ```sh
-systemctl --user status scmm-ui.service --no-pager
-systemctl --user show scmm-ui.service -p ExecStart -p WorkingDirectory -p MainPID -p ActiveEnterTimestamp
+# 当前仓库为 dev；生产 worktree 尚未创建时执行
+# git worktree add -b main ../scMM-prod dev
+python3 scripts/scmm_env.py install
+```
+
+`install` 备份原 service 文件，安装两个用户级 unit，并启用生产服务随用户管理器启动；
+开发服务按需启动，不默认启用。稳定启动器复制到 `~/.local/share/scmm/scmm_env.py`，
+因此回滚到还没有管理脚本的旧提交也能启动网页。管理脚本变化后重新执行 `install`。
+安装 unit 不自动重启现有进程。
+
+## 日常开发与调试
+
+```sh
+cd ~/scMM
+python3 scripts/scmm_env.py sync dev
+systemctl --user start scmm-dev.service
+# 访问 http://服务器地址:5007
+journalctl --user -u scmm-dev.service -f
+```
+
+修改代码后执行 `systemctl --user restart scmm-dev.service`。需要终端日志、断点或临时调试时，
+先停止开发 service，再前台启动；Ctrl+C 停止，修改后重新运行：
+
+```sh
+systemctl --user stop scmm-dev.service
+python3 scripts/scmm_env.py serve dev
+```
+
+调试器选择 `~/scMM/.venv/bin/python`。需要 Python 断点时运行
+`python3 scripts/scmm_env.py serve dev --debug`，再用 IDE 连接本机 `127.0.0.1:5678`；
+它在调试器接入后才启动网页，远程开发可通过 SSH 转发该调试端口。
+开发同步/更新要求 5007 已停止，避免运行期间替换依赖。其他进程手工指定生产结果路径不受启动器约束。
+历史合成项目与浏览器证据保留原目录，见 [CHANGELOG 检验记录](../CHANGELOG.md#历史独立环境与检验步骤)；
+若需要在 5007 复用，须显式导入或复制到开发根，不把真实生产项目作为调试写入目标。
+
+## 发布、更新与回滚
+
+在开发目录中使用同一个脚本：
+
+```sh
+# 发布：先完成开发验证并提交，推送 dev，再发布到 main / 5006
+# git add <本任务文件>
+# git commit -m "feat: ..."
+git push origin dev
+python3 scripts/scmm_env.py release
+
+# 更新开发：先停止 5007；拉取 origin/dev 并锁定同步，不自动启动
+systemctl --user stop scmm-dev.service
+python3 scripts/scmm_env.py update dev
+
+# 更新生产：拉取 origin/main、同步依赖、重启及检查 5006
+python3 scripts/scmm_env.py update prod
+
+# 回滚到上次部署前的代码；也可指定一个已知提交或标签
+python3 scripts/scmm_env.py rollback
+# python3 scripts/scmm_env.py rollback <提交或标签>
+
+python3 scripts/scmm_env.py status
+```
+
+发布/更新只接受干净 worktree，并用 fast-forward 更新 `main`；分支分叉须先在开发环境处理。
+发布前执行 [开发验证](development.md#完整验证)。脚本串行锁定环境操作，检查生产浏览器连接、
+未结束任务和 worker，然后停止服务再变更代码及依赖。新进程通过 systemd 状态和首页 HTTP 检查后，
+`release` 才推送远端 `main`；网络推送失败时，本地新服务已生效，修复网络后补推即可。
+依赖同步或健康检查失败时，脚本尝试恢复原提交、锁定依赖和服务；若恢复本身失败，按错误和日志处置，
+原提交仍保存在 `refs/scmm/recovery`。脚本不会替用户完成科学验收，也不替代发布前测试。
+
+回滚将本地 `main` 指针恢复到指定版本，并在 `refs/scmm/previous` 保存切换前版本；
+不强推远端，不删除或恢复项目结果。再次 `rollback` 可切回刚才的版本，
+`update prod` 会重新部署远端 `main`。回滚后的新版本发布仍须包含远端 main 的历史，避免非快进推送；
+永久撤销应在 `dev` 中提交修复后正常发布。保存格式若已变化，须另外评估旧代码读取新项目的兼容性。
+
+重启会断开网页并清空未保存会话。先保存并关闭生产页面，再检查任务；
+脚本能检测连接与持久任务，不能证明已关闭页面的会话内容已保存。
+HTTP 200 不能代替六步流程或真实实验验收。可查看服务及具体运行目录：
+
+```sh
+systemctl --user status scmm-ui.service scmm-dev.service --no-pager
+systemctl --user show scmm-ui.service -p ExecStart -p WorkingDirectory -p MainPID
 journalctl --user -u scmm-ui.service -n 30 --no-pager
 ```
 
-确认实际工作目录与环境，保存会话修改并检查进行中的任务后，再重启：
-
-```sh
-systemctl --user restart scmm-ui.service
-systemctl --user status scmm-ui.service --no-pager
-```
-
-只改 Python 代码不需 daemon-reload；修改 service 文件后才需先执行 `systemctl --user daemon-reload`。
-重启会断开网页并清空未保存会话，不删除已保存文件。重开页面，核对“scMM 实验项目”及六步导航；
-HTTP 200 不能单独证明新版已加载。实际操作见[工作流程](workflow.md)。
+仅修改 Python 代码不需 daemon-reload；重新安装 unit 时脚本会执行 daemon-reload。

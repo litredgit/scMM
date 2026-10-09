@@ -1,5 +1,5 @@
 {
-  "raw": "/home/crs/data/crs/data/260922/wt-1.RAW",
+  "raw": "~/data/crs/data/260922/wt-1.RAW",
   "reference_mz": 760.5847,
   "parameters": {
     "ref_mz": 760.5847,

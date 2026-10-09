@@ -77,9 +77,14 @@ scMM 从 CyESI 单细胞质谱原始谱构建“细胞 × m/z 特征”矩阵，
 - 按改动运行相关测试；数值、存储和任务改动覆盖失败/恢复语义。合成测试、真实实验、用户验收和远端 CI 分别记录。
   完整检查命令见 [开发指南](docs/development.md#完整验证)，使用 `python -m pytest`。
 - 不提交原始谱、处理矩阵、H5AD、大体积输出或临时截图；Notebook 保持参数集中、无执行输出，测试优先小型合成数据。
-- 本机唯一项目网页服务为 **5006** 的用户级 `scmm-ui.service`；不自行启动第二个项目服务。
-  网页检验沿用 5006，在隔离项目中操作。重启前核对运行配置、未保存会话和活跃任务；依据已有授权执行。
-- 默认项目根为 `/home/crs/data/results`；`--project-root` 可配置，`--output` 只兼容旧任务输出。
+- `main` 为生产分支，worktree 位于 `~/scMM-prod`；`dev` 为开发分支，位于 `~/scMM`，
+  各自使用独立 `.venv`。生产为 **5006** 的用户级 `scmm-ui.service`，开发为 **5007** 的 `scmm-dev.service`，
+  开发支持停止 service 后前台调试，不同时占用同一端口。网页检验优先在开发环境的隔离项目中操作。
+  重启生产前核对运行配置、未保存会话和活跃任务；依据已有授权执行。
+- 原始数据共享 `~/data`；生产项目根保留 `~/data/results`，开发使用
+  `~/.local/state/scmm/dev/results`，两套缓存、临时文件及全局预设隔离。发布/更新/回滚使用
+  `scripts/scmm_env.py`，回滚只恢复代码与锁定依赖，不恢复数据、不强推远端。
+- API 默认项目根为 `~/data/results`；`--project-root` 可配置，`--output` 只兼容旧任务输出。
   启动、配置变量和外部依赖查 [安装部署](docs/installation.md) 与 [RAW 说明](docs/thermo-raw.md)。
 
 ## 文档职责与更新时机
