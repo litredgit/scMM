@@ -129,19 +129,15 @@ uv run --locked scmm-ui \
 外部默认参数用 `--config workbench.json` 或 `SCMM_UI_CONFIG` 配置，格式见[参数参考](parameters.md#网页默认参数)。
 Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；缺少 fcntl 的最小兼容不代表完整 Windows 支持。
 
-## 独立端口检验
+## 服务约定与隔离检验
 
-使用独立的项目目录与存储根，不需要重启现有服务：
+本机仅保留 5006 的 `scmm-ui.service` 作为项目网页服务；原 5007 独立检验服务已停止。
+后续在 5006 中建立隔离检验项目，原始输入和输出使用专门检验目录，保留真实实验项目的数据及配置。
+历史合成项目和浏览器证据的位置见 [检验记录](roadmap.md#独立端口检验步骤)，不自动迁移到默认项目根。
 
-```bash
-mkdir -p /tmp/scmm-review/projects
-SCMM_PREFERENCES=/tmp/scmm-review/preferences.json uv run --locked scmm-ui \
-  --storage "检验数据=/tmp/scmm-review" --isolated-storage \
-  --project-root /tmp/scmm-review/projects --port 5007
-```
-
-`--isolated-storage` 禁用自动加入云盘根目录，只开放明确配置的存储根。局域网访问时，
-增加 `--address 0.0.0.0`，并为实际使用的主机名/IP 配置对应端口的 `--allow-websocket-origin`。
+`--project-root` 可指定项目根，`SCMM_PREFERENCES` 可指定预设文件，`--isolated-storage` 只开放
+明确配置的存储根。这些参数用于服务配置；修改常驻服务配置前须核对会话与任务，按授权执行，
+不要为检验自行启动第二个项目服务。
 
 ## 更新常驻服务
 
