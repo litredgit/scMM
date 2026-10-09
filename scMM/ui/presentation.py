@@ -8,7 +8,23 @@ import panel as pn
 
 
 def ordinary_number(value):
-    return np.format_float_positional(float(value), trim="-")
+    number = float(value)
+    if 0 < abs(number) < 0.001:
+        # Keep small nonzero values visible without scientific notation.
+        return np.format_float_positional(
+            number, precision=3, unique=False, fractional=False, trim="-"
+        )
+    return np.format_float_positional(number, precision=3, unique=False, trim="-")
+
+
+def count_number(value):
+    return np.format_float_positional(float(value), precision=1, unique=False, trim="-")
+
+
+def probability_number(value):
+    return np.format_float_positional(
+        float(value), precision=3, unique=False, fractional=False, trim="-"
+    )
 
 
 class QCDataFrame(pn.pane.DataFrame):
@@ -26,7 +42,7 @@ class QCDataFrame(pn.pane.DataFrame):
                     if pd.isna(value)
                     else f"{value:.3e}"
                     if scientific
-                    else ordinary_number(value)
+                    else count_number(value)
                     for value, scientific in zip(obj[column], intensity, strict=True)
                 ]
             obj = displayed
@@ -103,7 +119,7 @@ def style_figure(figure):
             elif any(word in title for word in ("features", "cells", "特征数", "细胞数")):
                 axis.tickformat = axis.hoverformat = "d"
             else:
-                axis.tickformat = axis.hoverformat = "~f"
+                axis.tickformat = axis.hoverformat = ".3~f"
     return figure
 
 
@@ -152,7 +168,9 @@ def apply_presentation(root):
                 ):
                     formatters[col] = lambda x: f"{x:.3e}"
                 elif any(key in name for key in ("features", "cells", "特征数", "细胞数")):
-                    formatters[col] = ordinary_number
+                    formatters[col] = count_number
+                elif name in {"p_value", "p", "pval", "pvalue", "fdr", "q_value", "qvalue"}:
+                    formatters[col] = probability_number
             table.formatters = formatters
 
         format_table()

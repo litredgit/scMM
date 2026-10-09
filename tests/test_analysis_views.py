@@ -56,5 +56,5 @@ def test_plot_display_uses_scientific_notation_only_for_intensity():
     assert template.count(".3e") == 2
     assert "0.000000001" in volcano.data[0].customdata[0]
     assert "0.00000001" in volcano.data[0].customdata[0]
-    assert volcano.layout.yaxis.tickformat == "~f"
+    assert volcano.layout.yaxis.tickformat == ".3~f"
     pd.testing.assert_frame_equal(table, original)

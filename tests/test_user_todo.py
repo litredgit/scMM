@@ -156,9 +156,9 @@ def test_qc_display_formats_by_metric_without_rounding_numerical_data():
         {
             "metric": ["total_intensity", "detected_features", "reference_intensity"],
             "count": [3.0, 3.0, 2.0],
-            "mean": [1234567.89, 2.5, 98765.4321],
+            "mean": [1234567.89, 2.6666666666666665, 98765.4321],
             "median": [1200000.0, 2.5, 90000.0],
-            "std": [123.45, 0.5, float("nan")],
+            "std": [123.45, 0.5773502691896257, float("nan")],
             "min": [1000000.0, 2.0, 80000.0],
             "max": [1300000.0, 3.0, 100000.0],
         }
@@ -174,7 +174,8 @@ def test_qc_display_formats_by_metric_without_rounding_numerical_data():
     html = unescape(model.text)
     assert "1.235e+06" in html and "9.877e+04" in html
     assert "2.500e+00" not in html and "5.000e-01" not in html
-    assert "<td>2.5</td>" in html and "<td>0.5</td>" in html and "<td>2</td>" in html
+    assert "<td>2.7</td>" in html and "<td>0.6</td>" in html and "<td>2</td>" in html
+    assert "2.6666666666666665" not in html and "0.5773502691896257" not in html
     assert "NaN" in html
     pd.testing.assert_frame_equal(pane.object, stats)
     plain = general.get_root(Document())
@@ -185,6 +186,26 @@ def test_qc_display_formats_by_metric_without_rounding_numerical_data():
     assert "e+" not in unescape(model.text) and "e-" not in unescape(model.text)
     pane._cleanup(model)
     general._cleanup(plain)
+
+
+def test_display_precision_preserves_tiny_values_and_csv_precision():
+    from io import BytesIO
+
+    from scMM.ui.presentation import count_number, ordinary_number, probability_number
+    from scMM.ui.workbench import _csv
+
+    assert count_number(123.33333333333333) == "123.3"
+    assert count_number(123.0) == "123"
+    assert ordinary_number(-1.23456789) == "-1.235"
+    assert ordinary_number(0.0000123456789) == "0.0000123"
+    assert probability_number(0.123456789) == "0.123"
+    assert probability_number(1.23456789e-12) == "0.00000000000123"
+    assert probability_number(0) == "0"
+    stats = pd.DataFrame({"mean_features": [123.33333333333333], "fdr": [1.23456789e-12]})
+    exported = pd.read_csv(
+        BytesIO(_csv(stats).getvalue()), index_col=0, float_precision="round_trip"
+    )
+    pd.testing.assert_frame_equal(stats, exported)
 
 
 def test_color_sources_search_sort_and_restore(tmp_path):
