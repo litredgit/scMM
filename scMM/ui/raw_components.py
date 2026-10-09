@@ -21,6 +21,7 @@ from scMM.application import (
 )
 from scMM.application.parameters import load_defaults
 
+from .presentation import style_figure
 from .processing import GuidedProcessingPanel
 from .workbench import WorkbenchPanels
 
@@ -515,7 +516,11 @@ class PreviewWorkspace:
         for reference, frame in self.eic.groupby("reference_mz", sort=False):
             frame = _peak_preserving_downsample(frame, 30_000, "intensity")
             figure.add_scattergl(
-                x=frame.rt_seconds, y=frame.intensity, name=f"m/z {reference:g}", mode="lines"
+                x=frame.rt_seconds,
+                y=frame.intensity,
+                name=f"m/z {reference:.4f}",
+                mode="lines",
+                hovertemplate="RT %{x:.3f} s<br>Intensity %{y:.3e}<extra>%{fullData.name}</extra>",
             )
         figure.update_layout(
             title=f"多参考 EIC（± {self.ppm.value:g} ppm）",
@@ -572,19 +577,23 @@ class PreviewWorkspace:
             return
         try:
             frame, metadata = self.preview.single_spectrum(self.scan_index.value)
-            title = f"Scan {metadata['scan_index']} · MS{metadata['ms_level']} · RT={metadata['rt_seconds']:g} 秒"
+            title = f"Scan {metadata['scan_index']} · {metadata.get('native_id', '')} · MS{metadata['ms_level']} · RT={metadata['rt_seconds']:g} 秒"
             self.scan_pane.object = _spectrum_figure(frame, title)
         except Exception as exc:
             self.cell_status.object = str(exc)
 
-    def _preview_cells(self, _event=None):
+    def _preview_cells(self, _event=None, *, cached_result=None, targets=None):
         self._invalidate_cells()
         if self.preview is None:
             self.cell_status.object = "请先打开原始数据。"
             return
         self.cell_button.loading = True
         try:
-            result = self.preview.cell_detection(self.processing._parameters())
+            result = (
+                cached_result
+                if cached_result is not None
+                else self.preview.cell_detection(self.processing._parameters(), targets=targets)
+            )
             frame = result.traces
             figure = go.Figure()
             for i, mass in enumerate(result.reference_mz):
@@ -592,7 +601,7 @@ class PreviewWorkspace:
                 figure.add_scattergl(
                     x=display.rt_seconds,
                     y=display[f"reference_{i}"],
-                    name=f"m/z {mass:g}",
+                    name=f"m/z {mass:.4f}",
                     mode="lines",
                 )
                 peaks = frame.loc[frame.cell_apex]
@@ -600,7 +609,7 @@ class PreviewWorkspace:
                     x=peaks.rt_seconds,
                     y=peaks[f"reference_{i}"],
                     mode="markers",
-                    name=f"峰顶 {mass:g}",
+                    name=f"峰顶 {mass:.4f}",
                 )
             for start, stop in result.window_ranges:
                 figure.add_vrect(
@@ -610,10 +619,12 @@ class PreviewWorkspace:
                     opacity=0.12,
                     line_width=0,
                 )
-            figure.update_layout(title="细胞窗口与参考峰顶", xaxis_title="RT（秒）")
+            figure.update_layout(
+                title="细胞窗口与参考峰顶", xaxis_title="RT（秒）", yaxis_title="Intensity"
+            )
             self.cell_frame = frame
             self.cell_download.disabled = False
-            self.cell_pane.object = figure
+            self.cell_pane.object = style_figure(figure)
             self.cell_status.object = f"检出 {result.cell_count} 个细胞；与正式提取共享参数和实现。"
         except Exception as exc:
             self.cell_status.object = f"预览失败：{exc}"
@@ -662,7 +673,7 @@ def _chromatogram_figure(frame: pd.DataFrame, title: str, color: str) -> go.Figu
             y=display.get("intensity", []),
             mode="lines",
             line={"color": color, "width": 1.3},
-            hovertemplate="RT %{x:.3f} s<br>强度 %{y:.4g}<extra></extra>",
+            hovertemplate="RT %{x:.3f} s<br>强度 %{y:.3e}<extra></extra>",
         )
     )
     figure.update_layout(title=title, xaxis_title="保留时间（秒）", yaxis_title="强度")
@@ -677,7 +688,7 @@ def _spectrum_figure(frame: pd.DataFrame, title: str) -> go.Figure:
             y=display.get("intensity", []),
             mode="lines",
             line={"color": "#334155", "width": 1},
-            hovertemplate="m/z %{x:.6f}<br>强度 %{y:.4g}<extra></extra>",
+            hovertemplate="m/z %{x:.4f}<br>强度 %{y:.3e}<extra></extra>",
         )
     )
     figure.update_layout(title=title, xaxis_title="m/z", yaxis_title="强度")
@@ -686,16 +697,9 @@ def _spectrum_figure(frame: pd.DataFrame, title: str) -> go.Figure:
 
 def _style_figure(figure: go.Figure) -> go.Figure:
     figure.update_layout(
-        autosize=True,
-        margin={"l": 58, "r": 18, "t": 52, "b": 48},
-        hovermode="closest",
-        dragmode="zoom",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        autosize=True, margin={"l": 58, "r": 18, "t": 52, "b": 48}, dragmode="zoom"
     )
-    figure.update_xaxes(showgrid=True, gridcolor="rgba(148,163,184,0.18)")
-    figure.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.18)", rangemode="tozero")
-    return figure
+    return style_figure(figure)
 
 
 def _peak_preserving_downsample(
@@ -727,4 +731,4 @@ def _range_text(lower: float | None, upper: float | None, unit: str) -> str:
     if lower is None or upper is None:
         return "无"
     suffix = f" {unit}" if unit else ""
-    return f"{lower:.3f}–{upper:.3f}{suffix}"
+    return f"{lower:.3f}–{upper:.3f}{suffix}" if unit else f"{lower:.4f}–{upper:.4f}"

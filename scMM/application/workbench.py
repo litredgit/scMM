@@ -245,6 +245,73 @@ class AnalysisWorkspace:
             raise RuntimeError("Stale analysis result")
         return value
 
+    def sync_sample_metadata(self, samples, mapping=None, source_key="sample"):
+        """Update annotations on current/reset data without changing intensities."""
+        if self.data is None:
+            return set()
+        lookup = {s["id"]: s for s in samples}
+        names = {}
+        for sample in samples:
+            names.setdefault(sample["name"], []).append(sample["id"])
+        changed = set()
+        for data in (self.data, self._original):
+            if data is None:
+                continue
+            ids = (
+                data.obs["sample_id"].astype(str).copy()
+                if "sample_id" in data.obs
+                else pd.Series("", index=data.obs_names)
+            )
+            if source_key in data.obs:
+                for index, name in data.obs[source_key].astype(str).items():
+                    if ids.loc[index] not in lookup:
+                        candidates = names.get(name, [])
+                        ids.loc[index] = (mapping or {}).get(
+                            name, candidates[0] if len(candidates) == 1 else ""
+                        )
+            valid = ids.isin(lookup)
+            if not valid.any():
+                continue
+            if "sample_id" not in data.obs or not data.obs["sample_id"].astype(str).equals(ids):
+                changed.add("sample_id")
+            data.obs["sample_id"] = ids
+            for column, key in (
+                ("sample", "name"),
+                ("group", "group"),
+                ("subject", "subject"),
+                ("batch", "batch"),
+            ):
+                previous = (
+                    data.obs[column].astype(str)
+                    if column in data.obs
+                    else pd.Series("", index=data.obs_names)
+                )
+                update_mask = valid & ids.map(
+                    lambda identity, key=key: (
+                        key not in lookup.get(identity, {}).get("metadata_unresolved", [])
+                    )
+                )
+                values = ids.loc[update_mask].map(
+                    lambda identity, key=key: str(lookup[identity][key])
+                )
+                if not previous.loc[update_mask].equals(values):
+                    changed.add(column)
+                data.obs[column] = previous
+                data.obs.loc[update_mask, column] = values
+        if not changed:
+            return changed
+        for name, (_, value) in list(self.results.items()):
+            dependencies = (
+                {value.get("group_key")}
+                if isinstance(value, dict)
+                else {getattr(value, "label_key", None), getattr(value, "group_key", None)}
+            )
+            if dependencies & changed or (name == "shap" and "supervised" not in self.results):
+                self.results.pop(name, None)
+        self.revision += 1
+        self.results = {key: (self.token, value) for key, (_, value) in self.results.items()}
+        return changed
+
     def qc(self):
         return quality_metrics(self.require_data())
 
@@ -334,6 +401,8 @@ class AnalysisWorkspace:
             layer=layer,
             random_state=options.pop("random_state", 42),
         )
+        analyzer.label_key = label_key
+        analyzer.group_key = group_key
         analyzer.evaluate(model, **options)
         self.put_result("supervised", analyzer, token)
         return analyzer
@@ -443,6 +512,8 @@ class AnalysisWorkspace:
         if "supervised" in self.results:
             analyzer = self.result("supervised")
             reports["supervised"] = {
+                "label_key": getattr(analyzer, "label_key", None),
+                "group_key": getattr(analyzer, "group_key", None),
                 "diagnostics": analyzer.result_,
                 "train_obs": analyzer.train_obs_names_.tolist(),
                 "test_obs": analyzer.test_obs_names_.tolist(),

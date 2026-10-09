@@ -9,29 +9,31 @@ import os
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
+from .preferences import cpu_default, load_preferences
 from .processing import ProcessingParameters
 
 PROCESSING_HELP = {
-    "ref_mz": "参考离子 m/z，必须位于提取范围内；不是 EIC 图的显示范围。",
-    "ppm_tol": "扫描峰对齐到公共特征的质量容差（ppm）。",
-    "resolution": "m/z 200 处分辨率，控制合谱的变分辨率网格。",
-    "resample_points_per_fwhm": "每个半峰宽的网格点数；越大计算和内存开销越高。",
-    "ms_peak_snr_threshold": "总谱候选峰的信噪阈值，不等同于细胞特征 SNR。",
-    "cell_snr": "参考信号/基线比值阈值，用于划定细胞窗口。",
-    "peak_snr": "仅 legacy 使用：窗口强度相对基线阈值，不是真实噪声标准差 SNR。",
-    "baseline_filter_size": "基线窗口大小（扫描帧），不是秒。",
-    "max_zero_frac": "允许特征在细胞中取零值的最大比例，范围 0–1。",
-    "n_jobs": "并行任务数；-1 为全部 CPU；分块提取仍逐块执行。",
-    "mz_min": "正式提取 m/z 下限（包含）；影响合谱、特征选择和后续对齐。",
-    "mz_max": "正式提取 m/z 上限（包含）；与谱图显示范围独立。",
-    "extraction_method": "legacy 保持旧强度定义；snr_v1 使用扣基线丰度和背景噪声标准差。",
-    "reference_mz": "SNR 模式附加参考 m/z；空列表使用 ref_mz。所有参考须在提取范围内。",
-    "reference_mode": "多个参考窗口取 union（并集）或 intersection（交集）。",
-    "reference_ppm_tol": "SNR 参考离子匹配的最大质量误差（ppm）。",
-    "feature_snr_threshold": "仅 snr_v1 使用：扣基线峰顶/背景噪声标准差的阈值。",
-    "noise_window": "局部背景噪声估计窗口（扫描帧），至少 2。",
-    "feature_block_size": "每块特征数；控制临时矩阵内存，不改变科学参数。",
+    "ref_mz": "Reference ion m/z; must be within the extraction range, independent of plot limits.",
+    "ppm_tol": "Mass tolerance (ppm) used to align scan peaks to common features.",
+    "resolution": "Resolving power at m/z 200, used to construct the variable-resolution spectrum grid.",
+    "resample_points_per_fwhm": "Grid points per full width at half maximum; higher values require more resources.",
+    "ms_peak_snr_threshold": "Candidate-peak signal-to-noise threshold in the summed spectrum.",
+    "cell_snr": "Reference signal-to-baseline ratio threshold defining cell windows.",
+    "peak_snr": "Legacy window intensity-to-baseline threshold, not a noise-standard-deviation SNR.",
+    "baseline_filter_size": "Baseline window width in scan frames, not seconds.",
+    "max_zero_frac": "Maximum fraction of zero-valued cells allowed for a feature (0–1).",
+    "n_jobs": "Parallel workers; -1 uses all CPUs. Feature blocks are still processed sequentially.",
+    "mz_min": "Inclusive extraction lower m/z limit for spectrum merging, feature selection and alignment.",
+    "mz_max": "Inclusive extraction upper m/z limit, independent of plot limits.",
+    "extraction_method": "legacy retains historical intensities; snr_v1 uses baseline-subtracted abundance and background noise.",
+    "reference_mz": "Additional SNR reference masses; empty uses ref_mz. All must be within the extraction range.",
+    "reference_mode": "Combine reference windows by union or intersection.",
+    "reference_ppm_tol": "Maximum SNR reference-ion matching error in ppm.",
+    "feature_snr_threshold": "snr_v1 only: baseline-subtracted apex divided by background noise standard deviation.",
+    "noise_window": "Local background noise window in scan frames (at least 2).",
+    "feature_block_size": "Features per block; controls temporary memory without changing scientific parameters.",
 }
+
 
 # default, accepted type, lower/upper bound or choices, explanation
 ANALYSIS_SPECS = {
@@ -39,56 +41,106 @@ ANALYSIS_SPECS = {
         "total",
         str,
         ("total", "max", "pqn", "zscore", "log", "minmax", "quantile"),
-        "归一化方法；zscore 会产生负值，不能直接做丰度差异检验。",
+        "Normalization method; zscore produces negative values unsuitable for abundance differential tests.",
     ),
     "imputation": (
         "median",
         str,
         ("median", "mean", "knn"),
-        "零值视为缺失；插补和全数据变换可能造成监督学习泄漏。",
+        "Zeros are treated as missing; imputation and whole-dataset transforms can cause supervised-learning leakage.",
     ),
     "reduction": (
         "pca",
         str,
         ("pca", "umap", "tsne", "isomap", "lle"),
-        "降维方法；输入可为当前 X 或明确选择的 obsm。",
+        "Reduction method; input is current X or an explicitly selected embedding.",
     ),
-    "n_components": (2, int, (1, 1000), "输出维数，受样本数、特征数与算法限制。"),
-    "n_neighbors": (15, int, (2, 100000), "流形/图方法邻居数，必须少于细胞数。"),
-    "perplexity": (30.0, float, (1.0, 100000.0), "t-SNE perplexity，必须少于细胞数。"),
-    "random_state": (42, int, (0, 2147483647), "随机种子，随分析来源记录保存。"),
+    "n_components": (
+        2,
+        int,
+        (1, 1000),
+        "Output dimensions, limited by observations, features and the algorithm.",
+    ),
+    "n_neighbors": (
+        15,
+        int,
+        (2, 100000),
+        "Neighbors for manifold/graph methods; must be fewer than cells.",
+    ),
+    "perplexity": (30.0, float, (1.0, 100000.0), "t-SNE perplexity; must be fewer than cells."),
+    "random_state": (42, int, (0, 2147483647), "Random seed, saved with analysis provenance."),
     "clustering": (
         "kmeans",
         str,
         ("kmeans", "dbscan", "hierarchical", "leiden", "louvain"),
-        "聚类方法；DBSCAN 的 -1 为噪声，不作为生物学簇。",
+        "Clustering method; DBSCAN label -1 denotes noise, not a biological cluster.",
     ),
-    "n_clusters": (3, int, (2, 10000), "KMeans/层次聚类目标簇数。"),
+    "n_clusters": (
+        3,
+        int,
+        (2, 10000),
+        "Target number of clusters for KMeans or hierarchical clustering.",
+    ),
     "differential_method": (
         "mannwhitney",
         str,
         ("mannwhitney", "welch"),
-        "两组细胞比较；生物重复推断需先按重复汇总。",
+        "Two-group cell comparison; biological-replicate inference requires replicate-level aggregation.",
     ),
     "model": (
         "logistic",
         str,
         ("logistic", "lda", "plsda", "random_forest"),
-        "监督模型；样本组互斥划分和 CV，不能消除上游预处理泄漏。",
+        "Supervised model; group-disjoint split/CV does not eliminate upstream preprocessing leakage.",
     ),
-    "test_size": (0.2, float, (0.01, 0.99), "holdout 比例；训练和测试均须包含所有类别。"),
-    "cv": (5, int, (2, 100), "交叉验证折数，受每类样本数和独立组数限制。"),
-    "calibration_bins": (10, int, (2, 1000), "校准曲线的 quantile 分箱数，不执行概率重新校准。"),
+    "test_size": (
+        0.2,
+        float,
+        (0.01, 0.99),
+        "Holdout fraction; train and test sets must both contain all classes.",
+    ),
+    "cv": (
+        5,
+        int,
+        (2, 100),
+        "Cross-validation folds, limited by class counts and independent groups.",
+    ),
+    "calibration_bins": (
+        10,
+        int,
+        (2, 1000),
+        "Quantile bins for calibration diagnostics; does not recalibrate probabilities.",
+    ),
     "network_method": (
         "pearson",
         str,
         ("pearson", "spearman", "kendall"),
-        "特征相关系数；不代表因果或轨迹。",
+        "Feature correlation coefficient; does not imply causation or trajectories.",
     ),
-    "network_threshold": (0.7, float, (0.0, 1.0), "保留绝对相关系数不小于该值的边。"),
-    "network_top_features": (50, int, (1, 1000), "按方差选取前 N 个特征，限制相关矩阵与绘图规模。"),
-    "shap_background": (100, int, (1, 1000), "从训练集抽取 SHAP 背景样本，不重新训练模型。"),
-    "shap_samples": (100, int, (1, 1000), "最多解释的测试集样本数；跨样本和类别平均绝对 SHAP。"),
+    "network_threshold": (
+        0.7,
+        float,
+        (0.0, 1.0),
+        "Retain edges with absolute correlation at least this threshold.",
+    ),
+    "network_top_features": (
+        50,
+        int,
+        (1, 1000),
+        "Top N features by variance, limiting correlation matrix and plot size.",
+    ),
+    "shap_background": (
+        100,
+        int,
+        (1, 1000),
+        "SHAP background observations sampled from training data; no model refitting.",
+    ),
+    "shap_samples": (
+        100,
+        int,
+        (1, 1000),
+        "Maximum test observations explained; mean absolute SHAP across observations and classes.",
+    ),
 }
 
 
@@ -96,6 +148,7 @@ ANALYSIS_SPECS = {
 class WorkbenchDefaults:
     processing: ProcessingParameters
     analysis: dict
+    processing_overrides: frozenset[str] = frozenset()
 
     def to_dict(self):
         return {"processing": asdict(self.processing), "analysis": dict(self.analysis)}
@@ -107,7 +160,12 @@ def load_defaults(path: str | Path | None = None) -> WorkbenchDefaults:
     override = {} if path is None else json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(override, dict) or set(override) - {"processing", "analysis"}:
         raise ValueError("config sections must be processing and/or analysis")
-    processing = asdict(ProcessingParameters(ref_mz=734.5929))
+    preferences = load_preferences()
+    processing = asdict(
+        ProcessingParameters(
+            ref_mz=preferences["presets"][preferences["selected"]], n_jobs=cpu_default()
+        )
+    )
     updates = override.get("processing", {})
     if not isinstance(updates, dict) or set(updates) - set(processing):
         raise ValueError("unknown processing parameter or invalid section")
@@ -146,4 +204,4 @@ def load_defaults(path: str | Path | None = None) -> WorkbenchDefaults:
         analysis[key] = value
     if set(PROCESSING_HELP) != {field.name for field in fields(ProcessingParameters)}:
         raise RuntimeError("processing parameter help is incomplete")
-    return WorkbenchDefaults(parameters, analysis)
+    return WorkbenchDefaults(parameters, analysis, frozenset(override.get("processing", {})))

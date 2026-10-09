@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import asdict
@@ -10,6 +11,7 @@ from datetime import datetime
 from html import escape
 from io import BytesIO
 from pathlib import Path
+from uuid import uuid4
 
 import pandas as pd
 import panel as pn
@@ -20,6 +22,14 @@ from anndata import read_h5ad
 from scMM.analysis.quality import quality_metrics
 from scMM.application import OutputRoot, StorageCatalog, StorageRoot
 from scMM.application.parameters import load_defaults
+from scMM.application.preferences import BUILTIN_PRESETS, load_preferences, save_preferences
+from scMM.application.preview_cache import (
+    load_detection,
+    prepare_shared_targets,
+    reusable_preview,
+    save_preview,
+    signature,
+)
 from scMM.application.project_batch import (
     batches,
     preflight,
@@ -28,10 +38,12 @@ from scMM.application.project_batch import (
     stop_after_current,
     submit,
 )
-from scMM.application.projects import PROJECT_ROOT, ProjectStore, child_path
+from scMM.application.projects import PROJECT_ROOT, ProjectStore, child_path, sample_parameters
 from scMM.application.workbench import read_dataset
 
+from .file_browser import FileBrowser
 from .layout import CONTENT_STYLE, TaskDock, UnsavedGuard, fit_plot
+from .presentation import apply_presentation, english_parameters
 from .project_views import ProjectRawViews
 from .raw_components import PreviewWorkspace as PreviewWorkspace
 
@@ -46,6 +58,19 @@ STEPS = [
 ]
 
 ANALYSIS_FIELDS = (
+    "pca_input",
+    "pca_dimensions",
+    "whiten",
+    "min_dist",
+    "metric",
+    "learning_rate",
+    "max_iter",
+    "color_sort",
+    "color_descending",
+    "volcano_fdr",
+    "volcano_effect",
+    "volcano_labels",
+    "volcano_order",
     "group",
     "group_a",
     "group_b",
@@ -109,11 +134,16 @@ class ProjectWorkspace:
         self.catalog = StorageCatalog(self.roots)
         self.defaults = defaults or load_defaults()
         self.project = None
+        self.analysis_navigation = pn.Column(visible=False)
+        self.image_format = pn.widgets.Select(
+            label="Figure download format", options=["svg", "png"], value="svg", width=160
+        )
+        self.image_format.param.watch(lambda _: self._format_images(), "value")
         self.step = 0
         self._updating = False
         self._periodic = None
         self._checked = self._candidate = None
-        self.header = pn.pane.Markdown("选择或新建一个实验项目。")
+        self.header = pn.pane.Markdown("选择或新建一个实验项目。", styles={"flex": "1 1 280px"})
         self.unsaved_guard = UnsavedGuard(height=0, margin=0)
         self.message = pn.pane.Markdown("")
         self.task_status = pn.pane.Markdown("任务：尚未打开项目")
@@ -168,7 +198,13 @@ class ProjectWorkspace:
         self.footer = pn.Row(self.previous, pn.Spacer(), self.next)
         self.panel = pn.Column(
             self.unsaved_guard,
-            pn.Row(self.header, self.save_button),
+            pn.FlexBox(
+                self.header,
+                self.image_format,
+                self.save_button,
+                flex_wrap="wrap",
+                align_items="center",
+            ),
             self.body,
             self.footer,
             self.task_dock,
@@ -231,7 +267,23 @@ class ProjectWorkspace:
 
     def _create(self):
         self._allow_leave()
-        self.activate(self.store.create(self.name.value, self.defaults))
+        preferences = load_preferences()
+        defaults = self.defaults.to_dict()
+        if "ref_mz" not in self.defaults.processing_overrides:
+            defaults["processing"]["ref_mz"] = preferences["presets"][preferences["selected"]]
+        from scMM.application.parameters import WorkbenchDefaults
+        from scMM.application.processing import ProcessingParameters
+
+        project = self.store.create(
+            self.name.value,
+            WorkbenchDefaults(ProcessingParameters(**defaults["processing"]), defaults["analysis"]),
+        )
+        project.manifest["cell_type"] = preferences["selected"]
+        project.manifest["auto_ranges"] = not bool(
+            {"mz_min", "mz_max"} & self.defaults.processing_overrides
+        )
+        project.manifest["manual_parameters"] = not project.manifest["auto_ranges"]
+        self.activate(project)
 
     def _open(self):
         self._allow_leave()
@@ -332,8 +384,18 @@ class ProjectWorkspace:
         self._raw_page()
         self._batch_page()
         self._preprocess_page()
+        self.preprocess_page.extend(
+            [
+                self.analysis.matrix_download,
+                self.analysis.qc_download,
+                self.analysis.history_download,
+            ]
+        )
         self._analysis_page()
         self._results_page()
+        for owner in (self, self.components, self.analysis):
+            english_parameters(owner)
+        self._prepare_sample_mapping()
         self._sample_summary()
         self.go(1)
 
@@ -355,7 +417,7 @@ class ProjectWorkspace:
 
     def _preview_status(self, sample):
         preview = sample.get("preview")
-        current = sample["parameters"] or self.project.manifest["parameters"]
+        current = sample_parameters(self.project, sample)
         if preview is None:
             return "尚未预览"
         if json.dumps(preview["parameters"], sort_keys=True) != json.dumps(current, sort_keys=True):
@@ -388,6 +450,19 @@ class ProjectWorkspace:
             },
         )
         self.sample_table.on_edit(self._edit_sample)
+        self.sample_mapping = pn.widgets.Tabulator(
+            pd.DataFrame(columns=["Result sample", "Project sample"]), show_index=False, height=180
+        )
+        self.mapping_source = pn.widgets.Select(label="Result sample field", options=[])
+        self.mapping_source.param.watch(lambda e: self._change_mapping_source(e.new), "value")
+        self.mapping_panel = pn.Column(
+            self.mapping_source,
+            "匹配已有结果中的样本；空白项保持未关联。",
+            self.sample_mapping,
+            self.button("应用样本映射", self._apply_sample_mapping),
+            visible=False,
+        )
+
         self.file_root = pn.widgets.Select(
             label="原始文件存储", options=[r.label for r in self.roots]
         )
@@ -404,6 +479,7 @@ class ProjectWorkspace:
             "group：实验分组；subject：独立生物来源，同一来源的多个文件填写相同 ID；batch：采集批次。",
             self.sample_table,
             self.sample_csv,
+            self.mapping_panel,
             self.button("移出选中样本（不删除文件）", self._remove_samples),
             pn.Accordion(
                 (
@@ -430,7 +506,7 @@ class ProjectWorkspace:
                     ),
                 )
             ),
-            "修改样本表不会改写已有数据，重新处理并审核后才替换。已有结果可直接进入预处理。",
+            "修改样本信息即时更新下游分组；依赖分组的分析需重算，提取结果保留。离开前请保存项目。",
         )
 
     def _import_sample_csv(self):
@@ -447,6 +523,11 @@ class ProjectWorkspace:
             raise ValueError("CSV 中存在项目未添加的样本名称")
         for _, row in frame.iterrows():
             samples[row["name"]].update(row.to_dict())
+            samples[row["name"]]["metadata_unresolved"] = [
+                key
+                for key in samples[row["name"]].get("metadata_unresolved", [])
+                if key not in frame.columns
+            ]
         self.project.dirty = True
         self._update_samples()
 
@@ -457,7 +538,7 @@ class ProjectWorkspace:
         sample = self.project.samples[self.sample_table.selection[0]]
         if any(s["id"] != sample["id"] and s["path"] == str(path) for s in self.project.samples):
             raise ValueError("该文件已关联其他样本")
-        sample.update(path=str(path), storage=self.file_root.value)
+        sample.update(path=str(path), storage=self.file_root.value, result_only=False)
         sample.pop("preview", None)
         self.project.dirty = True
         self._update_samples()
@@ -470,23 +551,144 @@ class ProjectWorkspace:
 
     def _edit_sample(self, event):
         if event.column in {"name", "group", "subject", "batch"}:
-            self.project.samples[event.row][event.column] = str(event.value or "")
+            sample = self.project.samples[event.row]
+            value = str(event.value or "").strip()
+            if event.column == "name" and (
+                not value
+                or any(s["id"] != sample["id"] and s["name"] == value for s in self.project.samples)
+            ):
+                self.message.object = "样本名称必须非空且唯一。"
+                self.sample_table.value = self._sample_frame()
+                return
+            sample[event.column] = value
+            sample["metadata_unresolved"] = [
+                key for key in sample.get("metadata_unresolved", []) if key != event.column
+            ]
             self.project.dirty = True
             self._checked = None
+            self._update_samples()
             self.refresh_header()
 
-    def _file_browser(self):
-        root = self.catalog.root(self.file_root.value)
-        self.files = pn.widgets.FileSelector(
-            str(root.path),
-            root_directory=str(root.path),
-            file_pattern="*",
-            only_files=True,
-            height=250,
+    def _sync_metadata(self):
+        before = set(self.project.workspace.results)
+        changed = self.project.workspace.sync_sample_metadata(
+            self.project.samples,
+            self.project.manifest.get("sample_mapping"),
+            self.project.manifest.get("sample_column", "sample"),
         )
+        if changed:
+            stale = before - set(self.project.workspace.results)
+            for name, report in list(self.project.saved_reports.items()):
+                dependencies = {report.get("group_key"), report.get("label_key")}
+                if dependencies & changed or (
+                    name in {"supervised", "shap"} and not dependencies - {None}
+                ):
+                    stale.add(name)
+                    self.project.saved_reports.pop(name, None)
+            if "supervised" in stale:
+                stale.add("shap")
+                self.project.saved_reports.pop("shap", None)
+            for name in stale:
+                for figure in RESULT_PLOTS.get(name, ()):
+                    self.project.views.get("figures", {}).pop(figure, None)
+            self.project.report_token = self.project.workspace.token
+            self.analysis.refresh()
+            self._sample_summary()
+            self.analysis.status.object = "样本信息已更新；受影响分析已失效，请重新计算。"
+
+    def _change_mapping_source(self, value):
+        if not value or getattr(self, "_mapping_refreshing", False):
+            return
+        self.project.manifest["sample_column"] = value
+        self.project.dirty = True
+        self._prepare_sample_mapping()
+
+    def _prepare_sample_mapping(self):
+        data = self.project.workspace.data
+        if data is None:
+            self.mapping_panel.visible = False
+            return
+        source = self.project.manifest.get("sample_column")
+        if source not in data.obs:
+            source = next(
+                (key for key in ("sample", "sample_id", "source_file") if key in data.obs), None
+            )
+        self._mapping_refreshing = True
+        try:
+            self.mapping_source.options = ["", *list(data.obs.columns)]
+            self.mapping_source.value = source or ""
+        finally:
+            self._mapping_refreshing = False
+        self.mapping_panel.visible = True
+        if source is None:
+            return
+        self.project.manifest["sample_column"] = source
+        names = data.obs[source].dropna().astype(str).unique().tolist()
+        if not self.project.samples:
+            for name in names:
+                rows = data.obs.loc[data.obs[source].astype(str).eq(name)]
+                values = {
+                    key: str(rows[key].iloc[0])
+                    if key in rows
+                    and rows[key].nunique(dropna=False) == 1
+                    and pd.notna(rows[key].iloc[0])
+                    else ""
+                    for key in ("group", "subject", "batch")
+                }
+                self.project.samples.append(
+                    {
+                        "id": uuid4().hex,
+                        "name": name,
+                        "path": "",
+                        "storage": self.roots[0].label,
+                        "parameters": None,
+                        "result_only": True,
+                        "metadata_unresolved": [
+                            key
+                            for key in ("group", "subject", "batch")
+                            if key in rows and rows[key].nunique(dropna=False) > 1
+                        ],
+                        **values,
+                    }
+                )
+        matches = {s["name"]: s["id"] for s in self.project.samples}
+        mapping = self.project.manifest.setdefault("sample_mapping", {})
+        mapping.update(
+            {name: matches[name] for name in names if name in matches and name not in mapping}
+        )
+        labels = {s["id"]: s["name"] for s in self.project.samples}
+        self.sample_mapping.value = pd.DataFrame(
+            [
+                {"Result sample": name, "Project sample": labels.get(mapping.get(name), "")}
+                for name in names
+            ]
+        )
+        self.sample_mapping.editors = {
+            "Result sample": None,
+            "Project sample": {"type": "list", "values": ["", *matches]},
+        }
+        self.mapping_panel.visible = True
+        self._update_samples()
+
+    def _apply_sample_mapping(self):
+        by_name = {s["name"]: s["id"] for s in self.project.samples}
+        mapping = {}
+        for _, row in self.sample_mapping.value.iterrows():
+            target = row["Project sample"]
+            if target:
+                if target not in by_name:
+                    raise ValueError("请选择项目中现有样本")
+                mapping[row["Result sample"]] = by_name[target]
+        self.project.manifest["sample_mapping"] = mapping
+        self.project.dirty = True
+        self._sync_metadata()
+
+    def _file_browser(self):
+        self.files = FileBrowser(self.catalog, self.file_root.value)
         self.file_browser[:] = [self.files]
 
     def _update_samples(self):
+        self._sync_metadata()
         self.sample_table.value = self._sample_frame()
         previous = self.raw_sample.value
         self.raw_sample.options = {s["name"]: s["id"] for s in self.project.samples}
@@ -519,6 +721,8 @@ class ProjectWorkspace:
         a = self.analysis
         data = read_dataset(a.catalog, a.root.value, a.path.value, trust_pickle=a.trust.value)
         self.project.workspace.replace(data, source=a.path.value)
+        self._prepare_sample_mapping()
+        self._sync_metadata()
         self.project.saved_reports = {}
         self.project.dirty = True
         self.replace_confirm.value = False
@@ -532,8 +736,91 @@ class ProjectWorkspace:
         )
         self.raw_sample.param.watch(lambda _: self._select_raw(), "value")
         self.parameter_note = pn.pane.Markdown("")
+        r.setup_navigation()
         widgets = r.processing.parameter_widgets
         basic = ["extraction_method", "ref_mz", "mz_min", "mz_max", "cell_snr", "peak_snr"]
+        prefs = load_preferences()
+        self.cell_type = pn.widgets.Select(
+            label="Cell type",
+            options=list(prefs["presets"]),
+            value=self.project.manifest.get("cell_type", prefs["selected"])
+            if self.project.manifest.get("cell_type", prefs["selected"]) in prefs["presets"]
+            else prefs["selected"],
+        )
+        self.preset_table = pn.widgets.Tabulator(
+            pd.DataFrame(list(prefs["presets"].items()), columns=["Cell type", "Reference m/z"]),
+            show_index=False,
+            height=180,
+        )
+        self.preset_name = pn.widgets.TextInput(label="New cell type")
+
+        def choose_preset(event):
+            frame = self.preset_table.value
+            match = frame.loc[frame["Cell type"] == event.new, "Reference m/z"]
+            if len(match):
+                widgets["ref_mz"].value = float(match.iloc[0])
+
+        self.cell_type.param.watch(choose_preset, "value")
+
+        def save_presets():
+            frame = self.preset_table.value
+            if frame["Cell type"].duplicated().any():
+                raise ValueError("细胞类型名称不能重复")
+            presets = dict(zip(frame["Cell type"], frame["Reference m/z"], strict=True))
+            if not presets:
+                raise ValueError("至少保留一个细胞类型预设")
+            selected = (
+                self.cell_type.value if self.cell_type.value in presets else next(iter(presets))
+            )
+            save_preferences(presets, selected)
+            self.cell_type.options = list(presets)
+            self.cell_type.value = selected
+
+        def add_preset():
+            if (
+                not self.preset_name.value.strip()
+                or self.preset_name.value in self.preset_table.value["Cell type"].tolist()
+            ):
+                raise ValueError("细胞类型名称必须非空且唯一")
+            self.preset_table.value = pd.concat(
+                [
+                    self.preset_table.value,
+                    pd.DataFrame(
+                        [[self.preset_name.value, widgets["ref_mz"].value]],
+                        columns=self.preset_table.value.columns,
+                    ),
+                ],
+                ignore_index=True,
+            )
+
+        def delete_preset():
+            self.preset_table.value = self.preset_table.value.loc[
+                ~self.preset_table.value["Cell type"].eq(self.cell_type.value)
+            ].reset_index(drop=True)
+
+        preset_editor = pn.Accordion(
+            (
+                "编辑全局预设",
+                pn.Column(
+                    self.preset_table,
+                    self.preset_name,
+                    self.button("添加预设", add_preset),
+                    self.button("删除当前预设", delete_preset),
+                    self.button(
+                        "恢复内置值",
+                        lambda: setattr(
+                            self.preset_table,
+                            "value",
+                            pd.DataFrame(
+                                list(BUILTIN_PRESETS.items()),
+                                columns=["Cell type", "Reference m/z"],
+                            ),
+                        ),
+                    ),
+                    self.button("保存全局预设", save_presets),
+                ),
+            )
+        )
         self.raw_page = pn.Column(
             "## ② 原始谱检查",
             "打开文件、细胞检测和靠后 RAW 单扫描可能需要等待；细胞预览执行完整提取，"
@@ -545,9 +832,36 @@ class ProjectWorkspace:
                 pn.Column(
                     r.summary,
                     pn.Tabs(
-                        ("离子流", pn.Column(r.tic_pane, r.eic_pane)),
-                        ("合并谱", r.spectrum_pane),
-                        ("单扫描", pn.Column(r.scan_index, r.scan_button, r.scan_pane)),
+                        (
+                            "离子流",
+                            pn.Column(
+                                r.selection_mode,
+                                r.tic_pane,
+                                r.tic_download,
+                                r.eic_pane,
+                                r.eic_download,
+                            ),
+                        ),
+                        (
+                            "合并谱",
+                            pn.Column(
+                                pn.Row(r.merge_start, r.merge_end),
+                                r.average_spectrum,
+                                r.merge_update,
+                                r.merge_note,
+                                r.spectrum_pane,
+                                r.spectrum_download,
+                            ),
+                        ),
+                        (
+                            "单扫描",
+                            pn.Column(
+                                r.scan_slider,
+                                pn.Row(r.scan_time, r.scan_index),
+                                pn.Row(r.scan_previous, r.scan_next, r.scan_button),
+                                r.scan_pane,
+                            ),
+                        ),
                     ),
                     pn.Accordion(
                         (
@@ -566,6 +880,8 @@ class ProjectWorkspace:
                     ),
                 ),
                 pn.Column(
+                    self.cell_type,
+                    preset_editor,
                     *[widgets[k] for k in basic],
                     pn.Accordion(
                         (
@@ -601,7 +917,7 @@ class ProjectWorkspace:
     def _select_raw(self):
         sample = self._sample()
         self.components._clear_raw_view()
-        params = (sample["parameters"] if sample else None) or self.project.manifest["parameters"]
+        params = sample_parameters(self.project, sample)
         for key, value in params.items():
             self.components.processing.parameter_widgets[key].value = (
                 ", ".join(map(str, value)) if key == "reference_mz" else value
@@ -614,21 +930,41 @@ class ProjectWorkspace:
         sample = self._sample()
         if sample is None:
             raise ValueError("请先添加并选择样本")
+        if sample.get("result_only"):
+            raise ValueError("此样本来自已有结果，请先重新定位原始文件再进行原始谱检查")
         r = self.components
         r.root_select.value = sample["storage"]
         r._selector.value = [sample["path"]]
         r._load_selected(None)
         if r.preview is None:
             raise ValueError("原始文件读取失败")
+        r._scan_catalog()
+        r._selection_mode()
+        if (
+            not sample.get("range_initialized")
+            and sample["parameters"] is None
+            and not self.project.manifest.get("manual_parameters")
+        ):
+            summary = r.preview.summary
+            if summary.mz_min is not None and summary.mz_max is not None:
+                widgets = r.processing.parameter_widgets
+                widgets["mz_min"].value = math.floor(summary.mz_min / 10) * 10
+                widgets["mz_max"].value = math.ceil(summary.mz_max / 10) * 10
+                sample["auto_mz_range"] = [widgets["mz_min"].value, widgets["mz_max"].value]
+                sample["range_initialized"] = True
+                self.project.dirty = True
 
     def _apply_parameters(self, exception):
         params = asdict(self.components.processing._parameters())
+        self.project.manifest["cell_type"] = self.cell_type.value
         if exception:
             if self._sample() is None:
                 raise ValueError("请选择样本")
             self._sample()["parameters"] = params
+            self._sample()["manual_parameters"] = True
         else:
             self.project.manifest["parameters"] = params
+            self.project.manifest["manual_parameters"] = True
         self.project.dirty = True
         self._checked = None
         self.parameter_note.object = "参数已应用；旧提取结果不会自动更新，请重新预览和处理。"
@@ -639,10 +975,43 @@ class ProjectWorkspace:
         raw = self.components
         if sample is None or raw.preview is None or str(raw.preview.path) != sample["path"]:
             raise ValueError("先打开当前样本")
-        raw._preview_cells()
+        targets = None
+        if self.project.manifest["feature_strategy"] == "shared":
+            self._initialize_ranges()
+            request = preflight(self.project, self.catalog)
+            if (
+                self.project.manifest.get("auto_ranges")
+                and not self.project.manifest.get("manual_parameters")
+                and sample["parameters"] is None
+            ):
+                for key in ("mz_min", "mz_max"):
+                    raw.processing.parameter_widgets[key].value = request["parameters"][key]
+            from scMM.application.project_batch import SHARED_FIELDS
+
+            current = asdict(raw.processing._parameters())
+            if any(current[key] != request["parameters"][key] for key in SHARED_FIELDS):
+                raise ValueError("共同特征参数已编辑，请先应用为项目默认再预览")
+            targets = prepare_shared_targets(self.project, request)
+        parameters = raw.processing._parameters()
+        before = signature(sample["path"], parameters)
+        cached = reusable_preview(
+            self.project.folder, {**sample, "parameters": asdict(parameters)}, targets
+        )
+        raw._preview_cells(
+            cached_result=load_detection(cached) if cached else None, targets=targets
+        )
         if raw.cell_download.disabled:
             raise ValueError(str(raw.cell_status.object))
-        sample["preview"] = {"parameters": asdict(raw.processing._parameters()), "confirmed": False}
+        raw._selection_mode()
+        if cached:
+            raw.cell_status.object += " 已复用持久化预览，无需重新提取。"
+        sample["preview"] = {
+            "parameters": asdict(parameters),
+            "confirmed": False,
+            "artifact": sample["preview"]["artifact"]
+            if cached
+            else save_preview(self.project, sample, raw.preview, parameters, before),
+        }
         self.project.dirty = True
         self.sample_table.value = self._sample_frame()
 
@@ -677,7 +1046,7 @@ class ProjectWorkspace:
             "处理结束不等于已建立当前数据：请检查各样本状态与 QC，选择成功样本，"
             "点击“确认纳入并建立当前数据”，再进入预处理或分析。",
             self.strategy,
-            "共同特征要求统一范围、合谱与对齐参数。单样本失败继续其他样本；共同特征构建失败则停止整批。",
+            "共同特征要求统一合谱与对齐参数；自动范围取所有样本范围的并集。预览特征与整批共同特征一致才可复用；不一致时重新提取。单样本失败继续其他样本。",
             self.button("检查全部样本与实际参数", self._preflight),
             pn.Accordion(("本次预检的实际参数", self.preflight_details)),
             self.batch_confirm,
@@ -696,7 +1065,29 @@ class ProjectWorkspace:
         )
         self._refresh_batches()
 
+    def _initialize_ranges(self):
+        if self.project.manifest.get("auto_ranges") and not self.project.manifest.get(
+            "manual_parameters"
+        ):
+            for sample in self.project.samples:
+                if (
+                    sample["parameters"] is not None
+                    or sample.get("auto_mz_range")
+                    or sample.get("result_only")
+                ):
+                    continue
+                preview = self.components.service.open(sample["storage"], sample["path"])
+                summary = preview.summary
+                if summary.mz_min is not None and summary.mz_max is not None:
+                    sample["auto_mz_range"] = [
+                        math.floor(summary.mz_min / 10) * 10,
+                        math.ceil(summary.mz_max / 10) * 10,
+                    ]
+                    sample["range_initialized"] = True
+                    self.project.dirty = True
+
     def _preflight(self):
+        self._initialize_ranges()
         request = preflight(self.project, self.catalog)
         self._checked = json.dumps(request, sort_keys=True)
         self.preflight_details.object = request
@@ -755,6 +1146,7 @@ class ProjectWorkspace:
             raise ValueError("请选择批次")
         data = reviewed_dataset(self.batch_select.value, self.included.value)
         self.project.workspace.replace(data, source=self.batch_select.value)
+        self._sync_metadata()
         self.project.saved_reports = {}
         self.project.dirty = True
         self.replace_confirm.value = False
@@ -820,6 +1212,7 @@ class ProjectWorkspace:
                     {
                         "样本": row["name"],
                         "状态": TASK_LABELS.get(row["status"], row["status"]),
+                        "结果来源": "复用预览" if row.get("reused_preview") else "本批处理",
                         "细胞数": row.get("cells"),
                         "特征数": row.get("features"),
                         "错误": row.get("error", ""),
@@ -1009,8 +1402,8 @@ class ProjectWorkspace:
             "shap_background": "SHAP 训练背景样本上限",
             "shap_samples": "SHAP 测试解释样本上限",
         }
-        for name, label in labels.items():
-            getattr(a, name).label = label
+        for name in labels:
+            getattr(a, name).label = name
         discovery = pn.Column(
             "### 1. 确认输入",
             a.summary,
@@ -1022,6 +1415,7 @@ class ProjectWorkspace:
                 (
                     "高级参数与结果名称",
                     pn.Column(
+                        a.reduction_options,
                         a.neighbors,
                         a.perplexity,
                         a.seed,
@@ -1033,8 +1427,11 @@ class ProjectWorkspace:
             a._button("运行降维", a._reduce),
             "### 3. 查看结果",
             a.embedding_view,
+            a.color_search,
+            pn.Row(a.color_sort, a.color_descending),
             a.color,
             a.embedding_plot,
+            a.embedding_download,
             pn.Accordion(
                 (
                     "可选：细胞聚类",
@@ -1073,8 +1470,9 @@ class ProjectWorkspace:
         a.cluster_method.param.watch(relevant, "value")
         relevant()
         self.source_summary = pn.pane.DataFrame(pd.DataFrame(), index=False)
-        self.purpose = pn.widgets.Select(
+        self.purpose = pn.widgets.RadioButtonGroup(
             label="你希望了解什么？",
+            orientation="vertical",
             options=[
                 "整体分布与分群",
                 "实验分组差异",
@@ -1095,11 +1493,15 @@ class ProjectWorkspace:
                         pn.Row(a.group, a.group_a, a.group_b),
                         pn.Row(a.diff_layer, a.diff_method),
                         a._button("运行比较", a._differentiate),
+                        a.volcano_controls,
                         a.volcano,
                         a.features,
+                        a._button("清空选择", lambda: setattr(a.features, "value", [])),
                         a.hide_zero,
+                        a.violin_width,
                         a.violin,
                         a.diff_table,
+                        a.diff_download,
                     ),
                     "各细胞簇的代表特征": pn.Column(
                         "### 每簇对其余细胞",
@@ -1115,6 +1517,7 @@ class ProjectWorkspace:
                         ),
                         "每个比较内对全部特征校正，不是跨簇联合校正。",
                         a.marker_table,
+                        a.extra_downloads["markers"],
                     ),
                     "特征相关性": pn.Column(
                         "### 特征相关网络，不代表因果或轨迹",
@@ -1126,15 +1529,21 @@ class ProjectWorkspace:
                         a._button("运行相关分析", a._network),
                         a.network_plot,
                         a.network_table,
+                        a.extra_downloads["network"],
                     ),
                     "分类模型与解释": pn.Column(
                         self.exploratory_split,
                         a._button("检查并训练当前模型", a._train),
                         a.supervised_page,
+                        a.model_download,
+                        a.extra_downloads["shap"],
                     ),
                 }[self.purpose.value]
             ]
+            apply_presentation(self.analysis_body)
+            self._format_images()
 
+        self.analysis_navigation[:] = ["### 分析", self.purpose]
         self.purpose.param.watch(show, "value")
         show()
         self.analysis_page = pn.Column(
@@ -1142,7 +1551,6 @@ class ProjectWorkspace:
             "分析在当前会话同步运行，大数据的降维或 SHAP 可能较慢；运行结束前请勿刷新页面。"
             "参数变化后旧图仅供对照，需重新计算才能下载对应结果。",
             "每组单一来源时仅作细胞级探索；细胞数不是独立生物重复，FDR 不能修复该问题。",
-            self.purpose,
             self.source_summary,
             self.analysis_body,
         )
@@ -1185,10 +1593,33 @@ class ProjectWorkspace:
             "项目保存用于继续工作，下载不替代项目保存。模型对象不保存，继续模型运算需重新训练。",
             self.button("保存项目", self._save),
             pn.Row(a.matrix_download, a.diff_download, a.model_download),
+            pn.Row(a.embedding_download, a.qc_download, a.history_download),
+            pn.Row(
+                self.components.tic_download,
+                self.components.eic_download,
+                self.components.spectrum_download,
+                self.components.cell_download,
+            ),
+            pn.Accordion(
+                (
+                    "当前分析图形",
+                    pn.Column(
+                        a.embedding_plot,
+                        a.volcano,
+                        a.violin_width,
+                        a.violin,
+                        a.network_plot,
+                        a.roc,
+                        a.pr,
+                        a.calibration,
+                        a.shap_plot,
+                    ),
+                )
+            ),
             pn.Row(*a.extra_downloads.values()),
             self.h5ad_download,
             self.project_download,
-            "图形右上角可导出 SVG；上次保存的下载不包含未保存修改。",
+            "页顶选择 PNG/SVG，再使用图形右上角相机按钮下载；上次保存的下载不包含未保存修改。",
             pn.Accordion(("已保存的只读报告", pn.Column(self.reports, self.report_download))),
             self.saved_views,
         )
@@ -1197,9 +1628,9 @@ class ProjectWorkspace:
     def _refresh_reports(self):
         if not hasattr(self, "reports"):
             return
-        if self.project.saved_token != self.project.workspace.token:
+        if (self.project.report_token or self.project.saved_token) != self.project.workspace.token:
             self.project.saved_reports = {}
-            self.project.views = {}
+            self.project.views.pop("figures", None)
         self.reports.object = self.project.saved_reports
         self.report_download.data = None
         self.project_download.data = None
@@ -1281,10 +1712,31 @@ class ProjectWorkspace:
             ]
         )
         self.body[:] = [pages[self.step]]
+        self.analysis_navigation.visible = self.step == 5
+        apply_presentation(self.body)
+        self._format_images()
         self.footer.visible = self.step != 0
         self.previous.disabled = self.step <= 1
         self.next.disabled = self.step == 6
         self.refresh_header()
+
+    def _format_images(self):
+        from bokeh.models import CustomJS
+
+        for pane in self.body.select(pn.pane.Plotly):
+            # Pages can attach panes before presentation callbacks are registered.
+            # Install on live models as well as future models (presentation.py).
+            for model, _parent in pane._models.values():
+                if not model.js_property_callbacks.get("change:config"):
+                    model.js_on_change(
+                        "config", CustomJS(code="cb_obj.properties.frames.change.emit()")
+                    )
+            config = {
+                **(pane.config or {}),
+                "toImageButtonOptions": {"format": self.image_format.value},
+            }
+            if pane.config != config:
+                pane.config = config
 
     def refresh_header(self):
         self.save_button.disabled = self.project is None
@@ -1306,7 +1758,7 @@ def create_app(roots, output_roots=(), defaults=None, *, project_root=PROJECT_RO
     workspace = ProjectWorkspace(roots, project_root=project_root, defaults=defaults)
     template = pn.template.FastListTemplate(
         title="scMM 实验项目",
-        sidebar=[workspace.navigation],
+        sidebar=[workspace.navigation, workspace.analysis_navigation],
         sidebar_width=230,
         main=[workspace.panel],
         accent_base_color="#0f766e",

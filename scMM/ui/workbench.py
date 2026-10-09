@@ -22,7 +22,8 @@ from .analysis_plots import (
     violin_figure,
     volcano_figure,
 )
-from .layout import fit_plot
+from .file_browser import FileBrowser
+from .layout import PlotWidth, fit_plot
 
 
 def _plot(title):
@@ -101,14 +102,7 @@ class WorkbenchPanels:
         )
 
     def _browse(self, _event=None):
-        root = self.catalog.root(self.root.value)
-        selector = pn.widgets.FileSelector(
-            str(root.path),
-            root_directory=str(root.path),
-            only_files=False,
-            file_pattern="*",
-            height=230,
-        )
+        selector = FileBrowser(self.catalog, self.root.value, results=True)
         selector.param.watch(
             lambda e: setattr(self.path, "value", str(e.new[0]) if len(e.new) == 1 else ""), "value"
         )
@@ -209,6 +203,37 @@ class WorkbenchPanels:
         self.neighbors = self.field("n_neighbors")
         self.perplexity = self.field("perplexity")
         self.seed = self.field("random_state")
+        self.pca_input = pn.widgets.Checkbox(label="PCA preprocessing", value=True)
+        self.pca_dimensions = pn.widgets.IntInput(label="PCA input dimensions", value=20, start=1)
+        self.whiten = pn.widgets.Checkbox(label="whiten", value=False)
+        self.min_dist = pn.widgets.FloatInput(label="min_dist", value=0.3, start=0, end=1)
+        self.metric = pn.widgets.Select(
+            label="metric", options=["euclidean", "manhattan", "cosine"]
+        )
+        self.learning_rate = pn.widgets.TextInput(label="learning_rate", value="auto")
+        self.max_iter = pn.widgets.IntInput(label="max_iter", value=1000, start=250)
+        self.reduction_options = pn.Column(
+            self.pca_input,
+            self.pca_dimensions,
+            self.whiten,
+            self.min_dist,
+            self.metric,
+            self.learning_rate,
+            self.max_iter,
+        )
+
+        def reduction_visibility(_=None):
+            method = self.reduction.value
+            self.pca_input.visible = method == "umap"
+            self.pca_dimensions.visible = method == "umap" and self.pca_input.value
+            self.whiten.visible = method == "pca" or (method == "umap" and self.pca_input.value)
+            self.min_dist.visible = method == "umap"
+            self.metric.visible = method in {"umap", "tsne", "isomap"}
+            self.learning_rate.visible = self.max_iter.visible = method == "tsne"
+
+        self.reduction.param.watch(reduction_visibility, "value")
+        self.pca_input.param.watch(reduction_visibility, "value")
+        reduction_visibility()
         self.scale = pn.widgets.Checkbox(label="降维前标准化", value=False)
         self.embedding_key = pn.widgets.TextInput(
             label="新嵌入键（不覆盖已有键）", value=f"X_{self.reduction.value}"
@@ -217,7 +242,14 @@ class WorkbenchPanels:
             lambda e: setattr(self.embedding_key, "value", f"X_{e.new}"), "value"
         )
         self.embedding_view = pn.widgets.Select(label="查看嵌入", options=[])
-        self.color = pn.widgets.Select(label="按注释/特征着色", options={"无": ""})
+        self.color = pn.widgets.Select(label="Color", options={"无": ""})
+        self.color_search = pn.widgets.TextInput(label="Search annotation / feature")
+        self.color_sort = pn.widgets.Select(
+            label="Feature order", options=["mean", "total", "median", "detection", "mz", "name"]
+        )
+        self.color_descending = pn.widgets.Checkbox(label="Descending", value=True)
+        for widget in (self.color_search, self.color_sort, self.color_descending):
+            widget.param.watch(lambda _: self.refresh(), "value")
         self.embedding_plot = _plot("嵌入")
         self.cluster_method = self.field("clustering")
         self.clusters = self.field("n_clusters")
@@ -262,7 +294,61 @@ class WorkbenchPanels:
             random_state=self.seed.value,
             n_neighbors=self.neighbors.value,
             perplexity=self.perplexity.value,
+            pca_components=self.pca_dimensions.value
+            if self.reduction.value == "umap" and self.pca_input.value
+            else None,
+            whiten=self.whiten.value,
+            min_dist=self.min_dist.value,
+            metric=self.metric.value,
+            learning_rate="auto"
+            if self.learning_rate.value.strip() == "auto"
+            else float(self.learning_rate.value),
+            max_iter=self.max_iter.value,
         )
+
+    def _color_choices(self, data, observations):
+        import numpy as np
+
+        from scMM.application.workbench import dense
+
+        from .presentation import feature_label
+
+        columns = sorted(
+            observations,
+            key=lambda c: (
+                (["group", "sample", "batch"].index(c) if c in ["group", "sample", "batch"] else 3),
+                c,
+            ),
+        )
+        choices = {"无": "", **{f"Annotation · {c}": f"obs:{c}" for c in columns}}
+        if data is not None:
+            values = dense(data.X)
+            method = self.color_sort.value
+            scores = {
+                "mean": lambda: values.mean(axis=0),
+                "total": lambda: values.sum(axis=0),
+                "median": lambda: np.median(values, axis=0),
+                "detection": lambda: (values != 0).mean(axis=0),
+                "mz": lambda: pd.to_numeric(
+                    data.var.get("mz", pd.Series(data.var_names)), errors="coerce"
+                ).to_numpy(),
+                "name": lambda: np.asarray(data.var_names),
+            }[method]()
+            order = np.argsort(scores, kind="stable")
+            if self.color_descending.value:
+                order = order[::-1]
+            choices.update(
+                {
+                    f"Feature · {feature_label(data.var_names[j], data.var.iloc[j].get('mz'))} · #{j + 1}": f"feature:{data.var_names[j]}"
+                    for j in order
+                }
+            )
+        query = self.color_search.value.strip().lower()
+        return {
+            key: value
+            for key, value in choices.items()
+            if not value or not query or query in key.lower() or value == self.color.value
+        }
 
     def _draw_embedding(self):
         if self._refreshing or self.state.data is None or not self.embedding_view.value:
@@ -282,8 +368,28 @@ class WorkbenchPanels:
         self.diff_method = self.field("differential_method")
         self.features = pn.widgets.MultiChoice(label="小提琴特征（最多 12 个）", options=[])
         self.hide_zero = pn.widgets.Checkbox(label="仅在小提琴图隐藏零值", value=False)
+        self.volcano_fdr = pn.widgets.FloatInput(label="FDR threshold", value=0.05, start=0, end=1)
+        self.volcano_effect = pn.widgets.FloatInput(label="abs(log2FC)", value=1.0, start=0)
+        self.volcano_labels = pn.widgets.IntInput(label="Label count", value=10, start=0, end=100)
+        self.volcano_order = pn.widgets.Select(
+            label="Label order", options=["fdr", "effect", "p_value", "intensity"]
+        )
+        self.volcano_controls = pn.Row(
+            self.volcano_fdr, self.volcano_effect, self.volcano_labels, self.volcano_order
+        )
         self.volcano = _plot("全局 FDR 火山图")
+        self.volcano.param.watch(self._volcano_click, "click_data")
+        for widget in (
+            self.volcano_fdr,
+            self.volcano_effect,
+            self.volcano_labels,
+            self.volcano_order,
+        ):
+            widget.param.watch(lambda _: self._draw_volcano(), "value")
+        self.violin_width = PlotWidth(height=1, sizing_mode="stretch_width")
+        self.violin_width.param.watch(lambda _: self._draw_violin(), "pixels")
         self.violin = _plot("特征小提琴图")
+        self.violin.param.update(sizing_mode="stretch_width", aspect_ratio=None, min_height=340)
         self.diff_table = pn.pane.DataFrame(pd.DataFrame(), height=240, index=False)
         self.marker_table = pn.pane.DataFrame(pd.DataFrame(), height=240, index=False)
         self.network_method = self.field("network_method")
@@ -364,6 +470,32 @@ class WorkbenchPanels:
             layer=self.diff_layer.value,
         )
 
+    def _draw_volcano(self):
+        if "differential" in self.state.results:
+            self.volcano.object = volcano_figure(
+                self.state.result("differential")["table"],
+                fdr=self.volcano_fdr.value,
+                fold_change=self.volcano_effect.value,
+                labels=self.volcano_labels.value,
+                order=self.volcano_order.value,
+            )
+
+    def _volcano_click(self, event):
+        points = (event.new or {}).get("points", [])
+        if not points or "differential" not in self.state.results:
+            return
+        feature = points[0].get("customdata", [None])[0]
+        if feature not in self.state.result("differential")["table"].feature_id.tolist():
+            return
+        selected = list(self.features.value)
+        if feature in selected:
+            selected.remove(feature)
+        elif len(selected) < 12:
+            selected.append(feature)
+        else:
+            self.status.object = "最多选择 12 个特征，请先取消一个。"
+        self.features.value = selected
+
     def _draw_violin(self):
         if self._refreshing or "differential" not in self.state.results:
             return
@@ -373,7 +505,9 @@ class WorkbenchPanels:
                 self.state.result("differential"),
                 self.features.value,
                 hide_zero=self.hide_zero.value,
+                columns=max(1, min(3, self.violin_width.pixels // 300)),
             )
+            self.violin.height = self.violin.object.layout.height or 340
         except Exception as exc:
             self.violin.object = go.Figure()
             self.status.object = f"绘图失败：{escape(str(exc))}"
@@ -498,6 +632,26 @@ class WorkbenchPanels:
             filename="matrix.csv",
             callback=lambda: _csv(self.state.require_data().to_df()),
         )
+        self.embedding_download = pn.widgets.FileDownload(
+            label="下载当前嵌入 CSV",
+            filename="embedding.csv",
+            callback=lambda: _csv(
+                pd.DataFrame(
+                    self.state.require_data().obsm[self.embedding_view.value],
+                    index=self.state.data.obs_names,
+                )
+            ),
+        )
+        self.qc_download = pn.widgets.FileDownload(
+            label="下载细胞 QC CSV",
+            filename="cell_qc.csv",
+            callback=lambda: _csv(self.state.qc()["cell"]),
+        )
+        self.history_download = pn.widgets.FileDownload(
+            label="下载处理记录 CSV",
+            filename="history.csv",
+            callback=lambda: _csv(pd.DataFrame(self.state.history())),
+        )
         self.extra_downloads = {
             name: pn.widgets.FileDownload(
                 label=f"下载 {name} CSV",
@@ -566,7 +720,18 @@ class WorkbenchPanels:
                 else f"**{data.n_obs} 细胞 × {data.n_vars} 特征** · 修订 {self.state.revision} · 来源 `{escape(self.state.source)}`"
             )
             layers = {} if data is None else {key: key for key in data.layers}
-            observations = [] if data is None else list(data.obs.columns)
+            observations = (
+                []
+                if data is None
+                else sorted(
+                    data.obs.columns,
+                    key=lambda key: (
+                        ["group", "sample", "batch"].index(key)
+                        if key in ["group", "sample", "batch"]
+                        else 3
+                    ),
+                )
+            )
             embeddings = [] if data is None else list(data.obsm)
             self._options(self.history_layer, list(layers))
             self._options(self.diff_layer, {"当前 X": None, **layers})
@@ -579,10 +744,31 @@ class WorkbenchPanels:
             )
             self._options(self.representation, ["X", *embeddings])
             self._options(self.embedding_view, embeddings)
-            colors = {"无": "", **{f"obs: {c}": f"obs:{c}" for c in observations}}
-            if data is not None:
-                colors.update({f"feature: {c}": f"feature:{c}" for c in data.var_names})
+            colors = self._color_choices(data, observations)
+            previous_color = self.color.value
             self._options(self.color, colors)
+            if not previous_color:
+                self.color.value = next(
+                    (
+                        f"obs:{key}"
+                        for key in ("group", "sample")
+                        if data is not None
+                        and key in data.obs
+                        and data.obs[key]
+                        .astype(object)
+                        .fillna("")
+                        .astype(str)
+                        .str.strip()
+                        .ne("")
+                        .any()
+                        and f"obs:{key}" in colors.values()
+                    ),
+                    "",
+                )
+            self.embedding_download.disabled = data is None or not self.embedding_view.value
+            self.qc_download.disabled = self.history_download.disabled = data is None
+            for download in (self.embedding_download, self.qc_download, self.history_download):
+                download.data = None
             self.matrix_download.disabled = data is None
             self.save_button.disabled = data is None
             if data is not None:
@@ -599,16 +785,19 @@ class WorkbenchPanels:
             if "differential" in self.state.results:
                 result = self.state.result("differential")
                 self.diff_table.object = result["table"]
-                self.volcano.object = volcano_figure(result["table"])
+                self._draw_volcano()
                 choices = result["table"].feature_id.tolist()
                 selected = [f for f in self.features.value if f in choices]
-                self.features.options = choices
-                self.features.value = selected or choices[:1]
-                self.violin.object = (
-                    violin_figure(data, result, self.features.value, hide_zero=self.hide_zero.value)
-                    if len(self.features.value) <= 12
-                    else go.Figure(layout={"title": "最多选择 12 个特征"})
-                )
+                from .presentation import mass_label
+
+                self.features.options = {
+                    f"{mass_label(feature)} · #{i + 1}": feature
+                    for i, feature in enumerate(choices)
+                }
+                self.features.value = selected
+                self._refreshing = False
+                self._draw_violin()
+                self._refreshing = True
             else:
                 self.diff_table.object = pd.DataFrame()
                 self.features.value = []

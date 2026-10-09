@@ -23,8 +23,9 @@ from scMM.file.data import CyESIData
 from scMM.file.io import align_frame, extract_peaks, load_single_file, sum_spec, validate_ms_file
 from scMM.util.peak import filter_spectrum
 
+from .preview_cache import cached_shared_targets, reusable_preview
 from .processing import ProcessingParameters
-from .projects import child_path, project_lock, write_json
+from .projects import child_path, project_lock, sample_parameters, write_json
 from .tasks import background_tasks_supported, utc_now
 
 SHARED_FIELDS = (
@@ -45,16 +46,22 @@ def preflight(project, storage):
         raise ValueError("Unknown feature strategy")
     base = ProcessingParameters(**project.manifest["parameters"])
     samples = []
+    if project.manifest["feature_strategy"] == "shared":
+        base = ProcessingParameters(**sample_parameters(project, None))
     for sample in project.samples:
+        if sample.get("result_only"):
+            raise ValueError("Result-only samples require raw-file relocation before extraction")
         path = storage.resolve_raw_file(sample["storage"], sample["path"])
         validate_ms_file(path)
-        params = ProcessingParameters(**(sample["parameters"] or asdict(base)))
+        values = sample_parameters(project, sample)
+        params = ProcessingParameters(**values)
         if project.manifest["feature_strategy"] == "shared" and any(
             getattr(base, key) != getattr(params, key) for key in SHARED_FIELDS
         ):
             raise ValueError(f"Shared feature parameters differ for {sample['name']}")
         samples.append({**sample, "path": str(path), "parameters": asdict(params)})
     return {
+        "project_folder": str(project.folder),
         "samples": samples,
         "parameters": asdict(base),
         "feature_strategy": project.manifest["feature_strategy"],
@@ -112,7 +119,7 @@ def submit(project, storage, *, retry_path=None):
                 "parameters": value["parameters"],
                 "feature_merge_ppm": value["feature_merge_ppm"],
                 "samples": [
-                    {k: v for k, v in sample.items() if k != "preview"}
+                    {k: sample[k] for k in ("id", "path", "parameters")}
                     for sample in value["samples"]
                 ],
             }
@@ -121,7 +128,7 @@ def submit(project, storage, *, retry_path=None):
             scientific_request(request), sort_keys=True
         ):
             raise ValueError(
-                "Retry requires unchanged sample metadata and parameters; start a new batch"
+                "Retry requires unchanged input files and processing parameters; start a new batch"
             )
     with project_lock(project.folder):
         if any(read_batch(path)["status"] in {"queued", "running"} for path in batches(project)):
@@ -212,6 +219,17 @@ def run_batch(path):
         base = ProcessingParameters(**request["parameters"])
         if request.get("reuse_shared_features"):
             targets = np.load(path.parent / "shared_features.npy", allow_pickle=False)
+        elif (
+            request["feature_strategy"] == "shared"
+            and (
+                cached := cached_shared_targets(
+                    request.get("project_folder", path.parent.parent.parent), request
+                )
+            )
+            is not None
+        ):
+            targets = cached
+            np.save(path.parent / "shared_features.npy", targets)
         elif request["feature_strategy"] == "shared":
             grid, total = None, None
             for i, sample in enumerate(request["samples"]):
@@ -262,7 +280,13 @@ def run_batch(path):
                 def progress(value, message, name=sample["name"]):
                     report(f"{name}: {value:.0%} {message}")
 
-                if targets is None:
+                cached = reusable_preview(
+                    request.get("project_folder", path.parent.parent.parent), sample, targets
+                )
+                if cached is not None:
+                    obj = CyESIData.read_h5ad(cached)
+                    row["reused_preview"] = True
+                elif targets is None:
                     obj = CyESIData.load_from_file(
                         sample["path"],
                         params.ref_mz,

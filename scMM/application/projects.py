@@ -86,6 +86,7 @@ class Project:
     views: dict = field(default_factory=dict)
     dirty: bool = False
     saved_token: tuple | None = None
+    report_token: tuple | None = None
 
     @property
     def samples(self):
@@ -131,6 +132,21 @@ class Project:
                 raise ValueError("Invalid sample ID")
             if sample["parameters"] is not None:
                 ProcessingParameters(**sample["parameters"])
+
+
+def sample_parameters(project, sample):
+    """Resolve explicit overrides separately from automatic file-derived limits."""
+    if sample and sample["parameters"] is not None:
+        return dict(sample["parameters"])
+    values = dict(project.manifest["parameters"])
+    if not project.manifest.get("manual_parameters"):
+        if project.manifest["feature_strategy"] == "shared":
+            ranges = [s["auto_mz_range"] for s in project.samples if s.get("auto_mz_range")]
+            if ranges:
+                values.update(mz_min=min(r[0] for r in ranges), mz_max=max(r[1] for r in ranges))
+        elif sample and sample.get("auto_mz_range"):
+            values.update(zip(("mz_min", "mz_max"), sample["auto_mz_range"], strict=True))
+    return values
 
 
 class ProjectStore:
@@ -248,7 +264,10 @@ class ProjectStore:
                 current = project.workspace.save_h5ad(catalog, "snapshot", ".", "current.h5ad")
                 project.workspace._original.write_h5ad(snapshot / "baseline.h5ad")
                 # Loaded reports are read-only artifacts. Preserve only while data is unchanged.
-                if project.saved_reports and project.saved_token == project.workspace.token:
+                if (
+                    project.saved_reports
+                    and (project.report_token or project.saved_token) == project.workspace.token
+                ):
                     data = read_h5ad(current)
                     fresh = json.loads(data.uns["scmm_workbench"]["reports_json"])
                     data.uns["scmm_workbench"]["reports_json"] = json.dumps(
@@ -268,4 +287,5 @@ class ProjectStore:
             project.manifest = candidate
             project.saved_reports = saved_reports
             project.saved_token = project.workspace.token
+            project.report_token = project.workspace.token
             project.dirty = False

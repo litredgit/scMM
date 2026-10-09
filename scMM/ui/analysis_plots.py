@@ -1,6 +1,8 @@
 """Interactive views of stored analysis results; no statistical recomputation."""
 # ruff: noqa: RUF001
 
+import math
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -9,21 +11,41 @@ from plotly.subplots import make_subplots
 
 from scMM.application.workbench import dense
 
+from .presentation import feature_label, mass_label, style_figure
 
-def volcano_figure(table):
+
+def volcano_figure(table, *, fdr=0.05, fold_change=1.0, labels=10, order="fdr"):
     frame = table.copy()
     frame["minus_log10_fdr"] = -np.log10(np.clip(frame.fdr.to_numpy(), 1e-300, 1))
-    return px.scatter(
+    frame["effect"] = frame.log2_fold_change.abs()
+    frame["intensity"] = (frame.mean_a + frame.mean_b) / 2
+    selected = frame[(frame.fdr <= fdr) & (frame.effect >= fold_change)]
+    selected = selected.sort_values(
+        [order, "effect"], ascending=[order in {"fdr", "p_value"}, False]
+    ).head(labels)
+    frame["display_mz"] = [
+        feature_label(row.feature_id, row.get("mz")) for _, row in frame.iterrows()
+    ]
+    frame["label"] = frame["display_mz"].where(frame.index.isin(selected.index), "")
+    figure = px.scatter(
         frame,
         x="log2_fold_change",
         y="minus_log10_fdr",
-        hover_name="feature_id",
-        hover_data=["p_value", "fdr", "mean_a", "mean_b"],
+        text="label",
+        custom_data=["feature_id"],
+        hover_name="display_mz",
+        hover_data={"mean_a": ":.3e", "mean_b": ":.3e", "p_value": ":.3e", "fdr": ":.3e"},
         title="火山图：全部特征的全局 BH-FDR",
     )
+    figure.update_traces(textposition="top center")
+    figure.add_vline(x=fold_change, line_dash="dot")
+    figure.add_vline(x=-fold_change, line_dash="dot")
+    if fdr > 0:
+        figure.add_hline(y=-np.log10(fdr), line_dash="dot")
+    return style_figure(figure)
 
 
-def violin_figure(data, result, features, *, hide_zero=False):
+def violin_figure(data, result, features, *, hide_zero=False, columns=3):
     if not features:
         return go.Figure(layout={"title": "选择特征后显示小提琴图"})
     if len(features) > 12:
@@ -31,11 +53,14 @@ def violin_figure(data, result, features, *, hide_zero=False):
     table = result["table"].set_index("feature_id")
     groups = data.obs[result["group_key"]]
     values = dense(data.layers[result["layer"]] if result["layer"] else data.X)
+    columns = min(columns, len(features))
+    rows = math.ceil(len(features) / columns)
     figure = make_subplots(
-        rows=1,
-        cols=len(features),
+        rows=rows,
+        cols=columns,
         subplot_titles=[
-            f"{feature}<br>全局 FDR={table.loc[feature, 'fdr']:.3g}" for feature in features
+            f"{feature_label(feature, table.loc[feature].get('mz'))}<br>全局 FDR={table.loc[feature, 'fdr']:.3g}"
+            for feature in features
         ],
     )
     for column, feature in enumerate(features, 1):
@@ -55,15 +80,17 @@ def violin_figure(data, result, features, *, hide_zero=False):
                     meanline_visible=True,
                     line_color=color,
                 ),
-                row=1,
-                col=column,
+                row=(column - 1) // columns + 1,
+                col=(column - 1) % columns + 1,
             )
+    figure.update_yaxes(tickformat=".3e", title_text="Intensity")
     figure.update_layout(
+        height=340 * rows,
         title="小提琴图（零值仅从显示中隐藏；检验与全局 FDR 不变）"
         if hide_zero
-        else "小提琴图（包含零值；使用同一份全局 FDR）"
+        else "小提琴图（包含零值；使用同一份全局 FDR）",
     )
-    return figure
+    return style_figure(figure)
 
 
 def embedding_figure(data, key, color=None):
@@ -82,9 +109,15 @@ def embedding_figure(data, key, color=None):
     elif color and color.startswith("feature:"):
         frame["color"] = dense(data[:, [color[8:]]].X)[:, 0]
         color_key = "color"
-    return px.scatter(
+    figure = px.scatter(
         frame, x="x", y="y", color=color_key, hover_name="cell", title=key, render_mode="webgl"
     )
+    if color and color.startswith("feature:"):
+        figure.update_coloraxes(colorbar_tickformat=".3e", colorbar_title="Intensity")
+        figure.update_traces(
+            hovertemplate="Cell %{hovertext}<br>x=%{x}<br>y=%{y}<br>Intensity %{marker.color:.3e}<extra></extra>"
+        )
+    return style_figure(figure)
 
 
 def supervised_figures(analyzer):
@@ -135,7 +168,7 @@ def network_figure(graph):
         go.Scatter(
             x=[positions[n][0] for n in graph],
             y=[positions[n][1] for n in graph],
-            text=list(graph),
+            text=[mass_label(node) for node in graph],
             mode="markers",
             name="特征",
             hovertemplate="%{text}<extra></extra>",

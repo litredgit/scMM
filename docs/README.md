@@ -24,5 +24,5 @@
 - [开发指南](development.md)：模块职责、测试与发布、上游快照和历史文档追溯。
 - [待办与验收边界](roadmap.md)：优先验收、工程改进、暂缓方法及长期约束。
 
-当前网页是六步项目工作台，项目固定保存于 `/home/crs/data/results`；CLI/API 输出由调用参数决定。
+当前网页是六步项目工作台，项目默认保存于 `/home/crs/data/results`（可用 `--project-root` 指定独立目录）；CLI/API 输出由调用参数决定。
 RAW 仅支持 Thermo profile，读取保留 float64。详细旧阶段日志保存在 Git 历史，当前文档只描述最终行为。

@@ -129,6 +129,20 @@ uv run --locked scmm-ui \
 外部默认参数用 `--config workbench.json` 或 `SCMM_UI_CONFIG` 配置，格式见[参数参考](parameters.md#网页默认参数)。
 Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；缺少 fcntl 的最小兼容不代表完整 Windows 支持。
 
+## 独立端口检验
+
+使用独立的项目目录与存储根，不需要重启现有服务：
+
+```bash
+mkdir -p /tmp/scmm-review/projects
+SCMM_PREFERENCES=/tmp/scmm-review/preferences.json uv run --locked scmm-ui \
+  --storage "检验数据=/tmp/scmm-review" --isolated-storage \
+  --project-root /tmp/scmm-review/projects --port 5007
+```
+
+`--isolated-storage` 禁用自动加入云盘根目录，只开放明确配置的存储根。局域网访问时，
+增加 `--address 0.0.0.0`，并为实际使用的主机名/IP 配置对应端口的 `--allow-websocket-origin`。
+
 ## 更新常驻服务
 
 更新代码不会自动替换运行中的 Python 进程。采用用户级 `scmm-ui.service` 的部署可先检查：

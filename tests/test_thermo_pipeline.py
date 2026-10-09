@@ -94,6 +94,8 @@ def test_raw_web_preview_matches_xml(raw_pair):
         actual, meta = direct.single_spectrum(index)
         expected, expected_meta = baseline.single_spectrum(index)
         pd.testing.assert_frame_equal(actual, expected, check_dtype=False)
+        assert meta.pop("native_id") == f"scan={index + 10}"
+        assert expected_meta.pop("native_id") == f"spectrum={index}"
         assert meta == expected_meta
 
 

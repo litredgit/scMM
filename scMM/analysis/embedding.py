@@ -18,6 +18,11 @@ def reduce_dimension(
     perplexity=30.0,
     min_dist=0.3,
     store_key=None,
+    pca_components=None,
+    whiten=False,
+    metric="euclidean",
+    learning_rate="auto",
+    max_iter=1000,
 ):
     """Compute and store an embedding from X or an explicitly named obsm.
 
@@ -36,12 +41,26 @@ def reduce_dimension(
         raise ValueError("reduction requires at least three observations")
     if scale:
         values = StandardScaler().fit_transform(values)
+    preprocessing = {}
+    if pca_components is not None:
+        if (
+            isinstance(pca_components, bool)
+            or not isinstance(pca_components, int)
+            or not 1 <= pca_components <= min(values.shape)
+        ):
+            raise ValueError(
+                "PCA input dimensions exceed observations or features; choose fewer dimensions explicitly"
+            )
+        values = PCA(
+            n_components=pca_components, whiten=whiten, random_state=random_state
+        ).fit_transform(values)
+        preprocessing = {"pca_components": pca_components, "pca_whiten": whiten}
     method = method.lower()
     params = {"n_components": n_components}
     if method == "pca":
         if n_components > min(values.shape):
             raise ValueError("PCA dimensions exceed observations or input features")
-        params["random_state"] = random_state
+        params.update(random_state=random_state, whiten=whiten)
         model = PCA(**params)
     elif method == "tsne":
         if not np.isfinite(perplexity) or not 0 < perplexity < len(values):
@@ -50,7 +69,9 @@ def reduce_dimension(
             perplexity=perplexity,
             random_state=random_state,
             init="random",
-            learning_rate="auto",
+            learning_rate=learning_rate,
+            max_iter=max_iter,
+            metric=metric,
             method="exact" if n_components > 3 else "barnes_hut",
         )
         model = TSNE(**params)
@@ -67,11 +88,14 @@ def reduce_dimension(
 
             if not np.isfinite(min_dist) or not 0 <= min_dist <= 1:
                 raise ValueError("min_dist must be between zero and one")
-            params.update(min_dist=min_dist, random_state=random_state, init="random", n_jobs=1)
+            params.update(
+                min_dist=min_dist, random_state=random_state, init="random", n_jobs=1, metric=metric
+            )
             model = UMAP(**params)
         elif method == "isomap":
             if n_components >= len(values):
                 raise ValueError("Isomap dimensions must be below n_obs")
+            params["metric"] = metric
             model = Isomap(**params)
         else:
             if n_components >= n_neighbors or n_components > values.shape[1]:
@@ -89,5 +113,11 @@ def reduce_dimension(
     if not np.isfinite(embedding).all():
         raise ValueError("reduction produced non-finite coordinates")
     data.obsm[key] = embedding
-    data.uns[f"{key}_params"] = {"method": method, "source": source, "scale": scale, **params}
+    data.uns[f"{key}_params"] = {
+        "method": method,
+        "source": source,
+        "scale": scale,
+        **preprocessing,
+        **params,
+    }
     return embedding

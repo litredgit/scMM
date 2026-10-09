@@ -53,7 +53,10 @@ class RawFilePreview:
         experiment: oms.MSExperiment | ThermoRawSource,
         metadata: dict[str, object],
     ) -> None:
+        from .preview_cache import file_identity
+
         self.path = path
+        self.open_identity = file_identity(path)
         self.experiment = experiment
         self.metadata = metadata
         self.summary = _summarize(path, experiment, metadata)
@@ -75,6 +78,7 @@ class RawFilePreview:
         noise_window=None,
         feature_block_size=None,
         progress_callback=None,
+        targets=None,
     ) -> CellDetectionPreview:
         """Preview production cell windows (RAW sources reopen for each pass).
 
@@ -85,6 +89,10 @@ class RawFilePreview:
         from scMM.file._dataset_loading import _raw_config, align_raw_experiment
         from scMM.file.data import CyESIData
 
+        from .preview_cache import file_identity
+
+        if file_identity(self.path) != self.open_identity:
+            raise ValueError("Input changed since opening; reopen the file")
         config = _raw_config(
             parameters.ref_mz,
             np.float64,
@@ -96,7 +104,19 @@ class RawFilePreview:
             3,
             (parameters.mz_min, parameters.mz_max),
         )
-        state = align_raw_experiment(self.experiment, self.metadata, self.path, config)
+        if targets is None:
+            state = align_raw_experiment(self.experiment, self.metadata, self.path, config)
+        else:
+            from scMM.file._dataset_loading import DatasetState, _annotate_single_file_frames
+            from scMM.file.io import align_frame
+
+            frame, obs = align_frame(self.experiment, targets, ppm=parameters.ppm_tol)
+            metadata = dict(self.metadata)
+            _annotate_single_file_frames(obs, metadata)
+            metadata.update(
+                ref_mz=parameters.ref_mz, mz_range=[parameters.mz_min, parameters.mz_max]
+            )
+            state = DatasetState(frame, obs, metadata, parameters.ref_mz)
         captured = {}
 
         def capture(event, payload):
@@ -122,7 +142,8 @@ class RawFilePreview:
                 cell_count=len(payload["cell_idx"]),
             )
 
-        CyESIData._from_raw_state(
+        self.last_targets = np.asarray(state.data.columns, dtype=float)
+        self.last_dataset = CyESIData._from_raw_state(
             state,
             {
                 "baseline_filter_size": parameters.baseline_filter_size,
@@ -150,7 +171,11 @@ class RawFilePreview:
                 "debug_full_baseline": False,
             },
         )
-        return CellDetectionPreview(**captured)
+        if file_identity(self.path) != self.open_identity:
+            self.last_dataset = None
+            raise ValueError("Input changed during preview; reopen the file")
+        self.last_detection = CellDetectionPreview(**captured)
+        return self.last_detection
 
     def single_spectrum(self, scan_index: int) -> tuple[pd.DataFrame, dict]:
         """Read a zero-based scan index; RAW scans stream sequentially to it."""
@@ -171,6 +196,9 @@ class RawFilePreview:
         mz, intensity = spectrum.get_peaks()
         return pd.DataFrame({"mz": mz, "intensity": intensity}), {
             "scan_index": scan_index,
+            "native_id": spectrum.getNativeID()
+            if hasattr(spectrum, "getNativeID")
+            else f"scan={spectrum.scan_number}",
             "rt_seconds": float(spectrum.getRT()),
             "ms_level": int(spectrum.getMSLevel()),
         }

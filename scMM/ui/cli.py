@@ -59,6 +59,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="HOST[:PORT]",
         help="Additional browser origin accepted by Panel; repeat when needed",
     )
+    parser.add_argument(
+        "--isolated-storage",
+        action="store_true",
+        help="Expose only explicitly configured storage roots",
+    )
+    parser.add_argument("--project-root", type=Path, help="Project directory (must already exist)")
     parser.add_argument("--show", action="store_true", help="Open a local browser after launch")
     parser.add_argument(
         "--config", type=Path, help="JSON workbench defaults; overrides SCMM_UI_CONFIG"
@@ -75,7 +81,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     defaults = load_defaults(args.config)
     root_specs = args.storage or [("当前目录", Path.cwd())]
     cloud = Path("/home/crs/data")
-    if cloud.is_dir() and "云盘" not in {label for label, _ in root_specs}:
+    if (
+        not args.isolated_storage
+        and cloud.is_dir()
+        and "云盘" not in {label for label, _ in root_specs}
+    ):
         root_specs = [*root_specs, ("云盘", cloud)]
     roots = tuple(StorageRoot(label, path) for label, path in root_specs)
     output_specs = args.output
@@ -102,7 +112,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
     if args.allow_websocket_origin:
         serve_options["websocket_origin"] = args.allow_websocket_origin
-    pn.serve(lambda: create_app(roots, outputs, defaults=defaults), **serve_options)
+    pn.serve(
+        lambda: create_app(
+            roots, outputs, defaults=defaults, project_root=args.project_root or PROJECT_ROOT
+        ),
+        **serve_options,
+    )
     return 0
 
 

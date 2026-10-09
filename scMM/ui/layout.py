@@ -80,3 +80,20 @@ class TaskDock(pn.reactive.ReactiveHTML):
     }
     """
     ]
+
+
+class PlotWidth(pn.reactive.ReactiveHTML):
+    """Report container width for server-side subplot layout without polling."""
+
+    pixels = param.Integer(default=900)
+    _template = '<div id="measure" style="width:100%;height:1px"></div>'
+    _scripts: ClassVar[dict] = {
+        "render": """
+          state.observer = new ResizeObserver(entries => {
+            const width = Math.round(entries[0].contentRect.width);
+            if (width > 0 && Math.abs(width - data.pixels) > 30) data.pixels = width;
+          });
+          state.observer.observe(measure);
+        """,
+        "remove": "state.observer?.disconnect();",
+    }

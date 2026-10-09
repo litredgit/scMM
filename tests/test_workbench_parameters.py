@@ -83,7 +83,7 @@ def test_preview_range_single_scan_and_multiple_eics(tmp_path):
     experiment, metadata = load_single_file(path)
     raw = RawFilePreview(path, experiment, metadata)
     frame, meta = raw.single_spectrum(8)
-    assert meta == {"scan_index": 8, "rt_seconds": 8.0, "ms_level": 1}
+    assert meta == {"scan_index": 8, "rt_seconds": 8.0, "ms_level": 1, "native_id": "spectrum=8"}
     assert frame.intensity.max() == 20
     for index in [-1, 31, True, 1.5]:
         with pytest.raises(ValueError):

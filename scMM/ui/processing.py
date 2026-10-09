@@ -93,7 +93,7 @@ class GuidedProcessingPanel:
         self.cell_snr = _float_input("细胞 SNR", 5.0, step=0.5)
         self.peak_snr = _float_input("特征 SNR", 3.0, step=0.5)
         self.n_jobs = pn.widgets.IntInput(
-            label="CPU 任务数", value=1, start=-1, end=64, width=140, sizing_mode=None
+            label="n_jobs", value=1, start=-1, width=140, sizing_mode=None
         )
         self.ms_peak_snr = _float_input("总谱 SNR", 10.0, step=1.0)
         self.points_per_fwhm = _float_input("每 FWHM 采样点", 5.0, step=0.5)
@@ -127,6 +127,10 @@ class GuidedProcessingPanel:
             "max_zero_frac": self.max_zero_frac,
             **self.extra_parameters,
         }
+        for key, widget in self.parameter_widgets.items():
+            widget.label = key
+        for key in ("ref_mz", "mz_min", "mz_max"):
+            self.parameter_widgets[key].format = "0.0000"
         self.defaults = defaults or ProcessingParameters(ref_mz=100.0)
         for key, value in asdict(self.defaults).items():
             self.parameter_widgets[key].value = (
