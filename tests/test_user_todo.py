@@ -19,6 +19,7 @@ from scMM.application.projects import write_json
 from scMM.application.workbench import AnalysisWorkspace
 from scMM.ui.analysis_plots import violin_figure, volcano_figure
 from scMM.ui.file_browser import FileBrowser
+from scMM.ui.presentation import qc_file_table
 
 
 def test_metadata_preserves_matrix_layers_embedding_and_unrelated_results():
@@ -118,6 +119,91 @@ def test_global_presets_and_cpu_defaults(tmp_path, monkeypatch):
     monkeypatch.setattr("os.cpu_count", lambda: 12)
     monkeypatch.setattr("os.sched_getaffinity", lambda _: {0, 1})
     assert cpu_default() == 2
+
+
+def test_qc_reference_rows_preserve_nearby_ions_and_omit_empty_sample_records():
+    from scMM.analysis.quality import quality_metrics
+
+    data = AnnData(
+        np.ones((4, 2)),
+        obs=pd.DataFrame(
+            {
+                "source_file": ["a", "a", "b", "b"],
+                "reference_intensity_760.58331": [1.23456789, 2, np.nan, np.nan],
+                "reference_intensity_760.58332": [np.nan, np.nan, 3, 4],
+            },
+            index=list("abcd"),
+        ),
+    )
+    original = quality_metrics(data)["file"]
+    displayed = qc_file_table(original)
+    refs = displayed[displayed.metric == "reference_intensity"]
+    assert len(refs) == 2
+    assert refs.source_file.tolist() == ["a", "b"]
+    assert refs.reference_mz.tolist() == [760.58331, 760.58332]
+    assert refs["count"].tolist() == [2, 2]
+    assert refs.iloc[0]["mean"] == original.loc["a", ("reference_intensity_760.58331", "mean")]
+    assert not isinstance(displayed.columns, pd.MultiIndex)
+
+
+def test_color_sources_search_sort_and_restore(tmp_path):
+    from bokeh.document import Document
+
+    ui = workspace(tmp_path)
+    data = AnnData(
+        np.array([[1, 4, 2.0], [1, 8, 2.0]]),
+        obs=pd.DataFrame({"batch": ["a", "b"], "group": ["x", "y"]}, index=["a", "b"]),
+        var=pd.DataFrame({"mz": [760.58331, 100.12345, 500.0]}, index=["first", "second", "third"]),
+    )
+    data.obsm["X_pca"] = np.array([[1, 2.0], [3, 4.0]])
+    ui.project.workspace.replace(data)
+    a = ui.analysis
+    a.refresh()
+    assert a.color.value == "obs:group"
+    assert list(a.color.options.values()) == ["obs:batch", "obs:group"]
+    assert not a.color_sort.visible
+    a.color_search.value_input = "BATCH"
+    assert "obs:batch" in a.color.options.values()
+    a.color.value = "obs:batch"
+    a.color_search.value_input = ""
+    a.color_source.value = "feature"
+    assert list(a.color.options.values()) == ["feature:second", "feature:third", "feature:first"]
+    assert a.color_sort.visible
+    a.color_sort.value = "mz"
+    model = a.color.get_root(Document())
+    a.color_descending.value = False
+    assert list(a.color.options.values()) == ["feature:second", "feature:third", "feature:first"]
+    assert model.completions == list(a.color.options)
+    a.color_descending.value = True
+    assert list(a.color.options.values()) == ["feature:first", "feature:third", "feature:second"]
+    assert model.completions == list(a.color.options)
+    a.color._cleanup(model)
+    a.color_search.value_input = "760.58331"
+    assert (
+        "feature:first" in a.color.options.values()
+        and "feature:third" not in a.color.options.values()
+    )
+    a.color.value = "feature:first"
+    np.testing.assert_array_equal(a.embedding_plot.object.data[0].marker.color, data.X[:, 0])
+    # Browser patches can carry a previous committed value and new input in one batch.
+    a.color_search.param.update(value="stale", value_input="")
+    assert a._color_query == "" and len(a.color.options) == data.n_vars
+    a.color_source.value = "annotation"
+    assert a.color.value == "obs:batch"
+    a.color_source.value = "feature"
+    assert a.color.value == "feature:first"
+    a.color_source.value = "none"
+    assert a.color.value == "" and not a.color.visible
+    a.color_source.value = "feature"
+    ui._save()
+    reopened = ui.store.open(ui.project.folder)
+    ui.activate(reopened)
+    assert ui.analysis.color_source.value == "feature"
+    assert ui.analysis.color.value == "feature:first"
+    reopened.views["settings"].pop("color_source")
+    ui.activate(reopened)
+    assert ui.analysis.color_source.value == "feature"
+    assert ui.analysis.color.value == "feature:first"
 
 
 def test_imported_samples_edit_and_persist(tmp_path):

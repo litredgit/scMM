@@ -22,6 +22,41 @@ def feature_label(identity, mz=None):
         return mass_label(identity)
 
 
+def qc_file_table(frame):
+    """Display QC metrics as rows without merging distinct reference ions."""
+    rows = []
+    for source, values in frame.iterrows():
+        for metric in frame.columns.get_level_values(0).unique():
+            stats = values[metric]
+            reference = str(metric).startswith("reference_intensity_")
+            if reference and stats["count"] == 0:
+                continue
+            rows.append(
+                {
+                    "source_file": source,
+                    "metric": "reference_intensity" if reference else metric,
+                    "reference_mz": float(metric.removeprefix("reference_intensity_"))
+                    if reference
+                    else float("nan"),
+                    **stats.to_dict(),
+                }
+            )
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "source_file",
+            "metric",
+            "reference_mz",
+            "count",
+            "mean",
+            "median",
+            "std",
+            "min",
+            "max",
+        ],
+    )
+
+
 def style_figure(figure):
     if figure is None or not hasattr(figure, "update_layout"):
         return figure
@@ -62,8 +97,14 @@ def apply_presentation(root):
             continue
         table.tags = [*table.tags, "scmm-formatted"]
         table.text_align = table.justify = "center"
+        table.sparsify = False
+        table.col_space = 100
         table.max_rows = 100
-        table.styles = {"overflow": "auto"}
+        table.styles = {**table.styles, "overflow": "auto"}
+        table.stylesheets = [
+            *table.stylesheets,
+            ".panel-df th, .panel-df td { text-align: center !important; vertical-align: middle; white-space: nowrap; }",
+        ]
 
         def format_table(event=None, table=table):
             frame = table.object
@@ -74,7 +115,11 @@ def apply_presentation(root):
                 name = str(col).lower()
                 if name in {"mz", "m/z", "reference_mz", "feature_id"}:
                     formatters[col] = mass_label
-                elif any(
+                elif name == "count":
+                    formatters[col] = lambda x: f"{x:.0f}"
+                elif (
+                    "metric" in frame.columns and name in {"mean", "median", "std", "min", "max"}
+                ) or any(
                     key in name for key in ("intensity", "强度", "mean_a", "mean_b", "abundance")
                 ):
                     formatters[col] = lambda x: f"{x:.3e}"
@@ -96,6 +141,7 @@ def apply_presentation(root):
         table.stylesheets = [
             *table.stylesheets,
             ".tabulator-cell { text-overflow: ellipsis; text-align: center !important; } .tabulator-col-title { text-align: center !important; }",
+            ".tabulator-col.tabulator-sortable .tabulator-col-title { padding-left: 25px !important; padding-right: 25px !important; }",
         ]
 
 

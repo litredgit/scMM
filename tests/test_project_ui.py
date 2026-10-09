@@ -59,6 +59,45 @@ def test_project_steps_preflight_persistence_and_reset(tmp_path):
         ui._create()
 
 
+def test_preprocess_preview_tracks_candidate_and_clears_stale_results(tmp_path):
+    ui = workspace(tmp_path)
+    data = AnnData(
+        np.arange(1.0, 25.0).reshape(6, 4),
+        obs=pd.DataFrame({"source_file": ["one"] * 6}, index=list("abcdef")),
+    )
+    ui.project.workspace.replace(data)
+    ui.analysis.refresh()
+    ui.go(4)
+    assert ui.analysis.qc_plot not in ui.preprocess_page.objects
+    ui.analysis.min_total.value = 30
+    ui._preview_operation()
+    candidate = ui._candidate[1]
+    assert ui.impact_preview.visible
+    assert candidate.data.n_obs < data.n_obs
+    assert ui.project.workspace.data.n_obs == data.n_obs
+    np.testing.assert_array_equal(
+        ui.impact_qc_plot.object.data[0].x, candidate.qc()["cell"].total_intensity
+    )
+    assert ui.impact_qc_table.object.loc[0, "count"] == candidate.data.n_obs
+    current_qc = ui.analysis.qc_table.object.copy()
+    ui.operation.value = "normalize"
+    assert not ui.impact_preview.visible and ui._candidate is None
+    ui.analysis.normalization.value = "total"
+    ui._preview_operation()
+    candidate = ui._candidate[1]
+    np.testing.assert_allclose(ui.impact_qc_plot.object.data[0].x, candidate.data.X.sum(axis=1))
+    pd.testing.assert_frame_equal(ui.analysis.qc_table.object, current_qc)
+    ui.apply_confirm.value = True
+    ui._apply_operation()
+    assert not ui.impact_preview.visible
+    np.testing.assert_array_equal(ui.project.workspace.data.X, candidate.data.X)
+    ui.operation.value = "filter"
+    ui.analysis.min_total.value = 1e30
+    with pytest.raises(ValueError):
+        ui._preview_operation()
+    assert ui._candidate is None and not ui.impact_preview.visible
+
+
 def test_project_pages_serialize(tmp_path):
     ui = workspace(tmp_path)
     ui.project.workspace.replace(AnnData(np.ones((4, 3))))

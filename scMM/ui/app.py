@@ -16,6 +16,7 @@ from uuid import uuid4
 import pandas as pd
 import panel as pn
 import plotly.express as px
+import plotly.graph_objects as go
 import plotly.io as pio
 from anndata import read_h5ad
 
@@ -43,7 +44,7 @@ from scMM.application.workbench import read_dataset
 
 from .file_browser import FileBrowser
 from .layout import CONTENT_STYLE, TaskDock, UnsavedGuard, fit_plot
-from .presentation import apply_presentation, english_parameters
+from .presentation import apply_presentation, english_parameters, qc_file_table
 from .project_views import ProjectRawViews
 from .raw_components import PreviewWorkspace as PreviewWorkspace
 
@@ -67,6 +68,7 @@ ANALYSIS_FIELDS = (
     "max_iter",
     "color_sort",
     "color_descending",
+    "color_source",
     "volcano_fdr",
     "volcano_effect",
     "volcano_labels",
@@ -311,6 +313,9 @@ class ProjectWorkspace:
         self.log.value = ""
         self.analysis.state = project.workspace
         self.analysis.refresh()
+        settings = project.views.get("settings", {})
+        if "color_source" not in settings and str(settings.get("color", "")).startswith("feature:"):
+            self.analysis.color_source.value = "feature"
         for name, value in project.views.get("settings", {}).items():
             if name in ANALYSIS_FIELDS:
                 with suppress(ValueError, TypeError):
@@ -1260,6 +1265,8 @@ class ProjectWorkspace:
 
         def controls(_=None):
             self._candidate = None
+            if hasattr(self, "impact_preview"):
+                self._invalidate_impact()
             self.operation_controls[:] = {
                 "filter": [a.min_total, a.min_detected, a.feature_fraction],
                 "normalize": [a.normalization, a.help("normalization")],
@@ -1270,6 +1277,14 @@ class ProjectWorkspace:
         self.operation.param.watch(controls, "value")
         controls()
         self.impact = pn.pane.DataFrame(pd.DataFrame(), index=False)
+        self.impact_qc_table = pn.pane.DataFrame(pd.DataFrame(), index=False, height=240)
+        self.impact_qc_plot = fit_plot(pn.pane.Plotly(go.Figure()), "analysis")
+        self.impact_preview = pn.Column(
+            "### 检查后的候选数据（尚未应用）",
+            self.impact_qc_table,
+            self.impact_qc_plot,
+            visible=False,
+        )
         self.apply_confirm = pn.widgets.Checkbox(
             label="确认应用并清除下游分析；样本或分组可能被筛除"
         )
@@ -1287,14 +1302,15 @@ class ProjectWorkspace:
         self.preprocess_page = pn.Column(
             "## ④ 预处理",
             a.summary,
-            a.qc_plot,
             a.qc_table,
+            "参考强度按样本和实际参考 m/z 分行显示；不同参考离子不合并，空记录不展示。",
             self.operation,
             self.operation_controls,
             "QC 检出按 >0 定义，建议在标准化或插补前筛选。全数据插补可能影响模型验证的独立性。",
             self.button("检查影响（不改变当前数据）", self._preview_operation),
             self.impact,
             self.impact_note,
+            self.impact_preview,
             self.apply_confirm,
             self.button("应用到当前数据", self._apply_operation),
             a.history_table,
@@ -1305,6 +1321,7 @@ class ProjectWorkspace:
     def _invalidate_impact(self, _event=None):
         self._candidate = None
         self.apply_confirm.value = False
+        self.impact_preview.visible = False
         self.impact_note.object = "参数已改变；下方旧影响摘要不再有效，请重新检查。"
 
     def _signature(self):
@@ -1321,6 +1338,7 @@ class ProjectWorkspace:
         )
 
     def _preview_operation(self):
+        self._invalidate_impact()
         state = self.project.workspace
         state.require_data()
         candidate = deepcopy(state)
@@ -1352,6 +1370,16 @@ class ProjectWorkspace:
                 for name, count in before.items()
             )
         self.impact.object = pd.DataFrame(rows)
+        qc = candidate.qc()
+        self.impact_qc_table.object = qc_file_table(qc["file"])
+        self.impact_qc_plot.object = px.scatter(
+            qc["cell"],
+            x="total_intensity",
+            y="detected_features",
+            color="source_file",
+            title="检查后每细胞 QC（尚未应用）",
+        )
+        self.impact_preview.visible = True
         self._candidate = (self._signature(), candidate)
         self.impact_note.object = "影响检查有效；确认后将应用上述操作并清除下游结果。"
         self.apply_confirm.value = False
@@ -1366,6 +1394,7 @@ class ProjectWorkspace:
         self.project.workspace = self._candidate[1]
         self.analysis.state = self.project.workspace
         self._candidate = None
+        self.impact_preview.visible = False
         self.project.saved_reports = {}
         self.project.dirty = True
         self.apply_confirm.value = False
@@ -1376,6 +1405,7 @@ class ProjectWorkspace:
         if not self.reset_confirm.value:
             raise ValueError("请先确认恢复起点的影响")
         self.project.workspace.reset()
+        self._invalidate_impact()
         self.project.saved_reports = {}
         self.project.dirty = True
         self.reset_confirm.value = False
@@ -1427,6 +1457,7 @@ class ProjectWorkspace:
             a._button("运行降维", a._reduce),
             "### 3. 查看结果",
             a.embedding_view,
+            a.color_source,
             a.color_search,
             pn.Row(a.color_sort, a.color_descending),
             a.color,

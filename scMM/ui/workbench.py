@@ -24,6 +24,7 @@ from .analysis_plots import (
 )
 from .file_browser import FileBrowser
 from .layout import PlotWidth, fit_plot
+from .presentation import qc_file_table
 
 
 def _plot(title):
@@ -164,7 +165,7 @@ class WorkbenchPanels:
         )
         self.history_table = pn.pane.DataFrame(pd.DataFrame(), height=200)
         self.qc_plot = _plot("每细胞总强度与检出数")
-        self.qc_table = pn.pane.DataFrame(pd.DataFrame(), height=220)
+        self.qc_table = pn.pane.DataFrame(pd.DataFrame(), height=220, index=False)
         self.preprocess_page = pn.Column(
             "## 预处理与 QC",
             self.summary,
@@ -242,14 +243,29 @@ class WorkbenchPanels:
             lambda e: setattr(self.embedding_key, "value", f"X_{e.new}"), "value"
         )
         self.embedding_view = pn.widgets.Select(label="查看嵌入", options=[])
-        self.color = pn.widgets.Select(label="Color", options={"无": ""})
-        self.color_search = pn.widgets.TextInput(label="Search annotation / feature")
+        self.color_source = pn.widgets.Select(
+            label="Color source",
+            options={"列标签": "annotation", "Feature": "feature", "无": "none"},
+        )
+        self.color = pn.widgets.AutocompleteInput(
+            label="Color",
+            options={"无": ""},
+            min_characters=0,
+            case_sensitive=False,
+            search_strategy="includes",
+            restrict=True,
+            placeholder="输入列标签、feature 名称或 m/z，选择匹配项",
+        )
+        self.color_search = pn.widgets.TextInput(label="Search", placeholder="输入即筛选匹配项")
+        self._color_query = ""
+        self._color_selected = {}
         self.color_sort = pn.widgets.Select(
             label="Feature order", options=["mean", "total", "median", "detection", "mz", "name"]
         )
         self.color_descending = pn.widgets.Checkbox(label="Descending", value=True)
-        for widget in (self.color_search, self.color_sort, self.color_descending):
-            widget.param.watch(lambda _: self.refresh(), "value")
+        for widget in (self.color_source, self.color_sort, self.color_descending):
+            widget.param.watch(lambda _: self._refresh_colors(), "value")
+        self.color_search.param.watch(self._search_colors, ["value", "value_input"])
         self.embedding_plot = _plot("嵌入")
         self.cluster_method = self.field("clustering")
         self.clusters = self.field("n_clusters")
@@ -277,12 +293,16 @@ class WorkbenchPanels:
                 ),
             ),
             self.help("clustering", "n_clusters"),
-            pn.Row(self.embedding_view, self.color),
+            self.embedding_view,
+            self.color_source,
+            self.color_search,
+            pn.Row(self.color_sort, self.color_descending),
+            self.color,
             self.embedding_plot,
             "实验轨迹方法继续暂缓，现有 Python 轨迹接口不变。",
         )
-        for widget in (self.embedding_view, self.color):
-            widget.param.watch(lambda _: self._draw_embedding(), "value")
+        self.embedding_view.param.watch(lambda _: self._draw_embedding(), "value")
+        self.color.param.watch(self._select_color, "value")
 
     def _reduce(self):
         self.state.reduce(
@@ -313,17 +333,16 @@ class WorkbenchPanels:
 
         from .presentation import feature_label
 
-        columns = sorted(
-            observations,
-            key=lambda c: (
-                (["group", "sample", "batch"].index(c) if c in ["group", "sample", "batch"] else 3),
-                c,
-            ),
-        )
-        choices = {"无": "", **{f"Annotation · {c}": f"obs:{c}" for c in columns}}
-        if data is not None:
-            values = dense(data.X)
+        choices = {}
+        search_terms = {}
+        if self.color_source.value == "annotation":
+            for c in observations:
+                choices[str(c)] = f"obs:{c}"
+                search_terms[str(c)] = str(c).lower()
+        elif self.color_source.value == "feature" and data is not None:
             method = self.color_sort.value
+            # m/z and name sorting do not need to materialize a sparse matrix.
+            values = dense(data.X) if method not in {"mz", "name"} else None
             scores = {
                 "mean": lambda: values.mean(axis=0),
                 "total": lambda: values.sum(axis=0),
@@ -334,21 +353,86 @@ class WorkbenchPanels:
                 ).to_numpy(),
                 "name": lambda: np.asarray(data.var_names),
             }[method]()
-            order = np.argsort(scores, kind="stable")
-            if self.color_descending.value:
-                order = order[::-1]
-            choices.update(
-                {
-                    f"Feature · {feature_label(data.var_names[j], data.var.iloc[j].get('mz'))} · #{j + 1}": f"feature:{data.var_names[j]}"
-                    for j in order
-                }
+            order = (
+                pd.Series(scores)
+                .sort_values(
+                    ascending=not self.color_descending.value, kind="stable", na_position="last"
+                )
+                .index
             )
-        query = self.color_search.value.strip().lower()
+            for j in order:
+                identity = data.var_names[j]
+                mz = data.var.iloc[j].get("mz")
+                mass = feature_label(identity, mz)
+                # Numeric feature identities stay at display precision; searches retain the full ID.
+                name = "" if pd.notna(pd.to_numeric(identity, errors="coerce")) else identity
+                label = f"{mass}{' · ' + name if name else ''} · #{j + 1}"
+                if method in {"mean", "total", "median"}:
+                    label += f" · {method} {scores[j]:.3e}"
+                choices[label] = f"feature:{identity}"
+                search_terms[label] = f"{label} {identity} {mz}".lower()
+        else:
+            return {"无": ""}
+        query = self._color_query.strip().lower()
+        selected = self._color_selected.get(self.color_source.value)
         return {
             key: value
             for key, value in choices.items()
-            if not value or not query or query in key.lower() or value == self.color.value
+            if not query or query in search_terms[key] or value == selected
         }
+
+    def _search_colors(self, *events):
+        event = next((event for event in events if event.name == "value_input"), events[-1])
+        self._color_query = event.new
+        self._refresh_colors()
+
+    def _select_color(self, _event=None):
+        if self._refreshing:
+            return
+        self._color_selected[self.color_source.value] = self.color.value
+        self._draw_embedding()
+
+    def _refresh_colors(self):
+        refreshing = self._refreshing
+        self._refreshing = True
+        try:
+            feature = self.color_source.value == "feature"
+            self.color_sort.visible = self.color_descending.visible = feature
+            self.color_search.visible = self.color.visible = self.color_source.value != "none"
+            data = self.state.data
+            observations = [] if data is None else list(data.obs.columns)
+            choices = self._color_choices(data, observations)
+            previous = self._color_selected.get(self.color_source.value)
+            if not previous and self.color_source.value == "annotation" and data is not None:
+                previous = next(
+                    (
+                        f"obs:{key}"
+                        for key in ("group", "sample")
+                        if key in data.obs
+                        and data.obs[key]
+                        .astype(object)
+                        .fillna("")
+                        .astype(str)
+                        .str.strip()
+                        .ne("")
+                        .any()
+                        and f"obs:{key}" in choices.values()
+                    ),
+                    None,
+                )
+            old_options = self.color.options
+            self.color.options = choices
+            # Dict equality ignores insertion order, so Param otherwise skips this update.
+            if old_options == choices and list(old_options) != list(choices):
+                self.color.param.trigger("options")
+            self.color.value = (
+                previous if previous in choices.values() else next(iter(choices.values()), "")
+            )
+            self._color_selected[self.color_source.value] = self.color.value
+        finally:
+            self._refreshing = refreshing
+        if not refreshing:
+            self._draw_embedding()
 
     def _draw_embedding(self):
         if self._refreshing or self.state.data is None or not self.embedding_view.value:
@@ -744,27 +828,7 @@ class WorkbenchPanels:
             )
             self._options(self.representation, ["X", *embeddings])
             self._options(self.embedding_view, embeddings)
-            colors = self._color_choices(data, observations)
-            previous_color = self.color.value
-            self._options(self.color, colors)
-            if not previous_color:
-                self.color.value = next(
-                    (
-                        f"obs:{key}"
-                        for key in ("group", "sample")
-                        if data is not None
-                        and key in data.obs
-                        and data.obs[key]
-                        .astype(object)
-                        .fillna("")
-                        .astype(str)
-                        .str.strip()
-                        .ne("")
-                        .any()
-                        and f"obs:{key}" in colors.values()
-                    ),
-                    "",
-                )
+            self._refresh_colors()
             self.embedding_download.disabled = data is None or not self.embedding_view.value
             self.qc_download.disabled = self.history_download.disabled = data is None
             for download in (self.embedding_download, self.qc_download, self.history_download):
@@ -774,7 +838,7 @@ class WorkbenchPanels:
             if data is not None:
                 self.history_table.object = pd.DataFrame(self.state.history())
                 qc = self.state.qc()
-                self.qc_table.object = qc["file"]
+                self.qc_table.object = qc_file_table(qc["file"])
                 self.qc_plot.object = px.scatter(
                     qc["cell"],
                     x="total_intensity",

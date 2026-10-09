@@ -206,7 +206,9 @@ Notebook 或 Python API。
 首次读取原始文件时 m/z 下限向下、上限向上取整到 10 的倍数；共同特征采用各文件范围的并集，独立模式使用各文件范围。
 手动应用的参数优先；自动范围不冻结其他项目默认参数。UMAP 默认 PCA 输入为 20 维，维数不足时需手动调整。
 
-网页分析的默认选择：着色优先有效 group、其次 sample；特征按平均强度降序。
+网页分析默认 `color_source=annotation`（列标签），优先选择有效 group、其次 sample；
+可切换为 `feature` 或 `none`。Feature 默认 `color_sort=mean`、`color_descending=True`，即平均强度降序；
+排序还支持 `total`、`median`、`detection`、`mz`、`name`。输入匹配与搜索的操作见[工作流程](workflow.md#分析显示与导出)。
 火山图标签默认 FDR≤0.05、abs(log2FC)≥1，FDR 优先/效应量辅助排序，最多标注前 10 个特征；阈值、数量和排序可调整。
 小提琴图每次最多 12 个，默认包含零值。它们是显示设置，不改变检验和数值导出。
 
