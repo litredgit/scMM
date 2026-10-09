@@ -2,8 +2,35 @@
 
 import math
 
+import numpy as np
 import pandas as pd
 import panel as pn
+
+
+def ordinary_number(value):
+    return np.format_float_positional(float(value), trim="-")
+
+
+class QCDataFrame(pn.pane.DataFrame):
+    """Format mixed QC metrics on a display copy, retaining the numerical object."""
+
+    def _transform_object(self, obj):
+        if isinstance(obj, pd.DataFrame) and "metric" in obj:
+            displayed = obj.copy()
+            intensity = obj["metric"].str.contains("intensity|abundance|强度", case=False, na=False)
+            for column in ("mean", "median", "std", "min", "max"):
+                if column not in obj:
+                    continue
+                displayed[column] = [
+                    self.na_rep
+                    if pd.isna(value)
+                    else f"{value:.3e}"
+                    if scientific
+                    else ordinary_number(value)
+                    for value, scientific in zip(obj[column], intensity, strict=True)
+                ]
+            obj = displayed
+        return super()._transform_object(obj)
 
 
 def mass_label(value):
@@ -70,11 +97,13 @@ def style_figure(figure):
             axis = figure.layout[axis_name]
             title = (axis.title.text or "").lower()
             if any(word in title for word in ("intensity", "强度", "abundance")):
-                axis.tickformat = ".3e"
+                axis.tickformat = axis.hoverformat = ".3e"
             elif "m/z" in title or title == "mz":
-                axis.tickformat = ".4f"
-            elif "feature" in title or "特征数" in title:
-                axis.tickformat = "d"
+                axis.tickformat = axis.hoverformat = ".4f"
+            elif any(word in title for word in ("features", "cells", "特征数", "细胞数")):
+                axis.tickformat = axis.hoverformat = "d"
+            else:
+                axis.tickformat = axis.hoverformat = "~f"
     return figure
 
 
@@ -100,6 +129,7 @@ def apply_presentation(root):
         table.sparsify = False
         table.col_space = 100
         table.max_rows = 100
+        table.float_format = ordinary_number
         table.styles = {**table.styles, "overflow": "auto"}
         table.stylesheets = [
             *table.stylesheets,
@@ -117,14 +147,12 @@ def apply_presentation(root):
                     formatters[col] = mass_label
                 elif name == "count":
                     formatters[col] = lambda x: f"{x:.0f}"
-                elif (
-                    "metric" in frame.columns and name in {"mean", "median", "std", "min", "max"}
-                ) or any(
-                    key in name for key in ("intensity", "强度", "mean_a", "mean_b", "abundance")
+                elif name in {"mean_a", "mean_b"} or any(
+                    key in name for key in ("intensity", "强度", "abundance")
                 ):
                     formatters[col] = lambda x: f"{x:.3e}"
                 elif any(key in name for key in ("features", "cells", "特征数", "细胞数")):
-                    formatters[col] = lambda x: f"{x:.0f}"
+                    formatters[col] = ordinary_number
             table.formatters = formatters
 
         format_table()

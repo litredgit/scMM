@@ -44,7 +44,7 @@ from scMM.application.workbench import read_dataset
 
 from .file_browser import FileBrowser
 from .layout import CONTENT_STYLE, TaskDock, UnsavedGuard, fit_plot
-from .presentation import apply_presentation, english_parameters, qc_file_table
+from .presentation import QCDataFrame, apply_presentation, english_parameters, qc_file_table
 from .project_views import ProjectRawViews
 from .raw_components import PreviewWorkspace as PreviewWorkspace
 
@@ -1277,7 +1277,7 @@ class ProjectWorkspace:
         self.operation.param.watch(controls, "value")
         controls()
         self.impact = pn.pane.DataFrame(pd.DataFrame(), index=False)
-        self.impact_qc_table = pn.pane.DataFrame(pd.DataFrame(), index=False, height=240)
+        self.impact_qc_table = QCDataFrame(pd.DataFrame(), index=False, height=240)
         self.impact_qc_plot = fit_plot(pn.pane.Plotly(go.Figure()), "analysis")
         self.impact_preview = pn.Column(
             "### 检查后的候选数据（尚未应用）",

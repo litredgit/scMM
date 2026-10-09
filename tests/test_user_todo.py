@@ -19,7 +19,7 @@ from scMM.application.projects import write_json
 from scMM.application.workbench import AnalysisWorkspace
 from scMM.ui.analysis_plots import violin_figure, volcano_figure
 from scMM.ui.file_browser import FileBrowser
-from scMM.ui.presentation import qc_file_table
+from scMM.ui.presentation import QCDataFrame, apply_presentation, qc_file_table
 
 
 def test_metadata_preserves_matrix_layers_embedding_and_unrelated_results():
@@ -144,6 +144,47 @@ def test_qc_reference_rows_preserve_nearby_ions_and_omit_empty_sample_records():
     assert refs["count"].tolist() == [2, 2]
     assert refs.iloc[0]["mean"] == original.loc["a", ("reference_intensity_760.58331", "mean")]
     assert not isinstance(displayed.columns, pd.MultiIndex)
+
+
+def test_qc_display_formats_by_metric_without_rounding_numerical_data():
+    from html import unescape
+
+    import panel as pn
+    from bokeh.document import Document
+
+    stats = pd.DataFrame(
+        {
+            "metric": ["total_intensity", "detected_features", "reference_intensity"],
+            "count": [3.0, 3.0, 2.0],
+            "mean": [1234567.89, 2.5, 98765.4321],
+            "median": [1200000.0, 2.5, 90000.0],
+            "std": [123.45, 0.5, float("nan")],
+            "min": [1000000.0, 2.0, 80000.0],
+            "max": [1300000.0, 3.0, 100000.0],
+        }
+    )
+    pane = QCDataFrame(stats, index=False)
+    general = pn.pane.DataFrame(
+        pd.DataFrame(
+            {"detected_features": [3.0], "fdr": [1e-8], "mean_abs_shap": [1e-8], "mean_a": [1e6]}
+        )
+    )
+    apply_presentation(pn.Column(pane, general))
+    model = pane.get_root(Document())
+    html = unescape(model.text)
+    assert "1.235e+06" in html and "9.877e+04" in html
+    assert "2.500e+00" not in html and "5.000e-01" not in html
+    assert "<td>2.5</td>" in html and "<td>0.5</td>" in html and "<td>2</td>" in html
+    assert "NaN" in html
+    pd.testing.assert_frame_equal(pane.object, stats)
+    plain = general.get_root(Document())
+    assert unescape(plain.text).count("0.00000001") == 2
+    assert "1.000e+06" in unescape(plain.text)
+    assert "<td>3</td>" in unescape(plain.text)
+    pane.object = stats.loc[[1]].copy()
+    assert "e+" not in unescape(model.text) and "e-" not in unescape(model.text)
+    pane._cleanup(model)
+    general._cleanup(plain)
 
 
 def test_color_sources_search_sort_and_restore(tmp_path):

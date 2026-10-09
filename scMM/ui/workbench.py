@@ -24,7 +24,7 @@ from .analysis_plots import (
 )
 from .file_browser import FileBrowser
 from .layout import PlotWidth, fit_plot
-from .presentation import qc_file_table
+from .presentation import QCDataFrame, qc_file_table
 
 
 def _plot(title):
@@ -165,7 +165,7 @@ class WorkbenchPanels:
         )
         self.history_table = pn.pane.DataFrame(pd.DataFrame(), height=200)
         self.qc_plot = _plot("每细胞总强度与检出数")
-        self.qc_table = pn.pane.DataFrame(pd.DataFrame(), height=220, index=False)
+        self.qc_table = QCDataFrame(pd.DataFrame(), height=220, index=False)
         self.preprocess_page = pn.Column(
             "## 预处理与 QC",
             self.summary,

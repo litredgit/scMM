@@ -11,7 +11,7 @@ from plotly.subplots import make_subplots
 
 from scMM.application.workbench import dense
 
-from .presentation import feature_label, mass_label, style_figure
+from .presentation import feature_label, mass_label, ordinary_number, style_figure
 
 
 def volcano_figure(table, *, fdr=0.05, fold_change=1.0, labels=10, order="fdr"):
@@ -27,6 +27,8 @@ def volcano_figure(table, *, fdr=0.05, fold_change=1.0, labels=10, order="fdr"):
         feature_label(row.feature_id, row.get("mz")) for _, row in frame.iterrows()
     ]
     frame["label"] = frame["display_mz"].where(frame.index.isin(selected.index), "")
+    frame["display_p_value"] = frame.p_value.map(ordinary_number)
+    frame["display_fdr"] = frame.fdr.map(ordinary_number)
     figure = px.scatter(
         frame,
         x="log2_fold_change",
@@ -34,7 +36,13 @@ def volcano_figure(table, *, fdr=0.05, fold_change=1.0, labels=10, order="fdr"):
         text="label",
         custom_data=["feature_id"],
         hover_name="display_mz",
-        hover_data={"mean_a": ":.3e", "mean_b": ":.3e", "p_value": ":.3e", "fdr": ":.3e"},
+        hover_data={
+            "mean_a": ":.3e",
+            "mean_b": ":.3e",
+            "display_p_value": True,
+            "display_fdr": True,
+        },
+        labels={"display_p_value": "p_value", "display_fdr": "fdr"},
         title="火山图：全部特征的全局 BH-FDR",
     )
     figure.update_traces(textposition="top center")
@@ -59,7 +67,7 @@ def violin_figure(data, result, features, *, hide_zero=False, columns=3):
         rows=rows,
         cols=columns,
         subplot_titles=[
-            f"{feature_label(feature, table.loc[feature].get('mz'))}<br>全局 FDR={table.loc[feature, 'fdr']:.3g}"
+            f"{feature_label(feature, table.loc[feature].get('mz'))}<br>全局 FDR={ordinary_number(table.loc[feature, 'fdr'])}"
             for feature in features
         ],
     )
@@ -117,6 +125,9 @@ def embedding_figure(data, key, color=None):
         figure.update_traces(
             hovertemplate="Cell %{hovertext}<br>x=%{x}<br>y=%{y}<br>Intensity %{marker.color:.3e}<extra></extra>"
         )
+    elif color:
+        scientific = any(word in color.lower() for word in ("intensity", "abundance", "强度"))
+        figure.update_coloraxes(colorbar_tickformat=".3e" if scientific else "~f")
     return style_figure(figure)
 
 
