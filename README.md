@@ -23,6 +23,7 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 
 ## 从这里开始
 
+- 代理接手与协作规则：[AGENTS.md](AGENTS.md)。
 - [安装与部署](docs/installation.md) → [网页与 Notebook 工作流程](docs/workflow.md)
 - [参数参考](docs/parameters.md) · [Python/CLI](docs/python-api.md) · [分析](docs/analysis.md)
 - [排错](docs/troubleshooting.md) · [待办](docs/roadmap.md) · [完整文档索引](docs/README.md)
