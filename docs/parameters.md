@@ -198,6 +198,10 @@ Notebook 或 Python API。
 
 ## 网页默认参数
 
+网页新项目默认 `extraction_method=snr_v1`；显式 JSON 配置优先，已有项目继续使用保存的算法与参数。
+SNR 模式主要显示 `feature_snr_threshold`，legacy 模式显示 `peak_snr`；高级参数随算法显示适用项。
+此默认值只用于网页，CLI、Python API 和 Notebook 的各自默认值不变。
+
 网页首次创建项目的参考离子来自全局细胞类型预设：哺乳动物 `760.5851`（初始默认）、藻类 `734.5929`、细菌 `690.5069`。
 可修改、新增预设并显式保存；项目保留自己的参数，后续修改全局预设不会覆盖旧项目。
 全局预设默认写入 `~/data/results/.scmm-preferences.json`，可通过 `SCMM_PREFERENCES` 指定服务独立配置文件。
@@ -208,7 +212,7 @@ Notebook 或 Python API。
 
 网页分析默认 `color_source=annotation`（列标签），优先选择有效 group、其次 sample；
 可切换为 `feature` 或 `none`。Feature 默认 `color_sort=mean`、`color_descending=True`，即平均强度降序；
-排序还支持 `total`、`median`、`detection`、`mz`、`name`。输入匹配与搜索的操作见[工作流程](workflow.md#分析显示与导出)。
+排序还支持 `total`、`median`、`detection`、`mz`、`name`。下拉选择与搜索的操作见[工作流程](workflow.md#分析显示与导出)。
 火山图标签默认 FDR≤0.05、abs(log2FC)≥1，FDR 优先/效应量辅助排序，最多标注前 10 个特征；阈值、数量和排序可调整。
 小提琴图每次最多 12 个，默认包含零值。它们是显示设置，不改变检验和数值导出。
 
@@ -241,7 +245,7 @@ Notebook 或 Python API。
 }
 ```
 
-只覆盖明确写出的键，省略项使用后端默认值。未知节/键、错误类型、非法枚举、非有限数值和
+只覆盖明确写出的键，省略项使用本节网页默认值。未知节/键、错误类型、非法枚举、非有限数值和
 互相矛盾的范围在启动时明确失败，不静默忽略。设置的是新会话默认值，不自动加载数据或执行分析。
 完整处理键与帮助以 `scMM/application/parameters.py` 为准；analysis 键也在同一模块定义。
 更改文件后重新启动服务才能应用；界面手工更改不会写回 JSON。

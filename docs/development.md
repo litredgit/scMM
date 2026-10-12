@@ -17,6 +17,8 @@ scMM/
 ├── cli.py                 # scmm-process 命令行入口
 ├── application/
 │   ├── projects.py        # 项目清单、快照、修订冲突和保存重载
+│   ├── naming.py          # 北京时间与项目/批次/快照/H5AD 默认命名
+│   ├── trash.py           # 删除计划、引用/任务保护及回收区恢复
 │   ├── project_batch.py   # 多样本持久 worker、重试及审核合并
 │   ├── workbench.py       # 数据身份、预处理、分析与结果生命周期
 │   ├── preview_cache.py   # 完整预览/共同特征的身份校验与复用
@@ -36,6 +38,9 @@ scMM/
 │   ├── raw_components.py  # 可复用的原始谱及分析控件
 │   ├── file_browser.py    # 根目录内的浏览、搜索与跨目录选择
 │   ├── presentation.py    # 表格、图形与数值显示
+│   ├── downloads.py       # 挂载页面的下载缓存清除兼容
+│   ├── preflight.py       # 实际参数摘要、分组参数与样本差异
+│   ├── saved_items.py     # 已保存项目/结果管理及回收区交互
 │   ├── analysis_plots.py  # 分析结果图形
 │   ├── layout.py          # 任务栏、图表比例和离页提醒
 │   ├── workbench.py       # 分析页面控件

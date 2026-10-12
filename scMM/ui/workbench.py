@@ -12,6 +12,7 @@ import panel as pn
 import plotly.express as px
 import plotly.graph_objects as go
 
+from scMM.application.naming import dataset_filename
 from scMM.application.parameters import ANALYSIS_SPECS
 from scMM.application.workbench import AnalysisWorkspace, read_dataset
 
@@ -22,8 +23,9 @@ from .analysis_plots import (
     violin_figure,
     volcano_figure,
 )
+from .downloads import FileDownload
 from .file_browser import FileBrowser
-from .layout import PlotWidth, fit_plot
+from .layout import PlotWidth, fit_plot, flow, style_button
 from .presentation import QCDataFrame, qc_file_table
 
 
@@ -76,7 +78,7 @@ class WorkbenchPanels:
             self.path,
             self.browser,
             self.trust,
-            pn.Row(self.load_button, self.import_task),
+            flow(self.load_button, self.import_task),
             self.summary,
             self.notice,
             self.status,
@@ -146,8 +148,8 @@ class WorkbenchPanels:
                 return
         raise PermissionError("任务结果不在开放的存储目录内")
 
-    def _button(self, label, action):
-        button = pn.widgets.Button(label=label, color="primary")
+    def _button(self, label, action, *, role="action"):
+        button = style_button(pn.widgets.Button(label=label), role)
         button.on_click(lambda _: self.run(action))
         return button
 
@@ -176,7 +178,7 @@ class WorkbenchPanels:
             self.imputation,
             self._button("插补零值", lambda: self.state.impute(self.imputation.value)),
             self.help("normalization", "imputation"),
-            pn.Row(self.min_total, self.min_detected, self.feature_fraction),
+            flow(self.min_total, self.min_detected, self.feature_fraction),
             self._button(
                 "应用 QC 筛选",
                 lambda: self.state.filter(
@@ -247,23 +249,20 @@ class WorkbenchPanels:
             label="Color source",
             options={"列标签": "annotation", "Feature": "feature", "无": "none"},
         )
-        self.color = pn.widgets.AutocompleteInput(
-            label="Color",
-            options={"无": ""},
-            min_characters=0,
-            case_sensitive=False,
-            search_strategy="includes",
-            restrict=True,
-            placeholder="输入列标签、feature 名称或 m/z，选择匹配项",
+        self.color = pn.widgets.Select(label="Color", options={"无": ""}, width=480)
+        self.color_search = pn.widgets.TextInput(
+            label="Search", placeholder="筛选列标签、feature 名称或 m/z"
         )
-        self.color_search = pn.widgets.TextInput(label="Search", placeholder="输入即筛选匹配项")
+        self.color_clear = self._button("清除着色筛选", self._clear_color_search, role="auxiliary")
+        self.color_note = pn.pane.Markdown("")
         self._color_query = ""
         self._color_selected = {}
         self.color_sort = pn.widgets.Select(
             label="Feature order", options=["mean", "total", "median", "detection", "mz", "name"]
         )
         self.color_descending = pn.widgets.Checkbox(label="Descending", value=True)
-        for widget in (self.color_source, self.color_sort, self.color_descending):
+        self.color_source.param.watch(self._change_color_source, "value")
+        for widget in (self.color_sort, self.color_descending):
             widget.param.watch(lambda _: self._refresh_colors(), "value")
         self.color_search.param.watch(self._search_colors, ["value", "value_input"])
         self.embedding_plot = _plot("嵌入")
@@ -275,29 +274,23 @@ class WorkbenchPanels:
             self.summary,
             self.status,
             self.representation,
-            pn.Row(self.reduction, self.dimensions, self.scale),
-            pn.Row(self.neighbors, self.perplexity, self.seed),
+            flow(self.reduction, self.dimensions, self.scale),
+            flow(self.neighbors, self.perplexity, self.seed),
             self.embedding_key,
             self._button("运行降维", self._reduce),
             self.help("reduction", "n_components", "n_neighbors", "perplexity", "random_state"),
-            pn.Row(self.cluster_method, self.clusters, self.cluster_key),
+            flow(self.cluster_method, self.clusters, self.cluster_key),
             self._button(
                 "运行聚类",
-                lambda: self.state.cluster(
-                    self.cluster_method.value,
-                    use_rep=self.representation.value,
-                    key=self.cluster_key.value,
-                    n_clusters=self.clusters.value,
-                    n_neighbors=self.neighbors.value,
-                    random_state=self.seed.value,
-                ),
+                self._cluster,
             ),
             self.help("clustering", "n_clusters"),
             self.embedding_view,
             self.color_source,
-            self.color_search,
-            pn.Row(self.color_sort, self.color_descending),
+            flow(self.color_search, self.color_clear),
+            flow(self.color_sort, self.color_descending),
             self.color,
+            self.color_note,
             self.embedding_plot,
             "实验轨迹方法继续暂缓，现有 Python 轨迹接口不变。",
         )
@@ -325,6 +318,27 @@ class WorkbenchPanels:
             else float(self.learning_rate.value),
             max_iter=self.max_iter.value,
         )
+
+    def _cluster(self):
+        self.state.cluster(
+            self.cluster_method.value,
+            use_rep=self.representation.value,
+            key=self.cluster_key.value,
+            n_clusters=self.clusters.value,
+            n_neighbors=self.neighbors.value,
+            random_state=self.seed.value,
+        )
+        self._color_selected["annotation"] = f"obs:{self.cluster_key.value}"
+        self._clear_color_search()
+        self.color_source.value = "annotation"
+
+    def _clear_color_search(self):
+        self._color_query = ""
+        self.color_search.param.update(value="", value_input="")
+        self._refresh_colors()
+
+    def _change_color_source(self, _):
+        self._clear_color_search()
 
     def _color_choices(self, data, observations):
         import numpy as np
@@ -399,6 +413,7 @@ class WorkbenchPanels:
             feature = self.color_source.value == "feature"
             self.color_sort.visible = self.color_descending.visible = feature
             self.color_search.visible = self.color.visible = self.color_source.value != "none"
+            self.color_clear.visible = self.color_note.visible = self.color.visible
             data = self.state.data
             observations = [] if data is None else list(data.obs.columns)
             choices = self._color_choices(data, observations)
@@ -429,6 +444,12 @@ class WorkbenchPanels:
                 previous if previous in choices.values() else next(iter(choices.values()), "")
             )
             self._color_selected[self.color_source.value] = self.color.value
+            total = data.n_vars if feature and data is not None else len(observations)
+            noun = "特征" if feature else "列标签"
+            self.color_note.object = f"显示 **{len(choices)} / {total}** 个{noun}" + (
+                "（含当前选项）；清除筛选可查看全部。" if self._color_query else "。"
+            )
+            self.color_clear.disabled = not bool(self._color_query)
         finally:
             self._refreshing = refreshing
         if not refreshing:
@@ -458,7 +479,7 @@ class WorkbenchPanels:
         self.volcano_order = pn.widgets.Select(
             label="Label order", options=["fdr", "effect", "p_value", "intensity"]
         )
-        self.volcano_controls = pn.Row(
+        self.volcano_controls = flow(
             self.volcano_fdr, self.volcano_effect, self.volcano_labels, self.volcano_order
         )
         self.volcano = _plot("全局 FDR 火山图")
@@ -485,8 +506,8 @@ class WorkbenchPanels:
             "## 差异分析",
             self.summary,
             self.status,
-            pn.Row(self.group, self.group_a, self.group_b),
-            pn.Row(self.diff_layer, self.diff_method),
+            flow(self.group, self.group_a, self.group_b),
+            flow(self.diff_layer, self.diff_method),
             self._button("比较全部特征", self._differentiate),
             self.help("differential_method"),
             "选取特征和隐藏零值不会重新检验；两张图共享全特征 BH-FDR。",
@@ -506,7 +527,7 @@ class WorkbenchPanels:
             self.marker_table,
             "### 特征相关网络",
             "沿用上方数据层。仅按方差筛选特征；相关不代表因果，不是轨迹分析。",
-            pn.Row(self.network_method, self.network_threshold, self.network_top_features),
+            flow(self.network_method, self.network_threshold, self.network_top_features),
             self.help("network_method", "network_threshold", "network_top_features"),
             self._button("计算相关网络", self._network),
             self.network_plot,
@@ -631,9 +652,9 @@ class WorkbenchPanels:
             self.summary,
             self.status,
             "训练/测试和各 CV 折均须包含全部类别。分组划分不能补救提前在全数据上插补/选特征造成的泄漏。",
-            pn.Row(self.label, self.sample_group, self.model_layer),
-            pn.Row(self.model, self.lda_solver),
-            pn.Row(self.cv, self.test_size, self.calibration_bins),
+            flow(self.label, self.sample_group, self.model_layer),
+            flow(self.model, self.lda_solver),
+            flow(self.cv, self.test_size, self.calibration_bins),
             self.smote,
             self._button("训练并验证", self._train),
             self.help("model", "cv", "test_size", "calibration_bins"),
@@ -646,7 +667,7 @@ class WorkbenchPanels:
             "lsqr 可做分类但不支持潜变量；R2/Q2 继续暂缓。",
             "### SHAP",
             "使用训练集背景解释测试集样本；绝对贡献跨样本/类别取平均，不表示效应方向或因果。图显示前 30 项，下载包含全部。",
-            pn.Row(self.shap_background, self.shap_samples),
+            flow(self.shap_background, self.shap_samples),
             self.help("shap_background", "shap_samples"),
             self.shap_button,
             self.shap_plot,
@@ -688,19 +709,21 @@ class WorkbenchPanels:
             label="保存存储（含云盘）", options=[r.label for r in self.catalog.roots]
         )
         self.export_directory = pn.widgets.TextInput(label="保存目录", value=".")
-        self.export_name = pn.widgets.TextInput(label="H5AD 文件名", value="analysis.h5ad")
+        self.export_name = pn.widgets.TextInput(
+            label="H5AD 文件名", value=dataset_filename("analysis")
+        )
         self.confirm_save = pn.widgets.Checkbox(
             label="确认保存当前修订（不覆盖已有文件）", value=False
         )
         for widget in (self.export_root, self.export_directory, self.export_name):
             widget.param.watch(lambda _: setattr(self.confirm_save, "value", False), "value")
         self.save_button = self._button("保存 H5AD（含历史层与嵌入）", self._save)
-        self.diff_download = pn.widgets.FileDownload(
+        self.diff_download = FileDownload(
             label="下载完整差异表 CSV",
             filename="differential.csv",
             callback=lambda: _csv(self.state.result("differential")["table"]),
         )
-        self.model_download = pn.widgets.FileDownload(
+        self.model_download = FileDownload(
             label="下载监督诊断 JSON",
             filename="supervised.json",
             callback=lambda: BytesIO(
@@ -711,12 +734,12 @@ class WorkbenchPanels:
                 ).encode()
             ),
         )
-        self.matrix_download = pn.widgets.FileDownload(
+        self.matrix_download = FileDownload(
             label="下载当前矩阵 CSV",
             filename="matrix.csv",
             callback=lambda: _csv(self.state.require_data().to_df()),
         )
-        self.embedding_download = pn.widgets.FileDownload(
+        self.embedding_download = FileDownload(
             label="下载当前嵌入 CSV",
             filename="embedding.csv",
             callback=lambda: _csv(
@@ -726,18 +749,18 @@ class WorkbenchPanels:
                 )
             ),
         )
-        self.qc_download = pn.widgets.FileDownload(
+        self.qc_download = FileDownload(
             label="下载细胞 QC CSV",
             filename="cell_qc.csv",
             callback=lambda: _csv(self.state.qc()["cell"]),
         )
-        self.history_download = pn.widgets.FileDownload(
+        self.history_download = FileDownload(
             label="下载处理记录 CSV",
             filename="history.csv",
             callback=lambda: _csv(pd.DataFrame(self.state.history())),
         )
         self.extra_downloads = {
-            name: pn.widgets.FileDownload(
+            name: FileDownload(
                 label=f"下载 {name} CSV",
                 filename=f"{name}.csv",
                 callback=lambda name=name: _csv(self.state.result(name)["table"]),
@@ -749,8 +772,8 @@ class WorkbenchPanels:
             self.summary,
             self.status,
             self.notice,
-            pn.Row(self.diff_download, self.model_download, self.matrix_download),
-            pn.Row(*self.extra_downloads.values()),
+            flow(self.diff_download, self.model_download, self.matrix_download),
+            flow(*self.extra_downloads.values()),
             self.export_root,
             self.export_directory,
             self.export_name,

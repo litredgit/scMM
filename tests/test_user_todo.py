@@ -235,10 +235,10 @@ def test_color_sources_search_sort_and_restore(tmp_path):
     model = a.color.get_root(Document())
     a.color_descending.value = False
     assert list(a.color.options.values()) == ["feature:second", "feature:third", "feature:first"]
-    assert model.completions == list(a.color.options)
+    assert [label for _value, label in model.options] == list(a.color.options)
     a.color_descending.value = True
     assert list(a.color.options.values()) == ["feature:first", "feature:third", "feature:second"]
-    assert model.completions == list(a.color.options)
+    assert [label for _value, label in model.options] == list(a.color.options)
     a.color._cleanup(model)
     a.color_search.value_input = "760.58331"
     assert (
@@ -266,6 +266,58 @@ def test_color_sources_search_sort_and_restore(tmp_path):
     ui.activate(reopened)
     assert ui.analysis.color_source.value == "feature"
     assert ui.analysis.color.value == "feature:first"
+
+
+def test_cluster_exposes_new_labels_and_resets_color_filters(tmp_path):
+    from bokeh.document import Document
+
+    ui = workspace(tmp_path)
+    values = np.array([[1, 2, 3], [2, 2, 4], [1, 3, 4], [9, 8, 7], [8, 9, 8], [9, 9, 7.0]])
+    data = AnnData(
+        values,
+        obs=pd.DataFrame(
+            {"reference_mz": [150.0] * 6, "group": ["a"] * 3 + ["b"] * 3},
+            index=[f"c{i}" for i in range(6)],
+        ),
+        var=pd.DataFrame({"mz": [150.0, 200.0, 300.0]}, index=["ref", "other", "third"]),
+    )
+    data.obsm["X_umap"] = values[:, :2].copy()
+    ui.project.workspace.replace(data)
+    a = ui.analysis
+    a.refresh()
+    a.color.value = "obs:reference_mz"
+    model = a.color.get_root(Document())
+    assert [label for _value, label in model.options] == ["reference_mz", "group"]
+    a.color_search.value_input = "reference_mz"
+    assert len(a.color.options) == 1
+    a.color_source.value = "feature"
+    assert not a._color_query and len(a.color.options) == 3
+    assert a.color_search.value == a.color_search.value_input == ""
+    a.color_search.value_input = "200"
+    a._clear_color_search()
+    assert len(model.options) == 3 and a.color_clear.disabled
+    a.color.value = "feature:other"
+    np.testing.assert_array_equal(a.embedding_plot.object.data[0].marker.color, values[:, 1])
+    a.color_search.value_input = "200"
+    a.cluster_method.value = "kmeans"
+    a.clusters.value = 2
+    a.cluster_key.value = "new_clusters"
+    a.run(a._cluster)
+    assert "❌" not in a.status.object
+    assert a.color_source.value == "annotation"
+    assert a.color.value == "obs:new_clusters"
+    assert not a._color_query and "obs:new_clusters" in a.color.options.values()
+    assert "new_clusters" in [label for _value, label in model.options]
+    assert len(a.embedding_plot.object.data) == 2
+    assert a.embedding_view.value == "X_umap"
+    np.testing.assert_array_equal(a.state.data.obsm["X_umap"], data.obsm["X_umap"])
+    a.color_source.value = "feature"
+    assert a.color.value == "feature:other"
+    a.color_search.value_input = "200"
+    a.run(a._cluster)  # A duplicate key fails without changing the current view.
+    assert "❌" in a.status.object
+    assert a.color_source.value == "feature" and a._color_query == "200"
+    a.color._cleanup(model)
 
 
 def test_imported_samples_edit_and_persist(tmp_path):

@@ -22,6 +22,8 @@ from scMM.application import (
 from scMM.application.parameters import PROCESSING_HELP
 from scMM.application.tasks import background_tasks_supported
 
+from .downloads import FileDownload
+
 _PLOT_CONFIG = {"displaylogo": False, "responsive": True, "scrollZoom": True}
 _DIRECTORY_ONLY_PATTERN = ".__scmm_directory_selector_no_files__"
 
@@ -262,7 +264,7 @@ class GuidedProcessingPanel:
             ("运行清单 JSON", "scmm-manifest.json"),
         )
         self.artifact_downloads = {
-            filename: pn.widgets.FileDownload(
+            filename: FileDownload(
                 label=label,
                 icon="download",
                 file=None,

@@ -56,7 +56,10 @@ def setup_project(tmp_path, *, storage_label="data", sample_names=("a", "b")):
 def test_batch_real_mzml_review_and_stop(tmp_path, strategy):
     project, catalog = setup_project(tmp_path)
     project.manifest["feature_strategy"] = strategy
+    project.samples[1]["parameters"] = dict(project.manifest["parameters"])
     request = preflight(project, catalog)
+    assert [row["parameter_source"] for row in request["samples"]] == ["project", "sample"]
+    assert request["samples"][0]["parameters"] == request["samples"][1]["parameters"]
     request["created_at"] = "test"
     folder = project.folder / "processing" / "test"
     folder.mkdir()

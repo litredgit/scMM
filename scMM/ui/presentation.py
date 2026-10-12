@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import panel as pn
 
+from .layout import style_button
+
 
 def ordinary_number(value):
     number = float(value)
@@ -124,6 +126,36 @@ def style_figure(figure):
 
 
 def apply_presentation(root):
+    for widget in root.select(pn.widgets.Button) + root.select(pn.widgets.FileDownload):
+        style_button(widget)
+    for accordion in root.select(pn.Accordion):
+        accordion.header_background = "#f5f3ff"
+        accordion.active_header_background = "#ede9fe"
+        accordion.header_color = "#6d28d9"
+        accordion.sizing_mode = "stretch_width"
+    for widget in root.select(pn.widgets.Widget):
+        if isinstance(
+            widget,
+            (
+                pn.widgets.TextInput,
+                pn.widgets.Select,
+                pn.widgets.IntInput,
+                pn.widgets.FloatInput,
+                pn.widgets.Checkbox,
+            ),
+        ):
+            widget.sizing_mode = None
+            if isinstance(widget, (pn.widgets.IntInput, pn.widgets.FloatInput)):
+                widget.width = min(widget.width or 160, 160)
+            elif widget.width is None or widget.width == 300:
+                widget.width = 240
+            widget.styles = {**widget.styles, "max-width": "100%", "min-width": "0"}
+        elif isinstance(widget, (pn.widgets.MultiChoice, pn.widgets.AutocompleteInput)):
+            widget.sizing_mode = "stretch_width"
+            widget.max_width = 520
+            widget.min_width = 0
+    for layout in root.select(pn.Column):
+        layout.min_width = 0
     for pane in root.select(pn.pane.Plotly):
         if "scmm-formatted" in pane.tags:
             continue
@@ -215,6 +247,20 @@ def english_parameters(owner):
             "leave",
             "confirm_save",
             "exploratory_split",
+            "project_name",
+            "description",
+            "h5ad_download_name",
+            "follow_log",
+            "raw_sample",
+            "name",
+            "project_select",
+            "file_root",
+            "mapping_source",
+            "export_root",
+            "export_directory",
+            "export_name",
+            "root",
+            "path",
         }:
             widget.label = name
             if name in {"ref_mz", "target_mz", "mz_min", "mz_max"}:

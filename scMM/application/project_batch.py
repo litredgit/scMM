@@ -23,6 +23,7 @@ from scMM.file.data import CyESIData
 from scMM.file.io import align_frame, extract_peaks, load_single_file, sum_spec, validate_ms_file
 from scMM.util.peak import filter_spectrum
 
+from .naming import beijing_time
 from .preview_cache import cached_shared_targets, reusable_preview
 from .processing import ProcessingParameters
 from .projects import child_path, project_lock, sample_parameters, write_json
@@ -59,7 +60,14 @@ def preflight(project, storage):
             getattr(base, key) != getattr(params, key) for key in SHARED_FIELDS
         ):
             raise ValueError(f"Shared feature parameters differ for {sample['name']}")
-        samples.append({**sample, "path": str(path), "parameters": asdict(params)})
+        samples.append(
+            {
+                **sample,
+                "path": str(path),
+                "parameters": asdict(params),
+                "parameter_source": "sample" if sample.get("parameters") else "project",
+            }
+        )
     return {
         "project_folder": str(project.folder),
         "samples": samples,
@@ -133,7 +141,9 @@ def submit(project, storage, *, retry_path=None):
     with project_lock(project.folder):
         if any(read_batch(path)["status"] in {"queued", "running"} for path in batches(project)):
             raise RuntimeError("This project already has an active extraction batch")
-        folder = child_path(project.folder, f"processing/{uuid4().hex}")
+        folder = child_path(
+            project.folder, f"processing/{beijing_time(compact=True)}_batch_{uuid4().hex[:8]}"
+        )
         folder.mkdir()
         path = folder / "state.json"
         if prior is not None:

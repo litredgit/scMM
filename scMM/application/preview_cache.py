@@ -61,7 +61,7 @@ def reusable_preview(project_folder, sample, targets=None):
         return None
     try:
         folder = child_path(project_folder, record["artifact"])
-        identity = json.loads((folder / "identity.json").read_text())
+        identity = json.loads((folder / "identity.json").read_text(encoding="utf-8"))
         expected = signature(sample["path"], sample["parameters"])
         if any(identity.get(key) != value for key, value in expected.items()):
             return None
@@ -83,7 +83,7 @@ def load_detection(output):
     from .raw_preview import CellDetectionPreview
 
     folder = Path(output).parent
-    metadata = json.loads((folder / "detection.json").read_text())
+    metadata = json.loads((folder / "detection.json").read_text(encoding="utf-8"))
     return CellDetectionPreview(
         pd.read_csv(folder / "traces.csv"),
         tuple(metadata["reference_mz"]),
@@ -107,7 +107,7 @@ def cached_shared_targets(project_folder, request):
     try:
         key = shared_cache_key(request)
         path = child_path(project_folder, f"processing/shared-{key}.npy")
-        metadata = json.loads(path.with_suffix(".json").read_text())
+        metadata = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
         if digest_file(path) != metadata["sha256"]:
             return None
         return np.load(path, allow_pickle=False)

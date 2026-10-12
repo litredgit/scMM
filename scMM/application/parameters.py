@@ -163,7 +163,9 @@ def load_defaults(path: str | Path | None = None) -> WorkbenchDefaults:
     preferences = load_preferences()
     processing = asdict(
         ProcessingParameters(
-            ref_mz=preferences["presets"][preferences["selected"]], n_jobs=cpu_default()
+            ref_mz=preferences["presets"][preferences["selected"]],
+            n_jobs=cpu_default(),
+            extraction_method="snr_v1",
         )
     )
     updates = override.get("processing", {})

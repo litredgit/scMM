@@ -170,6 +170,11 @@ python3 scripts/scmm_env.py install
 因此回滚到还没有管理脚本的旧提交也能启动网页。管理脚本变化后重新执行 `install`。
 安装 unit 不自动重启现有进程。
 
+启动器与新安装的 unit 启用 `PYTHONUTF8=1`，worker 继承该设置。不能只依赖 `LANG`：
+本机 PyOpenMS 导入会将原生 locale 切换为 `C`。项目 JSON、全局预设和缓存元数据仍显式使用 UTF-8。
+已有服务可通过用户级 drop-in 添加 `[Service]` / `Environment=PYTHONUTF8=1`，
+在保存并关闭相关页面、确认无活动任务后执行 daemon-reload 和重启；不要修改已有项目文件的编码。
+
 ## 日常开发与调试
 
 ```sh

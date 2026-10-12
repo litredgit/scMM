@@ -10,7 +10,7 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 
 | 能力 | 使用说明 |
 |---|---|
-| 六步项目网页、多样本信息、参数预检、提取审核及主动保存重载 | [当前网页指南](docs/workflow.md) |
+| 六步项目网页、多样本信息、参数预检、提取审核、主动保存及可恢复删除 | [当前网页指南](docs/workflow.md) |
 | 持久批处理、共同/独立特征、失败继续、停止后续样本和重试 | [多样本流程](docs/workflow.md) |
 | Thermo profile RAW 直接读取，接入 Python、CLI、目录处理及网页 | [RAW 依赖与真实样本验收](docs/thermo-raw.md) |
 | H5AD、预处理起点恢复、结果失效管理、只读报告与图表重载 | [数据与输出](docs/data-output.md) |

@@ -1,10 +1,58 @@
 """Project-specific raw preview presentation; numerical work stays in application."""
 # ruff: noqa: RUF001
 
-from .raw_components import PreviewWorkspace
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
+from html import escape
+
+import panel as pn
+
+from .raw_components import PreviewWorkspace, _empty_figure, _spectrum_figure
 
 
 class ProjectRawViews(PreviewWorkspace):
+    def _configure_controls(self, preview):
+        self._configuring_scans = True
+        try:
+            super()._configure_controls(preview)
+        finally:
+            self._configuring_scans = False
+        self._scan_catalog()
+
+    def _clear_raw_view(self):
+        self._scan_generation = getattr(self, "_scan_generation", 0) + 1
+        self._scan_pending = None
+        self._cancel_scan_timeout()
+        super()._clear_raw_view()
+        if hasattr(self, "scan_status"):
+            self.scan_status.object = "打开样本后自动显示单扫描谱。"
+            self._scan_controls(False)
+
+    def close(self):
+        self._scan_closed = True
+        self._scan_pending = None
+        self._cancel_scan_timeout()
+        if hasattr(self, "_scan_executor"):
+            self._scan_executor.shutdown(wait=False, cancel_futures=True)
+
+    def _cancel_scan_timeout(self):
+        timeout = getattr(self, "_scan_timeout", None)
+        if timeout is not None:
+            doc, callback = timeout
+            with suppress(ValueError):
+                doc.remove_timeout_callback(callback)
+            self._scan_timeout = None
+
+    def _scan_controls(self, enabled):
+        for widget in (
+            self.scan_time,
+            self.scan_index,
+            self.scan_slider,
+            self.scan_previous,
+            self.scan_next,
+        ):
+            widget.disabled = not enabled
+
     def _invalidate_cells(self):
         if self.preview is None:
             return super()._invalidate_cells()
@@ -27,9 +75,10 @@ class ProjectRawViews(PreviewWorkspace):
             self._selection_mode()
 
     def setup_navigation(self):
-        import panel as pn
-
         self._scan_sync = False
+        self._scan_closed = False
+        self._scan_pending = self._scan_future = self._scan_timeout = None
+        self.scan_status = pn.pane.Markdown("打开样本后自动显示单扫描谱。")
         self.scan_time = pn.widgets.FloatInput(label="Scan time (s)", value=0.0)
         self.scan_slider = pn.widgets.FloatSlider(
             label="Scan time (s)", start=0.0, end=1.0, value=0.0
@@ -53,11 +102,17 @@ class ProjectRawViews(PreviewWorkspace):
         self.scan_previous.on_click(lambda _: self._seek_scan(step=-1))
         self.scan_next.on_click(lambda _: self._seek_scan(step=1))
         self.ms_level.param.watch(lambda _: self._scan_catalog(), "value")
+        self._scan_controls(False)
 
     def _scan_catalog(self):
-        if self.preview is None or not hasattr(self, "scan_time"):
+        if (
+            self.preview is None
+            or not hasattr(self, "scan_time")
+            or getattr(self, "_configuring_scans", False)
+        ):
             return
         self._scans = self.preview.total_ion_chromatogram(ms_level=int(self.ms_level.value))
+        self._scan_controls(not self._scans.empty)
         if not self._scans.empty:
             low, high = float(self._scans.rt_seconds.min()), float(self._scans.rt_seconds.max())
             self._scan_sync = True
@@ -67,10 +122,16 @@ class ProjectRawViews(PreviewWorkspace):
             finally:
                 self._scan_sync = False
             self._seek_scan(index=int(self._scans.scan_index.iloc[0]))
+        else:
+            self._scan_generation = getattr(self, "_scan_generation", 0) + 1
+            self._scan_pending = None
+            self.scan_pane.object = _empty_figure("当前 MS level 无扫描")
+            self.scan_status.object = "当前 MS level 无可显示扫描。"
 
     def _seek_scan(self, *, time=None, index=None, step=None):
         if (
             self._scan_sync
+            or getattr(self, "_configuring_scans", False)
             or self.preview is None
             or not hasattr(self, "_scans")
             or self._scans.empty
@@ -94,6 +155,73 @@ class ProjectRawViews(PreviewWorkspace):
             self.scan_slider.value = float(row.rt_seconds)
         finally:
             self._scan_sync = False
+        self.scan_previous.disabled = int(row.scan_index) == int(scans.scan_index.iloc[0])
+        self.scan_next.disabled = int(row.scan_index) == int(scans.scan_index.iloc[-1])
+        self._queue_scan()
+
+    def _queue_scan(self):
+        self._scan_generation = getattr(self, "_scan_generation", 0) + 1
+        request = (self._scan_generation, self.preview, self.scan_index.value)
+        self._scan_pending = request
+        self.scan_pane.object = _empty_figure(f"正在读取 Scan {request[2]}…")
+        self.scan_status.object = f"正在读取第 {request[2]} 帧…"
+        self._cancel_scan_timeout()
+        doc = pn.state.curdoc
+        if doc is None or doc.session_context is None:
+            try:
+                self._display_scan(request, self.preview.single_spectrum(request[2]))
+            except Exception as exc:
+                self._display_scan(request, error=exc)
+            self._scan_pending = None
+            return
+        self._scan_doc = doc
+        callback = doc.add_timeout_callback(self._start_scan, 200)
+        self._scan_timeout = (doc, callback)
+
+    def _start_scan(self):
+        self._scan_timeout = None
+        if self._scan_pending is None or self._scan_future is not None or self._scan_closed:
+            return
+        request, self._scan_pending = self._scan_pending, None
+        if not hasattr(self, "_scan_executor"):
+            self._scan_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="scmm-scan")
+        future = self._scan_executor.submit(request[1].single_spectrum, request[2])
+        self._scan_future = future
+        future.add_done_callback(
+            lambda done: (
+                self._scan_doc.add_next_tick_callback(lambda: self._finish_scan(request, done))
+                if not self._scan_closed
+                else None
+            )
+        )
+
+    def _finish_scan(self, request, future):
+        self._scan_future = None
+        try:
+            self._display_scan(request, future.result())
+        except Exception as exc:
+            self._display_scan(request, error=exc)
+        if self._scan_pending is not None and self._scan_timeout is None:
+            self._start_scan()
+
+    def _display_scan(self, request, result=None, *, error=None):
+        if (
+            self._scan_closed
+            or request[0] != self._scan_generation
+            or request[1] is not self.preview
+        ):
+            return
+        if error is not None:
+            self.scan_pane.object = _empty_figure("单扫描读取失败")
+            self.scan_status.object = f"单扫描读取失败：{escape(str(error))}；可重新选择帧重试。"
+            return
+        frame, meta = result
+        title = (
+            f"Scan {meta['scan_index']} · {meta.get('native_id', '')} · "
+            f"MS{meta['ms_level']} · RT={meta['rt_seconds']:.3f} 秒"
+        )
+        self.scan_pane.object = _spectrum_figure(frame, title)
+        self.scan_status.object = "单扫描谱已更新。"
 
     def _selection_mode(self, _=None):
         from copy import deepcopy

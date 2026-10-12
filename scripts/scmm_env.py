@@ -31,7 +31,7 @@ def settings(config=CONFIG):
         "origins": ["*"],
     }
     if config.exists():
-        overrides = json.loads(config.read_text())
+        overrides = json.loads(config.read_text(encoding="utf-8"))
         if set(overrides) - set(values):
             raise ValueError("Unknown environment configuration keys")
         values.update(overrides)
@@ -76,6 +76,7 @@ def environment(values, name):
         MPLCONFIGDIR=str(cache / "matplotlib"),
         TMPDIR=str(base / "tmp"),
         SCMM_PREFERENCES=str(preferences),
+        PYTHONUTF8="1",
         VIRTUAL_ENV=str(values[name] / ".venv"),
     )
     # Never allow a caller's Python path/environment to cross the worktree boundary.
@@ -109,7 +110,7 @@ def idle(values):
     if connections:
         raise RuntimeError("5006 has browser connections; save and close production pages first")
     for path in values["prod_results"].rglob("state.json"):
-        state = json.loads(path.read_text())
+        state = json.loads(path.read_text(encoding="utf-8"))
         if state.get("status") in {"queued", "running"}:
             raise RuntimeError(f"Unfinished production task: {path}; inspect it before deployment")
     # Detached workers can survive the server and must not read changing editable code.
@@ -237,6 +238,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+Environment=PYTHONUTF8=1
 WorkingDirectory={unit_path(values[name])}
 ExecStart=/usr/bin/python3 "{unit_path(script)}" --config "{unit_path(config)}" serve {name}
 Restart=on-failure

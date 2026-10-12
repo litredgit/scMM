@@ -7,11 +7,11 @@ import math
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import asdict
-from datetime import datetime
 from html import escape
 from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
+from weakref import WeakSet
 
 import pandas as pd
 import panel as pn
@@ -23,6 +23,7 @@ from anndata import read_h5ad
 from scMM.analysis.quality import quality_metrics
 from scMM.application import OutputRoot, StorageCatalog, StorageRoot
 from scMM.application.cell_preview import initialize_ranges, submit_preview
+from scMM.application.naming import beijing_time, project_dataset_filename
 from scMM.application.parameters import load_defaults
 from scMM.application.preferences import BUILTIN_PRESETS, load_preferences, save_preferences
 from scMM.application.preview_cache import file_identity
@@ -37,12 +38,15 @@ from scMM.application.project_batch import (
 from scMM.application.projects import PROJECT_ROOT, ProjectStore, child_path, sample_parameters
 from scMM.application.workbench import read_dataset
 
+from .downloads import FileDownload
 from .file_browser import FileBrowser
-from .layout import CONTENT_STYLE, TaskDock, UnsavedGuard, fit_plot
+from .layout import CONTENT_STYLE, TaskDock, UnsavedGuard, fit_plot, flow, form, style_button
+from .preflight import request_view
 from .presentation import QCDataFrame, apply_presentation, english_parameters, qc_file_table
 from .project_views import ProjectRawViews
 from .raw_components import PreviewWorkspace as PreviewWorkspace
 from .raw_components import cell_detection_figure
+from .saved_items import SavedItemsPanel
 
 STEPS = [
     "项目首页",
@@ -111,6 +115,7 @@ RESULT_PLOTS = {
     "supervised": ("roc", "pr", "calibration"),
     "shap": ("shap_plot",),
 }
+LIVE_WORKSPACES = WeakSet()
 
 
 TASK_LABELS = {
@@ -127,6 +132,7 @@ TASK_LABELS = {
 
 class ProjectWorkspace:
     def __init__(self, roots, *, project_root=PROJECT_ROOT, defaults=None):
+        LIVE_WORKSPACES.add(self)
         self.store = ProjectStore(project_root)
         self.roots = tuple(roots)
         self.catalog = StorageCatalog(self.roots)
@@ -164,11 +170,11 @@ class ProjectWorkspace:
                 self.task_status,
                 self.message,
                 self.error_notice,
-                self.button("清除错误提示", self._clear_error),
+                self.button("清除错误提示", self._clear_error, role="auxiliary"),
                 self.event_log,
                 self.follow_log,
                 self.log,
-                pn.widgets.FileDownload(
+                FileDownload(
                     label="下载完整任务日志", filename="worker.log", callback=self._download_log
                 ),
                 sizing_mode="stretch_width",
@@ -180,11 +186,19 @@ class ProjectWorkspace:
         )
         self.navigation.param.watch(self._navigate, "value")
         self.save_button = self.button("保存项目", self._save)
-        self.previous = self.button("上一步", lambda: self.go(self.step - 1))
-        self.next = self.button("下一步", lambda: self.go(self.step + 1))
+        self.previous = self.button("上一步", lambda: self.go(self.step - 1), role="auxiliary")
+        self.next = self.button("下一步", self._next_step)
+        self.next_note = pn.pane.Markdown("")
         self.leave = pn.widgets.Checkbox(label="确认放弃未保存修改，再新建或打开其他项目")
         self.name = pn.widgets.TextInput(label="新项目名称")
         self.project_select = pn.widgets.Select(label="已保存项目", options={})
+        self.saved_items = SavedItemsPanel(
+            self.store,
+            self.roots,
+            active_paths=self._active_saved_paths,
+            changed=self._refresh_home,
+        )
+        self.close_button = self.button("关闭当前项目", self._close_project, role="auxiliary")
         self.home = pn.Column(
             "## 实验项目",
             f"项目位置：`{escape(str(self.store.root))}`",
@@ -193,9 +207,11 @@ class ProjectWorkspace:
             self.project_select,
             self.button("打开所选项目", self._open),
             self.leave,
+            self.close_button,
+            pn.Accordion(("管理已保存项目、结果与回收区", self.saved_items)),
             "从已有结果开始：先新建项目，再导入结果目录或 H5AD。",
         )
-        self.footer = pn.Row(self.previous, pn.Spacer(), self.next)
+        self.footer = flow(self.previous, self.next, self.next_note)
         self.panel = pn.Column(
             self.unsaved_guard,
             pn.FlexBox(
@@ -210,13 +226,14 @@ class ProjectWorkspace:
             self.task_dock,
             stylesheets=[CONTENT_STYLE],
         )
+        apply_presentation(self.task_dock.content)
         self._refresh_home()
         self.render()
         if pn.state.curdoc is not None and pn.state.curdoc.session_context is not None:
             pn.state.on_session_destroyed(self._close_session)
 
-    def button(self, label, action):
-        button = pn.widgets.Button(label=label, color="primary")
+    def button(self, label, action, *, role="action"):
+        button = style_button(pn.widgets.Button(label=label), role)
         button.on_click(lambda _: self.run(action))
         return button
 
@@ -244,7 +261,7 @@ class ProjectWorkspace:
     def _record(self, message):
         if not message:
             return
-        self.events.append(f"{datetime.now().strftime('%H:%M:%S')} {message}")
+        self.events.append(f"{beijing_time().split()[1]} {message}")
         self.events = self.events[-100:]
         self.event_log.value = "\n".join(self.events)
         if "❌" in message or "失败" in message:
@@ -255,13 +272,33 @@ class ProjectWorkspace:
     def _refresh_home(self):
         previous = self.project_select.value
         self.project_select.options = {
-            f"{p['name']} · {p['samples']} 文件 · {p['saved_at']}": p["path"]
+            f"{p['name']} · {p['samples']} 文件 · {beijing_time(p['saved_at'])}": p["path"]
             for p in self.store.list()
         }
         values = list(self.project_select.options.values())
         self.project_select.value = (
             previous if previous in values else (values[0] if values else None)
         )
+
+    def _active_saved_paths(self):
+        for ui in LIVE_WORKSPACES:
+            if ui.project is not None:
+                yield ui.project.folder
+                if ui.project.workspace.source:
+                    yield ui.project.workspace.source
+
+    def _close_project(self):
+        self._allow_leave()
+        if self._cell_preview_job is not None:
+            raise ValueError("细胞预览仍在运行，请等待完成后关闭项目")
+        if self.project is not None:
+            self.components.close()
+        self.project = None
+        self.leave.value = False
+        self.step = 0
+        self.saved_items.refresh()
+        self.render()
+        return "当前项目已关闭。"
 
     def _allow_leave(self):
         if self.project and self.project.unsaved and not self.leave.value:
@@ -294,6 +331,8 @@ class ProjectWorkspace:
         self.activate(self.store.open(self.project_select.value))
 
     def activate(self, project):
+        if hasattr(self, "components"):
+            self.components.close()
         self.project = project
         self.leave.value = False
         self._checked = self._candidate = None
@@ -400,6 +439,7 @@ class ProjectWorkspace:
         self._results_page()
         for owner in (self, self.components, self.analysis):
             english_parameters(owner)
+        apply_presentation(self.panel)
         self._prepare_sample_mapping()
         self._sample_summary()
         self.go(1)
@@ -431,11 +471,15 @@ class ProjectWorkspace:
 
     def _project_page(self):
         self.project_name = pn.widgets.TextInput(
-            label="项目名称", value=self.project.manifest["name"]
+            label="项目名称", value=self.project.manifest["name"], width=300
         )
         self.project_name.param.watch(lambda e: self._metadata("name", e.new), "value")
         self.description = pn.widgets.TextAreaInput(
-            label="说明", value=self.project.manifest["description"]
+            label="说明",
+            value=self.project.manifest["description"],
+            width=480,
+            height=85,
+            styles={"max-width": "100%"},
         )
         self.description.param.watch(lambda e: self._metadata("description", e.new), "value")
         self.sample_table = pn.widgets.Tabulator(
@@ -443,7 +487,7 @@ class ProjectWorkspace:
             show_index=False,
             hidden_columns=["id", "storage", "parameters"],
             selectable="checkbox",
-            height=260,
+            height=min(360, max(130, 45 + 32 * len(self.project.samples))),
             editors={
                 "path": None,
                 "name": "input",
@@ -477,40 +521,56 @@ class ProjectWorkspace:
         self.sample_csv = pn.widgets.FileInput(label="导入样本信息 CSV", accept=".csv")
         self.sample_csv.param.watch(lambda _: self.run(self._import_sample_csv), "value")
         a = self.analysis
+        self.file_picker = pn.Column(
+            "支持 Thermo RAW（profile）、mzML 和 mzXML；其他文件不会被加入项目。",
+            self.file_root,
+            self.file_browser,
+            self.button("添加所选文件", self._add_files),
+            self.button("用所选文件重新定位一个选中样本", self._relocate_sample, role="auxiliary"),
+            visible=False,
+        )
+        self.result_picker = pn.Column(
+            a.root,
+            a.path,
+            a.browser,
+            a.trust,
+            self.replace_confirm,
+            self.button("读取结果并建立当前数据", self._import_result),
+            visible=False,
+        )
+
+        def toggle_picker(panel):
+            show = not panel.visible
+            self.file_picker.visible = self.result_picker.visible = False
+            panel.visible = show
+
+        self.remove_samples = self.button("移出选中样本（0）", self._remove_samples, role="danger")
+        self.remove_samples.disabled = True
+
+        def selected_samples(event):
+            self.remove_samples.label = f"移出选中样本（{len(event.new)}）"
+            self.remove_samples.disabled = not event.new
+            style_button(self.remove_samples)
+
+        self.sample_table.param.watch(selected_samples, "selection")
+        self.project_actions = flow(
+            self.button("添加原始文件", lambda: toggle_picker(self.file_picker), role="auxiliary"),
+            self.button(
+                "选择已有结果", lambda: toggle_picker(self.result_picker), role="auxiliary"
+            ),
+            self.remove_samples,
+        )
         self.project_page = pn.Column(
             "## ① 项目与样本",
-            self.project_name,
-            self.description,
+            self.project_actions,
+            self.file_picker,
+            self.result_picker,
+            form(self.project_name, self.description),
             "group：实验分组；subject：独立生物来源，同一来源的多个文件填写相同 ID；batch：采集批次。",
             self.sample_table,
             self.sample_csv,
             self.mapping_panel,
-            self.button("移出选中样本（不删除文件）", self._remove_samples),
-            pn.Accordion(
-                (
-                    "添加多个原始文件",
-                    pn.Column(
-                        "支持 Thermo RAW（profile）、mzML 和 mzXML；其他文件不会被加入项目。",
-                        self.file_root,
-                        self.file_browser,
-                        self.button("添加所选文件", self._add_files),
-                        self.button("用所选文件重新定位一个选中样本", self._relocate_sample),
-                    ),
-                )
-            ),
-            pn.Accordion(
-                (
-                    "从已有结果开始",
-                    pn.Column(
-                        a.root,
-                        a.path,
-                        a.browser,
-                        a.trust,
-                        self.replace_confirm,
-                        self.button("读取结果并建立当前数据", self._import_result),
-                    ),
-                )
-            ),
+            "移出样本只改变项目清单，不删除原始文件。",
             "修改样本信息即时更新下游分组；依赖分组的分析需重算，提取结果保留。离开前请保存项目。",
         )
 
@@ -551,7 +611,7 @@ class ProjectWorkspace:
     def _metadata(self, key, value):
         self.project.manifest[key] = value
         self.project.dirty = True
-        self._checked = None
+        self._invalidate_preflight()
         self.refresh_header()
 
     def _edit_sample(self, event):
@@ -570,7 +630,7 @@ class ProjectWorkspace:
                 key for key in sample.get("metadata_unresolved", []) if key != event.column
             ]
             self.project.dirty = True
-            self._checked = None
+            self._invalidate_preflight()
             self._update_samples()
             self.refresh_header()
 
@@ -695,17 +755,20 @@ class ProjectWorkspace:
     def _update_samples(self):
         self._sync_metadata()
         self.sample_table.value = self._sample_frame()
+        self.sample_table.height = min(360, max(130, 45 + 32 * len(self.project.samples)))
         previous = self.raw_sample.value
         self.raw_sample.options = {s["name"]: s["id"] for s in self.project.samples}
         values = list(self.raw_sample.options.values())
         self.raw_sample.value = previous if previous in values else (values[0] if values else None)
-        self._checked = None
+        self._invalidate_preflight()
         self.refresh_header()
 
     def _add_files(self):
         if not self.files.value:
             raise ValueError("请选择文件")
         self.project.add_files(self.catalog, self.file_root.value, self.files.value)
+        self.files.value = []
+        self.file_picker.visible = False
         self._update_samples()
 
     def _remove_samples(self):
@@ -732,6 +795,7 @@ class ProjectWorkspace:
         self.project.dirty = True
         self.replace_confirm.value = False
         a.refresh()
+        self.result_picker.visible = False
         self._sample_summary()
 
     def _raw_page(self):
@@ -746,7 +810,35 @@ class ProjectWorkspace:
         self.parameter_note = pn.pane.Markdown("")
         r.setup_navigation()
         widgets = r.processing.parameter_widgets
-        basic = ["extraction_method", "ref_mz", "mz_min", "mz_max", "cell_snr", "peak_snr"]
+        for widget in widgets.values():
+            if isinstance(widget, (pn.widgets.FloatInput, pn.widgets.IntInput)):
+                widget.width = 140
+                widget.margin = (5, 3)
+        basic = [
+            "extraction_method",
+            "ref_mz",
+            "mz_min",
+            "mz_max",
+            "cell_snr",
+            "peak_snr",
+            "feature_snr_threshold",
+        ]
+
+        def algorithm_controls(_=None):
+            snr = widgets["extraction_method"].value == "snr_v1"
+            widgets["peak_snr"].visible = not snr
+            for key in (
+                "feature_snr_threshold",
+                "reference_mz",
+                "reference_mode",
+                "reference_ppm_tol",
+                "noise_window",
+                "feature_block_size",
+            ):
+                widgets[key].visible = snr
+
+        widgets["extraction_method"].param.watch(algorithm_controls, "value")
+        algorithm_controls()
         prefs = load_preferences()
         self.cell_type = pn.widgets.Select(
             label="Cell type",
@@ -812,8 +904,8 @@ class ProjectWorkspace:
                 pn.Column(
                     self.preset_table,
                     self.preset_name,
-                    self.button("添加预设", add_preset),
-                    self.button("删除当前预设", delete_preset),
+                    self.button("添加预设", add_preset, role="auxiliary"),
+                    self.button("删除当前预设", delete_preset, role="danger"),
                     self.button(
                         "恢复内置值",
                         lambda: setattr(
@@ -825,7 +917,7 @@ class ProjectWorkspace:
                             ),
                         ),
                     ),
-                    self.button("保存全局预设", save_presets),
+                    self.button("保存全局预设", save_presets, role="auxiliary"),
                 ),
             )
         )
@@ -833,10 +925,9 @@ class ProjectWorkspace:
             "## ② 原始谱检查",
             "打开文件和靠后 RAW 单扫描可能需要等待。细胞预览在后台执行完整提取；"
             "运行状态见下方。修改参数或切换样本后，旧任务结果不会应用；当前不能立即取消。",
-            self.raw_sample,
-            self.button("打开所选样本", self._open_raw),
+            flow(self.raw_sample, self.button("打开所选样本", self._open_raw, role="auxiliary")),
             self.parameter_note,
-            pn.Row(
+            pn.FlexBox(
                 pn.Column(
                     r.summary,
                     pn.Tabs(
@@ -853,7 +944,7 @@ class ProjectWorkspace:
                         (
                             "合并谱",
                             pn.Column(
-                                pn.Row(r.merge_start, r.merge_end),
+                                flow(r.merge_start, r.merge_end),
                                 r.average_spectrum,
                                 r.merge_update,
                                 r.merge_note,
@@ -865,8 +956,9 @@ class ProjectWorkspace:
                             "单扫描",
                             pn.Column(
                                 r.scan_slider,
-                                pn.Row(r.scan_time, r.scan_index),
-                                pn.Row(r.scan_previous, r.scan_next, r.scan_button),
+                                flow(r.scan_time, r.scan_index),
+                                flow(r.scan_previous, r.scan_next),
+                                r.scan_status,
                                 r.scan_pane,
                             ),
                         ),
@@ -886,21 +978,30 @@ class ProjectWorkspace:
                             ),
                         )
                     ),
+                    styles={"flex": "3 1 480px", "min-width": "0"},
+                    sizing_mode="stretch_width",
                 ),
                 pn.Column(
                     self.cell_type,
                     preset_editor,
-                    *[widgets[k] for k in basic],
+                    form(*[widgets[k] for k in basic]),
                     pn.Accordion(
                         (
                             "高级处理参数",
-                            pn.Column(*[w for k, w in widgets.items() if k not in basic]),
+                            form(*[w for k, w in widgets.items() if k not in basic]),
                         )
                     ),
                     r.processing.parameter_help,
-                    self.button("应用为项目默认", lambda: self._apply_parameters(False)),
-                    self.button("仅应用于当前样本", lambda: self._apply_parameters(True)),
+                    flow(
+                        self.button("应用为项目默认", lambda: self._apply_parameters(False)),
+                        self.button("仅应用于当前样本", lambda: self._apply_parameters(True)),
+                    ),
+                    styles={"flex": "2 1 320px", "min-width": "0"},
+                    sizing_mode="stretch_width",
                 ),
+                flex_wrap="wrap",
+                align_items="flex-start",
+                sizing_mode="stretch_width",
             ),
             self.preview_button,
             self.preview_status,
@@ -947,7 +1048,6 @@ class ProjectWorkspace:
         r._load_selected(None)
         if r.preview is None:
             raise ValueError("原始文件读取失败")
-        r._scan_catalog()
         r._selection_mode()
         if (
             not sample.get("range_initialized")
@@ -975,7 +1075,7 @@ class ProjectWorkspace:
             self.project.manifest["parameters"] = params
             self.project.manifest["manual_parameters"] = True
         self.project.dirty = True
-        self._checked = None
+        self._invalidate_preflight()
         self.parameter_note.object = "参数已应用；旧提取结果不会自动更新，请重新预览和处理。"
         self.sample_table.value = self._sample_frame()
 
@@ -1112,6 +1212,9 @@ class ProjectWorkspace:
         self.refresh_header()
 
     def _close_session(self, _context):
+        LIVE_WORKSPACES.discard(self)
+        if hasattr(self, "components"):
+            self.components.close()
         if self._cell_preview_job is not None:
             self._cell_preview_job["future"].cancel()
             self._cell_preview_job = None
@@ -1142,7 +1245,16 @@ class ProjectWorkspace:
         self.batch_confirm = pn.widgets.Checkbox(label="确认样本与参数；未逐样本预览时也明确继续")
         self.batch_select = pn.widgets.Select(label="处理批次", options={})
         self.batch_table = pn.pane.DataFrame(pd.DataFrame(), height=230, index=False)
-        self.preflight_details = pn.pane.JSON({}, depth=1)
+        self.preflight_details = pn.Column("尚未预检。", sizing_mode="stretch_width")
+        self.preflight_json = pn.pane.JSON({}, depth=1)
+        self.preflight_download = FileDownload(
+            label="下载本次预检参数 JSON",
+            filename="preflight.json",
+            disabled=True,
+            callback=lambda: BytesIO(
+                json.dumps(self.preflight_json.object, ensure_ascii=False, indent=2).encode()
+            ),
+        )
         self.included = pn.widgets.MultiChoice(label="审核纳入的成功样本", options={})
         self.batch_qc = pn.Column()
         self.batch_select.param.watch(lambda _: self.poll(), "value")
@@ -1153,17 +1265,23 @@ class ProjectWorkspace:
             self.strategy,
             "共同特征要求统一合谱与对齐参数；自动范围取所有样本范围的并集。预览特征与整批共同特征一致才可复用；不一致时重新提取。单样本失败继续其他样本。",
             self.button("检查全部样本与实际参数", self._preflight),
-            pn.Accordion(("本次预检的实际参数", self.preflight_details)),
+            self.preflight_details,
+            pn.Accordion(
+                ("高级：本次预检原始参数", pn.Column(self.preflight_download, self.preflight_json))
+            ),
             self.batch_confirm,
             self.button("确认并开始处理", self._submit),
             self.batch_select,
-            self.button("刷新任务", self._refresh_batches),
-            self.button("重试未成功样本（须先检查并确认，参数保持不变）", self._retry),
+            flow(
+                self.button("刷新任务", self._refresh_batches, role="auxiliary"),
+                self.button("重试未成功样本", self._retry),
+                self.button("停止后续样本（当前样本继续）", self._stop, role="danger"),
+            ),
+            "重试须重新预检并确认，参数与输入保持不变。",
             self.batch_table,
-            self.button("停止后续样本（当前样本继续）", self._stop),
             "停止请求不会立即中断当前读取或计算；已完成样本保留，等待当前阶段结束后停止后续样本。",
             self.included,
-            self.button("比较所选成功样本的 QC", self._batch_qc),
+            self.button("比较所选成功样本的 QC", self._batch_qc, role="auxiliary"),
             self.batch_qc,
             self.replace_confirm,
             self.button("确认纳入并建立当前数据", self._review),
@@ -1174,17 +1292,29 @@ class ProjectWorkspace:
         initialize_ranges(self.project, self.components.service)
 
     def _preflight(self):
+        self._invalidate_preflight()
         self._initialize_ranges()
         request = preflight(self.project, self.catalog)
         self._checked = json.dumps(request, sort_keys=True)
-        self.preflight_details.object = request
-        self.batch_table.object = pd.DataFrame(
-            [
-                {"样本": s["name"], "实际参数": json.dumps(s["parameters"], ensure_ascii=False)}
-                for s in request["samples"]
-            ]
-        )
+        self.preflight_json.object = request
+        self.preflight_download.disabled = False
+        self.preflight_download.data = None
+        self.preflight_details[:] = [
+            request_view(
+                request, automatic_range=not self.project.manifest.get("manual_parameters", False)
+            )
+        ]
+        apply_presentation(self.preflight_details)
         self.batch_confirm.value = False
+
+    def _invalidate_preflight(self):
+        self._checked = None
+        if hasattr(self, "preflight_details"):
+            self.preflight_details[:] = ["配置尚未检查或已改变，请重新预检。"]
+            self.preflight_json.object = {}
+            self.preflight_download.disabled = True
+            self.preflight_download.data = None
+            self.batch_confirm.value = False
 
     def _submit(self):
         if not self.batch_confirm.value or self._checked != json.dumps(
@@ -1200,7 +1330,7 @@ class ProjectWorkspace:
     def _refresh_batches(self):
         previous = self.batch_select.value
         self.batch_select.options = {
-            f"{read_batch(p).get('created_at', '')} · {p.parent.name[:8]}": str(p)
+            f"{beijing_time(read_batch(p)['created_at'])} · {p.parent.name[-8:]}": str(p)
             for p in batches(self.project)
         }
         values = list(self.batch_select.options.values())
@@ -1344,7 +1474,7 @@ class ProjectWorkspace:
                 "异常值处理（可选）": "outliers",
             },
         )
-        self.operation_controls = pn.Column()
+        self.operation_controls = form()
 
         def controls(_=None):
             self._candidate = None
@@ -1398,7 +1528,7 @@ class ProjectWorkspace:
             self.button("应用到当前数据", self._apply_operation),
             a.history_table,
             self.reset_confirm,
-            self.button("恢复到预处理起点", self._reset),
+            self.button("恢复到预处理起点", self._reset, role="danger"),
         )
 
     def _invalidate_impact(self, _event=None):
@@ -1523,7 +1653,7 @@ class ProjectWorkspace:
             a.status,
             a.representation,
             "### 2. 设置降维",
-            pn.Row(a.reduction, a.dimensions, a.scale),
+            flow(a.reduction, a.dimensions, a.scale),
             pn.Accordion(
                 (
                     "高级参数与结果名称",
@@ -1541,9 +1671,10 @@ class ProjectWorkspace:
             "### 3. 查看结果",
             a.embedding_view,
             a.color_source,
-            a.color_search,
-            pn.Row(a.color_sort, a.color_descending),
+            flow(a.color_search, a.color_clear),
+            flow(a.color_sort, a.color_descending),
             a.color,
+            a.color_note,
             a.embedding_plot,
             a.embedding_download,
             pn.Accordion(
@@ -1556,14 +1687,7 @@ class ProjectWorkspace:
                         "聚类使用上方选定输入。DBSCAN 当前使用 eps=0.5、min_samples=5；图聚类 resolution=1。",
                         a._button(
                             "运行细胞聚类",
-                            lambda: a.state.cluster(
-                                a.cluster_method.value,
-                                use_rep=a.representation.value,
-                                key=a.cluster_key.value,
-                                n_clusters=a.clusters.value,
-                                n_neighbors=a.neighbors.value,
-                                random_state=a.seed.value,
-                            ),
+                            a._cluster,
                         ),
                     ),
                 )
@@ -1604,13 +1728,15 @@ class ProjectWorkspace:
                     "实验分组差异": pn.Column(
                         "### 细胞级探索性比较",
                         a.status,
-                        pn.Row(a.group, a.group_a, a.group_b),
-                        pn.Row(a.diff_layer, a.diff_method),
+                        flow(a.group, a.group_a, a.group_b),
+                        flow(a.diff_layer, a.diff_method),
                         a._button("运行比较", a._differentiate),
                         a.volcano_controls,
                         a.volcano,
                         a.features,
-                        a._button("清空选择", lambda: setattr(a.features, "value", [])),
+                        a._button(
+                            "清空选择", lambda: setattr(a.features, "value", []), role="auxiliary"
+                        ),
                         a.hide_zero,
                         a.violin_width,
                         a.violin,
@@ -1673,17 +1799,33 @@ class ProjectWorkspace:
         a = self.analysis
         self.reports = pn.pane.JSON(self.project.saved_reports, depth=2)
         self.saved_views = pn.Column()
-        self.report_download = pn.widgets.FileDownload(
+        self.report_download = FileDownload(
             label="下载保存的报告 JSON",
             filename="saved_reports.json",
             callback=lambda: BytesIO(
                 json.dumps(self.project.saved_reports, ensure_ascii=False).encode()
             ),
         )
-        self.h5ad_download = pn.widgets.FileDownload(
+        self.h5ad_download = FileDownload(
             label="下载上次保存的 H5AD", filename="current.h5ad", callback=self._download_h5ad
         )
-        self.project_download = pn.widgets.FileDownload(
+        self.h5ad_download_name = pn.widgets.TextInput(label="下载 H5AD 文件名", width=480)
+        self.output_paths = pn.pane.Markdown("")
+        self.download_name_note = pn.pane.Markdown("")
+        self.h5ad_download_name.param.watch(lambda _: self._validate_download_name(), "value")
+        self._suggested_download_name = ""
+        self._suggested_export_name = a.export_name.value
+        self._output_signature = None
+        a.export_root.value = "当前项目"
+        a.export_directory.value = "exports"
+        self.export_path = pn.pane.Markdown("")
+        self.export_status = pn.pane.Markdown("")
+        self.export_button = self.button(
+            "保存 H5AD（含历史层与嵌入）", self._export_h5ad, role="download"
+        )
+        for widget in (a.export_root, a.export_directory, a.export_name):
+            widget.param.watch(lambda _: self._refresh_export_path(), "value")
+        self.project_download = FileDownload(
             label="下载项目摘要 JSON",
             filename="project_summary.json",
             callback=lambda: BytesIO(
@@ -1706,31 +1848,36 @@ class ProjectWorkspace:
             "尚未应用的表单编辑不等于已保存参数。保存大型数据到云盘可能需要等待。",
             "项目保存用于继续工作，下载不替代项目保存。模型对象不保存，继续模型运算需重新训练。",
             self.button("保存项目", self._save),
-            pn.Row(a.matrix_download, a.diff_download, a.model_download),
-            pn.Row(a.embedding_download, a.qc_download, a.history_download),
-            pn.Row(
+            self.output_paths,
+            pn.Accordion(("管理已保存项目、结果与回收区", self.saved_items)),
+            pn.Accordion(
+                (
+                    "单独导出当前数据 H5AD",
+                    pn.Column(
+                        "导出包含当前数据、历史层与嵌入；文件名默认含项目、批次、北京时间和修订号，可修改。",
+                        form(a.export_root, a.export_directory),
+                        a.export_name,
+                        self.export_path,
+                        a.confirm_save,
+                        self.export_button,
+                        self.export_status,
+                    ),
+                )
+            ),
+            "### 下载当前结果",
+            flow(a.matrix_download, a.diff_download, a.model_download),
+            flow(a.embedding_download, a.qc_download, a.history_download),
+            flow(
                 self.components.tic_download,
                 self.components.eic_download,
                 self.components.spectrum_download,
                 self.components.cell_download,
             ),
-            pn.Accordion(
-                (
-                    "当前分析图形",
-                    pn.Column(
-                        a.embedding_plot,
-                        a.volcano,
-                        a.violin_width,
-                        a.violin,
-                        a.network_plot,
-                        a.roc,
-                        a.pr,
-                        a.calibration,
-                        a.shap_plot,
-                    ),
-                )
-            ),
-            pn.Row(*a.extra_downloads.values()),
+            self._result_figures(),
+            flow(*a.extra_downloads.values()),
+            "### 下载上次保存的数据",
+            self.h5ad_download_name,
+            self.download_name_note,
             self.h5ad_download,
             self.project_download,
             "页顶选择 PNG/SVG，再使用图形右上角相机按钮下载；上次保存的下载不包含未保存修改。",
@@ -1738,6 +1885,124 @@ class ProjectWorkspace:
             self.saved_views,
         )
         self._refresh_reports()
+        self._update_output_names()
+
+    def _result_figures(self):
+        # Keep result-page models separate from the analysis page. Mount only
+        # the requested plot: mounting hidden shared Plotly views can race
+        # Panel's purge/resize callbacks during navigation.
+        a = self.analysis
+        sources = (
+            ("嵌入", a.embedding_plot),
+            ("差异", a.volcano),
+            ("小提琴", a.violin),
+            ("网络", a.network_plot),
+            ("ROC", a.roc),
+            ("PR", a.pr),
+            ("校准", a.calibration),
+            ("SHAP", a.shap_plot),
+        )
+        content = pn.Column()
+        accordion = pn.Accordion(("当前分析图形", content))
+
+        def show(_=None):
+            if not accordion.active:
+                return
+            if content.objects:
+                for pane, (_name, source) in zip(content[0], sources, strict=True):
+                    pane.object = go.Figure(source.object)
+            else:
+                tabs = pn.Tabs(
+                    *(
+                        (name, source.clone(object=go.Figure(source.object), tags=[]))
+                        for name, source in sources
+                    ),
+                    dynamic=True,
+                )
+                apply_presentation(tabs)
+                content[:] = [tabs]
+            self._format_images()
+
+        accordion.param.watch(show, "active")
+        self._refresh_result_figures = show
+        return accordion
+
+    def _refresh_export_path(self):
+        a = self.analysis
+        try:
+            folder = a.catalog.resolve_output_directory(
+                a.export_root.value, a.export_directory.value
+            )
+            self.export_path.object = f"导出路径：`{escape(str(folder / a.export_name.value))}`"
+        except (ValueError, PermissionError, OSError) as exc:
+            self.export_path.object = f"导出路径不可用：{escape(str(exc))}"
+
+    def _export_h5ad(self):
+        try:
+            self.analysis._save()
+        except Exception as exc:
+            self.export_status.object = f"❌ 导出失败：{escape(str(exc))}"
+            raise
+        self.export_status.object = "✓ H5AD 已导出。" + self.export_path.object
+        return self.export_status.object
+
+    def _validate_download_name(self):
+        name = self.h5ad_download_name.value.strip()
+        valid = (
+            bool(name)
+            and Path(name).name == name
+            and not any(c in name for c in "/\\")
+            and name.lower().endswith(".h5ad")
+        )
+        self.h5ad_download.disabled = not valid or not self.project.manifest["artifacts"].get(
+            "current"
+        )
+        self.download_name_note.object = "" if valid else "请输入以 .h5ad 结尾的文件名，不含路径。"
+        if valid:
+            self.h5ad_download.filename = name
+            self.h5ad_download.data = None
+
+    def _update_output_names(self):
+        if not hasattr(self, "output_paths"):
+            return
+        p, a = self.project, self.analysis
+        signature = (
+            p.manifest["name"],
+            p.manifest["revision"],
+            tuple(s.get("batch", "") for s in p.samples),
+            p.workspace.token,
+        )
+        if signature != self._output_signature:
+            suggested = project_dataset_filename(p)
+            if not a.export_name.value or a.export_name.value == self._suggested_export_name:
+                a.export_name.value = suggested
+            self._suggested_export_name = suggested
+            self._output_signature = signature
+        current = p.manifest["artifacts"].get("current")
+        download = (
+            Path(current).name
+            if current and Path(current).name != "current.h5ad"
+            else project_dataset_filename(p, timestamp=p.manifest["saved_at"])
+        )
+        if (
+            not self.h5ad_download_name.value
+            or self.h5ad_download_name.value == self._suggested_download_name
+        ):
+            self.h5ad_download_name.value = download
+        self._suggested_download_name = download
+        self.output_paths.object = (
+            f"项目目录：`{escape(str(p.folder))}`"
+            + (
+                f"\n\n上次保存的数据：`{escape(str(child_path(p.folder, current)))}`"
+                if current
+                else ""
+            )
+            + "\n\n默认名称中的时间均为北京时间。"
+        )
+        a.save_button.disabled = p.workspace.data is None
+        self.export_button.disabled = p.workspace.data is None
+        self._validate_download_name()
+        self._refresh_export_path()
 
     def _refresh_reports(self):
         if not hasattr(self, "reports"):
@@ -1789,10 +2054,21 @@ class ProjectWorkspace:
         self._refresh_reports()
         self.h5ad_download.data = None
         self._refresh_home()
+        self.saved_items.refresh()
 
     def _navigate(self, event):
         if not self._updating:
             self.run(lambda: self.go(STEPS.index(event.new)))
+
+    def _next_step(self):
+        index = self.step + 1
+        if (
+            self.step == 1
+            and self.project.workspace.data is not None
+            and not any(not sample.get("result_only") for sample in self.project.samples)
+        ):
+            index = 4
+        self.go(index)
 
     def go(self, index):
         try:
@@ -1812,6 +2088,8 @@ class ProjectWorkspace:
             self._updating = False
 
     def render(self):
+        if self.project is not None and self.step == 6:
+            self._refresh_result_figures()
         pages = (
             [self.home]
             if self.project is None
@@ -1855,11 +2133,25 @@ class ProjectWorkspace:
                 pane.config = config
 
     def refresh_header(self):
+        self.close_button.disabled = self.project is None
         self.save_button.disabled = self.project is None
         self.unsaved_guard.dirty = bool(self.project and self.project.unsaved)
+        if self.project is None:
+            self.header.object = "选择或新建一个实验项目。"
         if self.project:
             p = self.project
-            self.header.object = f"### {escape(p.manifest['name'])}\n{'● 有未保存修改' if p.unsaved else '✓ 已保存'} · {p.manifest['saved_at']}"
+            self.header.object = f"### {escape(p.manifest['name'])}\n{'● 有未保存修改' if p.unsaved else '✓ 已保存'} · {beijing_time(p.manifest['saved_at'])}"
+            self._update_output_names()
+            needs_samples = self.step == 1 and not p.samples and p.workspace.data is None
+            needs_review = self.step == 3 and p.workspace.data is None
+            self.next.disabled = self.step == 6 or needs_samples or needs_review
+            self.next_note.object = (
+                "请先添加原始文件或读取已有结果。"
+                if needs_samples
+                else "请先审核纳入成功样本并建立当前数据。"
+                if needs_review
+                else ""
+            )
 
     def start_polling(self):
         if self._periodic is None:

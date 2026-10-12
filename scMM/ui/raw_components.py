@@ -21,6 +21,7 @@ from scMM.application import (
 )
 from scMM.application.parameters import load_defaults
 
+from .downloads import FileDownload
 from .presentation import style_figure
 from .processing import GuidedProcessingPanel
 from .workbench import WorkbenchPanels
@@ -282,7 +283,7 @@ class PreviewWorkspace:
             styles={"min-width": "0"},
         )
 
-        self.tic_download = pn.widgets.FileDownload(
+        self.tic_download = FileDownload(
             label="下载 TIC CSV",
             icon="download",
             callback=lambda: _csv_buffer(self.tic),
@@ -290,7 +291,7 @@ class PreviewWorkspace:
             width=128,
             sizing_mode="fixed",
         )
-        self.eic_download = pn.widgets.FileDownload(
+        self.eic_download = FileDownload(
             label="下载 EIC CSV",
             icon="download",
             callback=lambda: _csv_buffer(self.eic),
@@ -298,7 +299,7 @@ class PreviewWorkspace:
             width=128,
             sizing_mode="fixed",
         )
-        self.spectrum_download = pn.widgets.FileDownload(
+        self.spectrum_download = FileDownload(
             label="下载谱图 CSV",
             icon="download",
             callback=lambda: _csv_buffer(self.spectrum),
@@ -327,7 +328,7 @@ class PreviewWorkspace:
         self.cell_pane = pn.pane.Plotly(_empty_figure("细胞窗口与峰顶"), height=380)
         self.cell_status = pn.pane.Markdown("先打开原始数据，并在数据页确认提取参数。")
         self.cell_frame = pd.DataFrame()
-        self.cell_download = pn.widgets.FileDownload(
+        self.cell_download = FileDownload(
             label="下载细胞预览 CSV",
             filename="cell_preview.csv",
             callback=lambda: _csv_buffer(self.cell_frame),

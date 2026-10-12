@@ -17,6 +17,7 @@ from uuid import uuid4
 
 from anndata import read_h5ad
 
+from .naming import beijing_time, project_dataset_filename, safe_name
 from .parameters import load_defaults
 from .processing import ProcessingParameters
 from .storage import StorageCatalog, StorageRoot
@@ -199,8 +200,10 @@ class ProjectStore:
         if not name:
             raise ValueError("Project name is required")
         identity = uuid4().hex
-        slug = re.sub(r"[^\w-]+", "_", name)[:60] or "project"
-        folder = self.root / f"{slug}_{identity[:12]}"
+        created_at = utc_now()
+        folder = (
+            self.root / f"{safe_name(name)}_{beijing_time(created_at, compact=True)}_{identity[:8]}"
+        )
         folder.mkdir()
         for directory in ("processing", "analyses", "exports", "snapshots"):
             (folder / directory).mkdir()
@@ -212,7 +215,7 @@ class ProjectStore:
                 "name": name,
                 "description": "",
                 "revision": 0,
-                "saved_at": utc_now(),
+                "saved_at": created_at,
                 "samples": [],
                 "artifacts": {},
                 "parameters": asdict((defaults or load_defaults()).processing),
@@ -251,17 +254,28 @@ class ProjectStore:
         folder = self._folder(project.folder)
         project.validate_samples()
         ProcessingParameters(**project.manifest["parameters"])
-        with project_lock(folder):
+        with project_lock(self.root), project_lock(folder):
             disk = self._manifest(folder)
             if disk["revision"] != project.manifest["revision"]:
                 raise RuntimeError("Project was saved by another session; reopen before saving")
             candidate = deepcopy(project.manifest)
+            candidate["data_source"] = project.workspace.source
             saved_reports = dict(project.saved_reports)
+            saved_at = utc_now()
+            revision = disk["revision"] + 1
             if project.workspace.data is not None:
-                snapshot = child_path(folder, f"snapshots/{uuid4().hex}")
+                snapshot = child_path(
+                    folder,
+                    f"snapshots/{beijing_time(saved_at, compact=True)}_r{revision:03d}_{uuid4().hex[:8]}",
+                )
                 snapshot.mkdir()
                 catalog = StorageCatalog((StorageRoot("snapshot", snapshot),))
-                current = project.workspace.save_h5ad(catalog, "snapshot", ".", "current.h5ad")
+                current = project.workspace.save_h5ad(
+                    catalog,
+                    "snapshot",
+                    ".",
+                    project_dataset_filename(project, timestamp=saved_at, revision=revision),
+                )
                 project.workspace._original.write_h5ad(snapshot / "baseline.h5ad")
                 # Loaded reports are read-only artifacts. Preserve only while data is unchanged.
                 if (
@@ -282,7 +296,7 @@ class ProjectStore:
                 write_json(snapshot / "views.json", project.views)
                 saved = read_h5ad(current)
                 saved_reports = json.loads(saved.uns["scmm_workbench"]["reports_json"])
-            candidate.update(revision=disk["revision"] + 1, saved_at=utc_now())
+            candidate.update(revision=revision, saved_at=saved_at)
             write_json(folder / "project.json", candidate)
             project.manifest = candidate
             project.saved_reports = saved_reports

@@ -174,6 +174,7 @@ def test_raw_preview_integration_and_parameter_invalidation(tmp_path):
     workspace._show_scan()
     assert "Scan 8" in workspace.scan_pane.object.layout.title.text
     processing = workspace.processing
+    processing.extra_parameters["extraction_method"].value = "legacy"
     processing.ref_mz.value = 150
     processing.resolution.value = 5000
     processing.points_per_fwhm.value = 2

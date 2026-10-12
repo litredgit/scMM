@@ -7,6 +7,89 @@ import panel as pn
 import param
 
 
+def flow(*objects, **params):
+    """Wrap compact controls instead of stretching buttons or overflowing rows."""
+    return pn.FlexBox(
+        *objects,
+        flex_wrap="wrap",
+        align_items="center",
+        gap="8px",
+        sizing_mode="stretch_width",
+        **params,
+    )
+
+
+def form(*objects, **params):
+    return pn.FlexBox(
+        *objects,
+        flex_wrap="wrap",
+        align_items="flex-start",
+        gap="8px",
+        sizing_mode="stretch_width",
+        **params,
+    )
+
+
+BUTTON_STYLE = """
+.bk-btn { border-radius: 6px; padding: 7px 12px; font-weight: 500;
+  white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+.bk-btn-primary { background: #2563eb !important; color: white !important; }
+.bk-btn-success { background: #15803d !important; color: white !important; }
+.bk-btn-default { background: white !important; color: #475569 !important;
+  border: 1px solid #cbd5e1 !important; }
+.bk-btn-danger { background: #fff7f7 !important; color: #b91c1c !important;
+  border: 1px solid #fca5a5 !important; }
+.bk-btn:disabled { opacity: 0.45; }
+.bk-btn:hover:not(:disabled) { filter: brightness(0.95); }
+:host { max-width: 100%; min-width: 0; }
+"""
+DOWNLOAD_STYLE = """
+.bk-btn { background: #15803d !important; color: white !important;
+  border: 1px solid #15803d !important; }
+.bk-btn a { color: inherit !important; text-decoration: none; }
+"""
+
+
+def style_button(widget, role=None):
+    if role is None:
+        declared = next(
+            (
+                tag.removeprefix("scmm-role-")
+                for tag in widget.tags
+                if isinstance(tag, str) and tag.startswith("scmm-role-")
+            ),
+            None,
+        )
+        role = declared or (
+            "download"
+            if isinstance(widget, pn.widgets.FileDownload)
+            else {
+                "primary": "action",
+                "danger": "danger",
+            }.get(widget.color, "auxiliary")
+        )
+    widget.tags = [
+        tag for tag in widget.tags if not (isinstance(tag, str) and tag.startswith("scmm-role-"))
+    ] + [f"scmm-role-{role}"]
+    widget.color = {
+        "action": "primary",
+        "download": "success",
+        "danger": "danger",
+        "auxiliary": "default",
+    }[role]
+    widget.variant = "solid" if role in {"action", "download"} else "outline"
+    if role == "download":
+        widget.icon = "download"
+    widget.sizing_mode = None
+    widget.width = min(400, max(110, 42 + sum(14 if ord(c) > 127 else 7 for c in widget.label)))
+    widget.height = None
+    if BUTTON_STYLE not in widget.stylesheets:
+        widget.stylesheets = [*widget.stylesheets, BUTTON_STYLE]
+    if role == "download" and DOWNLOAD_STYLE not in widget.stylesheets:
+        widget.stylesheets = [*widget.stylesheets, DOWNLOAD_STYLE]
+    return widget
+
+
 def fit_plot(pane, kind="analysis"):
     ratio, width = {"square": (1, 720), "spectrum": (2, 1000), "analysis": (4 / 3, 900)}[kind]
     pane.param.update(

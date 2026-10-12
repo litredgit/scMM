@@ -126,6 +126,7 @@ def test_runtime_paths_and_preferences_are_isolated(worktrees, monkeypatch):
         assert Path(dev_env[key]).parent.exists()
     assert "PYTHONPATH" not in dev_env
     assert "UV_PROJECT_ENVIRONMENT" not in prod_env
+    assert prod_env["PYTHONUTF8"] == dev_env["PYTHONUTF8"] == "1"
 
 
 def test_overlapping_results_are_rejected(tmp_path):

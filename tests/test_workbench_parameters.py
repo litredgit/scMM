@@ -19,9 +19,13 @@ def test_json_defaults_are_validated_and_isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("SCMM_UI_CONFIG", str(config))
     first = load_defaults()
     assert first.processing.mz_min == 500
+    assert first.processing.extraction_method == "snr_v1"
     assert first.analysis["cv"] == 3
     first.analysis["cv"] = 99
     assert load_defaults().analysis["cv"] == 3
+    config.write_text(json.dumps({"processing": {"extraction_method": "legacy"}}))
+    assert load_defaults().processing.extraction_method == "legacy"
+    assert ProcessingParameters(ref_mz=150).extraction_method == "legacy"
     for override in [
         {"unknown": {}},
         {"analysis": {"oops": 1}},

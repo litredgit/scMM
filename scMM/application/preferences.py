@@ -23,7 +23,7 @@ def preferences_path():
 def load_preferences():
     path = preferences_path()
     return (
-        json.loads(path.read_text())
+        json.loads(path.read_text(encoding="utf-8"))
         if path.exists()
         else {"presets": dict(BUILTIN_PRESETS), "selected": "哺乳动物"}
     )
