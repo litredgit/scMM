@@ -54,7 +54,7 @@ def cell_detection_figure(result):
     figure.update_layout(
         title="细胞窗口与参考峰顶",
         xaxis_title="RT（秒）",
-        yaxis_title="Intensity",
+        yaxis_title="强度",
         shapes=[
             dict(
                 type="rect",
@@ -326,7 +326,7 @@ class PreviewWorkspace:
         self.scan_pane = pn.pane.Plotly(_empty_figure("单扫描谱"), height=320)
         self.cell_button = pn.widgets.Button(label="使用正式处理参数预览细胞", color="primary")
         self.cell_pane = pn.pane.Plotly(_empty_figure("细胞窗口与峰顶"), height=380)
-        self.cell_status = pn.pane.Markdown("先打开原始数据，并在数据页确认提取参数。")
+        self.cell_status = pn.pane.Markdown("先打开原始数据，并设置提取参数。")
         self.cell_frame = pd.DataFrame()
         self.cell_download = FileDownload(
             label="下载细胞预览 CSV",
@@ -566,12 +566,12 @@ class PreviewWorkspace:
                 y=frame.intensity,
                 name=f"m/z {reference:.4f}",
                 mode="lines",
-                hovertemplate="RT %{x:.3f} s<br>Intensity %{y:.3e}<extra>%{fullData.name}</extra>",
+                hovertemplate="保留时间 %{x:.3f} 秒<br>强度 %{y:.3e}<extra>%{fullData.name}</extra>",
             )
         figure.update_layout(
             title=f"多参考 EIC（± {self.ppm.value:g} ppm）",
             xaxis_title="RT（秒）",
-            yaxis_title="Intensity",
+            yaxis_title="强度",
         )
         self.eic_pane.object = _style_figure(figure)
         spectrum_title = "平均谱" if self.average_spectrum.value else "合并谱"

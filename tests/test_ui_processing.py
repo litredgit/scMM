@@ -26,7 +26,7 @@ def _panel(tmp_path: Path):
     return panel
 
 
-def test_processing_panel_requires_fresh_preflight_and_confirmation(tmp_path: Path) -> None:
+def test_processing_panel_checks_parameters_without_confirmation(tmp_path: Path) -> None:
     panel = _panel(tmp_path)
 
     assert panel._output_path == tmp_path / "raw" / "results"
@@ -36,15 +36,10 @@ def test_processing_panel_requires_fresh_preflight_and_confirmation(tmp_path: Pa
     panel._preflight()
 
     assert "预检通过" in panel.preflight_text.object
-    assert panel.confirm.disabled is False
-    assert panel.submit_button.disabled is True
-
-    panel.confirm.value = True
     assert panel.submit_button.disabled is False
 
     panel.ppm_tol.value = 8.0
-    assert panel.confirm.disabled is True
-    assert panel.submit_button.disabled is True
+    assert panel.submit_button.disabled is False
     assert "重新" in panel.preflight_text.object
 
 
@@ -61,7 +56,6 @@ def test_processing_panel_reports_validation_failure(tmp_path: Path) -> None:
 def test_processing_panel_submits_and_recovers_task_status(tmp_path: Path) -> None:
     panel = _panel(tmp_path)
     panel._preflight()
-    panel.confirm.value = True
     task = Mock(
         task_id="a" * 32,
         status="running",

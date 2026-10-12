@@ -28,43 +28,48 @@ class SavedItemsPanel(pn.viewable.Viewer):
         )
         self.browser_area = pn.Column()
         self.notice = pn.pane.Markdown("")
-        self.preview = pn.pane.Markdown("先选择内容并预览删除计划。")
-        self.confirm = pn.widgets.Checkbox(label="确认将上述项目或结果移入回收区")
-        self.move_button = self.button("确认移入回收区", self.move, role="danger")
+        self.preview = pn.pane.Markdown("选择内容后显示待删除清单，点击移入回收区立即执行。")
+        self.move_button = self.button("移入回收区", self.move, role="danger")
         self.move_button.disabled = True
         self.trash = pn.widgets.Select(label="回收区条目", options={}, width=480)
         self.restore_note = pn.pane.Markdown("")
         self.trash.param.watch(self._restore_preview, "value")
         self.restore_button = self.button("恢复到原路径", self.restore)
-        self.confirm.param.watch(
-            lambda e: setattr(self.move_button, "disabled", not (e.new and self.plan)), "value"
-        )
         self.root.param.watch(lambda _: self._browse(), "value")
-        for widget in (self.project, self.root, self.path):
-            widget.param.watch(lambda _: self.invalidate(), "value")
-        self.panel = pn.Column(
-            "删除会将内容移入所在存储的 scMM 回收区，不释放磁盘空间；可恢复到原路径。"
-            "原始谱不能删除。项目须先保存并关闭；被其他项目引用的结果和未结束任务受保护。",
-            pn.Tabs(
-                (
-                    "已保存项目",
-                    pn.Column(self.project, self.button("预览删除所选项目", self.plan_project)),
-                ),
-                (
-                    "独立结果",
-                    pn.Column(
-                        self.root,
-                        self.browser_area,
-                        self.path,
-                        self.button("预览删除所选结果", self.plan_result),
-                    ),
-                ),
-                ("回收区", pn.Column(self.trash, self.restore_note, self.restore_button)),
-                dynamic=True,
+        self.project.param.watch(lambda _: self._selected_plan(), "value")
+        self.path.param.watch(lambda _: self._selected_plan(), "value")
+        self.tabs = pn.Tabs(
+            (
+                "已保存项目",
+                pn.Column(self.project),
             ),
+            (
+                "独立结果",
+                pn.Column(
+                    self.root,
+                    self.browser_area,
+                    self.path,
+                ),
+            ),
+            (
+                "回收区",
+                pn.Column(
+                    self.trash,
+                    self.restore_note,
+                    self.restore_button,
+                    "开发与生产共用回收区；点击清空会立即永久删除全部回收条目，无法恢复。",
+                    self.button("清空回收区", self.clear, role="danger"),
+                ),
+            ),
+            dynamic=True,
+        )
+        self.tabs.param.watch(lambda _: self._selected_plan(), "active")
+        self.panel = pn.Column(
+            "删除会将内容移入共享回收区 ~/data/results/recycle，不释放磁盘空间；可恢复到原路径。"
+            "原始谱不能删除。项目须先保存并关闭；被其他项目引用的结果和未结束任务受保护。",
+            self.tabs,
             flow(self.button("刷新已保存内容", self.refresh)),
             self.preview,
-            self.confirm,
             self.move_button,
             self.notice,
             css_classes=["scmm-saved-items"],
@@ -90,17 +95,37 @@ class SavedItemsPanel(pn.viewable.Viewer):
 
     def invalidate(self):
         self.plan = None
-        self.confirm.value = False
         self.move_button.disabled = True
-        self.preview.object = "选择已变化，请重新预览删除计划。"
+        self.preview.object = "请选择待移入回收区的内容。"
 
     def _browse(self):
+        self.path.value = ""
+        self.invalidate()
         self.browser = FileBrowser(self.manager.catalog, self.root.value, results=True)
         self.browser.param.watch(
             lambda e: setattr(self.path, "value", e.new[0] if e.new else ""), "value"
         )
         self.browser_area[:] = [self.browser]
         apply_presentation(self.browser_area)
+
+    def _selected_plan(self):
+        if not hasattr(self, "tabs"):
+            return
+        if self.tabs.active == 2:
+            self.invalidate()
+            return
+        label, path = (
+            ("项目结果", self.project.value)
+            if self.tabs.active == 0
+            else (self.root.value, self.path.value)
+        )
+        self._selection_plan(label, path)
+
+    def _selection_plan(self, label, path):
+        if not path:
+            self.invalidate()
+            return
+        self.run(lambda: self.show_plan(label, path))
 
     def show_plan(self, label, path):
         self.invalidate()
@@ -112,6 +137,7 @@ class SavedItemsPanel(pn.viewable.Viewer):
             "目录内容将整体移动；原始谱引用不会移动原文件。"
         )
         self.notice.object = ""
+        self.move_button.disabled = False
 
     def plan_project(self):
         if not self.project.value:
@@ -124,8 +150,8 @@ class SavedItemsPanel(pn.viewable.Viewer):
         self.show_plan(self.root.value, self.path.value)
 
     def move(self):
-        if not self.confirm.value or self.plan is None:
-            raise ValueError("请先预览删除计划并明确确认")
+        if self.plan is None:
+            raise ValueError("请选择待移入回收区的内容")
         self.manager.move(self.plan)
         self.invalidate()
         self.refresh()
@@ -146,27 +172,35 @@ class SavedItemsPanel(pn.viewable.Viewer):
         self.changed()
         self.notice.object = f"已恢复：`{escape(str(original))}`"
 
+    def clear(self):
+        try:
+            count = self.manager.clear()
+        finally:
+            self.refresh()
+        self.changed()
+        self.notice.object = f"已永久清空回收区，共清理 {count} 项。"
+
     def refresh(self):
         self.invalidate()
         previous_project, previous_trash = self.project.value, self.trash.value
         self.project.options = {
-            f"{r['name']} · {beijing_time(r['saved_at'])}": r["path"]
-            for r in self.manager.store.list()
+            "请选择待管理项目": None,
+            **{
+                f"{r['name']} · {beijing_time(r['saved_at'])}": r["path"]
+                for r in self.manager.store.list()
+            },
         }
         self.trash.options = {
             f"{beijing_time(r['deleted_at'])} · {r['kind']} · {r['path']}": r["entry"]
             for r in self.manager.list_trash()
         }
         projects, entries = list(self.project.options.values()), list(self.trash.options.values())
-        self.project.value = (
-            previous_project
-            if previous_project in projects
-            else (projects[0] if projects else None)
-        )
+        self.project.value = previous_project if previous_project in projects else None
         self.trash.value = (
             previous_trash if previous_trash in entries else (entries[0] if entries else None)
         )
         self.restore_button.disabled = not self.trash.value
         self._restore_preview()
+        self._selected_plan()
         if self.browser.directory.exists():
             self.browser.refresh()

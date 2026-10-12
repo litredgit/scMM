@@ -1,5 +1,4 @@
 """Responsive presentation only; never changes figure coordinates or data."""
-# ruff: noqa: RUF001
 
 from typing import ClassVar
 
@@ -12,7 +11,7 @@ def flow(*objects, **params):
     return pn.FlexBox(
         *objects,
         flex_wrap="wrap",
-        align_items="center",
+        align_items="flex-end",
         gap="8px",
         sizing_mode="stretch_width",
         **params,
@@ -24,15 +23,46 @@ def form(*objects, **params):
         *objects,
         flex_wrap="wrap",
         align_items="flex-start",
-        gap="8px",
+        gap="12px",
+        stylesheets=[
+            """
+          [id^="flexbox-"] { display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+            align-items: end; }
+          [id^="flex-item-"] > * { width: 100% !important; min-width: 0; }
+        """
+        ],
         sizing_mode="stretch_width",
         **params,
     )
 
 
+FIELD_STYLE = """
+:host { min-width: 0; max-width: 100%; }
+.bk-input-group { white-space: normal; }
+.bk-input-group > label { display: grid; grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: start; width: 100%; min-height: 28px; line-height: 1.4;
+  white-space: normal; overflow-wrap: anywhere; padding-bottom: 4px; }
+.bk-description { margin: 0; width: 28px; height: 28px; display: inline-flex;
+  align-items: center; justify-content: center; }
+.bk-description:focus-visible { outline: 2px solid #2563eb; border-radius: 4px; }
+.bk-input { min-height: 36px; }
+@media (pointer: coarse) { .bk-input { min-height: 44px; } }
+"""
+
+
+CONTROL_BUTTON_STYLE = """
+.bk-btn { min-height: 38px; white-space: normal; overflow-wrap: anywhere;
+  line-height: 1.4; padding: 7px 12px; box-sizing: border-box; }
+@media (pointer: coarse) { .bk-btn { min-height: 44px; } }
+"""
+
+
 BUTTON_STYLE = """
 .bk-btn { border-radius: 6px; padding: 7px 12px; font-weight: 500;
-  white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+  white-space: normal; overflow-wrap: anywhere; line-height: 1.4;
+  min-height: 38px; width: 100%; box-sizing: border-box; }
+@media (pointer: coarse) { .bk-btn { min-height: 44px; } }
 .bk-btn-primary { background: #2563eb !important; color: white !important; }
 .bk-btn-success { background: #15803d !important; color: white !important; }
 .bk-btn-default { background: white !important; color: #475569 !important;
@@ -41,7 +71,7 @@ BUTTON_STYLE = """
   border: 1px solid #fca5a5 !important; }
 .bk-btn:disabled { opacity: 0.45; }
 .bk-btn:hover:not(:disabled) { filter: brightness(0.95); }
-:host { max-width: 100%; min-width: 0; }
+:host { max-width: 100%; min-width: 0; width: fit-content; flex: 0 1 auto; }
 """
 DOWNLOAD_STYLE = """
 .bk-btn { background: #15803d !important; color: white !important;
@@ -81,7 +111,8 @@ def style_button(widget, role=None):
     if role == "download":
         widget.icon = "download"
     widget.sizing_mode = None
-    widget.width = min(400, max(110, 42 + sum(14 if ord(c) > 127 else 7 for c in widget.label)))
+    widget.width = None
+    widget.styles = {**widget.styles, "width": "fit-content", "max-width": "100%", "min-width": "0"}
     widget.height = None
     if BUTTON_STYLE not in widget.stylesheets:
         widget.stylesheets = [*widget.stylesheets, BUTTON_STYLE]
@@ -104,65 +135,8 @@ def fit_plot(pane, kind="analysis"):
 
 
 CONTENT_STYLE = """
-:host { box-sizing: border-box; padding-right: 360px; min-width: 0; }
-@media (max-width: 1100px) { :host { padding-right: 0; padding-bottom: 60px; } }
+:host { box-sizing: border-box; padding: 0; min-width: 0; }
 """
-
-
-class UnsavedGuard(pn.reactive.ReactiveHTML):
-    """Best-effort browser warning only; never saves or cancels a worker."""
-
-    dirty = param.Boolean(default=False)
-    _template = '<span id="guard" aria-hidden="true"></span>'
-    _scripts: ClassVar[dict] = {
-        "render": """
-          state.warn = (event) => {
-            if (data.dirty) {
-              event.preventDefault();
-              event.returnValue = '';
-            }
-          };
-          window.addEventListener('beforeunload', state.warn);
-        """,
-        "remove": "window.removeEventListener('beforeunload', state.warn);",
-    }
-
-
-class TaskDock(pn.reactive.ReactiveHTML):
-    content = param.ClassSelector(class_=pn.viewable.Viewable)
-    label = param.String(default="任务与日志（点击展开 / 收起）")
-    _template = """
-    <details id="drawer" class="task-drawer" open>
-      <summary id="toggle" class="task-toggle">${label}</summary>
-      <div id="contents" class="task-contents">${content}</div>
-    </details>
-    """
-    _scripts: ClassVar[dict] = {
-        "render": """
-          state.media = window.matchMedia('(max-width: 1100px)');
-          state.resize = () => { drawer.open = !state.media.matches; };
-          state.media.addEventListener('change', state.resize);
-          state.resize();
-        """,
-        "remove": "state.media?.removeEventListener('change', state.resize);",
-    }
-    _stylesheets: ClassVar[list] = [
-        """
-    :host { position: fixed !important; right: 18px; top: 85px; bottom: 18px;
-      width: 340px !important; height: calc(100vh - 103px) !important; z-index: 100;
-      background: var(--background-color, white); border: 1px solid #b6cbc8;
-      border-radius: 10px; box-shadow: 0 3px 14px #0002; overflow: auto; }
-    .task-drawer { padding: 12px; }
-    .task-toggle { display: none; cursor: pointer; font-weight: 600; }
-    .task-contents { display: block; }
-    @media (max-width: 1100px) {
-      :host { top: auto; bottom: 10px; right: 10px;
-        width: min(360px, calc(100vw - 20px)) !important; height: auto !important; max-height: 65vh; }
-      .task-toggle { display: list-item; }
-      details:not([open]) > .task-contents { display: none; }
-    }
-    """
-    ]
 
 
 class PlotWidth(pn.reactive.ReactiveHTML):
@@ -179,4 +153,40 @@ class PlotWidth(pn.reactive.ReactiveHTML):
           state.observer.observe(measure);
         """,
         "remove": "state.observer?.disconnect();",
+    }
+
+
+class ResponsivePage(pn.reactive.ReactiveHTML):
+    """Collapse navigation on narrow windows while keeping manual access."""
+
+    _template = '<div id="marker" style="height:0"></div>'
+    _scripts: ClassVar[dict] = {
+        "render": """
+          state.style = document.createElement("style");
+          state.style.textContent = `
+            #main { min-width: 0; }
+            .pn-wrapper { min-width: 0; }
+            @media (max-width: 1000px) {
+              #sidebar { position: fixed; top: 64px; left: 0; z-index: 1000;
+                background: var(--neutral-fill-rest, white); }
+              #sidebar:not(.hidden) { box-shadow: 4px 0 16px #0002; }
+              #main { padding: 0 8px; }
+            }
+            @media (max-width: 600px) {
+              .title { font-size: 18px; }
+            }
+          `;
+          document.head.appendChild(state.style);
+          state.media = window.matchMedia("(max-width: 1000px)");
+          state.update = () => {
+            if (state.media.matches) window.closeNav?.();
+            else window.openNav?.();
+          };
+          state.media.addEventListener("change", state.update);
+          state.update();
+        """,
+        "remove": """
+          state.media?.removeEventListener("change", state.update);
+          state.style?.remove();
+        """,
     }

@@ -15,7 +15,9 @@ def setup(tmp_path, **kwargs):
     root = tmp_path / "projects"
     root.mkdir()
     store = ProjectStore(root)
-    manager = SavedItems(store, (StorageRoot("results", tmp_path),), **kwargs)
+    manager = SavedItems(
+        store, (StorageRoot("results", tmp_path),), trash_root=tmp_path / "recycle", **kwargs
+    )
     return store, manager
 
 
@@ -182,3 +184,107 @@ def test_restore_rejects_tampered_parent_traversal(tmp_path):
     with pytest.raises(PermissionError, match="越过"):
         manager.restore(entry)
     assert (entry / "payload").is_file()
+
+
+def test_shared_recycle_clear_and_symlink_failure_preserves_inventory(tmp_path):
+    store, manager = setup(tmp_path)
+    second = SavedItems(store, (StorageRoot("results", tmp_path),), trash_root=manager.trash_root)
+    source = tmp_path / "result.h5ad"
+    AnnData(np.ones((2, 2))).write_h5ad(source)
+    entry = manager.move(manager.plan("results", source))
+    assert second.list_trash()[0]["entry"] == str(entry)
+    external = tmp_path / "keep.txt"
+    external.write_text("keep")
+    link = manager.trash_root / "unsafe"
+    link.symlink_to(external)
+    with pytest.raises(PermissionError, match="符号链接"):
+        second.clear()
+    assert (entry / "payload").exists() and external.read_text() == "keep"
+    link.unlink()
+    assert second.clear() == 1
+    assert manager.list_trash() == []
+    assert external.read_text() == "keep"
+    assert second.clear() == 0
+
+
+def test_clear_rejects_active_payload_and_reports_partial_failure(tmp_path, monkeypatch):
+    _, manager = setup(tmp_path)
+    for name in ("one", "two"):
+        result = tmp_path / f"{name}.h5ad"
+        AnnData(np.ones((2, 2))).write_h5ad(result)
+        manager.move(manager.plan("results", result))
+    entries = manager.list_trash()
+    manager.active_paths = lambda: (entries[0]["entry"],)
+    with pytest.raises(RuntimeError, match="会话"):
+        manager.clear()
+    assert len(manager.list_trash()) == 2
+    manager.active_paths = lambda: ()
+    import shutil
+
+    actual = shutil.rmtree
+    blocked = Path(entries[0]["entry"])
+
+    def fail(path, *args, **kwargs):
+        if Path(path) == blocked:
+            raise OSError("read-only")
+        return actual(path, *args, **kwargs)
+
+    monkeypatch.setattr("scMM.application.trash.shutil.rmtree", fail)
+    with pytest.raises(RuntimeError, match="已清理 1 项"):
+        manager.clear()
+    assert len(manager.list_trash()) == 1
+    assert (blocked / "payload").exists()
+
+
+def test_cross_device_move_restore_and_copy_failure(tmp_path, monkeypatch):
+    import errno
+    import os
+
+    _, manager = setup(tmp_path)
+    source = tmp_path / "result.h5ad"
+    AnnData(np.ones((2, 2))).write_h5ad(source)
+    rename = os.rename
+
+    def cross_device(left, right):
+        if Path(left) == source or Path(left).name == "payload":
+            raise OSError(errno.EXDEV, "cross-device")
+        return rename(left, right)
+
+    monkeypatch.setattr("scMM.application.trash.os.rename", cross_device)
+    entry = manager.move(manager.plan("results", source))
+    assert not source.exists()
+    manager.restore(entry)
+    assert source.exists() and not manager.list_trash()
+
+    def fail(*args, **kwargs):
+        raise OSError("copy failed")
+
+    monkeypatch.setattr("scMM.application.trash.shutil.copy2", fail)
+    with pytest.raises(OSError, match="copy failed"):
+        manager.move(manager.plan("results", source))
+    assert source.exists() and not manager.list_trash()
+
+
+def test_saved_items_home_does_not_scan_usage_until_project_is_selected(tmp_path, monkeypatch):
+    from scMM.ui.saved_items import SavedItemsPanel
+
+    store, manager = setup(tmp_path)
+    project = store.create("已有项目")
+    calls = []
+    actual_plan = manager.plan
+
+    def plan(*args):
+        calls.append(args)
+        return actual_plan(*args)
+
+    monkeypatch.setattr(manager, "plan", plan)
+    monkeypatch.setattr("scMM.ui.saved_items.SavedItems", lambda *args, **kwargs: manager)
+    panel = SavedItemsPanel(store, (), active_paths=lambda: (), changed=lambda: None)
+    panel.refresh()
+    assert panel.project.value is None
+    assert panel.move_button.disabled
+    assert calls == []
+    panel.project.value = str(project.folder)
+    assert len(calls) == 1
+    assert panel.plan["path"] == str(project.folder)
+    assert not panel.move_button.disabled

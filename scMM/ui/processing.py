@@ -19,10 +19,10 @@ from scMM.application import (
     StorageCatalog,
     load_quality_report,
 )
-from scMM.application.parameters import PROCESSING_HELP
 from scMM.application.tasks import background_tasks_supported
 
 from .downloads import FileDownload
+from .help import parameter_help, task_message
 
 _PLOT_CONFIG = {"displaylogo": False, "responsive": True, "scrollZoom": True}
 _DIRECTORY_ONLY_PATTERN = ".__scmm_directory_selector_no_files__"
@@ -138,15 +138,7 @@ class GuidedProcessingPanel:
             self.parameter_widgets[key].value = (
                 ", ".join(map(str, value)) if key == "reference_mz" else value
             )
-        self.parameter_help = pn.Accordion(
-            (
-                "参数含义、单位与算法差异",
-                pn.pane.Markdown(
-                    "\n\n".join(f"**{key}**：{text}" for key, text in PROCESSING_HELP.items())
-                ),
-            ),
-            active=[],
-        )
+        parameter_help(self)
         self.progress = pn.indicators.Progress(label="处理进度", value=0, max=100)
         self.advanced_toggle = pn.widgets.Toggle(
             label="显示高级参数", icon="adjustments", width=150, height=36, sizing_mode="fixed"
@@ -170,7 +162,6 @@ class GuidedProcessingPanel:
             height=38,
             sizing_mode="fixed",
         )
-        self.confirm_discard = pn.widgets.Checkbox(label="确认删除未保存的临时结果", value=False)
         self.discard_button = pn.widgets.Button(
             label="放弃并删除临时结果",
             icon="trash",
@@ -190,11 +181,6 @@ class GuidedProcessingPanel:
             width=170,
             height=38,
             sizing_mode="fixed",
-        )
-        self.confirm = pn.widgets.Checkbox(
-            label="我已核对参考离子和处理参数",
-            value=False,
-            disabled=True,
         )
         self.submit_button = pn.widgets.Button(
             label="开始后台处理",
@@ -330,7 +316,6 @@ class GuidedProcessingPanel:
                 sizing_mode="stretch_width",
             ),
             pn.FlexBox(
-                self.confirm_discard,
                 self.discard_button,
                 gap="10px",
                 align_items="center",
@@ -369,7 +354,6 @@ class GuidedProcessingPanel:
         )
         actions = pn.FlexBox(
             self.preflight_button,
-            self.confirm,
             self.submit_button,
             gap="12px",
             align_items="center",
@@ -384,13 +368,12 @@ class GuidedProcessingPanel:
         )
         return pn.Column(
             "## 原始数据处理与审核保存",
-            "按顺序完成参数设置、预检、明确确认和后台提交。关闭页面不会中止已提交任务。",
+            "设置参数后点击开始处理，提交前自动预检。关闭页面不会中止已提交任务。",
             self.input_text,
             "### 1. 处理参数",
             primary,
             self.advanced_toggle,
             self.advanced,
-            self.parameter_help,
             "### 2. 提交前检查",
             self.preflight_text,
             actions,
@@ -450,7 +433,9 @@ class GuidedProcessingPanel:
         self.status_text.object = "  \n".join(details)
         self.progress.value = round(100 * max(0.0, min(1.0, task.progress)))
         if task.progress_message:
-            self.status_text.object += f"  \n**阶段：** {escape(task.progress_message)}"
+            self.status_text.object += (
+                f"  \n**阶段：** {escape(task_message(task.progress_message))}"
+            )
         self.log_text.value = self.tasks.read_log(task.task_id)
         if task.status == "succeeded" and self._quality_task_id != task.task_id:
             self._load_quality(task)
@@ -463,9 +448,6 @@ class GuidedProcessingPanel:
         self.output_select.param.watch(self._on_output_root_change, "value")
         self.use_current_directory.on_click(self._use_current_output_directory)
         self.save_button.on_click(self._save_result)
-        self.confirm_discard.param.watch(
-            lambda event: setattr(self.discard_button, "disabled", not event.new), "value"
-        )
         self.discard_button.on_click(self._discard_result)
         self.advanced_toggle.param.watch(
             lambda event: setattr(self.advanced, "visible", event.new), "value"
@@ -473,7 +455,6 @@ class GuidedProcessingPanel:
         parameters = tuple(self.parameter_widgets.values())
         for widget in parameters:
             widget.param.watch(self._invalidate_preflight, "value")
-        self.confirm.param.watch(self._update_submit_state, "value")
         self.preflight_button.on_click(self._preflight)
         self.submit_button.on_click(self._submit)
         self.refresh_button.on_click(lambda _event: self._refresh_tasks())
@@ -563,7 +544,6 @@ class GuidedProcessingPanel:
         except Exception as exc:
             self._request = None
             self.preflight_text.object = f"❌ **预检未通过：** {escape(str(exc))}"
-            self.confirm.disabled = True
             self.submit_button.disabled = True
             return
         self._request = request
@@ -577,12 +557,11 @@ class GuidedProcessingPanel:
             "处理结果将先保存在任务临时区，完成网页查看后再决定是否永久保存。"
             f"{warnings}"
         )
-        self.confirm.disabled = False
-        self.confirm.value = False
         self._update_submit_state()
 
     def _submit(self, _event=None) -> None:
-        if self._request is None or not self.confirm.value:
+        self._preflight()
+        if self._request is None:
             return
         self.submit_button.loading = True
         try:
@@ -599,14 +578,12 @@ class GuidedProcessingPanel:
 
     def _invalidate_preflight(self, _event=None) -> None:
         self._request = None
-        self.confirm.value = False
-        self.confirm.disabled = True
-        self.submit_button.disabled = True
-        self.preflight_text.object = "输入或参数已变化，请重新执行预检。"
+        self._update_submit_state()
+        self.preflight_text.object = "输入或参数已变化，开始处理时自动重新预检。"
 
     def _update_submit_state(self, _event=None) -> None:
         self.submit_button.disabled = (
-            not background_tasks_supported() or self._request is None or not self.confirm.value
+            not background_tasks_supported() or self._storage_label is None
         )
 
     def _refresh_tasks(self) -> None:
@@ -678,13 +655,11 @@ class GuidedProcessingPanel:
                 "质量 CSV、嵌入坐标和运行清单均位于该结果目录内。"
             )
             self.save_button.disabled = True
-            self.confirm_discard.disabled = True
             self.discard_button.disabled = True
             return
         if task.discarded_at:
             self.save_status.object = "临时结果已按要求删除，不能再保存或下载。"
             self.save_button.disabled = True
-            self.confirm_discard.disabled = True
             self.discard_button.disabled = True
             for download in self.artifact_downloads.values():
                 download.disabled = True
@@ -700,8 +675,7 @@ class GuidedProcessingPanel:
                 break
         self.result_name.value = source.stem
         self.save_button.disabled = False
-        self.confirm_discard.disabled = False
-        self.discard_button.disabled = not self.confirm_discard.value
+        self.discard_button.disabled = False
         self.save_status.object = "结果尚未永久保存；当前临时结果仍可在本页面查看和下载。"
 
     def _save_result(self, _event=None) -> None:
@@ -728,7 +702,7 @@ class GuidedProcessingPanel:
         self.poll()
 
     def _discard_result(self, _event=None) -> None:
-        if self._active_task_id is None or not self.confirm_discard.value:
+        if self._active_task_id is None:
             return
         self.discard_button.loading = True
         try:

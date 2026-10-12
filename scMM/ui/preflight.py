@@ -11,7 +11,7 @@ from scMM.application.parameters import PROCESSING_HELP
 from .presentation import ordinary_number
 
 GROUPS = {
-    "Extraction": (
+    "提取": (
         "extraction_method",
         "ref_mz",
         "mz_min",
@@ -21,14 +21,14 @@ GROUPS = {
         "feature_snr_threshold",
         "max_zero_frac",
     ),
-    "Reference ions": ("reference_mz", "reference_mode", "reference_ppm_tol"),
-    "Spectrum / alignment": (
+    "参考离子": ("reference_mz", "reference_mode", "reference_ppm_tol"),
+    "合谱与对齐": (
         "ppm_tol",
         "resolution",
         "resample_points_per_fwhm",
         "ms_peak_snr_threshold",
     ),
-    "Baseline / resources": (
+    "基线与资源": (
         "baseline_filter_size",
         "noise_window",
         "n_jobs",
@@ -42,10 +42,10 @@ UNITS = {
     "reference_mz": "m/z",
     "ppm_tol": "ppm",
     "reference_ppm_tol": "ppm",
-    "baseline_filter_size": "frames",
-    "noise_window": "frames",
-    "feature_block_size": "features",
-    "n_jobs": "workers",
+    "baseline_filter_size": "扫描帧",
+    "noise_window": "扫描帧",
+    "feature_block_size": "特征",
+    "n_jobs": "进程",
 }
 SNR_ONLY = {
     "reference_mz",
@@ -55,6 +55,21 @@ SNR_ONLY = {
     "noise_window",
     "feature_block_size",
 }
+
+
+class ParameterTable(pn.pane.DataFrame):
+    """Native cell tooltips keep explanations out of the table columns."""
+
+    def _transform_object(self, obj):
+        if not isinstance(obj, pd.DataFrame):
+            return super()._transform_object(obj)
+        displayed = obj.copy()
+        displayed["参数"] = [
+            f'<span title="{escape(PROCESSING_HELP[key], quote=True)}">{escape(key)}</span>'
+            for key in obj["参数"]
+        ]
+        html = displayed.to_html(index=False, escape=False, classes="panel-df", border=0)
+        return {"object": escape(html)}
 
 
 def parameter_source(sample):
@@ -89,12 +104,11 @@ def parameter_table(parameters, *, sample=None):
                     source = "自动计算" if sample.get("auto_mz_range") else source
                 rows.append(
                     {
-                        "Category": group,
-                        "Parameter": key,
-                        "Value": parameter_value(key, parameters[key], parameters),
-                        "Unit": UNITS.get(key, "—"),
+                        "类别": group,
+                        "参数": key,
+                        "值": parameter_value(key, parameters[key], parameters),
+                        "单位": UNITS.get(key, "—"),
                         "来源": source,
-                        "Explanation": PROCESSING_HELP[key],
                     }
                 )
     return pd.DataFrame(rows)
@@ -114,7 +128,7 @@ def request_view(request, *, automatic_range=False):
     )
     common = parameter_table(base)
     if automatic_range:
-        common.loc[common.Parameter.isin(["mz_min", "mz_max"]), "来源"] = "自动计算"
+        common.loc[common["参数"].isin(["mz_min", "mz_max"]), "来源"] = "自动计算"
     differences, full = [], []
     for sample in samples:
         values = sample["parameters"]
@@ -139,7 +153,7 @@ def request_view(request, *, automatic_range=False):
         full.append(
             (
                 sample["name"],
-                pn.pane.DataFrame(
+                ParameterTable(
                     parameter_table(values, sample={**sample, "auto_mz_range": bool(auto)}),
                     index=False,
                     sizing_mode="stretch_width",
@@ -149,7 +163,7 @@ def request_view(request, *, automatic_range=False):
     view = pn.Column(
         summary,
         "### 公共参数",
-        pn.pane.DataFrame(common, index=False),
+        ParameterTable(common, index=False),
         "### 样本参数与差异",
         pn.pane.DataFrame(pd.DataFrame(differences), index=False),
         pn.Accordion(*full),

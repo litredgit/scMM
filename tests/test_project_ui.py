@@ -15,16 +15,16 @@ def workspace(tmp_path):
     return ui
 
 
-def test_unsaved_guard_tracks_applied_changes_and_save(tmp_path):
+def test_unsaved_state_tracks_applied_changes_and_save(tmp_path):
     ui = workspace(tmp_path)
     ui.refresh_header()
-    assert not ui.unsaved_guard.dirty
+    assert not ui.project.unsaved
     ui.project.dirty = True
     ui.refresh_header()
-    assert ui.unsaved_guard.dirty
+    assert ui.project.unsaved
     ui._save()
     ui.refresh_header()
-    assert not ui.unsaved_guard.dirty
+    assert not ui.project.unsaved
 
 
 def test_project_steps_preflight_persistence_and_reset(tmp_path):
@@ -41,22 +41,18 @@ def test_project_steps_preflight_persistence_and_reset(tmp_path):
     ui.analysis.min_total.value = 30.0
     ui._preview_operation()
     assert ui.project.workspace.data.n_obs == 6
-    ui.apply_confirm.value = True
     ui.analysis.min_total.value = 50.0
-    with pytest.raises(ValueError, match="重新检查"):
-        ui._apply_operation()
+    ui._apply_operation()
     ui._preview_operation()
-    ui.apply_confirm.value = True
     ui._apply_operation()
     assert ui.project.workspace.data.n_obs < 6
     ui._save()
     restored = ui.store.open(ui.project.folder)
     ui.activate(restored)
-    ui.reset_confirm.value = True
     ui._reset()
     assert ui.project.workspace.data.n_obs == 6
-    with pytest.raises(ValueError, match="保存项目"):
-        ui._create()
+    ui._create()
+    assert ui.project.workspace.data is None
 
 
 def test_preprocess_preview_tracks_candidate_and_clears_stale_results(tmp_path):
@@ -68,7 +64,7 @@ def test_preprocess_preview_tracks_candidate_and_clears_stale_results(tmp_path):
     ui.project.workspace.replace(data)
     ui.analysis.refresh()
     ui.go(4)
-    assert ui.analysis.qc_plot not in ui.preprocess_page.objects
+    assert ui.analysis.qc_plot in ui.preprocess_page.objects
     ui.analysis.min_total.value = 30
     ui._preview_operation()
     candidate = ui._candidate[1]
@@ -78,7 +74,7 @@ def test_preprocess_preview_tracks_candidate_and_clears_stale_results(tmp_path):
     np.testing.assert_array_equal(
         ui.impact_qc_plot.object.data[0].x, candidate.qc()["cell"].total_intensity
     )
-    assert ui.impact_qc_table.object.loc[0, "count"] == candidate.data.n_obs
+    assert ui.impact_qc_table.object.loc[0, "cell_count"] == candidate.data.n_obs
     current_qc = ui.analysis.qc_table.object.copy()
     ui.operation.value = "normalize"
     assert not ui.impact_preview.visible and ui._candidate is None
@@ -87,7 +83,6 @@ def test_preprocess_preview_tracks_candidate_and_clears_stale_results(tmp_path):
     candidate = ui._candidate[1]
     np.testing.assert_allclose(ui.impact_qc_plot.object.data[0].x, candidate.data.X.sum(axis=1))
     pd.testing.assert_frame_equal(ui.analysis.qc_table.object, current_qc)
-    ui.apply_confirm.value = True
     ui._apply_operation()
     assert not ui.impact_preview.visible
     np.testing.assert_array_equal(ui.project.workspace.data.X, candidate.data.X)
@@ -168,12 +163,12 @@ def test_task_dock_preserves_errors_and_is_not_in_page_flow(tmp_path):
     assert ui.error_notice.visible
     ui.run(lambda: None)
     assert "test failure" in ui.error_notice.object
-    assert "test failure" in ui.event_log.value
+    assert "test failure" in "\n".join(ui.events)
     assert ui.message not in ui.panel.objects
     assert ui.task_status not in ui.panel.objects
     ui._clear_error()
     assert not ui.error_notice.visible
-    assert "test failure" in ui.event_log.value
+    assert "test failure" in "\n".join(ui.events)
     doc = Document()
     root = ui.task_dock.get_root(doc)
     doc.add_root(root)

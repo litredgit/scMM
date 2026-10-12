@@ -91,7 +91,7 @@ def violin_figure(data, result, features, *, hide_zero=False, columns=3):
                 row=(column - 1) // columns + 1,
                 col=(column - 1) % columns + 1,
             )
-    figure.update_yaxes(tickformat=".3e", title_text="Intensity")
+    figure.update_yaxes(tickformat=".3e", title_text="强度")
     figure.update_layout(
         height=340 * rows,
         title="小提琴图（零值仅从显示中隐藏；检验与全局 FDR 不变）"
@@ -121,9 +121,9 @@ def embedding_figure(data, key, color=None):
         frame, x="x", y="y", color=color_key, hover_name="cell", title=key, render_mode="webgl"
     )
     if color and color.startswith("feature:"):
-        figure.update_coloraxes(colorbar_tickformat=".3e", colorbar_title="Intensity")
+        figure.update_coloraxes(colorbar_tickformat=".3e", colorbar_title="强度")
         figure.update_traces(
-            hovertemplate="Cell %{hovertext}<br>x=%{x}<br>y=%{y}<br>Intensity %{marker.color:.3e}<extra></extra>"
+            hovertemplate="细胞 %{hovertext}<br>x=%{x}<br>y=%{y}<br>强度 %{marker.color:.3e}<extra></extra>"
         )
     elif color:
         scientific = any(word in color.lower() for word in ("intensity", "abundance", "强度"))
@@ -151,13 +151,13 @@ def supervised_figures(analyzer):
             mode="lines+markers",
             name=name,
         )
-    roc.update_layout(title="Holdout ROC", xaxis_title="FPR", yaxis_title="TPR")
-    pr.update_layout(
-        title="Holdout Precision–Recall", xaxis_title="Recall", yaxis_title="Precision"
+    roc.update_layout(
+        title="留出测试集 ROC", xaxis_title="假阳性率（FPR）", yaxis_title="真阳性率（TPR）"
     )
+    pr.update_layout(title="留出测试集精确率–召回率", xaxis_title="召回率", yaxis_title="精确率")
     calibration.add_scatter(x=[0, 1], y=[0, 1], mode="lines", name="理想校准")
     calibration.update_layout(
-        title="Holdout 校准诊断（不重新拟合）", xaxis_title="预测概率", yaxis_title="实际阳性比例"
+        title="留出测试集校准诊断（不重新拟合）", xaxis_title="预测概率", yaxis_title="实际阳性比例"
     )
     return roc, pr, calibration
 

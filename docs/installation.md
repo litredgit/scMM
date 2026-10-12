@@ -146,6 +146,9 @@ Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；
 | 缓存 / 临时文件 | `~/.local/state/scmm/prod/cache` / `prod/tmp` | `~/.local/state/scmm/dev/cache` / `dev/tmp` |
 | 全局预设 | `~/data/results/.scmm-preferences.json` | `~/.local/state/scmm/dev/preferences.json` |
 
+开发与生产的网页回收区统一为 `~/data/results/recycle`，需要运行服务的用户可读写；
+项目根、缓存、预设和临时目录仍分别隔离。回收及清空操作见[网页指南](workflow.md#保存和离开)。
+
 项目内的预览缓存、批次状态和快照随各自的项目根隔离。启动器另行设置 `XDG_CACHE_HOME`、
 `UV_CACHE_DIR`、`NUMBA_CACHE_DIR`、`MPLCONFIGDIR` 和 `TMPDIR`，后台 worker 继承这些配置。
 原始数据根沿用现有挂载，其中的生产结果子目录仍可被浏览，但开发保存和任务输出固定写入开发根；

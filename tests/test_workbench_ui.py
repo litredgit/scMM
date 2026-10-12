@@ -96,25 +96,19 @@ def test_model_parameters_invalidate_outputs_and_lsqr_disables_latent(tmp_path):
     assert not ui.state.data.obsm
 
 
-def test_save_requires_current_confirmation_and_preserves_history(tmp_path):
+def test_save_executes_directly_and_preserves_history(tmp_path):
     path = tmp_path / "data.h5ad"
     _dataset(path)
     ui = _workspace(tmp_path).analysis
     _load(ui, path)
-    ui.run(ui._save)
-    assert "确认" in ui.status.object
-    ui.confirm_save.value = True
     ui.run(lambda: ui.state.normalize("total"))
-    assert not ui.confirm_save.value
     ui.export_name.value = "saved.h5ad"
-    ui.confirm_save.value = True
     ui.run(ui._save)
     assert (tmp_path / "saved.h5ad").is_file(), ui.status.object
     stored = read_h5ad(tmp_path / "saved.h5ad")
     assert len(stored.layers) == 2
-    ui.confirm_save.value = True
-    ui.export_name.value = "changed.h5ad"
-    assert not ui.confirm_save.value
+    ui.run(ui._save)
+    assert "❌" in ui.status.object  # Existing exports remain protected.
 
 
 def test_json_defaults_reach_processing_and_analysis_widgets(tmp_path):
@@ -146,7 +140,7 @@ def test_json_defaults_reach_processing_and_analysis_widgets(tmp_path):
     assert workspace.analysis.reduction.value == "isomap"
     assert workspace.analysis.network_top_features.value == 12
     assert workspace.analysis.shap_samples.value == 4
-    assert "feature_snr_threshold" in workspace.processing.parameter_help[0].object
+    assert "snr_v1" in workspace.processing.parameter_widgets["feature_snr_threshold"].description
 
 
 def test_raw_preview_integration_and_parameter_invalidation(tmp_path):
@@ -262,7 +256,6 @@ def test_marker_network_shap_exports_and_invalidation(tmp_path):
         download._transfer()
         assert download.data
     ui.export_name.value = "reports.h5ad"
-    ui.confirm_save.value = True
     ui.run(ui._save)
     reports = json.loads(read_h5ad(tmp_path / "reports.h5ad").uns["scmm_workbench"]["reports_json"])
     assert {"markers", "network", "supervised", "shap"} <= reports.keys()

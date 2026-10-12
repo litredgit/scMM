@@ -40,9 +40,17 @@ from scMM.application.workbench import read_dataset
 
 from .downloads import FileDownload
 from .file_browser import FileBrowser
-from .layout import CONTENT_STYLE, TaskDock, UnsavedGuard, fit_plot, flow, form, style_button
+from .help import parameter_help, task_message
+from .layout import CONTENT_STYLE, ResponsivePage, fit_plot, flow, form, style_button
 from .preflight import request_view
-from .presentation import QCDataFrame, apply_presentation, english_parameters, qc_file_table
+from .presentation import (
+    LEGEND_POSITIONS,
+    QCDataFrame,
+    apply_presentation,
+    english_parameters,
+    position_legend,
+    qc_file_table,
+)
 from .project_views import ProjectRawViews
 from .raw_components import PreviewWorkspace as PreviewWorkspace
 from .raw_components import cell_detection_figure
@@ -142,6 +150,14 @@ class ProjectWorkspace:
         self.image_format = pn.widgets.Select(
             label="Figure download format", options=["svg", "png"], value="svg", width=160
         )
+        self.legend_chart = pn.widgets.Select(label="图表", options={}, width=180)
+        self.legend_position = pn.widgets.Select(
+            label="图例位置", options=LEGEND_POSITIONS, width=140
+        )
+        self.legend_chart.param.watch(self._select_legend_chart, "value")
+        self.legend_position.param.watch(self._change_legend_position, "value")
+        self._legend_panes = {}
+        self._legend_sync = False
         self.image_format.param.watch(lambda _: self._format_images(), "value")
         self.step = 0
         self._updating = False
@@ -150,35 +166,21 @@ class ProjectWorkspace:
         self.preview_status = pn.pane.Markdown("")
         self._checked = self._candidate = None
         self.header = pn.pane.Markdown("选择或新建一个实验项目。", styles={"flex": "1 1 280px"})
-        self.unsaved_guard = UnsavedGuard(height=0, margin=0)
         self.message = pn.pane.Markdown("")
         self.task_status = pn.pane.Markdown("任务：尚未打开项目")
         self.events = []
-        self.event_log = pn.widgets.TextAreaInput(
-            label="操作记录（可选择复制）", disabled=True, height=180
-        )
-        self.log = pn.widgets.TextAreaInput(
-            label="处理日志尾部（最近 30 KB，可选择复制）", disabled=True, height=260
-        )
-        self.follow_log = pn.widgets.Checkbox(
-            label="实时更新日志（阅读旧内容时可暂停）", value=True
-        )
+        self.latest_event = pn.pane.Markdown("尚无任务消息。")
         self.error_notice = pn.pane.Alert("", alert_type="danger", visible=False)
-        self.task_dock = TaskDock(
-            content=pn.Column(
-                "### 任务与日志",
-                self.task_status,
-                self.message,
-                self.error_notice,
-                self.button("清除错误提示", self._clear_error, role="auxiliary"),
-                self.event_log,
-                self.follow_log,
-                self.log,
-                FileDownload(
-                    label="下载完整任务日志", filename="worker.log", callback=self._download_log
-                ),
-                sizing_mode="stretch_width",
-            )
+        self.task_dock = pn.Column(
+            "### 任务信息",
+            self.task_status,
+            self.latest_event,
+            self.error_notice,
+            self.button("清除错误提示", self._clear_error, role="auxiliary"),
+            FileDownload(
+                label="下载完整任务日志", filename="worker.log", callback=self._download_log
+            ),
+            sizing_mode="stretch_width",
         )
         self.body = pn.Column(sizing_mode="stretch_width")
         self.navigation = pn.widgets.RadioButtonGroup(
@@ -189,7 +191,6 @@ class ProjectWorkspace:
         self.previous = self.button("上一步", lambda: self.go(self.step - 1), role="auxiliary")
         self.next = self.button("下一步", self._next_step)
         self.next_note = pn.pane.Markdown("")
-        self.leave = pn.widgets.Checkbox(label="确认放弃未保存修改，再新建或打开其他项目")
         self.name = pn.widgets.TextInput(label="新项目名称")
         self.project_select = pn.widgets.Select(label="已保存项目", options={})
         self.saved_items = SavedItemsPanel(
@@ -206,27 +207,30 @@ class ProjectWorkspace:
             self.button("新建项目", self._create),
             self.project_select,
             self.button("打开所选项目", self._open),
-            self.leave,
+            "新建、打开或关闭项目会直接放弃未保存修改；需要保留时请先保存项目。",
             self.close_button,
             pn.Accordion(("管理已保存项目、结果与回收区", self.saved_items)),
             "从已有结果开始：先新建项目，再导入结果目录或 H5AD。",
         )
         self.footer = flow(self.previous, self.next, self.next_note)
         self.panel = pn.Column(
-            self.unsaved_guard,
+            ResponsivePage(height=0, margin=0),
             pn.FlexBox(
                 self.header,
                 self.image_format,
+                self.legend_chart,
+                self.legend_position,
                 self.save_button,
                 flex_wrap="wrap",
-                align_items="center",
+                align_items="flex-end",
             ),
             self.body,
             self.footer,
-            self.task_dock,
             stylesheets=[CONTENT_STYLE],
         )
-        apply_presentation(self.task_dock.content)
+        apply_presentation(self.task_dock)
+        apply_presentation(self.navigation)
+        apply_presentation(self.analysis_navigation)
         self._refresh_home()
         self.render()
         if pn.state.curdoc is not None and pn.state.curdoc.session_context is not None:
@@ -250,7 +254,6 @@ class ProjectWorkspace:
 
     def _clear_error(self):
         self.error_notice.visible = False
-        self.task_dock.label = "任务与日志（点击展开 / 收起）"
 
     def _download_log(self):
         if not self.project or not hasattr(self, "batch_select") or not self.batch_select.value:
@@ -263,11 +266,10 @@ class ProjectWorkspace:
             return
         self.events.append(f"{beijing_time().split()[1]} {message}")
         self.events = self.events[-100:]
-        self.event_log.value = "\n".join(self.events)
+        self.latest_event.object = self.events[-1]
         if "❌" in message or "失败" in message:
             self.error_notice.object = message
             self.error_notice.visible = True
-            self.task_dock.label = "❌ 有错误待查看 — 点击展开任务日志"
 
     def _refresh_home(self):
         previous = self.project_select.value
@@ -288,24 +290,17 @@ class ProjectWorkspace:
                     yield ui.project.workspace.source
 
     def _close_project(self):
-        self._allow_leave()
         if self._cell_preview_job is not None:
             raise ValueError("细胞预览仍在运行，请等待完成后关闭项目")
         if self.project is not None:
             self.components.close()
         self.project = None
-        self.leave.value = False
         self.step = 0
         self.saved_items.refresh()
         self.render()
         return "当前项目已关闭。"
 
-    def _allow_leave(self):
-        if self.project and self.project.unsaved and not self.leave.value:
-            raise ValueError("请先保存项目，或明确勾选放弃未保存修改")
-
     def _create(self):
-        self._allow_leave()
         preferences = load_preferences()
         defaults = self.defaults.to_dict()
         if "ref_mz" not in self.defaults.processing_overrides:
@@ -325,7 +320,6 @@ class ProjectWorkspace:
         self.activate(project)
 
     def _open(self):
-        self._allow_leave()
         if not self.project_select.value:
             raise ValueError("请选择项目")
         self.activate(self.store.open(self.project_select.value))
@@ -334,7 +328,6 @@ class ProjectWorkspace:
         if hasattr(self, "components"):
             self.components.close()
         self.project = project
-        self.leave.value = False
         self._checked = self._candidate = None
         roots = list(self.roots)
         if project.folder not in {r.path for r in roots}:
@@ -345,11 +338,14 @@ class ProjectWorkspace:
             defaults=self.defaults,
         )
         self.analysis = self.components.analysis
+        task_root = project.folder / "processing"
+        self.analysis.catalog = StorageCatalog((*roots, StorageRoot("项目任务", task_root)))
+        self.analysis.root.options = [root.label for root in self.analysis.catalog.roots]
+        self.analysis.root.value = "项目任务"
         for name in ("tic_pane", "eic_pane", "spectrum_pane", "scan_pane", "cell_pane"):
             fit_plot(getattr(self.components, name), "spectrum")
         self.analysis.status.param.watch(lambda e: self._record(e.new), "object")
         self.analysis.status.visible = False
-        self.log.value = ""
         self.analysis.state = project.workspace
         self.analysis.refresh()
         settings = project.views.get("settings", {})
@@ -406,13 +402,15 @@ class ProjectWorkspace:
         for name in ANALYSIS_FIELDS:
             getattr(self.analysis, name).param.watch(self._analysis_setting_changed, "value")
         original_train = self.analysis._train
-        self.exploratory_split = pn.widgets.Checkbox(
-            label="明确使用细胞级探索性划分：不将结果视为独立来源的泛化验证"
+        self.validation_mode = pn.widgets.Select(
+            label="验证方式",
+            options={"按独立来源分组": "grouped", "细胞级探索（不作为独立来源验证）": "cell"},
+            description="按独立来源分组时须选择来源字段；细胞级探索不能作为独立来源的泛化验证。",
         )
 
         def train():
-            if self.analysis.sample_group.value is None and not self.exploratory_split.value:
-                raise ValueError("请选择独立样本字段，或明确确认细胞级探索性划分")
+            if self.analysis.sample_group.value is None and self.validation_mode.value != "cell":
+                raise ValueError("请选择独立样本字段，或将验证方式设为细胞级探索")
             original_train()
 
         self.analysis._train = train
@@ -421,9 +419,6 @@ class ProjectWorkspace:
             if button.label == "训练并验证":
                 button.disabled = True
                 button.visible = False
-        self.replace_confirm = pn.widgets.Checkbox(
-            label="确认替换当前数据并清除预处理和分析结果（不删除文件）"
-        )
         self._project_page()
         self._raw_page()
         self._batch_page()
@@ -439,7 +434,11 @@ class ProjectWorkspace:
         self._results_page()
         for owner in (self, self.components, self.analysis):
             english_parameters(owner)
+            parameter_help(owner)
         apply_presentation(self.panel)
+        parameter_help(self.components.processing)
+        self.included.label = "选择纳入的样本"
+        self._register_legends()
         self._prepare_sample_mapping()
         self._sample_summary()
         self.go(1)
@@ -467,7 +466,7 @@ class ProjectWorkspace:
             return "尚未预览"
         if json.dumps(preview["parameters"], sort_keys=True) != json.dumps(current, sort_keys=True):
             return "参数已修改"
-        return "已人工确认" if preview.get("confirmed") else "已预览，待确认"
+        return "已预览"
 
     def _project_page(self):
         self.project_name = pn.widgets.TextInput(
@@ -533,9 +532,13 @@ class ProjectWorkspace:
             a.root,
             a.path,
             a.browser,
-            a.trust,
-            self.replace_confirm,
+            "读取结果会替换当前数据并清除下游结果；旧格式仅在信任文件来源时读取。",
             self.button("读取结果并建立当前数据", self._import_result),
+            self.button(
+                "读取可信旧格式结果",
+                lambda: self._import_result(trust_pickle=True),
+                role="auxiliary",
+            ),
             visible=False,
         )
 
@@ -780,27 +783,21 @@ class ProjectWorkspace:
         self.project.dirty = True
         self._update_samples()
 
-    def _check_replacement(self):
-        if self.project.workspace.data is not None and not self.replace_confirm.value:
-            raise ValueError("请先明确确认替换当前数据的影响")
-
-    def _import_result(self):
-        self._check_replacement()
+    def _import_result(self, *, trust_pickle=False):
         a = self.analysis
-        data = read_dataset(a.catalog, a.root.value, a.path.value, trust_pickle=a.trust.value)
+        data = read_dataset(a.catalog, a.root.value, a.path.value, trust_pickle=trust_pickle)
         self.project.workspace.replace(data, source=a.path.value)
         self._prepare_sample_mapping()
         self._sync_metadata()
         self.project.saved_reports = {}
         self.project.dirty = True
-        self.replace_confirm.value = False
         a.refresh()
         self.result_picker.visible = False
         self._sample_summary()
 
     def _raw_page(self):
         r = self.components
-        self.preview_button = self.button("运行当前样本细胞检测预览", self._preview_cells)
+        self.preview_button = self.button("运行预览", self._preview_cells)
         self.preview_button.disabled = self._cell_preview_job is not None
         self.preview_button.loading = self._cell_preview_job is not None
         self.raw_sample = pn.widgets.Select(
@@ -991,7 +988,6 @@ class ProjectWorkspace:
                             form(*[w for k, w in widgets.items() if k not in basic]),
                         )
                     ),
-                    r.processing.parameter_help,
                     flow(
                         self.button("应用为项目默认", lambda: self._apply_parameters(False)),
                         self.button("仅应用于当前样本", lambda: self._apply_parameters(True)),
@@ -1005,7 +1001,6 @@ class ProjectWorkspace:
             ),
             self.preview_button,
             self.preview_status,
-            self.button("确认当前预览合理", self._confirm_preview),
             r.cell_status,
             r.cell_pane,
             r.cell_download,
@@ -1201,7 +1196,9 @@ class ProjectWorkspace:
                 }
                 self.project.dirty = True
                 self.sample_table.value = self._sample_frame()
-                self.preview_status.object = "细胞预览完成，请检查下图并确认；项目仍需主动保存。"
+                self.preview_status.object = (
+                    "细胞预览完成，可查看下图或直接下一步；项目仍需主动保存。"
+                )
         except Exception as exc:
             self.preview_status.object = f"❌ 细胞预览失败：{escape(str(exc))}；可重新运行。"
         finally:
@@ -1221,20 +1218,6 @@ class ProjectWorkspace:
         if self._periodic is not None:
             self._periodic.stop()
 
-    def _confirm_preview(self):
-        if self._cell_preview_job is not None:
-            raise ValueError("请等待当前细胞预览完成")
-        sample = self._sample()
-        if (
-            sample is None
-            or self._preview_status(sample) not in {"已预览，待确认", "已人工确认"}
-            or self.components.cell_download.disabled
-        ):
-            raise ValueError("先应用参数并重新运行当前样本预览")
-        sample["preview"]["confirmed"] = True
-        self.project.dirty = True
-        self.sample_table.value = self._sample_frame()
-
     def _batch_page(self):
         self.strategy = pn.widgets.Select(
             label="特征建立方式",
@@ -1242,7 +1225,6 @@ class ProjectWorkspace:
             value=self.project.manifest["feature_strategy"],
         )
         self.strategy.param.watch(lambda e: self._metadata("feature_strategy", e.new), "value")
-        self.batch_confirm = pn.widgets.Checkbox(label="确认样本与参数；未逐样本预览时也明确继续")
         self.batch_select = pn.widgets.Select(label="处理批次", options={})
         self.batch_table = pn.pane.DataFrame(pd.DataFrame(), height=230, index=False)
         self.preflight_details = pn.Column("尚未预检。", sizing_mode="stretch_width")
@@ -1255,13 +1237,12 @@ class ProjectWorkspace:
                 json.dumps(self.preflight_json.object, ensure_ascii=False, indent=2).encode()
             ),
         )
-        self.included = pn.widgets.MultiChoice(label="审核纳入的成功样本", options={})
+        self.included = pn.widgets.MultiChoice(label="选择纳入的样本", options={})
         self.batch_qc = pn.Column()
         self.batch_select.param.watch(lambda _: self.poll(), "value")
         self.batch_page = pn.Column(
             "## ③ 提取与审核",
-            "处理结束不等于已建立当前数据：请检查各样本状态与 QC，选择成功样本，"
-            "点击“确认纳入并建立当前数据”，再进入预处理或分析。",
+            "处理结束后选择成功样本，可按需比较 QC，点击“建立当前数据集”，再进入预处理或分析。",
             self.strategy,
             "共同特征要求统一合谱与对齐参数；自动范围取所有样本范围的并集。预览特征与整批共同特征一致才可复用；不一致时重新提取。单样本失败继续其他样本。",
             self.button("检查全部样本与实际参数", self._preflight),
@@ -1269,22 +1250,20 @@ class ProjectWorkspace:
             pn.Accordion(
                 ("高级：本次预检原始参数", pn.Column(self.preflight_download, self.preflight_json))
             ),
-            self.batch_confirm,
-            self.button("确认并开始处理", self._submit),
+            self.button("开始处理", self._submit),
             self.batch_select,
             flow(
                 self.button("刷新任务", self._refresh_batches, role="auxiliary"),
                 self.button("重试未成功样本", self._retry),
                 self.button("停止后续样本（当前样本继续）", self._stop, role="danger"),
             ),
-            "重试须重新预检并确认，参数与输入保持不变。",
+            "开始和重试时自动检查实际参数；重试须保持参数与输入不变。",
             self.batch_table,
             "停止请求不会立即中断当前读取或计算；已完成样本保留，等待当前阶段结束后停止后续样本。",
             self.included,
             self.button("比较所选成功样本的 QC", self._batch_qc, role="auxiliary"),
             self.batch_qc,
-            self.replace_confirm,
-            self.button("确认纳入并建立当前数据", self._review),
+            self.button("建立当前数据集", self._review),
         )
         self._refresh_batches()
 
@@ -1305,7 +1284,6 @@ class ProjectWorkspace:
             )
         ]
         apply_presentation(self.preflight_details)
-        self.batch_confirm.value = False
 
     def _invalidate_preflight(self):
         self._checked = None
@@ -1314,18 +1292,13 @@ class ProjectWorkspace:
             self.preflight_json.object = {}
             self.preflight_download.disabled = True
             self.preflight_download.data = None
-            self.batch_confirm.value = False
 
     def _submit(self):
-        if not self.batch_confirm.value or self._checked != json.dumps(
-            preflight(self.project, self.catalog), sort_keys=True
-        ):
-            raise ValueError("先重新检查配置并明确确认")
+        self._preflight()
         self._save()
         path = submit(self.project, self.catalog)
         self._refresh_batches()
         self.batch_select.value = str(path)
-        self.batch_confirm.value = False
 
     def _refresh_batches(self):
         previous = self.batch_select.value
@@ -1340,17 +1313,13 @@ class ProjectWorkspace:
         self.poll()
 
     def _retry(self):
-        if (
-            not self.batch_select.value
-            or not self.batch_confirm.value
-            or self._checked != json.dumps(preflight(self.project, self.catalog), sort_keys=True)
-        ):
-            raise ValueError("请选择批次，重新检查配置并确认")
+        if not self.batch_select.value:
+            raise ValueError("请选择批次")
+        self._preflight()
         self._save()
         path = submit(self.project, self.catalog, retry_path=self.batch_select.value)
         self._refresh_batches()
         self.batch_select.value = str(path)
-        self.batch_confirm.value = False
 
     def _stop(self):
         if not self.batch_select.value:
@@ -1358,7 +1327,6 @@ class ProjectWorkspace:
         stop_after_current(self.batch_select.value)
 
     def _review(self):
-        self._check_replacement()
         if not self.batch_select.value:
             raise ValueError("请选择批次")
         data = reviewed_dataset(self.batch_select.value, self.included.value)
@@ -1366,7 +1334,6 @@ class ProjectWorkspace:
         self._sync_metadata()
         self.project.saved_reports = {}
         self.project.dirty = True
-        self.replace_confirm.value = False
         self.analysis.refresh()
         self._sample_summary()
 
@@ -1419,12 +1386,11 @@ class ProjectWorkspace:
         self._poll_cell_preview()
         if not self.project or not hasattr(self, "batch_select") or not self.batch_select.value:
             self.task_status.object = "任务：无所选批次"
-            self.log.value = ""
             return
         try:
             state = read_batch(self.batch_select.value)
             batch_id = Path(self.batch_select.value).parent.name
-            self.task_status.object = f"任务：**{escape(TASK_LABELS.get(state['status'], state['status']))}** · {escape(state.get('message', ''))}\n\n批次 ID：`{escape(batch_id)}`。报错时请同时提供此 ID 和完整任务日志。"
+            self.task_status.object = f"任务：**{escape(TASK_LABELS.get(state['status'], state['status']))}** · {escape(task_message(state.get('message', '')))}\n\n批次 ID：`{escape(batch_id)}`。报错时请同时提供此 ID 和完整任务日志。"
             self.batch_table.object = pd.DataFrame(
                 [
                     {
@@ -1442,7 +1408,6 @@ class ProjectWorkspace:
             selected = [s for s in self.included.value if s in options.values()]
             self.included.options = options
             self.included.value = selected
-            path = Path(self.batch_select.value).with_name("worker.log")
             failures = "\n".join(
                 f"{row['name']}: {row['error']}" for row in state["samples"] if row.get("error")
             )
@@ -1451,12 +1416,6 @@ class ProjectWorkspace:
             if failures and failures != getattr(self, "_last_batch_error", None):
                 self._record(f"任务失败：{escape(failures)}")
             self._last_batch_error = failures
-            if path.exists() and self.follow_log.value:
-                with path.open("rb") as handle:
-                    handle.seek(max(0, path.stat().st_size - 30000))
-                    value = handle.read().decode(errors="replace")
-                    if self.log.value != value:
-                        self.log.value = value
         except Exception as exc:
             self.task_status.object = f"任务读取失败：{escape(str(exc))}"
             if self.task_status.object != getattr(self, "_last_poll_error", None):
@@ -1482,8 +1441,8 @@ class ProjectWorkspace:
                 self._invalidate_impact()
             self.operation_controls[:] = {
                 "filter": [a.min_total, a.min_detected, a.feature_fraction],
-                "normalize": [a.normalization, a.help("normalization")],
-                "impute": [a.imputation, a.help("imputation")],
+                "normalize": [a.normalization],
+                "impute": [a.imputation],
                 "outliers": [a.contamination],
             }[self.operation.value]
 
@@ -1498,10 +1457,7 @@ class ProjectWorkspace:
             self.impact_qc_plot,
             visible=False,
         )
-        self.apply_confirm = pn.widgets.Checkbox(
-            label="确认应用并清除下游分析；样本或分组可能被筛除"
-        )
-        self.impact_note = pn.pane.Markdown("先检查影响；计算在副本执行，不改变当前数据。")
+        self.impact_note = pn.pane.Markdown("可先查看影响；应用按钮直接执行并清除下游分析结果。")
         for widget in (
             a.min_total,
             a.min_detected,
@@ -1511,11 +1467,11 @@ class ProjectWorkspace:
             a.contamination,
         ):
             widget.param.watch(self._invalidate_impact, "value")
-        self.reset_confirm = pn.widgets.Checkbox(label="确认恢复预处理起点并清除下游结果")
         self.preprocess_page = pn.Column(
             "## ④ 预处理",
             a.summary,
             a.qc_table,
+            a.qc_plot,
             "参考强度按样本和实际参考 m/z 分行显示；不同参考离子不合并，空记录不展示。",
             self.operation,
             self.operation_controls,
@@ -1524,16 +1480,13 @@ class ProjectWorkspace:
             self.impact,
             self.impact_note,
             self.impact_preview,
-            self.apply_confirm,
             self.button("应用到当前数据", self._apply_operation),
             a.history_table,
-            self.reset_confirm,
             self.button("恢复到预处理起点", self._reset, role="danger"),
         )
 
     def _invalidate_impact(self, _event=None):
         self._candidate = None
-        self.apply_confirm.value = False
         self.impact_preview.visible = False
         self.impact_note.object = "参数已改变；下方旧影响摘要不再有效，请重新检查。"
 
@@ -1590,38 +1543,35 @@ class ProjectWorkspace:
             x="total_intensity",
             y="detected_features",
             color="source_file",
+            labels={
+                "source_file": "样本",
+                "total_intensity": "总强度",
+                "detected_features": "检出特征数",
+            },
             title="检查后每细胞 QC（尚未应用）",
         )
         self.impact_preview.visible = True
+        self._format_images()
         self._candidate = (self._signature(), candidate)
-        self.impact_note.object = "影响检查有效；确认后将应用上述操作并清除下游结果。"
-        self.apply_confirm.value = False
+        self.impact_note.object = "影响检查有效；点击应用将执行上述操作并清除下游分析结果。"
 
     def _apply_operation(self):
-        if (
-            not self.apply_confirm.value
-            or self._candidate is None
-            or self._candidate[0] != self._signature()
-        ):
-            raise ValueError("参数或数据变化后须重新检查影响，并确认应用")
+        if self._candidate is None or self._candidate[0] != self._signature():
+            self._preview_operation()
         self.project.workspace = self._candidate[1]
         self.analysis.state = self.project.workspace
         self._candidate = None
         self.impact_preview.visible = False
         self.project.saved_reports = {}
         self.project.dirty = True
-        self.apply_confirm.value = False
         self.analysis.refresh()
         self._sample_summary()
 
     def _reset(self):
-        if not self.reset_confirm.value:
-            raise ValueError("请先确认恢复起点的影响")
         self.project.workspace.reset()
         self._invalidate_impact()
         self.project.saved_reports = {}
         self.project.dirty = True
-        self.reset_confirm.value = False
         self.analysis.refresh()
 
     def _analysis_page(self):
@@ -1663,7 +1613,6 @@ class ProjectWorkspace:
                         a.perplexity,
                         a.seed,
                         a.embedding_key,
-                        a.help("reduction", "n_components", "n_neighbors", "perplexity"),
                     ),
                 )
             ),
@@ -1772,7 +1721,7 @@ class ProjectWorkspace:
                         a.extra_downloads["network"],
                     ),
                     "分类模型与解释": pn.Column(
-                        self.exploratory_split,
+                        self.validation_mode,
                         a._button("检查并训练当前模型", a._train),
                         a.supervised_page,
                         a.model_download,
@@ -1844,7 +1793,7 @@ class ProjectWorkspace:
         )
         self.results_page = pn.Column(
             "## ⑥ 结果与保存",
-            "离开前请确认页顶显示“已保存”。关闭提醒由浏览器控制，不保证每次出现；"
+            "离开前请主动保存项目并核对页顶状态；按钮操作、关闭和刷新均不二次确认。"
             "尚未应用的表单编辑不等于已保存参数。保存大型数据到云盘可能需要等待。",
             "项目保存用于继续工作，下载不替代项目保存。模型对象不保存，继续模型运算需重新训练。",
             self.button("保存项目", self._save),
@@ -1858,7 +1807,6 @@ class ProjectWorkspace:
                         form(a.export_root, a.export_directory),
                         a.export_name,
                         self.export_path,
-                        a.confirm_save,
                         self.export_button,
                         self.export_status,
                     ),
@@ -1919,6 +1867,9 @@ class ProjectWorkspace:
                     ),
                     dynamic=True,
                 )
+                for pane, (_name, source) in zip(tabs, sources, strict=True):
+                    pane._scmm_legend_key = getattr(source, "_scmm_legend_key", "")
+                    pane._scmm_legend_base = getattr(source, "_scmm_legend_base", None)
                 apply_presentation(tabs)
                 content[:] = [tabs]
             self._format_images()
@@ -2017,14 +1968,23 @@ class ProjectWorkspace:
             pn.Accordion(
                 (
                     f"已保存图形：{name}",
-                    fit_plot(
-                        pn.pane.Plotly(pio.from_json(value)),
-                        "square" if name in {"embedding_plot", "network_plot"} else "analysis",
-                    ),
+                    self._saved_plot(name, value),
                 )
             )
             for name, value in self.project.views.get("figures", {}).items()
         ]
+
+    def _saved_plot(self, name, value):
+        pane = fit_plot(
+            pn.pane.Plotly(pio.from_json(value)),
+            "square" if name in {"embedding", "embedding_plot", "network_plot"} else "analysis",
+        )
+        pane._scmm_legend_key = (
+            "analysis.embedding_plot" if name == "embedding" else f"analysis.{name}"
+        )
+        pane._scmm_legend_base = None
+        self._apply_legend(pane, pane._scmm_legend_key)
+        return pane
 
     def _download_h5ad(self):
         path = self.project.manifest["artifacts"].get("current")
@@ -2049,6 +2009,7 @@ class ProjectWorkspace:
         self.project.views = {
             "settings": {name: getattr(self.analysis, name).value for name in ANALYSIS_FIELDS},
             "figures": figures,
+            "legend_positions": dict(self.project.views.get("legend_positions", {})),
         }
         self.store.save(self.project)
         self._refresh_reports()
@@ -2106,6 +2067,8 @@ class ProjectWorkspace:
         # Configure tables before attaching their models. Updating columns while
         # a newly mounted Tabulator is initializing can race its DOM creation.
         apply_presentation(pages[self.step])
+        if self.step == 2:
+            self._configure_raw_tabs()
         self.body[:] = [pages[self.step]]
         self.analysis_navigation.visible = self.step == 5
         self._format_images()
@@ -2114,17 +2077,100 @@ class ProjectWorkspace:
         self.next.disabled = self.step == 6
         self.refresh_header()
 
+    def _configure_raw_tabs(self):
+        # Mount only the visible tab. Plotly otherwise caches a zero height
+        # while its container is hidden and can stay blank on return. Reusing
+        # the Python panes retains spectra and selection without any file I/O.
+        tabs = self.raw_page.select(pn.Tabs)[0]
+        tabs.dynamic = True
+        tabs.tags = [tag for tag in tabs.tags if tag != "scmm-refresh"] + ["scmm-refresh"]
+
+    def _register_legends(self):
+        self._legend_panes = {}
+        for owner_name, owner in (
+            ("raw", self.components),
+            ("analysis", self.analysis),
+            ("project", self),
+        ):
+            for name, pane in vars(owner).items():
+                if not isinstance(pane, pn.pane.Plotly):
+                    continue
+                key = f"{owner_name}.{name}"
+                self._legend_panes[key] = pane
+                pane._scmm_legend_key = key
+
+                def refresh(event, pane=pane, key=key):
+                    if self._legend_sync:
+                        return
+                    pane._scmm_legend_revision = getattr(pane, "_scmm_legend_revision", 0) + 1
+                    pane._scmm_legend_base = event.new.layout.showlegend
+                    if hasattr(pane, "_scmm_coloraxis_base"):
+                        del pane._scmm_coloraxis_base
+                    self._apply_legend(pane, key)
+
+                pane.param.watch(refresh, "object")
+                self._apply_legend(pane, key)
+
+    def _apply_legend(self, pane, key):
+        if self.project is None:
+            return
+        previous_sync = self._legend_sync
+        self._legend_sync = True
+        try:
+            position_legend(pane, self.project.views.get("legend_positions", {}).get(key, "right"))
+        finally:
+            self._legend_sync = previous_sync
+
+    def _select_legend_chart(self, _event=None):
+        self._legend_sync = True
+        try:
+            self.legend_position.value = (
+                self.project.views.get("legend_positions", {}).get(self.legend_chart.value, "right")
+                if self.project
+                else "right"
+            )
+        finally:
+            self._legend_sync = False
+
+    def _change_legend_position(self, _event=None):
+        if self._legend_sync or self.project is None or not self.legend_chart.value:
+            return
+        key = self.legend_chart.value
+        self.project.views.setdefault("legend_positions", {})[key] = self.legend_position.value
+        for pane in dict.fromkeys(
+            [*self._legend_panes.values(), *self.body.select(pn.pane.Plotly)]
+        ):
+            if getattr(pane, "_scmm_legend_key", None) == key:
+                self._apply_legend(pane, key)
+        self.project.dirty = True
+        self.refresh_header()
+
     def _format_images(self):
         from bokeh.models import CustomJS
 
-        for pane in self.body.select(pn.pane.Plotly):
+        panes = self.body.select(pn.pane.Plotly)
+        choices = {}
+        for index, pane in enumerate(panes):
+            if not hasattr(pane, "_scmm_legend_key"):
+                pane._scmm_legend_key = f"saved.{index}"
+            key = pane._scmm_legend_key
+            self._legend_panes.setdefault(key, pane)
+            self._apply_legend(pane, key)
+            title = pane.object.layout.title.text or "图表"
+            choices[f"{title} · {index + 1}"] = key
+        old = self.legend_chart.value
+        self.legend_chart.options = choices
+        self.legend_chart.value = (
+            old if old in choices.values() else next(iter(choices.values()), None)
+        )
+        self.legend_chart.visible = self.legend_position.visible = bool(choices)
+        self._select_legend_chart()
+        for pane in panes:
             # Pages can attach panes before presentation callbacks are registered.
             # Install on live models as well as future models (presentation.py).
             for model, _parent in pane._models.values():
                 if not model.js_property_callbacks.get("change:config"):
-                    model.js_on_change(
-                        "config", CustomJS(code="cb_obj.properties.frames.change.emit()")
-                    )
+                    model.js_on_change("config", CustomJS(code="cb_obj._render_count += 1"))
             config = {
                 **(pane.config or {}),
                 "toImageButtonOptions": {"format": self.image_format.value},
@@ -2135,7 +2181,6 @@ class ProjectWorkspace:
     def refresh_header(self):
         self.close_button.disabled = self.project is None
         self.save_button.disabled = self.project is None
-        self.unsaved_guard.dirty = bool(self.project and self.project.unsaved)
         if self.project is None:
             self.header.object = "选择或新建一个实验项目。"
         if self.project:
@@ -2160,13 +2205,10 @@ class ProjectWorkspace:
 
 def create_app(roots, output_roots=(), defaults=None, *, project_root=PROJECT_ROOT):
     pn.extension("plotly", "tabulator", notifications=True)
-    dock_css = "#main .pn-wrapper { contain: none !important; overflow: visible !important; }"
-    if dock_css not in pn.config.raw_css:
-        pn.config.raw_css.append(dock_css)
     workspace = ProjectWorkspace(roots, project_root=project_root, defaults=defaults)
     template = pn.template.FastListTemplate(
         title="scMM 实验项目",
-        sidebar=[workspace.navigation, workspace.analysis_navigation],
+        sidebar=[workspace.navigation, workspace.analysis_navigation, workspace.task_dock],
         sidebar_width=230,
         main=[workspace.panel],
         accent_base_color="#0f766e",

@@ -8,7 +8,7 @@
 ## 代码结构
 
 当前入口为 `ui/app.py` 的项目工作台；`ui/project_views.py` 管理项目原始谱展示，
-`ui/layout.py` 管理响应式布局及未保存离页提示。项目持久化与批次编排分别在
+`ui/layout.py` 管理响应式布局和图形尺寸，`ui/help.py` 管理中文悬停解释。项目持久化与批次编排分别在
 `application/projects.py` 和 `application/project_batch.py`，RAW 流读取在 `file/readers/`。
 下列树保留其他模块职责，使用流程以 [当前网页指南](workflow.md) 为准。
 
@@ -37,12 +37,13 @@ scMM/
 │   ├── project_views.py   # 项目原始谱展示与预览编排
 │   ├── raw_components.py  # 可复用的原始谱及分析控件
 │   ├── file_browser.py    # 根目录内的浏览、搜索与跨目录选择
+│   ├── help.py            # 中文参数悬停解释
 │   ├── presentation.py    # 表格、图形与数值显示
 │   ├── downloads.py       # 挂载页面的下载缓存清除兼容
 │   ├── preflight.py       # 实际参数摘要、分组参数与样本差异
 │   ├── saved_items.py     # 已保存项目/结果管理及回收区交互
 │   ├── analysis_plots.py  # 分析结果图形
-│   ├── layout.py          # 任务栏、图表比例和离页提醒
+│   ├── layout.py          # 响应式布局和图表比例
 │   ├── workbench.py       # 分析页面控件
 │   └── processing.py      # 旧处理面板及共享处理控件
 ├── file/

@@ -170,17 +170,15 @@ def test_ui_returns_immediately_rejects_duplicates_and_applies_then_saves(tmp_pa
     ui.poll()  # Polling unrelated batch state must still service preview completion.
     with pytest.raises(ValueError, match="已有细胞预览"):
         ui._preview_cells()
-    with pytest.raises(ValueError, match="等待"):
-        ui._confirm_preview()
     complete(future, submitted[0], tmp_path)
     ui.poll()
     assert not ui.preview_button.disabled and not ui.preview_button.loading
     assert ui.project.dirty and not ui.components.cell_download.disabled
     assert not ui.project.samples[0]["preview"]["confirmed"]
-    ui._confirm_preview()
     ui._save()
     restored = ui.store.open(ui.project.folder)
-    assert restored.samples[0]["preview"]["confirmed"]
+    assert not restored.samples[0]["preview"]["confirmed"]
+    assert ui._preview_status(restored.samples[0]) == "已预览"
     assert child_path(restored.folder, restored.samples[0]["preview"]["artifact"]).is_dir()
 
 

@@ -135,15 +135,13 @@ def test_snr_controls_output_names_and_saved_item_confirmation(tmp_path):
     ui.h5ad_download_name.value = "../bad.h5ad"
     assert ui.h5ad_download.disabled
     ui.h5ad_download_name.value = "自定义.h5ad"
-    ui.analysis.confirm_save.value = True
     ui.analysis._save()
     assert (ui.project.folder / "exports" / "独立导出.h5ad").is_file()
     ui._close_project()
     manager = ui.saved_items
+    manager.manager.trash_root = tmp_path / "recycle"
     manager.project.value = str(next(iter(ui.store.list()))["path"])
     manager.plan_project()
-    assert manager.move_button.disabled
-    manager.confirm.value = True
     assert not manager.move_button.disabled
     manager.move()
     assert not ui.store.list()
@@ -172,8 +170,8 @@ def test_preflight_is_readable_without_mutating_request():
     view = request_view(request, automatic_range=True)
     tables = view.select(pn.pane.DataFrame)
     common = tables[0].object
-    assert {"Parameter", "Value", "Unit", "来源"} <= set(common.columns)
-    assert "snr_v1" in common.Value.tolist()
+    assert {"参数", "值", "单位", "来源"} <= set(common.columns)
+    assert "snr_v1" in common["值"].tolist()
     differences = tables[1].object
     assert differences.iloc[0]["与公共参数的差异"] == "一致"
     assert "cell_snr = 8" in differences.iloc[1]["与公共参数的差异"]

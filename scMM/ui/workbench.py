@@ -25,6 +25,7 @@ from .analysis_plots import (
 )
 from .downloads import FileDownload
 from .file_browser import FileBrowser
+from .help import HelpCheckbox, parameter_help
 from .layout import PlotWidth, fit_plot, flow, style_button
 from .presentation import QCDataFrame, qc_file_table
 
@@ -65,7 +66,6 @@ class WorkbenchPanels:
             label="结果目录 / H5AD 路径", placeholder="相对路径或服务器原生绝对路径"
         )
         self.browser = pn.Column()
-        self.trust = pn.widgets.Checkbox(label="我信任所选旧目录中的 pickle 文件（可能执行代码）")
         self.load_button = pn.widgets.Button(label="读取并替换工作数据", color="primary")
         self.import_task = pn.widgets.Button(label="载入当前已完成任务的数据")
         self.root.param.watch(self._browse, "value")
@@ -77,7 +77,8 @@ class WorkbenchPanels:
             self.root,
             self.path,
             self.browser,
-            self.trust,
+            "旧格式仅在信任文件来源时读取。",
+            self._button("读取可信旧格式结果", lambda: self._load(trust_pickle=True)),
             flow(self.load_button, self.import_task),
             self.summary,
             self.notice,
@@ -88,20 +89,23 @@ class WorkbenchPanels:
         self._differential_page()
         self._supervised_page()
         self._results_page()
+        parameter_help(self)
         self.refresh()
 
     def field(self, name):
         default, kind, limits, _ = ANALYSIS_SPECS[name]
         value = self.defaults.analysis.get(name, default)
         if kind is str:
-            return pn.widgets.Select(label=name, options=list(limits), value=value)
+            return pn.widgets.Select(
+                label=name, options=list(limits), value=value, description=ANALYSIS_SPECS[name][3]
+            )
         widget = pn.widgets.IntInput if kind is int else pn.widgets.FloatInput
-        return widget(label=name, value=value, start=limits[0], end=limits[1])
-
-    @staticmethod
-    def help(*names):
-        return pn.pane.Markdown(
-            "\n\n".join(f"**{name}**：{ANALYSIS_SPECS[name][3]}" for name in names)
+        return widget(
+            label=name,
+            value=value,
+            start=limits[0],
+            end=limits[1],
+            description=ANALYSIS_SPECS[name][3],
         )
 
     def _browse(self, _event=None):
@@ -121,11 +125,11 @@ class WorkbenchPanels:
             self.refresh()
             self.status.object = f"❌ {escape(str(exc))}"
 
-    def _load(self):
+    def _load(self, *, trust_pickle=False):
         if not self.path.value.strip():
             raise ValueError("请选择一个结果目录或 H5AD")
         data = read_dataset(
-            self.catalog, self.root.value, self.path.value, trust_pickle=self.trust.value
+            self.catalog, self.root.value, self.path.value, trust_pickle=trust_pickle
         )
         self.state.replace(data, source=str(self.catalog.resolve(self.root.value, self.path.value)))
         if self.on_replace:
@@ -177,7 +181,6 @@ class WorkbenchPanels:
             self._button("归一化", lambda: self.state.normalize(self.normalization.value)),
             self.imputation,
             self._button("插补零值", lambda: self.state.impute(self.imputation.value)),
-            self.help("normalization", "imputation"),
             flow(self.min_total, self.min_detected, self.feature_fraction),
             self._button(
                 "应用 QC 筛选",
@@ -206,9 +209,9 @@ class WorkbenchPanels:
         self.neighbors = self.field("n_neighbors")
         self.perplexity = self.field("perplexity")
         self.seed = self.field("random_state")
-        self.pca_input = pn.widgets.Checkbox(label="PCA preprocessing", value=True)
+        self.pca_input = HelpCheckbox(label="PCA preprocessing", value=True)
         self.pca_dimensions = pn.widgets.IntInput(label="PCA input dimensions", value=20, start=1)
-        self.whiten = pn.widgets.Checkbox(label="whiten", value=False)
+        self.whiten = HelpCheckbox(label="whiten", value=False)
         self.min_dist = pn.widgets.FloatInput(label="min_dist", value=0.3, start=0, end=1)
         self.metric = pn.widgets.Select(
             label="metric", options=["euclidean", "manhattan", "cosine"]
@@ -237,7 +240,7 @@ class WorkbenchPanels:
         self.reduction.param.watch(reduction_visibility, "value")
         self.pca_input.param.watch(reduction_visibility, "value")
         reduction_visibility()
-        self.scale = pn.widgets.Checkbox(label="降维前标准化", value=False)
+        self.scale = HelpCheckbox(label="降维前标准化", value=False)
         self.embedding_key = pn.widgets.TextInput(
             label="新嵌入键（不覆盖已有键）", value=f"X_{self.reduction.value}"
         )
@@ -260,7 +263,7 @@ class WorkbenchPanels:
         self.color_sort = pn.widgets.Select(
             label="Feature order", options=["mean", "total", "median", "detection", "mz", "name"]
         )
-        self.color_descending = pn.widgets.Checkbox(label="Descending", value=True)
+        self.color_descending = HelpCheckbox(label="Descending", value=True)
         self.color_source.param.watch(self._change_color_source, "value")
         for widget in (self.color_sort, self.color_descending):
             widget.param.watch(lambda _: self._refresh_colors(), "value")
@@ -278,13 +281,11 @@ class WorkbenchPanels:
             flow(self.neighbors, self.perplexity, self.seed),
             self.embedding_key,
             self._button("运行降维", self._reduce),
-            self.help("reduction", "n_components", "n_neighbors", "perplexity", "random_state"),
             flow(self.cluster_method, self.clusters, self.cluster_key),
             self._button(
                 "运行聚类",
                 self._cluster,
             ),
-            self.help("clustering", "n_clusters"),
             self.embedding_view,
             self.color_source,
             flow(self.color_search, self.color_clear),
@@ -472,7 +473,7 @@ class WorkbenchPanels:
         self.diff_layer = pn.widgets.Select(label="差异检验数据层", options={"当前 X": None})
         self.diff_method = self.field("differential_method")
         self.features = pn.widgets.MultiChoice(label="小提琴特征（最多 12 个）", options=[])
-        self.hide_zero = pn.widgets.Checkbox(label="仅在小提琴图隐藏零值", value=False)
+        self.hide_zero = HelpCheckbox(label="仅在小提琴图隐藏零值", value=False)
         self.volcano_fdr = pn.widgets.FloatInput(label="FDR threshold", value=0.05, start=0, end=1)
         self.volcano_effect = pn.widgets.FloatInput(label="abs(log2FC)", value=1.0, start=0)
         self.volcano_labels = pn.widgets.IntInput(label="Label count", value=10, start=0, end=100)
@@ -509,7 +510,6 @@ class WorkbenchPanels:
             flow(self.group, self.group_a, self.group_b),
             flow(self.diff_layer, self.diff_method),
             self._button("比较全部特征", self._differentiate),
-            self.help("differential_method"),
             "选取特征和隐藏零值不会重新检验；两张图共享全特征 BH-FDR。",
             self.volcano,
             self.features,
@@ -528,7 +528,6 @@ class WorkbenchPanels:
             "### 特征相关网络",
             "沿用上方数据层。仅按方差筛选特征；相关不代表因果，不是轨迹分析。",
             flow(self.network_method, self.network_threshold, self.network_top_features),
-            self.help("network_method", "network_threshold", "network_top_features"),
             self._button("计算相关网络", self._network),
             self.network_plot,
             self.network_table,
@@ -627,7 +626,7 @@ class WorkbenchPanels:
         self.cv = self.field("cv")
         self.test_size = self.field("test_size")
         self.calibration_bins = self.field("calibration_bins")
-        self.smote = pn.widgets.Checkbox(label="训练折内 SMOTE", value=False)
+        self.smote = HelpCheckbox(label="训练折内 SMOTE", value=False)
         self.lda_solver = pn.widgets.Select(label="LDA solver", options=["svd", "lsqr", "eigen"])
         self.latent_key = pn.widgets.TextInput(label="潜变量存储键", value="X_latent")
         self.latent_button = self._button(
@@ -657,7 +656,6 @@ class WorkbenchPanels:
             flow(self.cv, self.test_size, self.calibration_bins),
             self.smote,
             self._button("训练并验证", self._train),
-            self.help("model", "cv", "test_size", "calibration_bins"),
             self.model_report,
             self.roc,
             self.pr,
@@ -668,7 +666,6 @@ class WorkbenchPanels:
             "### SHAP",
             "使用训练集背景解释测试集样本；绝对贡献跨样本/类别取平均，不表示效应方向或因果。图显示前 30 项，下载包含全部。",
             flow(self.shap_background, self.shap_samples),
-            self.help("shap_background", "shap_samples"),
             self.shap_button,
             self.shap_plot,
             self.shap_table,
@@ -712,11 +709,6 @@ class WorkbenchPanels:
         self.export_name = pn.widgets.TextInput(
             label="H5AD 文件名", value=dataset_filename("analysis")
         )
-        self.confirm_save = pn.widgets.Checkbox(
-            label="确认保存当前修订（不覆盖已有文件）", value=False
-        )
-        for widget in (self.export_root, self.export_directory, self.export_name):
-            widget.param.watch(lambda _: setattr(self.confirm_save, "value", False), "value")
         self.save_button = self._button("保存 H5AD（含历史层与嵌入）", self._save)
         self.diff_download = FileDownload(
             label="下载完整差异表 CSV",
@@ -777,21 +769,17 @@ class WorkbenchPanels:
             self.export_root,
             self.export_directory,
             self.export_name,
-            self.confirm_save,
             self.save_button,
             "H5AD 保留当前轴上的历史层及来源记录；CSV 不包含层和嵌入。云盘需可写挂载才能保存。",
         )
 
     def _save(self):
-        if not self.confirm_save.value:
-            raise ValueError("请先确认保存当前修订")
         self.state.save_h5ad(
             self.catalog,
             self.export_root.value,
             self.export_directory.value,
             self.export_name.value,
         )
-        self.confirm_save.value = False
 
     def _invalidate(self, name):
         if self._refreshing:
@@ -815,7 +803,6 @@ class WorkbenchPanels:
         try:
             data = self.state.data
             if self._rendered_token != self.state.token:
-                self.confirm_save.value = False
                 for download in (self.matrix_download, self.diff_download, self.model_download):
                     download.data = None
                 for download in self.extra_downloads.values():
@@ -867,6 +854,11 @@ class WorkbenchPanels:
                     x="total_intensity",
                     y="detected_features",
                     color="source_file",
+                    labels={
+                        "source_file": "样本",
+                        "total_intensity": "总强度",
+                        "detected_features": "检出特征数",
+                    },
                     title="每细胞 QC",
                 )
             if "differential" in self.state.results:

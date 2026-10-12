@@ -198,6 +198,9 @@ Notebook 或 Python API。
 
 ## 网页默认参数
 
+网页参数名保留英文，中文解释通过控件或预检参数名的鼠标悬停查看。预处理及分析高级参数也采用此方式；
+显示位置、按钮和保存行为见[网页流程](workflow.md#网页六步项目流程)。
+
 网页新项目默认 `extraction_method=snr_v1`；显式 JSON 配置优先，已有项目继续使用保存的算法与参数。
 SNR 模式主要显示 `feature_snr_threshold`，legacy 模式显示 `peak_snr`；高级参数随算法显示适用项。
 此默认值只用于网页，CLI、Python API 和 Notebook 的各自默认值不变。

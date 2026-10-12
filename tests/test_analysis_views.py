@@ -32,7 +32,7 @@ def test_feature_selection_and_hiding_zero_never_recompute_fdr(monkeypatch):
     pd.testing.assert_frame_equal(expected, result["table"])
 
 
-def test_plot_display_uses_scientific_notation_only_for_intensity():
+def test_plot_display_formats_intensity_and_probabilities_without_rounding_data():
     import plotly.graph_objects as go
 
     figure = style_figure(
@@ -54,7 +54,7 @@ def test_plot_display_uses_scientific_notation_only_for_intensity():
     volcano = volcano_figure(table)
     template = volcano.data[0].hovertemplate
     assert template.count(".3e") == 2
-    assert "0.000000001" in volcano.data[0].customdata[0]
-    assert "0.00000001" in volcano.data[0].customdata[0]
+    assert "1.00e-09" in volcano.data[0].customdata[0]
+    assert "1.00e-08" in volcano.data[0].customdata[0]
     assert volcano.layout.yaxis.tickformat == ".3~f"
     pd.testing.assert_frame_equal(table, original)

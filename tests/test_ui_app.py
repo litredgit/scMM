@@ -63,7 +63,7 @@ def test_create_app_returns_template_with_isolated_session(tmp_path) -> None:
     assert type(app).__name__ == "FastListTemplate"
     assert app.title == "scMM 实验项目"
     assert app.sidebar_width == 230
-    assert len(app.sidebar) == 2
+    assert len(app.sidebar) == 3
     assert app.sidebar[1].visible is False
 
 

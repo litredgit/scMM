@@ -59,7 +59,7 @@ class ProjectRawViews(PreviewWorkspace):
         self._cell_generation = getattr(self, "_cell_generation", 0) + 1
         self.cell_download.disabled = True
         self.cell_download.data = None
-        self.cell_status.object = "参数已改变；下图为旧参数结果，请重新预览后确认。"
+        self.cell_status.object = "参数已改变；下图为旧参数结果，请重新预览。"
 
     def _invalidate_raw_plots(self):
         if self.preview is None:

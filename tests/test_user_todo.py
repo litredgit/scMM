@@ -137,11 +137,12 @@ def test_qc_reference_rows_preserve_nearby_ions_and_omit_empty_sample_records():
     )
     original = quality_metrics(data)["file"]
     displayed = qc_file_table(original)
-    refs = displayed[displayed.metric == "reference_intensity"]
+    refs = displayed[displayed.metric.str.startswith("参考强度")]
     assert len(refs) == 2
     assert refs.source_file.tolist() == ["a", "b"]
-    assert refs.reference_mz.tolist() == [760.58331, 760.58332]
-    assert refs["count"].tolist() == [2, 2]
+    assert refs.reference_mz.tolist() == ["760.5833", "760.5833"]
+    assert original.columns.get_level_values(0).nunique() == 4
+    assert refs["cell_count"].tolist() == [2, 2]
     assert refs.iloc[0]["mean"] == original.loc["a", ("reference_intensity_760.58331", "mean")]
     assert not isinstance(displayed.columns, pd.MultiIndex)
 
@@ -179,7 +180,8 @@ def test_qc_display_formats_by_metric_without_rounding_numerical_data():
     assert "NaN" in html
     pd.testing.assert_frame_equal(pane.object, stats)
     plain = general.get_root(Document())
-    assert unescape(plain.text).count("0.00000001") == 2
+    assert unescape(plain.text).count("0.00000001") == 1
+    assert "1.00e-08" in unescape(plain.text)
     assert "1.000e+06" in unescape(plain.text)
     assert "<td>3</td>" in unescape(plain.text)
     pane.object = stats.loc[[1]].copy()
@@ -198,8 +200,8 @@ def test_display_precision_preserves_tiny_values_and_csv_precision():
     assert count_number(123.0) == "123"
     assert ordinary_number(-1.23456789) == "-1.235"
     assert ordinary_number(0.0000123456789) == "0.0000123"
-    assert probability_number(0.123456789) == "0.123"
-    assert probability_number(1.23456789e-12) == "0.00000000000123"
+    assert probability_number(0.123456789) == "1.23e-01"
+    assert probability_number(1.23456789e-12) == "1.23e-12"
     assert probability_number(0) == "0"
     stats = pd.DataFrame({"mean_features": [123.33333333333333], "fdr": [1.23456789e-12]})
     exported = pd.read_csv(

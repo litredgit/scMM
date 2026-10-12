@@ -1,9 +1,11 @@
 """Reviewable, reversible removal of saved projects and processed results."""
 # ruff: noqa: RUF001
 
+import errno
 import hashlib
 import json
 import os
+import shutil
 from contextlib import ExitStack
 from pathlib import Path
 from uuid import uuid4
@@ -49,11 +51,12 @@ def _references(value, folder):
 
 
 class SavedItems:
-    def __init__(self, store, roots, *, active_paths=lambda: ()):
+    def __init__(self, store, roots, *, active_paths=lambda: (), trash_root=None):
         self.store = store
         roots = [StorageRoot("项目结果", store.root), *roots]
         self.catalog = StorageCatalog(roots)
         self.active_paths = active_paths
+        self.trash_root = Path(trash_root or Path.home() / "data/results/recycle").absolute()
 
     def _target(self, label, value):
         root = self.catalog.root(label).path
@@ -63,7 +66,7 @@ class SavedItems:
         if ".." in lexical.parts or any(p.is_symlink() for p in (lexical, *lexical.parents)):
             raise PermissionError("不能删除符号链接或含上级跳转的路径")
         path = self.catalog.resolve(label, lexical)
-        if path == root or path == self.store.root or ".scmm-trash" in path.parts:
+        if path == root or path == self.store.root or _overlaps(path, self.trash_root):
             raise PermissionError("不能删除存储根目录或回收区")
         for parent in path.parents:
             if (parent / "project.json").is_file() and parent.parent != self.store.root:
@@ -154,7 +157,7 @@ class SavedItems:
                     raise RuntimeError("所选目录中仍有未结束任务")
         for root in {r.path for r in self.catalog.roots}:
             for task_root in root.rglob(".scmm-tasks"):
-                if ".scmm-trash" in task_root.parts or task_root.is_symlink():
+                if task_root.is_relative_to(self.trash_root) or task_root.is_symlink():
                     continue
                 for state_path in task_root.glob("*/state.json"):
                     state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -176,7 +179,7 @@ class SavedItems:
         folders = {Path(row["path"]) for row in self.store.list()}
         for root in {r.path for r in self.catalog.roots}:
             for path in root.rglob("project.json"):
-                if ".scmm-trash" in path.parts or path.is_symlink():
+                if path.is_relative_to(self.trash_root) or path.is_symlink():
                     continue
                 try:
                     self.store._manifest(path.parent)
@@ -200,7 +203,9 @@ class SavedItems:
         }
 
     def move(self, plan):
+        self._prepare_trash()
         with ExitStack() as locks:
+            locks.enter_context(project_lock(self.trash_root))
             folders = self._project_folders()
             for root in sorted({self.store.root, *(folder.parent for folder in folders)}):
                 locks.enter_context(project_lock(root))
@@ -208,45 +213,40 @@ class SavedItems:
                 locks.enter_context(project_lock(folder))
             if self.plan(plan["label"], plan["path"]) != plan:
                 raise RuntimeError("所选内容已改变，请重新预览删除计划")
-            root, original = Path(plan["root"]), Path(plan["path"])
-            trash = root / ".scmm-trash"
-            if trash.is_symlink():
-                raise PermissionError("回收区不能是符号链接")
-            trash.mkdir(exist_ok=True)
+            original = Path(plan["path"])
+            trash = self.trash_root
             entry = trash / f"{beijing_time(compact=True)}_{uuid4().hex[:12]}"
             entry.mkdir()
             record = {**plan, "deleted_at": utc_now(), "status": "moved"}
             write_json(entry / "record.json", record)
-            os.rename(original, entry / "payload")
+            self._transfer(original, entry / "payload")
         return entry
 
     def list_trash(self):
         entries = []
-        for root in {r.path for r in self.catalog.roots}:
-            trash = root / ".scmm-trash"
-            if trash.is_symlink():
+        self._validate_trash()
+        for entry in self.trash_root.glob("*/record.json"):
+            if (
+                entry.is_symlink()
+                or entry.parent.is_symlink()
+                or not (entry.parent / "payload").exists()
+            ):
                 continue
-            for entry in trash.glob("*/record.json"):
-                if (
-                    entry.is_symlink()
-                    or entry.parent.is_symlink()
-                    or not (entry.parent / "payload").exists()
-                ):
-                    continue
-                try:
-                    record = json.loads(entry.read_text(encoding="utf-8"))
-                except (ValueError, OSError):
-                    continue
-                if (
-                    not isinstance(record, dict)
-                    or not {"root", "path", "deleted_at", "kind"} <= record.keys()
-                ):
-                    continue
-                entries.append({**record, "entry": str(entry.parent)})
+            try:
+                record = json.loads(entry.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                continue
+            if (
+                not isinstance(record, dict)
+                or not {"root", "path", "deleted_at", "kind"} <= record.keys()
+            ):
+                continue
+            entries.append({**record, "entry": str(entry.parent)})
         return sorted(entries, key=lambda row: row["deleted_at"], reverse=True)
 
     def restore(self, value):
-        with project_lock(self.store.root):
+        self._prepare_trash()
+        with project_lock(self.trash_root), project_lock(self.store.root):
             entry = Path(value)
             records = {r["entry"]: r for r in self.list_trash()}
             if str(entry) not in records:
@@ -268,6 +268,84 @@ class SavedItems:
             if not original.parent.is_dir():
                 raise FileNotFoundError("原父目录不存在，请先恢复所属项目")
             self._inventory(entry / "payload")
-            os.rename(entry / "payload", original)
-            write_json(entry / "record.json", {**record, "status": "restored"})
+            self._transfer(entry / "payload", original)
+            shutil.rmtree(entry)
         return original
+
+    def _validate_trash(self):
+        if ".." in self.trash_root.parts or any(
+            p.is_symlink() for p in (self.trash_root, *self.trash_root.parents)
+        ):
+            raise PermissionError("回收区路径不能含符号链接或上级跳转")
+
+    def _prepare_trash(self):
+        self._validate_trash()
+        self.trash_root.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _transfer(source, target):
+        """Move across storage devices only after a complete verified copy."""
+        try:
+            os.rename(source, target)
+            return
+        except OSError as exc:
+            if exc.errno != errno.EXDEV:
+                raise
+        staging = target.with_name(f".transfer-{uuid4().hex}")
+        try:
+            if source.is_dir():
+                shutil.copytree(source, staging)
+            else:
+                shutil.copy2(source, staging)
+            originals = (
+                sorted(p for p in source.rglob("*") if p.is_file()) if source.is_dir() else [source]
+            )
+            for original in originals:
+                copied = staging / original.relative_to(source) if source.is_dir() else staging
+                with original.open("rb") as left, copied.open("rb") as right:
+                    if (
+                        hashlib.file_digest(left, "sha256").digest()
+                        != hashlib.file_digest(right, "sha256").digest()
+                    ):
+                        raise OSError("跨存储移动校验失败，原内容已保留")
+            os.rename(staging, target)
+            if source.is_dir():
+                shutil.rmtree(source)
+            else:
+                source.unlink()
+        finally:
+            if staging.is_dir():
+                shutil.rmtree(staging)
+            elif staging.exists():
+                staging.unlink()
+
+    def clear(self):
+        """Clear a locked inventory; reject unsafe content before deleting anything."""
+        self._prepare_trash()
+        with ExitStack() as locks:
+            locks.enter_context(project_lock(self.trash_root))
+            folders = self._project_folders()
+            for root in sorted({self.store.root, *(folder.parent for folder in folders)}):
+                locks.enter_context(project_lock(root))
+            for folder in folders:
+                locks.enter_context(project_lock(folder))
+            entries = sorted(p for p in self.trash_root.iterdir() if p.name != ".project.lock")
+            plans = []
+            for entry in entries:
+                self._check_usage(entry)
+                plans.append((entry, self._inventory(entry)))
+            removed, errors = 0, []
+            for entry, inventory in plans:
+                try:
+                    if self._inventory(entry) != inventory:
+                        raise RuntimeError("回收条目已改变，请刷新后重试")
+                    if entry.is_dir():
+                        shutil.rmtree(entry)
+                    else:
+                        entry.unlink()
+                    removed += 1
+                except (OSError, RuntimeError) as exc:
+                    errors.append(f"{entry.name}：{exc}")
+            if errors:
+                raise RuntimeError(f"已清理 {removed} 项；未清理：" + "；".join(errors))
+            return removed
