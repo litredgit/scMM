@@ -28,6 +28,51 @@ from .workbench import WorkbenchPanels
 pn.extension("plotly", notifications=True, sizing_mode="stretch_width")
 
 _ACCENT = "#0F766E"
+
+
+def cell_detection_figure(result):
+    """Render full cell windows with linear shape construction and unchanged traces."""
+    frame = result.traces
+    figure = go.Figure()
+    peaks = frame.loc[frame.cell_apex]
+    for i, mass in enumerate(result.reference_mz):
+        display = _peak_preserving_downsample(frame, 30_000, f"reference_{i}")
+        figure.add_scattergl(
+            x=display.rt_seconds,
+            y=display[f"reference_{i}"],
+            name=f"m/z {mass:.4f}",
+            mode="lines",
+        )
+        figure.add_scatter(
+            x=peaks.rt_seconds,
+            y=peaks[f"reference_{i}"],
+            mode="markers",
+            name=f"峰顶 {mass:.4f}",
+        )
+    times = frame.rt_seconds.to_numpy()
+    figure.update_layout(
+        title="细胞窗口与参考峰顶",
+        xaxis_title="RT（秒）",
+        yaxis_title="Intensity",
+        shapes=[
+            dict(
+                type="rect",
+                xref="x",
+                yref="y domain",
+                x0=times[start],
+                x1=times[stop],
+                y0=0,
+                y1=1,
+                fillcolor="green",
+                opacity=0.12,
+                line_width=0,
+            )
+            for start, stop in result.window_ranges
+        ],
+    )
+    return style_figure(figure)
+
+
 _SIDEBAR_DEFAULT_WIDTH = 680
 _PLOT_CONFIG = {
     "displaylogo": False,
@@ -540,6 +585,7 @@ class PreviewWorkspace:
         self._update_summary()
 
     def _invalidate_cells(self):
+        self._cell_generation = getattr(self, "_cell_generation", 0) + 1
         self.cell_frame = pd.DataFrame()
         self.cell_download.disabled = True
         self.cell_download.data = None
@@ -594,42 +640,23 @@ class PreviewWorkspace:
                 if cached_result is not None
                 else self.preview.cell_detection(self.processing._parameters(), targets=targets)
             )
-            frame = result.traces
-            figure = go.Figure()
-            for i, mass in enumerate(result.reference_mz):
-                display = _peak_preserving_downsample(frame, 30_000, f"reference_{i}")
-                figure.add_scattergl(
-                    x=display.rt_seconds,
-                    y=display[f"reference_{i}"],
-                    name=f"m/z {mass:.4f}",
-                    mode="lines",
-                )
-                peaks = frame.loc[frame.cell_apex]
-                figure.add_scatter(
-                    x=peaks.rt_seconds,
-                    y=peaks[f"reference_{i}"],
-                    mode="markers",
-                    name=f"峰顶 {mass:.4f}",
-                )
-            for start, stop in result.window_ranges:
-                figure.add_vrect(
-                    x0=frame.rt_seconds.iloc[start],
-                    x1=frame.rt_seconds.iloc[stop],
-                    fillcolor="green",
-                    opacity=0.12,
-                    line_width=0,
-                )
-            figure.update_layout(
-                title="细胞窗口与参考峰顶", xaxis_title="RT（秒）", yaxis_title="Intensity"
-            )
-            self.cell_frame = frame
-            self.cell_download.disabled = False
-            self.cell_pane.object = style_figure(figure)
-            self.cell_status.object = f"检出 {result.cell_count} 个细胞；与正式提取共享参数和实现。"
+            self._show_cell_detection(result)
         except Exception as exc:
             self.cell_status.object = f"预览失败：{exc}"
         finally:
             self.cell_button.loading = False
+
+    def _show_cell_detection(self, result, *, figure=None):
+        # Construct every window at once. add_vrect revalidates the growing shape
+        # list on every call, causing quadratic work for thousands of cells.
+        if figure is None:
+            figure = cell_detection_figure(result)
+        if hasattr(self, "selection_mode"):
+            figure.update_layout(dragmode=self.selection_mode.value, selectdirection="h")
+        self.cell_pane.object = figure
+        self.cell_frame = result.traces
+        self.cell_download.disabled = False
+        self.cell_status.object = f"检出 {result.cell_count} 个细胞；与正式提取共享参数和实现。"
 
     def _use_clicked_mz(self, event) -> None:
         data = event.new

@@ -22,15 +22,10 @@ from anndata import read_h5ad
 
 from scMM.analysis.quality import quality_metrics
 from scMM.application import OutputRoot, StorageCatalog, StorageRoot
+from scMM.application.cell_preview import initialize_ranges, submit_preview
 from scMM.application.parameters import load_defaults
 from scMM.application.preferences import BUILTIN_PRESETS, load_preferences, save_preferences
-from scMM.application.preview_cache import (
-    load_detection,
-    prepare_shared_targets,
-    reusable_preview,
-    save_preview,
-    signature,
-)
+from scMM.application.preview_cache import file_identity
 from scMM.application.project_batch import (
     batches,
     preflight,
@@ -47,6 +42,7 @@ from .layout import CONTENT_STYLE, TaskDock, UnsavedGuard, fit_plot
 from .presentation import QCDataFrame, apply_presentation, english_parameters, qc_file_table
 from .project_views import ProjectRawViews
 from .raw_components import PreviewWorkspace as PreviewWorkspace
+from .raw_components import cell_detection_figure
 
 STEPS = [
     "项目首页",
@@ -144,6 +140,8 @@ class ProjectWorkspace:
         self.step = 0
         self._updating = False
         self._periodic = None
+        self._cell_preview_job = None
+        self.preview_status = pn.pane.Markdown("")
         self._checked = self._candidate = None
         self.header = pn.pane.Markdown("选择或新建一个实验项目。", styles={"flex": "1 1 280px"})
         self.unsaved_guard = UnsavedGuard(height=0, margin=0)
@@ -214,6 +212,8 @@ class ProjectWorkspace:
         )
         self._refresh_home()
         self.render()
+        if pn.state.curdoc is not None and pn.state.curdoc.session_context is not None:
+            pn.state.on_session_destroyed(self._close_session)
 
     def button(self, label, action):
         button = pn.widgets.Button(label=label, color="primary")
@@ -222,8 +222,8 @@ class ProjectWorkspace:
 
     def run(self, action):
         try:
-            action()
-            self.message.object = "操作完成。"
+            result = action()
+            self.message.object = result if isinstance(result, str) else "操作完成。"
         except Exception as exc:
             self.message.object = f"❌ {escape(str(exc))}"
         self._record(self.message.object)
@@ -736,6 +736,9 @@ class ProjectWorkspace:
 
     def _raw_page(self):
         r = self.components
+        self.preview_button = self.button("运行当前样本细胞检测预览", self._preview_cells)
+        self.preview_button.disabled = self._cell_preview_job is not None
+        self.preview_button.loading = self._cell_preview_job is not None
         self.raw_sample = pn.widgets.Select(
             label="当前样本", options={s["name"]: s["id"] for s in self.project.samples}
         )
@@ -828,8 +831,8 @@ class ProjectWorkspace:
         )
         self.raw_page = pn.Column(
             "## ② 原始谱检查",
-            "打开文件、细胞检测和靠后 RAW 单扫描可能需要等待；细胞预览执行完整提取，"
-            "不是快速估算。计算期间请勿重复点击，当前预览不能后台运行或立即取消。",
+            "打开文件和靠后 RAW 单扫描可能需要等待。细胞预览在后台执行完整提取；"
+            "运行状态见下方。修改参数或切换样本后，旧任务结果不会应用；当前不能立即取消。",
             self.raw_sample,
             self.button("打开所选样本", self._open_raw),
             self.parameter_note,
@@ -899,7 +902,8 @@ class ProjectWorkspace:
                     self.button("仅应用于当前样本", lambda: self._apply_parameters(True)),
                 ),
             ),
-            self.button("运行当前样本细胞检测预览", self._preview_cells),
+            self.preview_button,
+            self.preview_status,
             self.button("确认当前预览合理", self._confirm_preview),
             r.cell_status,
             r.cell_pane,
@@ -976,51 +980,147 @@ class ProjectWorkspace:
         self.sample_table.value = self._sample_frame()
 
     def _preview_cells(self):
+        if self._cell_preview_job is not None:
+            raise ValueError("已有细胞预览正在运行，请等待完成")
         sample = self._sample()
         raw = self.components
         if sample is None or raw.preview is None or str(raw.preview.path) != sample["path"]:
             raise ValueError("先打开当前样本")
-        targets = None
-        if self.project.manifest["feature_strategy"] == "shared":
-            self._initialize_ranges()
-            request = preflight(self.project, self.catalog)
-            if (
-                self.project.manifest.get("auto_ranges")
-                and not self.project.manifest.get("manual_parameters")
-                and sample["parameters"] is None
-            ):
-                for key in ("mz_min", "mz_max"):
-                    raw.processing.parameter_widgets[key].value = request["parameters"][key]
-            from scMM.application.project_batch import SHARED_FIELDS
-
-            current = asdict(raw.processing._parameters())
-            if any(current[key] != request["parameters"][key] for key in SHARED_FIELDS):
-                raise ValueError("共同特征参数已编辑，请先应用为项目默认再预览")
-            targets = prepare_shared_targets(self.project, request)
-        parameters = raw.processing._parameters()
-        before = signature(sample["path"], parameters)
-        cached = reusable_preview(
-            self.project.folder, {**sample, "parameters": asdict(parameters)}, targets
-        )
-        raw._preview_cells(
-            cached_result=load_detection(cached) if cached else None, targets=targets
-        )
-        if raw.cell_download.disabled:
-            raise ValueError(str(raw.cell_status.object))
-        raw._selection_mode()
-        if cached:
-            raw.cell_status.object += " 已复用持久化预览，无需重新提取。"
-        sample["preview"] = {
-            "parameters": asdict(parameters),
-            "confirmed": False,
-            "artifact": sample["preview"]["artifact"]
-            if cached
-            else save_preview(self.project, sample, raw.preview, parameters, before),
+        parameters = asdict(raw.processing._parameters())
+        inputs = {
+            s["path"]: file_identity(s["path"])
+            for s in (
+                self.project.samples
+                if self.project.manifest["feature_strategy"] == "shared"
+                else [sample]
+            )
+            if not s.get("result_only")
         }
-        self.project.dirty = True
-        self.sample_table.value = self._sample_frame()
+        if inputs[sample["path"]] != raw.preview.open_identity:
+            raise ValueError("原始文件已改变，请重新打开当前样本")
+        request = {
+            "project_folder": str(self.project.folder),
+            "manifest": deepcopy(self.project.manifest),
+            "sample_id": sample["id"],
+            "parameters": parameters,
+            "roots": [(r.label, str(r.path)) for r in self.catalog.roots],
+            "inputs": inputs,
+        }
+        raw._invalidate_cells()
+        future, state_path = submit_preview(request)
+        self._cell_preview_job = {
+            "future": future,
+            "state_path": state_path,
+            "project": self.project,
+            "raw": raw,
+            "preview": raw.preview,
+            "context": self._preview_context(),
+            "inputs": inputs,
+            "sample": sample,
+        }
+        self.preview_button.disabled = self.preview_button.loading = True
+        self.preview_status.object = "细胞预览已启动，正在准备计算；可继续操作页面。"
+        return self.preview_status.object
+
+    def _preview_context(self):
+        # Include only extraction inputs, so unrelated metadata edits remain usable.
+        manifest = self.project.manifest
+        return json.dumps(
+            {
+                "sample": self.raw_sample.value,
+                "generation": getattr(self.components, "_cell_generation", 0),
+                "controls": asdict(self.components.processing._parameters()),
+                "project": {
+                    key: manifest.get(key)
+                    for key in (
+                        "parameters",
+                        "feature_strategy",
+                        "feature_merge_ppm",
+                        "auto_ranges",
+                        "manual_parameters",
+                    )
+                },
+                "samples": [
+                    {
+                        key: s.get(key)
+                        for key in (
+                            "id",
+                            "path",
+                            "storage",
+                            "parameters",
+                            "auto_mz_range",
+                            "range_initialized",
+                            "result_only",
+                        )
+                    }
+                    for s in self.project.samples
+                ],
+            },
+            sort_keys=True,
+        )
+
+    def _poll_cell_preview(self):
+        job = self._cell_preview_job
+        if job is None:
+            return
+        if not job["future"].done():
+            try:
+                state = json.loads(job["state_path"].read_text(encoding="utf-8"))
+                self.preview_status.object = (
+                    f"细胞预览：{escape(state['message'])}。可继续操作页面。"
+                )
+            except (OSError, ValueError, KeyError):
+                pass  # The future remains authoritative if a status read fails.
+            return
+        try:
+            result = job["future"].result()
+            if (
+                self.project is not job["project"]
+                or self.components is not job["raw"]
+                or self.components.preview is not job["preview"]
+                or self._preview_context() != job["context"]
+                or any(file_identity(p) != identity for p, identity in job["inputs"].items())
+            ):
+                self.preview_status.object = (
+                    "旧细胞预览已完成；样本、参数或文件已改变，结果未应用，请重新预览。"
+                )
+            else:
+                raw = self.components
+                figure = cell_detection_figure(result["detection"])
+                for sample in self.project.samples:
+                    sample.update(result["ranges"][sample["id"]])
+                for key in ("mz_min", "mz_max"):
+                    raw.processing.parameter_widgets[key].value = result["parameters"][key]
+                raw._show_cell_detection(result["detection"], figure=figure)
+                if result["reused"]:
+                    raw.cell_status.object += " 已复用持久化预览，无需重新提取。"
+                job["sample"]["preview"] = {
+                    "parameters": result["parameters"],
+                    "confirmed": False,
+                    "artifact": result["artifact"],
+                }
+                self.project.dirty = True
+                self.sample_table.value = self._sample_frame()
+                self.preview_status.object = "细胞预览完成，请检查下图并确认；项目仍需主动保存。"
+        except Exception as exc:
+            self.preview_status.object = f"❌ 细胞预览失败：{escape(str(exc))}；可重新运行。"
+        finally:
+            self._cell_preview_job = None
+            self.preview_button.disabled = self.preview_button.loading = False
+        self.message.object = self.preview_status.object
+        self._record(self.message.object)
+        self.refresh_header()
+
+    def _close_session(self, _context):
+        if self._cell_preview_job is not None:
+            self._cell_preview_job["future"].cancel()
+            self._cell_preview_job = None
+        if self._periodic is not None:
+            self._periodic.stop()
 
     def _confirm_preview(self):
+        if self._cell_preview_job is not None:
+            raise ValueError("请等待当前细胞预览完成")
         sample = self._sample()
         if (
             sample is None
@@ -1071,25 +1171,7 @@ class ProjectWorkspace:
         self._refresh_batches()
 
     def _initialize_ranges(self):
-        if self.project.manifest.get("auto_ranges") and not self.project.manifest.get(
-            "manual_parameters"
-        ):
-            for sample in self.project.samples:
-                if (
-                    sample["parameters"] is not None
-                    or sample.get("auto_mz_range")
-                    or sample.get("result_only")
-                ):
-                    continue
-                preview = self.components.service.open(sample["storage"], sample["path"])
-                summary = preview.summary
-                if summary.mz_min is not None and summary.mz_max is not None:
-                    sample["auto_mz_range"] = [
-                        math.floor(summary.mz_min / 10) * 10,
-                        math.ceil(summary.mz_max / 10) * 10,
-                    ]
-                    sample["range_initialized"] = True
-                    self.project.dirty = True
+        initialize_ranges(self.project, self.components.service)
 
     def _preflight(self):
         self._initialize_ranges()
@@ -1204,6 +1286,7 @@ class ProjectWorkspace:
         self.source_summary.object = pd.DataFrame(rows)
 
     def poll(self):
+        self._poll_cell_preview()
         if not self.project or not hasattr(self, "batch_select") or not self.batch_select.value:
             self.task_status.object = "任务：无所选批次"
             self.log.value = ""
@@ -1742,9 +1825,11 @@ class ProjectWorkspace:
                 self.results_page,
             ]
         )
+        # Configure tables before attaching their models. Updating columns while
+        # a newly mounted Tabulator is initializing can race its DOM creation.
+        apply_presentation(pages[self.step])
         self.body[:] = [pages[self.step]]
         self.analysis_navigation.visible = self.step == 5
-        apply_presentation(self.body)
         self._format_images()
         self.footer.visible = self.step != 0
         self.previous.disabled = self.step <= 1

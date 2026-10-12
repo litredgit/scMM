@@ -36,7 +36,7 @@
 
 | 编号 / 相关模块 | 当前基础与剩余工作 | 验收条件 |
 |---|---|---|
-| PERF-01：`application/raw_preview.py`、`application/workbench.py`、`ui/app.py` | 预览复用已实现；原始预览、分析和保存仍同步，RAW 靠后单扫描仍需顺序遍历；先测量瓶颈再确定后台化或进一步缓存边界 | 运行状态可见，结果不串数据，失败可恢复；保留参数/数据版本关联和主动保存语义 |
+| PERF-01：`application/cell_preview.py`、`application/raw_preview.py`、`application/workbench.py`、`ui/app.py` | 细胞预览已移入独立进程并批量构造窗口图形，待用户通过反代验收；原始文件打开、分析和保存仍同步，RAW 靠后单扫描仍需顺序遍历 | 预览运行状态可见，重复提交受阻，参数/样本/文件改变后旧结果不应用，失败可重试；反代真实样本验收待用户确认，其他后台化先测量瓶颈 |
 | VAL-05：`file/readers/`、`file/_spectrum.py`、`file/_alignment.py`、`application/project_batch.py` | 已有批次阶段状态；补充读取、合谱、对齐的细粒度进度 | 不改变数值与失败/资源回收语义，不把阶段比例解释为 ETA |
 
 ### 分析与统计解释

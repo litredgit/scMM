@@ -8,6 +8,7 @@ class ProjectRawViews(PreviewWorkspace):
     def _invalidate_cells(self):
         if self.preview is None:
             return super()._invalidate_cells()
+        self._cell_generation = getattr(self, "_cell_generation", 0) + 1
         self.cell_download.disabled = True
         self.cell_download.data = None
         self.cell_status.object = "参数已改变；下图为旧参数结果，请重新预览后确认。"
