@@ -29,6 +29,7 @@ def settings(config=CONFIG):
         "state": str(home / ".local/state/scmm"),
         "address": "0.0.0.0",
         "origins": ["*"],
+        "dev_frontend": "vue",
     }
     if config.exists():
         overrides = json.loads(config.read_text(encoding="utf-8"))
@@ -39,6 +40,8 @@ def settings(config=CONFIG):
         values[key] = Path(values[key]).expanduser().resolve()
     if values["dev"] == values["prod"]:
         raise ValueError("Development and production worktrees must differ")
+    if values["dev_frontend"] not in {"panel", "vue"}:
+        raise ValueError("dev_frontend must be panel or vue")
     dev_results = values["state"] / "dev/results"
     if dev_results == values["prod_results"] or (
         dev_results in values["prod_results"].parents
@@ -96,6 +99,13 @@ def sync(values, name):
         env=env,
         check=True,
     )
+    frontend = values[name] / "frontend"
+    if (frontend / "package-lock.json").is_file():
+        npm = shutil.which("npm")
+        if npm is None:
+            raise RuntimeError("Node.js/npm is required to build the Vue frontend")
+        subprocess.run([npm, "ci"], cwd=frontend, env=env, check=True)
+        subprocess.run([npm, "run", "build"], cwd=frontend, env=env, check=True)
 
 
 def clean(root, branch):
@@ -208,6 +218,8 @@ def serve(values, name, *, debug=False):
     ]
     for origin in values["origins"]:
         args.extend(["--allow-websocket-origin", origin])
+    if name == "dev":
+        args.extend(["--frontend", values.get("dev_frontend", "vue")])
     if debug:
         python = str(root / ".venv/bin/python")
         args = [python, "-m", "debugpy", "--listen", "127.0.0.1:5678", "--wait-for-client", *args]

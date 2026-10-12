@@ -1,4 +1,5 @@
 """Command-line launcher for the guided scMM web interface."""
+# ruff: noqa: RUF001
 
 from __future__ import annotations
 
@@ -27,10 +28,10 @@ def parse_output_root(value: str) -> tuple[str, Path]:
     return label.strip(), Path(path_text.strip()).expanduser()
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(*, frontend="panel", prog="scmm-ui") -> argparse.ArgumentParser:
     """Build the web-server argument parser."""
     parser = argparse.ArgumentParser(
-        prog="scmm-ui",
+        prog=prog,
         description="Launch the guided scMM preview, processing, and quality web interface.",
     )
     parser.add_argument(
@@ -54,6 +55,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--port", type=int, default=5006, help="Listening port (default: 5006)")
     parser.add_argument(
+        "--frontend",
+        choices=("panel", "vue"),
+        default=frontend,
+        help=f"Web frontend (default: {frontend}; vue uses FastAPI and built local assets)",
+    )
+    parser.add_argument(
         "--allow-websocket-origin",
         action="append",
         metavar="HOST[:PORT]",
@@ -72,9 +79,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Validate configuration and run the Panel server."""
-    args = build_parser().parse_args(argv)
+def main(argv: Sequence[str] | None = None, *, frontend="panel", prog="scmm-ui") -> int:
+    """Validate configuration and run the selected web server."""
+    args = build_parser(frontend=frontend, prog=prog).parse_args(argv)
     from scMM.application.parameters import load_defaults
     from scMM.application.projects import PROJECT_ROOT
 
@@ -93,6 +100,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         default_output = PROJECT_ROOT
         output_specs = [("处理结果", default_output)]
     outputs = tuple(OutputRoot(label, path) for label, path in output_specs)
+
+    if args.frontend == "vue":
+        try:
+            import uvicorn
+
+            from scMM.api.app import create_app as create_web_app
+        except ImportError as exc:
+            raise RuntimeError("Vue 后端依赖未安装；请执行 uv sync --locked --extra web。") from exc
+        app = create_web_app(
+            roots, outputs, defaults=defaults, project_root=args.project_root or PROJECT_ROOT
+        )
+        if args.show:
+            import webbrowser
+
+            webbrowser.open(f"http://127.0.0.1:{args.port}")
+        uvicorn.run(app, host=args.address, port=args.port, workers=1)
+        return 0
 
     try:
         import panel as pn

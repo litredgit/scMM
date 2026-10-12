@@ -7,6 +7,12 @@
 
 ## 代码结构
 
+Vue/FastAPI 网页按功能逐步替换 Panel 交互；前端页面在仓库根 `frontend/src/features/`，
+共享组件、路由、请求客户端及 Pinia 状态分别在相邻 `components/`、`router/`、`api/`、`stores/`。
+`scMM/api/routers/` 按功能拆分 HTTP 边界，`schemas.py` 定义接口契约。
+`application/web_workspace.py` 持有独立浏览器工作区、写入修订及事务候选；不依赖 Panel 或 FastAPI。
+矩阵与模型留在 Python 应用层，前端只接收摘要和展示数据。Panel 入口继续用于功能对照。
+
 当前入口为 `ui/app.py` 的项目工作台；`ui/project_views.py` 管理项目原始谱展示，
 `ui/layout.py` 管理响应式布局和图形尺寸，`ui/help.py` 管理中文悬停解释。项目持久化与批次编排分别在
 `application/projects.py` 和 `application/project_batch.py`，RAW 流读取在 `file/readers/`。
@@ -109,6 +115,22 @@ uv run --locked ruff check .
 uv run --locked python -m pytest -W error
 uv build --no-sources
 ```
+
+Vue 改动还需在仓库根执行以下检查；构建产物先于 Python 发行包构建：
+
+```bash
+npm --prefix frontend ci
+npm --prefix frontend run format:check
+npm --prefix frontend run build
+npm --prefix frontend exec -- playwright install chromium
+npm --prefix frontend run test:e2e
+uv build --no-sources
+```
+
+浏览器回归自动启动 5117 的隔离服务，使用临时原始文件占位与小型 AnnData，不访问开发或生产项目。
+测试端口可用 `SCMM_E2E_PORT` 修改；`SCMM_TEST_PYTHON` 和 `SCMM_CHROMIUM` 可指定测试解释器与已有浏览器。
+服务器退出删除临时项目；截图、trace 和测试报告保留在被忽略的前端测试输出目录。
+测试和配置说明仅覆盖当前交付的 Vue 功能，不能代替未迁移步骤的浏览器验收。
 
 `pytest -W error` 会把警告提升为错误，有助于尽早发现 pandas、NumPy、scikit-learn 或 PyOpenMS
 升级引入的兼容问题。

@@ -61,6 +61,7 @@ VS Code 也可直接选择仓库内的 `.venv/bin/python`。Notebook 的功能�
 | `cluster` | Leiden 与 Louvain 聚类 |
 | `supervised` | 监督学习、SMOTE 和 SHAP |
 | `ui` | Panel 引导式网页、Plotly 原始谱/质量图和 UMAP 质量检查 |
+| `web` | FastAPI、Uvicorn 及兼容的 ASGI 依赖；Vue 构建工具由 npm 单独管理 |
 | `notebook` | JupyterLab 与项目内核 |
 | `dev` 依赖组 | pytest、Ruff、构建与覆盖率；不进入发布包依赖 |
 
@@ -102,6 +103,30 @@ uv run --locked python -m pytest -q
 - 将结果写到本地高速磁盘，完成后再归档到网络存储。
 
 ## 网页服务部署
+
+### Vue/FastAPI 网页
+
+仓库前端位于 `frontend/`，要求 Node.js 22.12+；本项目 CI 使用 Node.js 24。
+Python 和前端分别使用 `uv.lock`、`frontend/package-lock.json` 固定依赖。仓库环境中执行：
+
+```bash
+uv sync --locked --all-extras --dev
+npm --prefix frontend ci
+npm --prefix frontend run build
+uv run --locked scmm-web --storage "原始数据=/mnt/ms-data" --port 5007
+```
+
+`scmm-web` 等价于 `scmm-ui --frontend vue`；`scmm-ui` 默认仍为 Panel。
+静态资源构建到 `scMM/api/static/`，与 `/api/v1` 接口由同一个服务提供；运行服务不需要 Node 进程。
+`--project-root`、`--storage`、`--output`、`--address` 及 `--config` 延用现有路径和配置规则。
+Vue 不使用 Panel 的 WebSocket origin 参数，修改接口要求同源浏览器请求；不新增账户体系。
+API 仅运行一个 worker，不能直接增加 Uvicorn workers；工作区在该进程内隔离管理。
+
+构建文件不提交 Git，但在构建 Python sdist/wheel 前必须生成；发行包包含静态页面和资源。
+源码包包含前端源文件及锁文件，可重新构建。仅安装 Python 包时无需本机 Node；核心 API/CLI 不依赖网页 extra。
+缺少 Vue 构建产物时启动明确报错。当前能力见[Vue 操作说明](workflow.md#vue-网页项目与样本)。
+
+### Panel 网页
 
 网页面向实验室内网使用。项目根目录默认为 `~/data/results`，可用 `--project-root` 指定，必须存在且可写。
 `--storage` 可重复指定已挂载的服务器目录，Linux 上 `~/data` 存在时会另加入“云盘”。
@@ -155,10 +180,13 @@ Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；
 不自动复制、迁移或清理已有结果。直接调用 Python API/Notebook 时仍应明确指定开发结果路径。
 .NET/Thermo helper 是独立的共享外部依赖，不由分支切换或回滚管理。
 
-统一入口为 [scripts/scmm_env.py](../scripts/scmm_env.py)，仅依赖 Linux 的 Python 3.10+ 标准库、
-Git、uv、systemd 和 `ss`；scMM 本身仍使用 `.venv` 中的 Python 3.12。
+统一入口为 [scripts/scmm_env.py](../scripts/scmm_env.py)，管理脚本使用 Linux 的 Python 3.10+ 标准库、
+Git、uv、systemd 和 `ss`；包含 Vue 源码的版本同步时还需 Node.js/npm 构建前端，服务运行不启动 Node。
+scMM 本身仍使用 `.venv` 中的 Python 3.12。
 配置默认由上述路径推导；可在 `~/.config/scmm/environments.json` 覆盖
-`dev`、`prod`、`raw`、`prod_results`、`state`、`address`、`origins`，或用 `--config` 指定文件。
+`dev`、`prod`、`raw`、`prod_results`、`state`、`address`、`origins`、`dev_frontend`，或用 `--config` 指定文件。
+迁移期间 `dev_frontend` 默认 `vue`，可设为 `panel` 进行完整功能对照；生产仍使用 Panel，最终切换见
+[迁移里程碑](roadmap.md#vuefastapi-网页迁移)。修改配置后按空闲检查要求重启相应服务。
 现有访问配置沿用 `0.0.0.0` 和 origin `*`；网络访问策略仍见 [NET-01](roadmap.md#工程改进待设计与实现)。
 配置与运行数据不提交到 Git。不同用户/机器先创建对应 worktree，再安装服务：
 

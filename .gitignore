@@ -160,6 +160,10 @@ venv.bak/
 dmypy.json
 
 # Project-local generated files
+node_modules/
+scMM/api/static/
+frontend/playwright-report/
+frontend/test-results/
 .tmp/
 output.log
 
@@ -217,6 +221,8 @@ __marimo__/
 .tmp/
 data/
 results/
+!frontend/src/features/results/
+!frontend/src/features/results/**
 files/
 *.png
 *.jpg

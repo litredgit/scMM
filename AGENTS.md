@@ -30,7 +30,8 @@ scMM 从 CyESI 单细胞质谱原始谱构建“细胞 × m/z 特征”矩阵，
 
 - 输入为 mzML、mzXML 和 Thermo profile RAW。RAW 使用外部 .NET/Thermo reader，
   保留 float64；centroid 明确报错，reader 失败不隐式转换为 mzML。
-- 入口为 Python API、`scMM_workflow.ipynb`、`scmm-process` CLI 和 Panel/Plotly 的 `scmm-ui`。
+- 入口为 Python API、`scMM_workflow.ipynb`、`scmm-process` CLI、Panel/Plotly 的 `scmm-ui`
+  及 Vue/FastAPI 的 `scmm-web`。网页按功能渐进迁移，共用应用层和既有项目格式。
 - 网页按“样本 → 原始谱与参数 → 提取审核 → 预处理 → 分析 → 结果与保存”组织。
   提取结束后须人工审核纳入才建立当前数据；项目由用户主动保存。
 - `CyESIData` 是稳定数据门面；AnnData 承载分析矩阵、细胞/特征注释、层、嵌入及处理溯源。
@@ -42,6 +43,8 @@ scMM 从 CyESI 单细胞质谱原始谱构建“细胞 × m/z 特征”矩阵，
 
 | 层 | 主要职责与入口 |
 |---|---|
+| Vue 前端 | 仓库根 `frontend/src/features/` 按功能组织页面，`components/` 提供共享控件；前端持有表单/展示状态，不持有计算矩阵或模型 |
+| HTTP 边界 | `api/app.py` 提供同源静态页面和版本化接口，`api/routers/` 按功能拆分，`api/schemas.py` 管理请求/响应契约 |
 | 网页 | `ui/app.py` 编排六步会话；`ui/project_views.py`/`raw_components.py` 展示原始谱；`ui/workbench.py`/`analysis_plots.py` 组织分析交互 |
 | 应用 | `application/projects.py` 管理项目与快照；`project_batch.py` 管理提取与审核；`workbench.py` 管理数据/结果生命周期；`preview_cache.py` 管理复用 |
 | 参数与边界 | `application/parameters.py`/`preferences.py` 管理默认值与预设；`storage.py` 校验路径；`tasks.py`/`worker.py` 管理持久任务 |
@@ -49,8 +52,10 @@ scMM 从 CyESI 单细胞质谱原始谱构建“细胞 × m/z 特征”矩阵，
 | 分析与绘图 | `analysis/` 负责统计、监督与统一降维；`plot/` 负责 Notebook 绘图、轨迹与趋势 |
 | 外部 reader | 仓库根 `tools/thermo_raw_reader/` 为 C# helper；`tools/validate_thermo_*.py` 与 `docs/validation/` 保存真实对照工具和报告 |
 
-除外部 reader 行外，模块路径相对 `scMM/`，省略前缀的文件承接所在目录。
-数值计算留在领域模块，Panel 回调只负责会话和展示。高层门面保持稳定；
+除标明仓库根的行外，模块路径相对 `scMM/`，省略前缀的文件承接所在目录。
+数值计算留在领域模块，Panel 回调和 HTTP 路由只负责边界、会话和展示。
+Vue 工作区由 `application/web_workspace.py` 隔离管理，写入检查工作区修订，保存另检查项目磁盘修订；
+首版仅支持单个 API 服务进程，不能用多个 ASGI worker 分割内存工作区。高层门面保持稳定；
 复杂计算拆为可独立验证的辅助函数，可选依赖按功能延迟导入并提供明确的缺失提示。
 
 ## 关键设计约束

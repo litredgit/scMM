@@ -9,7 +9,7 @@
 ## 开始使用
 
 1. [安装与部署](installation.md)：uv 环境、RAW 外部依赖、网页启动和服务更新。
-2. [工作流程](workflow.md)：网页六步项目与 Notebook，从输入到审核、分析和保存。
+2. [工作流程](workflow.md)：Vue 项目/样本操作、Panel 六步项目与 Notebook，从输入到审核、分析和保存。
 3. 运行失败时查 [排错与调参](troubleshooting.md)，需要选择或解释参数时查 [参数参考](parameters.md)。
 
 ## 按需查阅

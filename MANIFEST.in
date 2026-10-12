@@ -1,0 +1,5 @@
+recursive-include frontend *.json *.ts *.vue *.css *.html *.mjs *.py
+include frontend/.prettierignore
+prune frontend/node_modules
+prune frontend/test-results
+prune frontend/playwright-report

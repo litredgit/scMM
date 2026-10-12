@@ -36,6 +36,7 @@ from scMM.application.project_batch import (
     submit,
 )
 from scMM.application.projects import PROJECT_ROOT, ProjectStore, child_path, sample_parameters
+from scMM.application.web_workspace import RESULT_PLOTS
 from scMM.application.workbench import read_dataset
 
 from .downloads import FileDownload
@@ -117,12 +118,6 @@ ANALYSIS_FIELDS = (
     "shap_background",
     "shap_samples",
 )
-RESULT_PLOTS = {
-    "differential": ("volcano", "violin"),
-    "network": ("network_plot",),
-    "supervised": ("roc", "pr", "calibration"),
-    "shap": ("shap_plot",),
-}
 LIVE_WORKSPACES = WeakSet()
 
 
