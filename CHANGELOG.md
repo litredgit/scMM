@@ -18,7 +18,7 @@
 - 本轮发布前使用同一完整回归命令再次 **374 项通过（57.54s）**，Ruff/格式、TypeScript/Prettier、离线锁检查、Git 差异及 14 份 Markdown 的 **205** 处本地链接/锚点与围栏检查通过。92 份源码/静态资源与已验证 wheel 一致，静态资源与此前通过 7 项浏览器流程的暂存构建一致，未在本轮重复浏览器合成流程。发布前生产 worktree 干净、无 5006 连接、未保存/繁忙工作区、未结束任务或生产 worker，配置和数据根核对正确；保存产物重新记录为 **110** 份，不沿用验收前数量作为本次证据。
 - 已提交并推送 `dev` 的 **69aa8be**，执行 `python3 scripts/scmm_env.py release` 将生产 `main` 从 `ea84373` 快进至该提交；锁定依赖同步、前端构建及 HTTP/systemd 健康检查通过后，脚本完成 `main` 推送，保留上一生产提交用于回滚。5006 于 **2026-10-13 北京时间 17:42:35（09:42:35 UTC）** 启动，PID **924942**，active/running、重启计数 0；首页 HTTP 200、health 为 Vue/workbench，实际配置 `cell_min_signal=100000`，生产 cwd、独立环境及项目根正确。5007 PID **916071** 与启动时间未变。
 - 发布后 **110** 份已保存清单/H5AD 的大小、修改时间及清单 SHA-256 对照一致，开发与生产静态资源一致。实际 5006 只读 Chromium 页面及导航加载、默认门槛检查通过，脚本异常和失败请求均为 0；仅创建并释放空工作区，未打开或保存实验项目。两套服务健康、未保存/繁忙工作区均为 0；不重复宣称已有首页手机布局通过。发布证据以纯 CHANGELOG 提交同步 dev/main，不再次重启服务。
-- 实现提交 `69aa8be` 的 [dev CI](https://github.com/litredgit/scMM/actions/runs/38378121266) 与 [main CI](https://github.com/litredgit/scMM/actions/runs/38378267943) 已触发，核对时均为 **in_progress**，尚未记为通过；最终纯记录提交的远端检查与实现提交分别追踪。
+- 实现提交 `69aa8be` 的 [dev CI](https://github.com/litredgit/scMM/actions/runs/38378121266) 与 [main CI](https://github.com/litredgit/scMM/actions/runs/38378267943) 发布后复核均为 **success**。最终纯记录提交的远端检查与实现提交分别追踪，不将刚触发的文档检查记为通过。
 
 ### 发展规划与 Vue 清理阶段发布 — 2026-10-13
 
