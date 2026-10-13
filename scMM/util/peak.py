@@ -184,6 +184,7 @@ def find_cell_peaks(
     feature_block_size: int | None = None,
     return_full_baseline: bool = True,
     progress_callback=None,
+    cell_min_signal: float = 1e5,
     **kwargs,
 ):
     """Identify cell-event windows and reduce each to one feature vector."""
@@ -194,6 +195,7 @@ def find_cell_peaks(
         cell_snr,
         peak_snr,
         max_zero_frac,
+        cell_min_signal,
     )
     if feature_block_size is not None:
         if feature_block_size < 1:
@@ -212,6 +214,7 @@ def find_cell_peaks(
             return_full_baseline,
             progress_callback,
             kwargs,
+            cell_min_signal,
         )
     if progress_callback is not None:
         progress_callback(0.0, "Extracting cell features")
@@ -223,6 +226,7 @@ def find_cell_peaks(
         baseline_filter_size,
         cell_snr,
         kwargs,
+        cell_min_signal,
     )
     if n_cells == 0:
         if progress_callback is not None:
@@ -264,6 +268,7 @@ def _find_cells_blockwise(
     return_full_baseline,
     progress_callback,
     filter_kwargs,
+    cell_min_signal,
 ):
     """Bound temporary frame matrices while retaining legacy peak semantics.
 
@@ -276,6 +281,8 @@ def _find_cells_blockwise(
         reference, size=baseline_filter_size, filter=baseline_filter, **filter_kwargs
     )
     mask = reference[:, 0] > cell_snr * reference_baseline[:, 0]
+    if cell_min_signal > 0:
+        mask &= reference[:, 0] - reference_baseline[:, 0] > cell_min_signal
     labels, n_cells = label(mask.astype(np.int8))
     full_baseline = np.empty(data.shape, dtype=dtype) if return_full_baseline else None
     common = _common_cell_result(data, mask, labels, full_baseline, reference_index)
@@ -322,6 +329,7 @@ def _detect_cell_windows(
     baseline_filter_size,
     cell_snr,
     filter_kwargs,
+    cell_min_signal,
 ):
     values = data.values.astype(dtype)
     mz_values = data.columns.astype(dtype)
@@ -334,6 +342,8 @@ def _detect_cell_windows(
     reference_index = np.abs(mz_values - ref_mz).argmin()
     reference_signal = values[:, reference_index]
     cell_mask = reference_signal > cell_snr * baseline[:, reference_index]
+    if cell_min_signal > 0:
+        cell_mask &= reference_signal - baseline[:, reference_index] > cell_min_signal
     labeled_mask, n_cells = label(cell_mask.astype(np.int8))
     common = _common_cell_result(
         data,
@@ -353,7 +363,15 @@ def _validate_cell_peak_options(
     cell_snr,
     peak_snr,
     max_zero_frac,
+    cell_min_signal,
 ) -> None:
+    if (
+        isinstance(cell_min_signal, bool)
+        or not isinstance(cell_min_signal, (int, float, np.integer, np.floating))
+        or not np.isfinite(cell_min_signal)
+        or cell_min_signal < 0
+    ):
+        raise ValueError("cell_min_signal must be a finite nonnegative number")
     if data.empty or data.shape[1] == 0:
         raise ValueError("data must be a non-empty DataFrame")
     if not np.isfinite(ref_mz) or ref_mz <= 0:

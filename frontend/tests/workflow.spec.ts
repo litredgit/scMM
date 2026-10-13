@@ -148,8 +148,9 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   await expect(page.locator('.js-plotly-plot')).toBeVisible()
   await expect(page.getByLabel('baseline_filter_size', { exact: true })).toHaveCount(0)
   await expect(page.getByLabel('feature_snr_threshold', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('100000')
   const panel = page.locator('.raw-parameter-panel')
-  expect(await panel.locator('input[type="number"]').count()).toBe(6)
+  expect(await panel.locator('input[type="number"]').count()).toBe(7)
   for (const [label, value] of Object.entries({ ref_mz: '150', mz_min: '140', mz_max: '160' }))
     await page.getByLabel(label, { exact: true }).fill(value)
   await expect(page.getByRole('button', { name: '提取方法：snr说明', exact: true })).toBeVisible()
@@ -210,6 +211,12 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   await expect(page.getByLabel('scan_index（从 0 开始）', { exact: true })).toHaveValue('20')
   await page.getByRole('button', { name: 'TIC', exact: true }).click()
   await expect(page.locator('.js-plotly-plot')).toBeVisible()
+  await page.getByRole('button', { name: '预览细胞窗口', exact: true }).click()
+  await expect(page.getByText('检出 0 个细胞；预览不会直接建立当前数据。')).toBeVisible({
+    timeout: 30000,
+  })
+  await page.getByLabel('cell_min_signal', { exact: true }).fill('0')
+  await page.getByRole('button', { name: '应用为项目默认', exact: true }).click()
   await page.getByRole('button', { name: '预览细胞窗口', exact: true }).click()
   await expect(page.getByText('检出 2 个细胞；预览不会直接建立当前数据。')).toBeVisible({
     timeout: 30000,

@@ -38,6 +38,7 @@ class ProcessingParameters:
     feature_snr_threshold: float = 3.0
     noise_window: int = 51
     feature_block_size: int = 256
+    cell_min_signal: float = 1e5
 
     def __post_init__(self) -> None:
         from scMM.file._dataset_loading import validate_mz_range
@@ -77,6 +78,13 @@ class ProcessingParameters:
                 raise ValueError(f"{name} must be a positive finite number")
         if self.baseline_filter_size < 1:
             raise ValueError("baseline_filter_size must be at least 1")
+        if (
+            isinstance(self.cell_min_signal, bool)
+            or not isinstance(self.cell_min_signal, (int, float))
+            or not math.isfinite(self.cell_min_signal)
+            or self.cell_min_signal < 0
+        ):
+            raise ValueError("cell_min_signal must be a finite nonnegative number")
         if not math.isfinite(self.max_zero_frac) or not 0 <= self.max_zero_frac <= 1:
             raise ValueError("max_zero_frac must be between 0 and 1")
         if self.n_jobs == 0 or self.n_jobs < -1:

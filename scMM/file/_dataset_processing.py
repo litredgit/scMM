@@ -41,6 +41,7 @@ class DatasetProcessingMixin:
         noise_window: int = 51,
         debug_full_baseline: bool = True,
         progress_callback=None,
+        cell_min_signal: float = 1e5,
         **kwargs,
     ) -> Self:
         if self.ref_mz is None or not np.isfinite(self.ref_mz) or self.ref_mz <= 0:
@@ -60,6 +61,7 @@ class DatasetProcessingMixin:
                 baseline_filter=baseline_filter,
                 baseline_window=baseline_filter_size,
                 cell_signal_threshold=cell_snr,
+                cell_min_signal=cell_min_signal,
                 feature_snr_threshold=feature_snr_threshold,
                 noise_window=noise_window,
                 max_zero_fraction=max_zero_frac,
@@ -75,6 +77,7 @@ class DatasetProcessingMixin:
                 baseline_filter=baseline_filter,
                 baseline_filter_size=baseline_filter_size,
                 cell_snr=cell_snr,
+                cell_min_signal=cell_min_signal,
                 peak_snr=peak_snr,
                 max_zero_frac=max_zero_frac,
                 feature_block_size=feature_block_size,
@@ -119,6 +122,7 @@ class DatasetProcessingMixin:
             "extraction_method": extraction_method,
             "baseline_filter_size": baseline_filter_size,
             "cell_snr": cell_snr,
+            "cell_min_signal": cell_min_signal,
             "peak_snr": peak_snr,
             "max_zero_frac": max_zero_frac,
         }

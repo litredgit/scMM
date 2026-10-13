@@ -13,7 +13,7 @@ from anndata import AnnData
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scMM.api.app import create_app
+from scMM.api.app import STATIC_ROOT, create_app
 from scMM.application.storage import StorageRoot
 
 
@@ -65,7 +65,10 @@ def main():
         analysis.write_h5ad(results / "analysis.h5ad")
         os.environ["SCMM_PREFERENCES"] = str(root / "preferences.json")
         app = create_app(
-            [StorageRoot("Raw", raw)], [StorageRoot("Results", results)], project_root=projects
+            [StorageRoot("Raw", raw)],
+            [StorageRoot("Results", results)],
+            project_root=projects,
+            static_root=os.environ.get("SCMM_TEST_STATIC_ROOT") or STATIC_ROOT,
         )
         app.state.workspaces.store.create("已有项目", app.state.workspaces.defaults)
         from scMM.application.trash import SavedItems

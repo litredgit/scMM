@@ -72,6 +72,7 @@ def test_find_cell_peaks_extracts_windows_and_filters_sparse_features() -> None:
         data,
         ref_mz=100.0,
         baseline_filter=constant_baseline,
+        cell_min_signal=0,
         baseline_filter_size=3,
         cell_snr=5.0,
         peak_snr=3.0,
@@ -93,6 +94,7 @@ def test_find_cell_peaks_returns_stable_empty_schema() -> None:
         data,
         ref_mz=100.0,
         baseline_filter=constant_baseline,
+        cell_min_signal=0,
         cell_snr=5.0,
         n_jobs=1,
     )
@@ -111,6 +113,7 @@ def test_find_cell_peaks_rejects_unknown_baseline_stat_when_cells_exist() -> Non
             data,
             ref_mz=100.0,
             baseline_filter=constant_baseline,
+            cell_min_signal=0,
             baseline_stat="minimum",
             n_jobs=1,
         )
@@ -141,7 +144,9 @@ def test_blockwise_matches_legacy_peaks(stat, block_size):
     values[20:23, :] += 20
     values[70:74, :5] += 30
     data = pd.DataFrame(values, columns=np.arange(100.0, 109.0))
-    options = dict(ref_mz=102.0, baseline_filter_size=15, baseline_stat=stat, n_jobs=1)
+    options = dict(
+        cell_min_signal=0, ref_mz=102.0, baseline_filter_size=15, baseline_stat=stat, n_jobs=1
+    )
     expected = find_cell_peaks(data, **options)
     actual = find_cell_peaks(data, feature_block_size=block_size, **options)
     for key in ("cell_df", "zero_frac", "kept_columns"):

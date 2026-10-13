@@ -17,4 +17,12 @@ def test_cli_parses_processing_options() -> None:
 
     assert args.ref_mz == 734.5929
     assert args.jobs == 4
+    assert args.cell_min_signal == 1e5
     assert args.overwrite is True
+
+
+def test_cli_parses_cell_min_signal():
+    args = build_parser().parse_args(
+        ["raw", "results", "--ref-mz", "734.5929", "--cell-min-signal", "12345"]
+    )
+    assert args.cell_min_signal == 12345

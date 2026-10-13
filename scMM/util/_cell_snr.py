@@ -26,18 +26,28 @@ def find_cell_peaks_snr(
     show_progress: bool = True,
     reference_ppm_tol: float = 10.0,
     progress_callback=None,
+    cell_min_signal: float = 1e5,
     **filter_kwargs,
 ):
     """Extract cells using reference EICs and quantify features with true SNR.
 
     Cell windows are detected from one or more reference EICs using a
     signal-to-baseline ratio. reference_mode combines their masks by union or
-    intersection. Feature detection is deliberately different: local noise is
+    intersection. Each reference must also exceed cell_min_signal after baseline
+    subtraction (zero disables this additional condition). Feature detection is
+    deliberately different: local noise is
     estimated from frames outside every detected cell, and a feature is retained
     in a cell only when its baseline-corrected apex divided by that noise standard
     deviation exceeds feature_snr_threshold.
     """
     del n_jobs
+    if (
+        isinstance(cell_min_signal, bool)
+        or not isinstance(cell_min_signal, (int, float, np.integer, np.floating))
+        or not np.isfinite(cell_min_signal)
+        or cell_min_signal < 0
+    ):
+        raise ValueError("cell_min_signal must be a finite nonnegative number")
     if data.empty or data.shape[1] == 0:
         raise ValueError("data must be non-empty")
     if not np.isfinite(data.to_numpy()).all() or (data.to_numpy() < 0).any():
@@ -81,6 +91,8 @@ def find_cell_peaks_snr(
     eps = np.finfo(output_dtype).eps
     reference_ratio = reference_signal / np.maximum(reference_baseline, eps)
     reference_masks = reference_ratio > float(cell_signal_threshold)
+    if cell_min_signal > 0:
+        reference_masks &= reference_signal - reference_baseline > cell_min_signal
     cell_mask = (
         np.any(reference_masks, axis=1)
         if reference_mode == "union"

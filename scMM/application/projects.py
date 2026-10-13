@@ -230,6 +230,11 @@ class ProjectStore:
     def open(self, folder):
         folder = self._folder(folder)
         manifest = self._manifest(folder)
+        # Saved projects predate the additional gate: retain their extraction behavior.
+        manifest["parameters"].setdefault("cell_min_signal", 0.0)
+        for sample in manifest["samples"]:
+            if sample.get("parameters") is not None:
+                sample["parameters"].setdefault("cell_min_signal", 0.0)
         project = Project(folder, manifest)
         project.validate_samples()
         ProcessingParameters(**manifest["parameters"])

@@ -63,6 +63,7 @@ OPTIONS = dict(
     extraction_method="snr_v1",
     reference_ppm_tol=500.0,
     baseline_filter_size=5,
+    cell_min_signal=0,
     noise_window=5,
     show_progress=False,
 )

@@ -67,6 +67,7 @@ def test_extraction_range_reaches_all_loaders(tmp_path, strategy):
         resample_points_per_fwhm=2.0,
         ppm_tol=500.0,
         baseline_filter_size=5,
+        cell_min_signal=0,
         n_jobs=1,
     )
     if strategy == "single":
@@ -103,6 +104,7 @@ def test_preview_range_single_scan_and_multiple_eics(tmp_path):
         resample_points_per_fwhm=2.0,
         ppm_tol=500.0,
         baseline_filter_size=5,
+        cell_min_signal=0,
     )
     preview = raw.cell_detection(params)
     assert preview.cell_count == 2

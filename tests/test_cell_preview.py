@@ -92,6 +92,25 @@ def test_automatic_ranges_are_candidate_only_and_failures_are_recorded(tmp_path)
     assert json.loads(state.read_text(encoding="utf-8"))["status"] == "failed"
 
 
+def test_changed_net_signal_gate_cannot_reuse_previous_preview(tmp_path):
+    project, catalog = setup_project(tmp_path)
+    project.manifest.update(manual_parameters=True)
+    request = preview_request(project, catalog)
+    state = project.folder / "processing" / "preview-state.json"
+    first = run_preview(request, state)
+    assert first["detection"].cell_count == 2
+    request["manifest"]["samples"][0]["preview"] = {
+        "artifact": first["artifact"],
+        "parameters": first["parameters"],
+    }
+    request["parameters"]["cell_min_signal"] = 19
+    changed = run_preview(request, state)
+    assert not changed["reused"]
+    assert changed["artifact"] != first["artifact"]
+    assert changed["parameters"]["cell_min_signal"] == 19
+    assert changed["detection"].cell_count == 0
+
+
 def test_actual_spawned_worker_does_not_block_event_loop(tmp_path):
     project, catalog = setup_project(tmp_path)
     request = preview_request(project, catalog)

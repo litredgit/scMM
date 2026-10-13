@@ -42,9 +42,9 @@ def test_block_progress_preserves_results_and_propagates_failure(snr, cells):
     data = pd.DataFrame(values, columns=[100.0, 200.0, 300.0])
     function = find_cell_peaks_snr if snr else find_cell_peaks
     kwargs = (
-        dict(baseline_window=5, noise_window=5, show_progress=False)
+        dict(baseline_window=5, noise_window=5, cell_min_signal=0, show_progress=False)
         if snr
-        else dict(baseline_filter_size=5, n_jobs=1)
+        else dict(baseline_filter_size=5, cell_min_signal=0, n_jobs=1)
     )
     expected = function(data, 100.0, feature_block_size=2, **kwargs)
     events = []
@@ -82,6 +82,7 @@ def test_debug_baseline_is_opt_out_for_compatibility(snr, full):
         dict(
             extraction_method="snr_v1" if snr else "legacy",
             baseline_filter_size=5,
+            cell_min_signal=0,
             noise_window=5,
             n_jobs=1,
             debug_hook=lambda event, payload: events.append(payload),
@@ -96,7 +97,10 @@ def test_debug_baseline_is_opt_out_for_compatibility(snr, full):
 @pytest.mark.parametrize(
     "method,mode", [("legacy", "union"), ("snr_v1", "union"), ("snr_v1", "intersection")]
 )
-def test_cached_preview_matches_real_file_processing(tmp_path, monkeypatch, method, mode):
+@pytest.mark.parametrize("cell_min_signal", [0, 18, 19])
+def test_cached_preview_matches_real_file_processing(
+    tmp_path, monkeypatch, method, mode, cell_min_signal
+):
     spectra = []
     mz = np.array([149.8, 149.9, 150.0, 150.1, 150.2, 199.8, 199.9, 200.0, 200.1, 200.2])
     for i in range(31):
@@ -114,6 +118,7 @@ def test_cached_preview_matches_real_file_processing(tmp_path, monkeypatch, meth
         resample_points_per_fwhm=2.0,
         ppm_tol=500.0,
         baseline_filter_size=5,
+        cell_min_signal=cell_min_signal,
     )
     options = dict(
         extraction_method=method,
@@ -138,6 +143,15 @@ def test_cached_preview_matches_real_file_processing(tmp_path, monkeypatch, meth
     result = preview.cell_detection(params, **options)
     again = preview.cell_detection(params, **options)
     assert result.cell_count == len(actual.data)
+    assert result.cell_count == (
+        0
+        if cell_min_signal == 19
+        else 1
+        if mode == "intersection"
+        else 2
+        if method == "legacy"
+        else 3
+    )
     np.testing.assert_array_equal(
         result.traces.loc[result.traces.cell_apex, "rt_seconds"],
         actual.peak_meta.rt,

@@ -46,7 +46,9 @@ Python/Notebook，范围见[入口区别](analysis.md#vue-尚未接入的分析�
 1. **原始谱与参数**：选择样本并打开文件，查看 TIC、多 EIC、快速网格或高分辨率合并谱、单扫描。
    单扫描支持帧号、时间、时间滑块及上一/下一帧，定位当前 MS level 的最近扫描。
    TIC/EIC/细胞窗口图可选择“选择合谱范围”并横向拖选；也可填写 RT 起止值，切换合并谱后更新。
-   提取参数默认只显示 `ref_mz`、`mz_min`、`mz_max`、`cell_snr`、`feature_snr_threshold` 和 `max_zero_frac`。
+   提取参数默认只显示 `ref_mz`、`mz_min`、`mz_max`、`cell_snr`、`cell_min_signal`、`feature_snr_threshold` 和 `max_zero_frac`。
+   `cell_min_signal` 默认 `1e5`；每个扫描点须同时通过倍数条件和最低净信号条件，0 关闭附加条件。
+   旧项目缺少该参数时保留为 0，使用前可显式调整；定义与边界见[最低净信号](parameters.md#细胞逐扫描最低净信号)。
    点击“展开全部参数”，在参考与范围、细胞与噪声、合谱与对齐、样本合并、计算资源及参考预设之间切换；
    常用项始终可见，切换分类或收起不会丢失草稿，也不会应用参数。`feature_merge_ppm` 仅在 independent 策略下显示。
    数值输入按内容留宽，m/z 上下限并排，参考离子列表及预设 JSON 使用整行；窄屏自动换行。

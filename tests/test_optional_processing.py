@@ -15,7 +15,7 @@ def test_multi_reference_and_corrected_intensity():
     values[6] = [20, 12]
     values[24] = [1, 20]
     data = pd.DataFrame(values, columns=[100.0, 200.0])
-    kwargs = dict(baseline_window=5, noise_window=5, show_progress=False)
+    kwargs = dict(baseline_window=5, noise_window=5, cell_min_signal=0, show_progress=False)
     union = find_cell_peaks_snr(data, [100.0, 200.0], **kwargs)
     intersection = find_cell_peaks_snr(
         data, [100.0, 200.0], reference_mode="intersection", **kwargs
@@ -31,6 +31,7 @@ def test_multi_reference_and_corrected_intensity():
             extraction_method="snr_v1",
             reference_mz=[100.0, 200.0],
             baseline_filter_size=5,
+            cell_min_signal=0,
             noise_window=5,
             show_progress=False,
         ),
@@ -95,6 +96,7 @@ def test_sequential_file_boundaries_with_real_mzml(tmp_path, monkeypatch, strate
         150.0,
         processing_strategy=strategy,
         baseline_filter=lambda values, **kw: np.ones_like(values),
+        cell_min_signal=0,
         progress_callback=lambda value, message: progress.append(value),
         n_jobs=1,
     )
@@ -131,6 +133,7 @@ def test_full_synthetic_processing_and_h5ad(tmp_path):
         extraction_method="snr_v1",
         reference_ppm_tol=500.0,
         baseline_filter_size=5,
+        cell_min_signal=0,
         noise_window=5,
         show_progress=False,
     )

@@ -24,6 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mz-min", type=float, default=100.0, help="Extraction m/z lower bound")
     parser.add_argument("--mz-max", type=float, default=1000.0, help="Extraction m/z upper bound")
     parser.add_argument("--cell-snr", type=float, default=5.0)
+    parser.add_argument(
+        "--cell-min-signal",
+        type=float,
+        default=1e5,
+        help="Minimum baseline-subtracted reference intensity per scan (strict >; 0 disables)",
+    )
     parser.add_argument("--peak-snr", type=float, default=3.0)
     parser.add_argument(
         "--jobs", type=int, default=None, help="File workers: default RAW=1, XML=all; -1=all CPUs"
@@ -69,6 +75,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "resolution": args.resolution,
         "mz_range": (args.mz_min, args.mz_max),
         "cell_snr": args.cell_snr,
+        "cell_min_signal": args.cell_min_signal,
         "peak_snr": args.peak_snr,
         "extraction_method": args.extraction_method,
         "reference_mz": args.reference_mz,

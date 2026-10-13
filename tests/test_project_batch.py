@@ -47,6 +47,7 @@ def setup_project(tmp_path, *, storage_label="data", sample_names=("a", "b")):
             resample_points_per_fwhm=2.0,
             ppm_tol=500.0,
             baseline_filter_size=5,
+            cell_min_signal=0,
         )
     )
     return project, catalog
@@ -75,6 +76,28 @@ def test_batch_real_mzml_review_and_stop(tmp_path, strategy):
     (folder / "stop.requested").touch()
     run_batch(folder / "state.json")
     assert read_batch(folder / "state.json")["status"] == "stopped"
+
+
+@pytest.mark.parametrize("strategy", ["shared", "independent"])
+@pytest.mark.parametrize("method", ["legacy", "snr_v1"])
+def test_batch_uses_per_sample_net_signal_gate(tmp_path, strategy, method):
+    project, catalog = setup_project(tmp_path)
+    project.manifest["feature_strategy"] = strategy
+    project.manifest["parameters"].update(
+        extraction_method=method, cell_min_signal=18, reference_ppm_tol=500.0
+    )
+    project.samples[1]["parameters"] = {**project.manifest["parameters"], "cell_min_signal": 19}
+    request = preflight(project, catalog)
+    request["created_at"] = "test"
+    folder = project.folder / "processing" / "gate"
+    folder.mkdir()
+    write_json(folder / "request.json", request)
+    run_batch(folder / "state.json")
+    state = read_batch(folder / "state.json")
+    assert state["status"] == "completed", state
+    assert [row["status"] for row in state["samples"]] == ["succeeded", "failed"], state
+    assert state["samples"][0]["cells"] == 2
+    assert state["samples"][1]["error"] == "No cells or features retained"
 
 
 def test_failure_continues_and_shared_parameters_checked(tmp_path):

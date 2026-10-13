@@ -19,6 +19,7 @@ data = CyESIData.load_from_file(
     resample_points_per_fwhm=5,
     ms_peak_snr_threshold=10,
     cell_snr=5,
+    cell_min_signal=1e5,
     peak_snr=3,
     baseline_filter_size=50,
     max_zero_frac=0.9,
@@ -27,6 +28,9 @@ data = CyESIData.load_from_file(
 
 `load_from_file()` 完成谱读取、总谱构建、去噪、公共峰提取、扫描对齐和细胞事件识别。
 返回的对象可以通过 `len(data)` 查看细胞数，通过 `data.data.shape` 查看完整矩阵形状。
+`cell_min_signal` 在 `preprocess`、单文件及各目录入口均可调，默认 `1e5`。
+逐扫描参考离子必须同时通过原倍数条件和扣基线后的最低净信号条件；0 关闭附加条件。
+两种提取算法均适用，定义、单位及旧项目兼容见[参数说明](parameters.md#细胞逐扫描最低净信号)。
 
 ### Thermo profile RAW 直接读取
 

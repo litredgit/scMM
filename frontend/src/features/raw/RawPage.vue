@@ -45,7 +45,15 @@ const legacyParameters = computed(() => {
   return (item?.parameters ?? store.project?.manifest.parameters)?.extraction_method === 'legacy'
 })
 const samples = computed(() => store.project?.manifest.samples ?? [])
-const basic = ['ref_mz', 'mz_min', 'mz_max', 'cell_snr', 'feature_snr_threshold', 'max_zero_frac']
+const basic = [
+  'ref_mz',
+  'mz_min',
+  'mz_max',
+  'cell_snr',
+  'cell_min_signal',
+  'feature_snr_threshold',
+  'max_zero_frac',
+]
 const expanded = ref(false)
 const parameterCategory = ref('reference')
 const categories = [
