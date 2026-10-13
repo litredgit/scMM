@@ -56,8 +56,12 @@ notebook = [
 ]
 web = [
     "fastapi>=0.115,<0.136",
+    "matplotlib>=3.8",
+    "networkx>=3.2",
+    "plotly>=6,<7",
     "pydantic>=2.9,<3",
     "starlette>=0.46,<1",
+    "umap-learn>=0.5",
     "uvicorn>=0.30,<1",
 ]
 

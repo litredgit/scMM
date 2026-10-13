@@ -221,11 +221,13 @@ async function applyMapping() {
           :kind="picker"
           :disabled="store.busy"
           @selected="selectFiles"
+          @project="(path) => store.mutate('/project/open', { path })"
         />
         <details>
           <summary>直接输入服务器路径</summary>
           <label
-            >每行一个路径<textarea
+            ><FieldLabel name="每行一个路径" /><textarea
+              aria-label="每行一个路径"
               v-model="manual"
               rows="2"
               :disabled="store.busy"
@@ -273,14 +275,21 @@ async function applyMapping() {
         "
       >
         <label
-          >项目名称<input v-model="name" required maxlength="200" :disabled="store.busy" /></label
+          ><FieldLabel name="项目名称" /><input
+            aria-label="项目名称"
+            v-model="name"
+            required
+            maxlength="200"
+            :disabled="store.busy" /></label
         ><label class="grow"
-          >项目说明<input
+          ><FieldLabel name="项目说明" /><input
+            aria-label="项目说明"
             v-model="description"
             maxlength="20000"
             :disabled="store.busy"
             placeholder="记录实验目的与备注" /></label
         ><button
+          class="primary"
           :disabled="
             store.busy ||
             (name === store.project.manifest.name &&
@@ -307,10 +316,30 @@ async function applyMapping() {
           <thead>
             <tr>
               <th><span class="sr-only">选择</span></th>
-              <th>name</th>
-              <th>group</th>
-              <th>subject</th>
-              <th>batch</th>
+              <th>
+                <FieldLabel
+                  name="name"
+                  text="样本显示名称，项目内唯一；修改后仍以稳定 sample_id 同步已有数据。"
+                />
+              </th>
+              <th>
+                <FieldLabel
+                  name="group"
+                  text="实验比较分组，例如处理组/对照组；相同组名的细胞归入同一组，不代表独立生物重复。"
+                />
+              </th>
+              <th>
+                <FieldLabel
+                  name="subject"
+                  text="独立生物来源，例如供体或独立培养物。同一来源的样本填写相同值，可用于分组验证；细胞数量不等于独立来源数量。"
+                />
+              </th>
+              <th>
+                <FieldLabel
+                  name="batch"
+                  text="采集或处理批次标签，用于识别技术批次；不自动执行批次校正，也不能代替独立生物来源。"
+                />
+              </th>
               <th>原始文件</th>
             </tr>
           </thead>
@@ -334,10 +363,11 @@ async function applyMapping() {
                 />
               </td>
               <td>
-                <span class="file-name" :title="sample.path">{{
-                  sample.path.split('/').at(-1) || '仅结果数据'
-                }}</span
-                ><small v-if="sample.metadata_unresolved?.length" class="inline-error"
+                <span class="file-name">{{ sample.path.split('/').at(-1) || '仅结果数据' }}</span
+                ><HelpTip
+                  :text="sample.path || '该样本只有导入结果，尚未关联原始谱。'"
+                  label="完整路径"
+                /><small v-if="sample.metadata_unresolved?.length" class="inline-error"
                   >待核对：{{ sample.metadata_unresolved.join(' / ') }}</small
                 >
               </td>
@@ -347,7 +377,8 @@ async function applyMapping() {
       </div>
       <div class="sample-footer">
         <label class="upload-control button"
-          >导入样本信息 CSV<input
+          ><FieldLabel name="导入样本信息 CSV" /><input
+            aria-label="导入样本信息 CSV"
             type="file"
             class="sr-only"
             accept=".csv,text/csv"
@@ -369,7 +400,8 @@ async function applyMapping() {
       </div>
       <p v-if="mappingError" role="alert" class="inline-error">{{ mappingError }}</p>
       <label
-        >结果样本字段<select
+        ><FieldLabel name="结果样本字段" /><select
+          aria-label="结果样本字段"
           :value="mapping?.source_key ?? ''"
           :disabled="store.busy || mappingBusy"
           @change="loadMapping(($event.target as HTMLSelectElement).value)"

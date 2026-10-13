@@ -9,7 +9,8 @@ const fields = computed(
       `${item.name} ${item.help}`.toLowerCase().includes(search.value.toLowerCase()),
     ) ?? [],
 )
-function format(value: unknown) {
+function format(value: unknown, name?: string) {
+  if (name === 'extraction_method' && value === 'snr_v1') return 'snr'
   return Array.isArray(value) ? (value.length ? value.join(', ') : '空') : String(value)
 }
 </script>
@@ -29,7 +30,7 @@ function format(value: unknown) {
         <input v-model="search" aria-label="搜索参数" placeholder="搜索参数名称或解释" />
       </div>
       <p class="muted">
-        此页只读；参数编辑与实际参数预检将在原始谱、提取阶段接入。实验参考离子须按实际实验明确选择。
+        此页只读；在第二步编辑参数，在第三步检查实际提取参数。实验参考离子须按实际实验明确选择。
       </p>
       <div class="table-scroll">
         <table>
@@ -44,12 +45,16 @@ function format(value: unknown) {
           <tbody>
             <tr v-for="item in fields" :key="item.name">
               <td>
-                <code :title="item.help">{{ item.name }}</code>
+                <FieldLabel :name="item.name" :text="item.help" />
               </td>
               <td>
-                {{ store.project ? format(store.project.manifest.parameters[item.name]) : '—' }}
+                {{
+                  store.project
+                    ? format(store.project.manifest.parameters[item.name], item.name)
+                    : '—'
+                }}
               </td>
-              <td>{{ format(item.default) }}</td>
+              <td>{{ format(item.default, item.name) }}</td>
               <td>{{ item.help }}</td>
             </tr>
           </tbody>

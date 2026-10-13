@@ -4,6 +4,7 @@ from typing import Literal
 from fastapi import APIRouter, Query
 
 from scMM.application.parameters import ANALYSIS_SPECS, PROCESSING_HELP
+from scMM.application.saved_catalog import ResultCatalog
 from scMM.application.storage import SUPPORTED_RAW_SUFFIXES
 
 from .. import schemas as s
@@ -41,6 +42,7 @@ def browse(
     root: str,
     path: str = ".",
     kind: Literal["raw", "results"] = "raw",
+    include_internal: bool = False,
     search: str = Query(default="", max_length=1000),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=200, ge=1, le=1000),
@@ -50,6 +52,9 @@ def browse(
     if not directory.is_dir():
         raise ValueError("请选择目录。")
     entries = []
+    descriptions = (
+        ResultCatalog(manager.store, catalog.root(root).path) if kind == "results" else None
+    )
     suffixes = SUPPORTED_RAW_SUFFIXES if kind == "raw" else {".h5ad"}
     for child in directory.iterdir():
         try:
@@ -60,17 +65,23 @@ def browse(
                 and (not resolved.is_file() or resolved.suffix.lower() not in suffixes)
             ):
                 continue
+            description = descriptions.describe(resolved) if descriptions else {}
+            if description.get("internal") and not include_internal:
+                continue
             entries.append(
                 {
                     "name": child.name,
                     "path": str(child.relative_to(catalog.root(root).path)),
                     "directory": is_directory,
                     "bytes": None if is_directory else resolved.stat().st_size,
+                    **description,
                 }
             )
         except (OSError, ValueError):
             continue
     entries.sort(key=lambda entry: (not entry["directory"], entry["name"].casefold()))
+    if descriptions:
+        entries.sort(key=lambda row: row["modified_at"], reverse=True)
     relative = directory.relative_to(catalog.root(root).path)
     return {
         "root": root,
@@ -78,4 +89,6 @@ def browse(
         "parent": None if relative.parts == () else str(relative.parent),
         "entries": entries[offset : offset + limit],
         "total": len(entries),
+        "latest": descriptions.latest(directory, entries) if descriptions else None,
+        "context": descriptions.describe(directory) if descriptions else None,
     }

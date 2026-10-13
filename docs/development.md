@@ -7,13 +7,16 @@
 
 ## 代码结构
 
-Vue/FastAPI 网页按功能逐步替换 Panel 交互；前端页面在仓库根 `frontend/src/features/`，
+Vue/FastAPI 网页按功能组织完整六步交互，Panel 保留兼容入口；前端页面在仓库根 `frontend/src/features/`，
 共享组件、路由、请求客户端及 Pinia 状态分别在相邻 `components/`、`router/`、`api/`、`stores/`。
-`scMM/api/routers/` 按功能拆分 HTTP 边界，`schemas.py` 定义接口契约。
+`scMM/api/routers/` 按项目、样本、存储、原始谱、提取、分析、结果和预设拆分 HTTP 边界，
+`schemas.py`、`workflow_schemas.py` 定义接口契约并校验科学参数。
 `application/web_workspace.py` 持有独立浏览器工作区、写入修订及事务候选；不依赖 Panel 或 FastAPI。
+`web_raw.py`、`web_analysis.py`、`web_results.py` 分别编排原始谱/任务、分析及下载/管理。
+`plot/presentation.py`、`plot/raw.py`、`plot/workbench.py` 提供不依赖 Panel 的共享图形构建，两个网页入口复用。
 矩阵与模型留在 Python 应用层，前端只接收摘要和展示数据。Panel 入口继续用于功能对照。
 
-当前入口为 `ui/app.py` 的项目工作台；`ui/project_views.py` 管理项目原始谱展示，
+Panel 入口为 `ui/app.py` 的项目工作台；`ui/project_views.py` 管理项目原始谱展示，
 `ui/layout.py` 管理响应式布局和图形尺寸，`ui/help.py` 管理中文悬停解释。项目持久化与批次编排分别在
 `application/projects.py` 和 `application/project_batch.py`，RAW 流读取在 `file/readers/`。
 下列树保留其他模块职责，使用流程以 [当前网页指南](workflow.md) 为准。
@@ -130,7 +133,9 @@ uv build --no-sources
 浏览器回归自动启动 5117 的隔离服务，使用临时原始文件占位与小型 AnnData，不访问开发或生产项目。
 测试端口可用 `SCMM_E2E_PORT` 修改；`SCMM_TEST_PYTHON` 和 `SCMM_CHROMIUM` 可指定测试解释器与已有浏览器。
 服务器退出删除临时项目；截图、trace 和测试报告保留在被忽略的前端测试输出目录。
-测试和配置说明仅覆盖当前交付的 Vue 功能，不能代替未迁移步骤的浏览器验收。
+浏览器回归覆盖六步合成流程、模型/SHAP、保存重载、精度下载及回收恢复；不能替代真实实验和用户验收。
+预览为独立进程，提取为持久 worker；其余 HTTP 计算在线程池执行并持有工作区锁，避免阻塞整个 ASGI 事件循环。
+`/api/v1/runtime` 报告未保存/繁忙工作区；发布脚本对 Vue 检查此状态，接口失联时拒绝重启。
 
 `pytest -W error` 会把警告提升为错误，有助于尽早发现 pandas、NumPy、scikit-learn 或 PyOpenMS
 升级引入的兼容问题。

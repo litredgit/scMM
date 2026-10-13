@@ -288,3 +288,30 @@ def test_saved_items_home_does_not_scan_usage_until_project_is_selected(tmp_path
     assert len(calls) == 1
     assert panel.plan["path"] == str(project.folder)
     assert not panel.move_button.disabled
+
+
+def test_obsolete_snapshot_cleanup_after_reopen_keeps_current_and_external_references(tmp_path):
+    store, manager = setup(tmp_path)
+    project = store.create("history")
+    project.workspace.replace(AnnData(np.ones((3, 2))))
+    store.save(project)
+    old_snapshot = (project.folder / project.manifest["artifacts"]["current"]).parent
+    reopened = store.open(project.folder)
+    store.save(reopened)
+    # Own project folder is provenance; it must not pin all historical snapshots forever.
+    plan = manager.plan("项目结果", old_snapshot)
+    other = store.create("dependent")
+    other.workspace.replace(AnnData(np.ones((3, 2))), source=str(old_snapshot))
+    store.save(other)
+    with pytest.raises(RuntimeError, match="引用"):
+        manager.move(plan)
+    # Removing the dependent project releases that reference.
+    manager.move(manager.plan("项目结果", other.folder))
+    entry = manager.move(plan)
+    assert not old_snapshot.exists()
+    assert store.open(project.folder).workspace.data.shape == (3, 2)
+    for key in ("current", "baseline"):
+        with pytest.raises(RuntimeError, match="引用"):
+            manager.plan("项目结果", project.folder / reopened.manifest["artifacts"][key])
+    manager.restore(entry)
+    assert old_snapshot.is_dir()

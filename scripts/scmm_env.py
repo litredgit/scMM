@@ -30,6 +30,7 @@ def settings(config=CONFIG):
         "address": "0.0.0.0",
         "origins": ["*"],
         "dev_frontend": "vue",
+        "prod_frontend": "panel",
     }
     if config.exists():
         overrides = json.loads(config.read_text(encoding="utf-8"))
@@ -40,8 +41,8 @@ def settings(config=CONFIG):
         values[key] = Path(values[key]).expanduser().resolve()
     if values["dev"] == values["prod"]:
         raise ValueError("Development and production worktrees must differ")
-    if values["dev_frontend"] not in {"panel", "vue"}:
-        raise ValueError("dev_frontend must be panel or vue")
+    if any(values[key] not in {"panel", "vue"} for key in ("dev_frontend", "prod_frontend")):
+        raise ValueError("dev_frontend and prod_frontend must be panel or vue")
     dev_results = values["state"] / "dev/results"
     if dev_results == values["prod_results"] or (
         dev_results in values["prod_results"].parents
@@ -115,7 +116,42 @@ def clean(root, branch):
         raise RuntimeError(f"{root} has uncommitted files; commit or stash them first")
 
 
+def web_idle(port):
+    """Vue workspaces have no long-lived socket; ask the API before restarting."""
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/api/v1/health", timeout=2
+        ) as response:
+            if response.headers.get("Content-Type", "").startswith("application/json"):
+                health = json.load(response)
+            else:
+                return  # Legacy Panel server: its sessions use established sockets.
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return
+        raise RuntimeError("Cannot verify web workspace state") from exc
+    except (OSError, ValueError) as exc:
+        raise RuntimeError("Cannot verify web workspace state") from exc
+    if health.get("frontend") != "vue":
+        return
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/api/v1/runtime", timeout=2
+        ) as response:
+            status = json.load(response)
+    except (OSError, ValueError) as exc:
+        raise RuntimeError("Cannot verify Vue workspace state") from exc
+    if not isinstance(status, dict) or any(
+        type(status.get(key)) is not int or status[key] < 0
+        for key in ("unsaved_workspaces", "busy_workspaces")
+    ):
+        raise RuntimeError("Cannot verify Vue workspace state: invalid runtime response")
+    if status.get("unsaved_workspaces", 0) or status.get("busy_workspaces", 0):
+        raise RuntimeError(f"{port} has unsaved or busy Vue workspaces; save and close them first")
+
+
 def idle(values):
+    web_idle(5006)
     connections = run("ss", "-Htn", "state", "established", "( sport = :5006 )", capture=True)
     if connections:
         raise RuntimeError("5006 has browser connections; save and close production pages first")
@@ -218,8 +254,7 @@ def serve(values, name, *, debug=False):
     ]
     for origin in values["origins"]:
         args.extend(["--allow-websocket-origin", origin])
-    if name == "dev":
-        args.extend(["--frontend", values.get("dev_frontend", "vue")])
+    args.extend(["--frontend", values.get(f"{name}_frontend", "vue" if name == "dev" else "panel")])
     if debug:
         python = str(root / ".venv/bin/python")
         args = [python, "-m", "debugpy", "--listen", "127.0.0.1:5678", "--wait-for-client", *args]

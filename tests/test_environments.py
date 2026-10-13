@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -44,6 +45,7 @@ def worktrees(tmp_path, monkeypatch):
 
     monkeypatch.setattr(manager, "run", run)
     monkeypatch.setattr(manager, "health", lambda: None)
+    monkeypatch.setattr(manager, "web_idle", lambda _port: None)
     monkeypatch.setattr(manager, "sync", lambda *_: None)
     return values, old, new, service_calls
 
@@ -170,3 +172,52 @@ def test_home_paths_expand_for_preferences_and_systemd(tmp_path, monkeypatch):
     assert preferences_path() == tmp_path / "dev/preferences.json"
     assert manager.unit_path(tmp_path / "scMM-prod") == "%h/scMM-prod"
     assert manager.unit_path(Path("/opt/scmm")) == "/opt/scmm"
+
+
+def test_vue_unsaved_workspaces_block_restart_without_sockets(monkeypatch):
+    from io import BytesIO
+
+    class Response(BytesIO):
+        headers: ClassVar[dict] = {"Content-Type": "application/json"}
+
+    replies = [{"frontend": "vue"}, {"unsaved_workspaces": 1, "busy_workspaces": 0}]
+    monkeypatch.setattr(
+        manager.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: Response(json.dumps(replies.pop(0)).encode()),
+    )
+    with pytest.raises(RuntimeError, match="unsaved or busy Vue"):
+        manager.web_idle(5006)
+
+
+def test_vue_missing_runtime_never_assumes_idle(monkeypatch):
+    from io import BytesIO
+
+    class Response(BytesIO):
+        headers: ClassVar[dict] = {"Content-Type": "application/json"}
+
+    def open_url(url, **_kwargs):
+        if url.endswith("health"):
+            return Response(b'{"frontend":"vue"}')
+        raise OSError("connection lost")
+
+    monkeypatch.setattr(manager.urllib.request, "urlopen", open_url)
+    with pytest.raises(RuntimeError, match="Cannot verify Vue"):
+        manager.web_idle(5006)
+
+
+@pytest.mark.parametrize("status", [{}, [], {"unsaved_workspaces": 0, "busy_workspaces": False}])
+def test_vue_invalid_runtime_never_assumes_idle(monkeypatch, status):
+    from io import BytesIO
+
+    class Response(BytesIO):
+        headers: ClassVar[dict] = {"Content-Type": "application/json"}
+
+    replies = [{"frontend": "vue"}, status]
+    monkeypatch.setattr(
+        manager.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: Response(json.dumps(replies.pop(0)).encode()),
+    )
+    with pytest.raises(RuntimeError, match="invalid runtime response"):
+        manager.web_idle(5006)

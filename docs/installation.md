@@ -61,7 +61,7 @@ VS Code 也可直接选择仓库内的 `.venv/bin/python`。Notebook 的功能�
 | `cluster` | Leiden 与 Louvain 聚类 |
 | `supervised` | 监督学习、SMOTE 和 SHAP |
 | `ui` | Panel 引导式网页、Plotly 原始谱/质量图和 UMAP 质量检查 |
-| `web` | FastAPI、Uvicorn 及兼容的 ASGI 依赖；Vue 构建工具由 npm 单独管理 |
+| `web` | FastAPI/Uvicorn、Plotly、Matplotlib、NetworkX、UMAP 及兼容依赖；Vue 构建工具由 npm 单独管理 |
 | `notebook` | JupyterLab 与项目内核 |
 | `dev` 依赖组 | pytest、Ruff、构建与覆盖率；不进入发布包依赖 |
 
@@ -184,9 +184,16 @@ Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；
 Git、uv、systemd 和 `ss`；包含 Vue 源码的版本同步时还需 Node.js/npm 构建前端，服务运行不启动 Node。
 scMM 本身仍使用 `.venv` 中的 Python 3.12。
 配置默认由上述路径推导；可在 `~/.config/scmm/environments.json` 覆盖
-`dev`、`prod`、`raw`、`prod_results`、`state`、`address`、`origins`、`dev_frontend`，或用 `--config` 指定文件。
-迁移期间 `dev_frontend` 默认 `vue`，可设为 `panel` 进行完整功能对照；生产仍使用 Panel，最终切换见
-[迁移里程碑](roadmap.md#vuefastapi-网页迁移)。修改配置后按空闲检查要求重启相应服务。
+`dev`、`prod`、`raw`、`prod_results`、`state`、`address`、`origins`、`dev_frontend`、`prod_frontend`，或用 `--config` 指定文件。
+`dev_frontend` 默认 `vue`；可设为 `panel` 使用兼容入口。为兼容旧部署，未配置的
+`prod_frontend` 仍默认 `panel`；生产使用完整 Vue 工作台时，在配置文件中明确设置：
+
+```json
+{"prod_frontend": "vue"}
+```
+
+保留配置文件中的其他已有键。修改后按空闲检查要求执行发布流程或重启相应服务；
+回滚代码时同时核对所需前端配置，代码回滚不会恢复此本机配置。默认 CLI 入口仍兼容 Panel。
 现有访问配置沿用 `0.0.0.0` 和 origin `*`；网络访问策略仍见 [NET-01](roadmap.md#工程改进待设计与实现)。
 配置与运行数据不提交到 Git。不同用户/机器先创建对应 worktree，再安装服务：
 
@@ -262,7 +269,8 @@ python3 scripts/scmm_env.py status
 
 发布/更新只接受干净 worktree，并用 fast-forward 更新 `main`；分支分叉须先在开发环境处理。
 发布前执行 [开发验证](development.md#完整验证)。脚本串行锁定环境操作，检查生产浏览器连接、
-未结束任务和 worker，然后停止服务再变更代码及依赖。新进程通过 systemd 状态和首页 HTTP 检查后，
+未结束任务和 worker；Vue 另检查 `/api/v1/runtime` 的未保存及繁忙工作区，状态无法读取时拒绝更新。
+满足空闲条件后停止服务再变更代码及依赖。新进程通过 systemd 状态和首页 HTTP 检查后，
 `release` 才推送远端 `main`；网络推送失败时，本地新服务已生效，修复网络后补推即可。
 依赖同步或健康检查失败时，脚本尝试恢复原提交、锁定依赖和服务；若恢复本身失败，按错误和日志处置，
 原提交仍保存在 `refs/scmm/recovery`。脚本不会替用户完成科学验收，也不替代发布前测试。

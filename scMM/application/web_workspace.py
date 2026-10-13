@@ -19,6 +19,9 @@ import pandas as pd
 
 from .projects import Project, ProjectStore
 from .storage import StorageCatalog
+from .web_analysis import AnalysisWorkflow
+from .web_raw import RawWorkflow
+from .web_results import ResultWorkflow
 from .workbench import read_dataset
 
 RESULT_PLOTS = {
@@ -44,6 +47,16 @@ class BrowserWorkspace:
     touched: float = field(default_factory=time.monotonic)
     closed: bool = False
     lock: threading.RLock = field(default_factory=threading.RLock)
+
+    raw: dict | None = None
+    preview_job: dict | None = None
+    trash_plan: tuple | None = None
+
+    def discard_views(self):
+        self.raw = None
+        if self.preview_job:
+            self.preview_job["future"].cancel()
+            self.preview_job = None
 
     def check(self, revision):
         if revision != self.revision:
@@ -139,14 +152,18 @@ def prepare_mapping(project, storage_label):
     project.manifest["sample_mapping"] = {name: matches[name] for name in names if name in matches}
 
 
-class WebWorkspaceService:
+class WebWorkspaceService(RawWorkflow, AnalysisWorkflow, ResultWorkflow):
     def __init__(
         self, roots, result_roots, project_root, defaults, *, idle_seconds=3600, capacity=128
     ):
         self.store = ProjectStore(project_root)
         self.storage = StorageCatalog(roots)
         self.results = StorageCatalog(result_roots)
-        self.defaults = defaults
+        from dataclasses import replace
+
+        self.defaults = replace(
+            defaults, processing=replace(defaults.processing, extraction_method="snr_v1")
+        )
         self.idle_seconds = idle_seconds
         self.capacity = capacity
         self._workspaces = {}
@@ -164,6 +181,7 @@ class WebWorkspaceService:
                 if now - workspace.touched > self.idle_seconds:
                     workspace.closed = True
                     workspace.project = None
+                    workspace.discard_views()
                     self._workspaces.pop(identity, None)
             finally:
                 workspace.lock.release()
@@ -193,6 +211,7 @@ class WebWorkspaceService:
                     self._workspaces.pop(identity, None)
                 workspace.closed = True
                 workspace.project = None
+                workspace.discard_views()
                 raise WorkspaceError(
                     "工作区已过期，请重新打开项目。", code="workspace_missing", status=404
                 )
@@ -212,6 +231,7 @@ class WebWorkspaceService:
                 "path": str(project.folder),
                 "manifest": deepcopy(project.manifest),
                 "unsaved": project.unsaved,
+                "presentation": deepcopy(project.views.get("legend_positions", {})),
                 "dataset": None
                 if data is None
                 else {
@@ -233,6 +253,7 @@ class WebWorkspaceService:
         with self.access(identity) as workspace:
             workspace.closed = True
             workspace.project = None
+            workspace.discard_views()
             with self._lock:
                 self._workspaces.pop(identity, None)
 
@@ -243,6 +264,7 @@ class WebWorkspaceService:
             with workspace.lock:
                 workspace.closed = True
                 workspace.project = None
+                workspace.discard_views()
         with self._lock:
             self._workspaces.clear()
 
@@ -257,18 +279,23 @@ class WebWorkspaceService:
 
     def create_project(self, identity, revision, name):
         def action(workspace):
-            workspace.project = self.store.create(name, self.defaults)
+            project = self.store.create(name, self.defaults)
+            workspace.discard_views()
+            workspace.project = project
 
         return self.mutate(identity, revision, action, require_project=False)
 
     def open_project(self, identity, revision, path):
         def action(workspace):
-            workspace.project = self.store.open(path)
+            project = self.store.open(path)
+            workspace.discard_views()
+            workspace.project = project
 
         return self.mutate(identity, revision, action, require_project=False)
 
     def close_project(self, identity, revision):
         def action(workspace):
+            workspace.discard_views()
             workspace.project = None
 
         return self.mutate(identity, revision, action, require_project=False)

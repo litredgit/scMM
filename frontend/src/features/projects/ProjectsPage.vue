@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onActivated, ref } from 'vue'
+import SavedItems from '../../components/SavedItems.vue'
 import { useRouter } from 'vue-router'
 import { request } from '../../api/client'
 import type { SavedProject } from '../../api/types'
@@ -63,7 +64,8 @@ function date(value: string) {
         <h2>创建项目</h2>
         <p>原始文件仅引用，保留在服务器原位置。</p>
         <label
-          >项目名称<input
+          ><FieldLabel name="项目名称" /><input
+            aria-label="项目名称"
             v-model="name"
             required
             maxlength="200"
@@ -83,7 +85,7 @@ function date(value: string) {
           <li>审核提取结果，再进行预处理与分析</li>
           <li>主动保存项目，下载需要的结果</li>
         </ol>
-        <p class="muted">当前迁移阶段开放项目、样本、结果导入和保存，其余步骤将分阶段接入。</p>
+        <p class="muted">六步工作流共用同一个数据集；提取后人工审核，项目由你主动保存。</p>
       </div>
     </div>
     <section class="card project-list">
@@ -123,7 +125,9 @@ function date(value: string) {
             <tr v-for="item in filtered" :key="item.path">
               <td>
                 <strong>{{ item.name }}</strong
-                ><small class="path" :title="item.path">{{ item.path }}</small>
+                ><small class="path"
+                  >{{ item.path }} <HelpTip :text="item.path" label="项目完整路径"
+                /></small>
               </td>
               <td>{{ item.samples }}</td>
               <td>{{ date(item.saved_at) }}</td>
@@ -134,5 +138,6 @@ function date(value: string) {
       </div>
       <p class="storage-path">项目根目录：{{ store.configuration?.project_root }}</p>
     </section>
+    <SavedItems @changed="load" />
   </section>
 </template>

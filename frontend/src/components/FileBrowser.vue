@@ -1,12 +1,25 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { request } from '../api/client'
-import type { Directory, Root } from '../api/types'
+import type { Directory, Root, FileEntry } from '../api/types'
 
-const props = defineProps<{ roots: Root[]; kind: 'raw' | 'results'; disabled?: boolean }>()
-const emit = defineEmits<{ selected: [root: string, paths: string[]] }>()
+const props = defineProps<{
+  roots: Root[]
+  kind: 'raw' | 'results'
+  disabled?: boolean
+  purpose?: 'import' | 'manage'
+}>()
+const emit = defineEmits<{ selected: [root: string, paths: string[]]; project: [path: string] }>()
 const root = ref(props.roots[0]?.label ?? '')
 const path = ref('.')
+const includeInternal = ref(false)
+let chooseLatest = true
+const selectedInfo = ref<FileEntry>()
+function date(value?: string | null) {
+  return value
+    ? new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
+    : '—'
+}
 const search = ref('')
 const directory = ref<Directory | null>(null)
 const selection = ref<string[]>([])
@@ -27,12 +40,19 @@ async function browse(target = path.value, offset = 0) {
       kind: props.kind,
       search: search.value,
       offset: String(offset),
+      include_internal: String(includeInternal.value),
     })
     const result = await request<Directory>(`/storage/entries?${query}`)
     if (ticket !== generation) return
     directory.value = result
     path.value = result.path
     page.value = offset
+    if (props.kind === 'results' && props.purpose !== 'manage' && chooseLatest && result.latest) {
+      chooseLatest = false
+      selectedInfo.value = result.latest
+      selection.value = [result.latest.path]
+      emit('selected', root.value, [...selection.value])
+    }
   } catch (cause) {
     if (ticket === generation) error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
@@ -40,6 +60,8 @@ async function browse(target = path.value, offset = 0) {
   }
 }
 function select(value: string) {
+  chooseLatest = false
+  selectedInfo.value = directory.value?.entries.find((e) => e.path === value)
   selection.value =
     props.kind === 'results'
       ? [value]
@@ -49,15 +71,19 @@ function select(value: string) {
   emit('selected', root.value, [...selection.value])
 }
 function clear() {
+  chooseLatest = false
+  selectedInfo.value = undefined
   selection.value = []
   emit('selected', root.value, [])
 }
 function remove(value: string) {
+  if (selectedInfo.value?.path === value) selectedInfo.value = undefined
   selection.value = selection.value.filter((path) => path !== value)
   emit('selected', root.value, [...selection.value])
 }
 watch(root, () => {
   clear()
+  chooseLatest = true
   path.value = '.'
   directory.value = null
   void browse('.')
@@ -69,6 +95,7 @@ watch(
   },
   { immediate: true },
 )
+watch(includeInternal, () => void browse(directory.value?.path ?? '.'))
 void browse('.')
 defineExpose({ clear })
 </script>
@@ -77,16 +104,63 @@ defineExpose({ clear })
   <div class="file-browser">
     <form class="browser-controls" @submit.prevent="browse()">
       <label
-        >服务器存储<select v-model="root" aria-label="服务器存储" :disabled="disabled || loading">
+        ><FieldLabel name="服务器存储" /><select
+          v-model="root"
+          aria-label="服务器存储"
+          :disabled="disabled || loading"
+        >
           <option v-for="item in roots" :key="item.label">{{ item.label }}</option>
         </select></label
       >
       <label class="grow"
-        >目录路径<input v-model="path" :disabled="disabled || loading" aria-label="目录路径"
+        ><FieldLabel name="目录路径" /><input
+          v-model="path"
+          :disabled="disabled || loading"
+          aria-label="目录路径"
       /></label>
       <button :disabled="disabled || loading">打开路径</button>
     </form>
     <p class="storage-path">{{ selectedRoot?.path }}</p>
+    <label v-if="kind === 'results'" class="inline-check"
+      ><input
+        v-model="includeInternal"
+        aria-label="显示内部快照、提取产物和缓存"
+        type="checkbox"
+        :disabled="disabled || loading" />显示内部快照、提取产物和缓存
+      <HelpTip
+        label="内部文件"
+        text="默认收起当前/历史快照、恢复起点和处理缓存。完整恢复优先打开项目；高级浏览可查看内部文件，但删除仍须通过引用和任务检查。"
+    /></label>
+    <div v-if="kind === 'results' && directory?.context?.project_name" class="result-context">
+      <strong>{{ directory.context.project_name }} · {{ directory.context.role }}</strong>
+      <p>{{ directory.context.detail }} {{ directory.context.protection }}</p>
+      <button
+        v-if="purpose !== 'manage' && directory?.context?.project_path"
+        :disabled="disabled"
+        @click="emit('project', directory!.context!.project_path!)"
+      >
+        打开所属项目
+      </button>
+    </div>
+    <div v-if="kind === 'results' && selectedInfo" class="latest-result" role="status">
+      <strong>已选结果：{{ selectedInfo.name }}</strong>
+      <HelpTip
+        :text="`${selectedInfo.detail ?? ''} ${selectedInfo.protection ?? ''}`"
+        label="结果用途"
+      />
+      <p>
+        {{ selectedInfo.role
+        }}{{ selectedInfo.project_name ? ` · ${selectedInfo.project_name}` : '' }} ·
+        {{ date(selectedInfo.modified_at) }}（北京时间）
+      </p>
+      <button
+        v-if="selectedInfo.project_path && purpose !== 'manage'"
+        :disabled="disabled"
+        @click="emit('project', selectedInfo!.project_path!)"
+      >
+        打开完整项目（推荐）
+      </button>
+    </div>
     <div class="browser-toolbar">
       <button
         type="button"
@@ -117,24 +191,42 @@ defineExpose({ clear })
       <p v-else-if="!directory?.entries.length" class="muted">
         此目录中没有匹配的{{ kind === 'raw' ? '原始文件' : '结果文件' }}。
       </p>
-      <template v-else
-        ><button
-          v-for="item in directory.entries"
-          :key="item.path"
-          type="button"
-          class="file-entry"
-          :class="{ selected: selection.includes(item.path) }"
-          :disabled="disabled"
-          @click="item.directory ? browse(item.path) : select(item.path)"
-        >
-          <span class="file-icon">{{ item.directory ? '▰' : '▤' }}</span
-          ><span class="grow">{{ item.name }}</span
-          ><small>{{
-            item.directory ? '打开目录 →' : `${((item.bytes ?? 0) / 1024 ** 2).toFixed(2)} MB`
-          }}</small
-          ><span v-if="selection.includes(item.path)">✓</span>
-        </button></template
-      >
+      <template v-else>
+        <div v-for="item in directory.entries" :key="item.path" class="file-entry-row">
+          <button
+            type="button"
+            class="file-entry"
+            :class="{ selected: selection.includes(item.path) }"
+            :disabled="disabled"
+            @click="item.directory ? browse(item.path) : select(item.path)"
+          >
+            <span class="file-icon">{{ item.directory ? '▰' : '▤' }}</span>
+            <span class="file-info"
+              ><strong>{{ item.name }}</strong>
+              <small v-if="kind === 'results'"
+                >{{ item.role }}{{ item.project_name ? ` · ${item.project_name}` : '' }} ·
+                {{ date(item.modified_at) }}（北京时间）</small
+              >
+            </span>
+            <small>{{
+              item.directory ? '打开目录 →' : `${((item.bytes ?? 0) / 1024 ** 2).toFixed(2)} MiB`
+            }}</small>
+            <span v-if="selection.includes(item.path)">✓</span>
+          </button>
+          <HelpTip
+            v-if="kind === 'results'"
+            :text="`${item.detail ?? ''} ${item.protection ?? ''} 完整路径：${selectedRoot?.path}/${item.path}`"
+            :label="item.name"
+          />
+          <button
+            v-if="purpose !== 'manage' && item.project_path && item.role === '项目（推荐打开）'"
+            :disabled="disabled"
+            @click="emit('project', item.project_path!)"
+          >
+            打开项目
+          </button>
+        </div>
+      </template>
     </div>
     <div v-if="directory && directory.total > 200" class="actions">
       <button

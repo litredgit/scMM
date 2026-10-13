@@ -8,7 +8,12 @@ onMounted(() => {
   window.addEventListener('pagehide', store.release)
 })
 onUnmounted(() => window.removeEventListener('pagehide', store.release))
-const pending = ['原始谱与参数', '提取与审核', '预处理', '分析']
+const stages = [
+  { path: '/raw', name: '原始谱与参数' },
+  { path: '/extraction', name: '提取与审核' },
+  { path: '/preprocess', name: '预处理' },
+  { path: '/analysis', name: '分析' },
+]
 </script>
 
 <template>
@@ -21,15 +26,10 @@ const pending = ['原始谱与参数', '提取与审核', '预处理', '分析']
       <nav aria-label="工作流程">
         <RouterLink to="/projects"><span class="nav-number">⌂</span>项目首页</RouterLink>
         <RouterLink to="/samples"><span class="nav-number">1</span>项目与样本</RouterLink>
-        <button
-          v-for="(name, i) in pending"
-          :key="name"
-          disabled
-          :title="`${name}将在后续迁移阶段开放`"
+        <RouterLink v-for="(stage, i) in stages" :key="stage.path" :to="stage.path"
+          ><span class="nav-number">{{ i + 2 }}</span
+          >{{ stage.name }}</RouterLink
         >
-          <span class="nav-number">{{ i + 2 }}</span
-          >{{ name }}<small>待迁移</small>
-        </button>
         <RouterLink to="/results"><span class="nav-number">6</span>结果与保存</RouterLink>
       </nav>
       <div class="sidebar-bottom">
@@ -38,7 +38,8 @@ const pending = ['原始谱与参数', '提取与审核', '预处理', '分析']
           <i :class="{ connected: store.current }"></i
           >{{ store.current ? '工作区已连接' : '工作区未连接' }}
         </div>
-        <p>项目与样本迁移阶段<br />保留六步实验流程</p>
+        <p class="task-note">{{ store.busy ? '正在执行操作…' : store.task }}</p>
+        <p>Vue / FastAPI 工作台<br />六步实验流程</p>
       </div>
     </aside>
 
@@ -54,7 +55,7 @@ const pending = ['原始谱与参数', '提取与审核', '预处理', '分析']
           }}</span>
           <button
             v-if="store.project"
-            class="primary"
+            class="save"
             :disabled="store.busy"
             @click="store.mutate('/project/save', {}, 'POST', '项目已保存。')"
           >

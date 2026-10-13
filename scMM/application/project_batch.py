@@ -24,7 +24,7 @@ from scMM.file.io import align_frame, extract_peaks, load_single_file, sum_spec,
 from scMM.util.peak import filter_spectrum
 
 from .naming import beijing_time
-from .preview_cache import cached_shared_targets, reusable_preview
+from .preview_cache import cached_shared_targets, digest_file, file_identity, reusable_preview
 from .processing import ProcessingParameters
 from .projects import child_path, project_lock, sample_parameters, write_json
 from .tasks import background_tasks_supported, utc_now
@@ -111,6 +111,8 @@ def submit(project, storage, *, retry_path=None):
     if not background_tasks_supported():
         raise RuntimeError("Project extraction currently requires Linux")
     request = preflight(project, storage)
+    for sample in request["samples"]:
+        sample["input_identity"] = file_identity(sample["path"])
     prior = None
     if retry_path is not None:
         retry_path = Path(retry_path).resolve(strict=True)
@@ -121,13 +123,16 @@ def submit(project, storage, *, retry_path=None):
             raise ValueError("Cannot retry an active batch")
         previous = json.loads(retry_path.with_name("request.json").read_text(encoding="utf-8"))
 
+        if any("input_identity" not in sample for sample in previous["samples"]):
+            raise ValueError("Old batch has no frozen input identity; start a new batch")
+
         def scientific_request(value):
             return {
                 "feature_strategy": value["feature_strategy"],
                 "parameters": value["parameters"],
                 "feature_merge_ppm": value["feature_merge_ppm"],
                 "samples": [
-                    {k: sample[k] for k in ("id", "path", "parameters")}
+                    {k: sample[k] for k in ("id", "path", "parameters", "input_identity")}
                     for sample in value["samples"]
                 ],
             }
@@ -151,10 +156,17 @@ def submit(project, storage, *, retry_path=None):
             for row in prior["samples"]:
                 if row["status"] == "succeeded":
                     output = child_path(retry_path.parent, row["output"])
+                    if not row.get("sha256") or digest_file(output) != row["sha256"]:
+                        raise ValueError("Successful batch artifact changed; start a new batch")
                     shutil.copy2(output, folder / output.name)
                     request["initial_results"].append(row)
             targets = retry_path.with_name("shared_features.npy")
             if targets.exists():
+                if (
+                    not prior.get("shared_features_sha256")
+                    or digest_file(targets) != prior["shared_features_sha256"]
+                ):
+                    raise ValueError("Shared feature artifact changed; start a new batch")
                 shutil.copy2(targets, folder / "shared_features.npy")
                 request["reuse_shared_features"] = True
         request["created_at"] = utc_now()
@@ -216,6 +228,16 @@ def run_batch(path):
             for sample in request["samples"]
         ],
     }
+
+    def check_inputs(selected=None):
+        for sample in request["samples"]:
+            if (
+                (selected is None or selected["id"] == sample["id"])
+                and "input_identity" in sample
+                and file_identity(sample["path"]) != sample["input_identity"]
+            ):
+                raise ValueError("Input changed since submission; start a new batch")
+
     previous = {r["id"]: r for r in request.get("initial_results", [])}
     state["samples"] = [previous.get(row["id"], row) for row in state["samples"]]
 
@@ -225,6 +247,7 @@ def run_batch(path):
 
     report("Preparing shared features")
     try:
+        check_inputs()
         targets = None
         base = ProcessingParameters(**request["parameters"])
         if request.get("reuse_shared_features"):
@@ -274,6 +297,9 @@ def run_batch(path):
             if not len(targets):
                 raise ValueError("No shared features detected")
             np.save(path.parent / "shared_features.npy", targets)
+        check_inputs()
+        if targets is not None:
+            state["shared_features_sha256"] = digest_file(path.parent / "shared_features.npy")
         for i, sample in enumerate(request["samples"]):
             row = state["samples"][i]
             if row["status"] in {"failed", "succeeded"}:
@@ -285,6 +311,7 @@ def run_batch(path):
             row["status"] = "running"
             report(f"Extracting {sample['name']}")
             try:
+                check_inputs(None if request["feature_strategy"] == "shared" else sample)
                 params = ProcessingParameters(**sample["parameters"])
 
                 def progress(value, message, name=sample["name"]):
@@ -322,6 +349,7 @@ def run_batch(path):
                         {**kwargs, "progress_callback": progress},
                     )
                     del exp, frame, obs
+                check_inputs(None if request["feature_strategy"] == "shared" else sample)
                 obj.file_meta.update(name=sample["name"], source_file=sample["path"])
                 for key, value in {
                     "sample_id": sample["id"],
@@ -341,6 +369,7 @@ def run_batch(path):
                     output=output.name,
                     cells=len(obj.data),
                     features=len(obj.data.columns),
+                    sha256=digest_file(output),
                 )
             except Exception as exc:
                 traceback.print_exc()

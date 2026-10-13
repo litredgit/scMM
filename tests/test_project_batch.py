@@ -119,6 +119,10 @@ def test_detached_batch_and_retry_reuse_successes(tmp_path):
     assert (path.parent / "shared_features.npy").read_bytes() == (
         retry.parent / "shared_features.npy"
     ).read_bytes()
+    with path.with_name("shared_features.npy").open("ab") as handle:
+        handle.write(b"changed")
+    with pytest.raises(ValueError, match="Shared feature artifact changed"):
+        submit(project, catalog, retry_path=path)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="Linux project workers")
@@ -136,3 +140,80 @@ def test_detached_batch_reads_unicode_request_under_ascii_locale(tmp_path, monke
     state = read_batch(path)
     assert state["status"] == "completed", (state, (path.parent / "worker.log").read_bytes())
     assert [row["name"] for row in state["samples"]] == ["对照一", "处理一"]
+
+
+def test_retry_rejects_replaced_input_and_modified_success_artifact(tmp_path):
+    from scMM.application.preview_cache import file_identity
+
+    project, catalog = setup_project(tmp_path)
+    request = preflight(project, catalog)
+    for sample in request["samples"]:
+        sample["input_identity"] = file_identity(sample["path"])
+    request["created_at"] = "test"
+    folder = project.folder / "processing" / "identity"
+    folder.mkdir()
+    write_json(folder / "request.json", request)
+    state = folder / "state.json"
+    run_batch(state)
+    succeeded = read_batch(state)["samples"][0]
+    output = folder / succeeded["output"]
+    with output.open("ab") as handle:
+        handle.write(b"changed")
+    with pytest.raises(ValueError, match="artifact changed"):
+        submit(project, catalog, retry_path=state)
+    raw = tmp_path / "a.mzML"
+    contents = raw.read_bytes()
+    raw.unlink()
+    raw.write_bytes(contents)
+    with pytest.raises(ValueError, match="unchanged input"):
+        submit(project, catalog, retry_path=state)
+
+
+def test_frozen_input_changed_before_worker_does_not_extract(tmp_path):
+    from scMM.application.preview_cache import file_identity
+
+    project, catalog = setup_project(tmp_path)
+    request = preflight(project, catalog)
+    for sample in request["samples"]:
+        sample["input_identity"] = file_identity(sample["path"])
+    request["created_at"] = "test"
+    folder = project.folder / "processing" / "changed"
+    folder.mkdir()
+    write_json(folder / "request.json", request)
+    with (tmp_path / "a.mzML").open("a") as handle:
+        handle.write("\n")
+    run_batch(folder / "state.json")
+    state = read_batch(folder / "state.json")
+    assert state["status"] == "failed" and "Input changed" in state["message"]
+    assert not list(folder.glob("*.h5ad"))
+
+
+def test_frozen_input_changed_during_extraction_does_not_publish(tmp_path, monkeypatch):
+    from scMM.application.preview_cache import file_identity
+    from scMM.file.data import CyESIData
+
+    project, catalog = setup_project(tmp_path)
+    project.manifest["feature_strategy"] = "independent"
+    request = preflight(project, catalog)
+    for sample in request["samples"]:
+        sample["input_identity"] = file_identity(sample["path"])
+    request["created_at"] = "test"
+    folder = project.folder / "processing" / "changed-during-extraction"
+    folder.mkdir()
+    write_json(folder / "request.json", request)
+    original = CyESIData.load_from_file
+
+    def changed(filename, *args, **kwargs):
+        result = original(filename, *args, **kwargs)
+        if str(filename) == project.samples[0]["path"]:
+            with open(filename, "a") as handle:
+                handle.write("\n")
+        return result
+
+    monkeypatch.setattr(CyESIData, "load_from_file", changed)
+    run_batch(folder / "state.json")
+    state = read_batch(folder / "state.json")
+    assert state["samples"][0]["status"] == "failed"
+    assert "Input changed" in state["samples"][0]["error"]
+    assert not (folder / f"{project.samples[0]['id']}.h5ad").exists()
+    assert state["samples"][1]["status"] == "succeeded"

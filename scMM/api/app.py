@@ -16,7 +16,7 @@ from scMM.application.projects import PROJECT_ROOT
 from scMM.application.storage import StorageRoot
 from scMM.application.web_workspace import WebWorkspaceService, WorkspaceError
 
-from .routers import projects, samples, storage
+from .routers import analysis, extraction, preferences, projects, raw, results, samples, storage
 
 STATIC_ROOT = Path(__file__).parent / "static"
 
@@ -94,6 +94,14 @@ def create_app(
     async def missing_key(_request, _exc):
         return error(400, "unknown_key", "所选存储或字段不存在。")
 
+    @app.exception_handler(RuntimeError)
+    async def operation_error(_request, exc):
+        return error(409, "operation_conflict", str(exc))
+
+    @app.exception_handler(ImportError)
+    async def dependency_error(_request, exc):
+        return error(400, "missing_dependency", str(exc))
+
     @app.exception_handler(OSError)
     async def storage_error(_request, exc):
         status = (
@@ -107,11 +115,19 @@ def create_app(
 
     @app.get("/api/v1/health", tags=["health"])
     def health():
-        return {"status": "ok", "frontend": "vue", "milestone": "projects"}
+        return {"status": "ok", "frontend": "vue", "milestone": "workbench"}
 
     app.include_router(projects.router)
     app.include_router(samples.router)
     app.include_router(storage.router)
+    for router in (
+        preferences.router,
+        raw.router,
+        extraction.router,
+        analysis.router,
+        results.router,
+    ):
+        app.include_router(router)
 
     if static_root is not None:
         static_root = Path(static_root)
@@ -124,6 +140,10 @@ def create_app(
         @app.get("/samples", include_in_schema=False)
         @app.get("/parameters", include_in_schema=False)
         @app.get("/results", include_in_schema=False)
+        @app.get("/raw", include_in_schema=False)
+        @app.get("/extraction", include_in_schema=False)
+        @app.get("/preprocess", include_in_schema=False)
+        @app.get("/analysis", include_in_schema=False)
         def index():
             return FileResponse(static_root / "index.html")
 

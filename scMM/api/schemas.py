@@ -82,6 +82,7 @@ class ProjectView(BaseModel):
     manifest: dict[str, Any]
     unsaved: bool
     dataset: DatasetSummary | None
+    presentation: dict[str, str] = Field(default_factory=dict)
 
 
 class WorkspaceView(BaseModel):
@@ -107,6 +108,14 @@ class FileEntry(BaseModel):
     path: str
     directory: bool
     bytes: int | None
+    role: str = ""
+    detail: str = ""
+    internal: bool = False
+    project_name: str | None = None
+    project_path: str | None = None
+    revision: int | None = None
+    modified_at: str | None = None
+    protection: str = ""
 
 
 class DirectoryView(BaseModel):
@@ -115,6 +124,8 @@ class DirectoryView(BaseModel):
     parent: str | None
     entries: list[FileEntry]
     total: int
+    latest: FileEntry | None = None
+    context: dict | None = None
 
 
 class MappingView(BaseModel):
@@ -131,7 +142,7 @@ class ParameterDefinition(BaseModel):
 
 class ConfigurationView(BaseModel):
     api_version: Literal["v1"] = "v1"
-    milestone: Literal["projects"] = "projects"
+    milestone: Literal["workbench"] = "workbench"
     storage: list[StorageView]
     results: list[StorageView]
     project_root: str

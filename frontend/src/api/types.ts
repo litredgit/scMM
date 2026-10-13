@@ -6,6 +6,7 @@ export interface Sample {
   group: string
   subject: string
   batch: string
+  parameters?: Record<string, unknown> | null
   result_only?: boolean
   metadata_unresolved?: string[]
 }
@@ -32,6 +33,7 @@ export interface ProjectView {
     feature_strategy: string
     [key: string]: unknown
   }
+  presentation: Record<string, string>
   unsaved: boolean
   dataset: DatasetSummary | null
 }
@@ -71,6 +73,14 @@ export interface FileEntry {
   path: string
   directory: boolean
   bytes: number | null
+  role?: string
+  detail?: string
+  internal?: boolean
+  project_name?: string | null
+  project_path?: string | null
+  revision?: number | null
+  modified_at?: string | null
+  protection?: string
 }
 export interface Directory {
   root: string
@@ -78,9 +88,61 @@ export interface Directory {
   parent: string | null
   entries: FileEntry[]
   total: number
+  latest?: FileEntry | null
+  context?: Partial<FileEntry> | null
 }
 export interface Mapping {
   source_key: string
   columns: string[]
   rows: { value: string; sample_id: string }[]
+}
+
+export interface DataTable {
+  columns: string[]
+  rows: Record<string, unknown>[]
+  total: number
+}
+export interface Figure {
+  data: unknown[]
+  layout: Record<string, unknown>
+}
+export interface QC {
+  notes?: string[]
+  files: DataTable
+  cells: DataTable
+  figure: Figure
+}
+export interface AnalysisInfo {
+  token: [string, number]
+  layers: string[]
+  embeddings: string[]
+  observations: Record<string, string[]>
+  history: Record<string, unknown>[]
+  results: string[]
+  live_results: string[]
+  latent_supported: boolean
+  settings: Record<string, unknown>
+  legend: string
+  figures: string[]
+}
+export interface Batch {
+  path: string
+  status: string
+  created_at: string
+  message: string
+  samples: {
+    id: string
+    name: string
+    status: string
+    cells?: number
+    features?: number
+    error?: string
+    reused_preview?: boolean
+  }[]
+}
+export interface Job {
+  id: string
+  revision: number
+  status: string
+  message: string
 }

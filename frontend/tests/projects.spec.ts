@@ -59,11 +59,11 @@ test('dataset import, mapping, CSV and snapshot reload', async ({ page }) => {
   await create(page, '导入与保存')
   await page.getByRole('button', { name: '导入已有结果', exact: true }).click()
   await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
-  await page.getByRole('button', { name: /example.h5ad/ }).click()
+  await page.getByRole('button', { name: /^▤ example.h5ad/ }).click()
   await page.getByRole('button', { name: '导入结果', exact: true }).click()
   await expect(page.getByRole('heading', { name: '结果与样本关联' })).toBeVisible()
-  await expect(page.getByLabel('映射 alpha')).not.toHaveValue('')
-  await page.getByLabel('导入样本信息 CSV').setInputFiles({
+  await expect(page.getByLabel('映射 alpha', { exact: true })).not.toHaveValue('')
+  await page.getByLabel('导入样本信息 CSV', { exact: true }).setInputFiles({
     name: 'metadata.csv',
     mimeType: 'text/csv',
     buffer: Buffer.from('name,subject,batch\nalpha,animal-1,批次A\nbeta,animal-2,批次A'),
@@ -75,7 +75,7 @@ test('dataset import, mapping, CSV and snapshot reload', async ({ page }) => {
   await expect(page.getByText('6 细胞 × 4 特征', { exact: true })).toBeVisible()
   await expect(page.getByText(/baseline.h5ad/)).toBeVisible()
   await page.getByRole('link', { name: /参数参考/ }).click()
-  await expect(page.getByRole('cell', { name: 'snr_v1', exact: true })).toHaveCount(2)
+  await expect(page.getByRole('cell', { name: 'snr', exact: true })).toHaveCount(2)
   await page.reload()
   await page
     .getByRole('link', { name: /项目首页/, exact: false })

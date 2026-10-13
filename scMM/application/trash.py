@@ -132,6 +132,10 @@ class SavedItems:
                         references.extend(_references(dict(data.uns), folder))
                     finally:
                         data.file.close()
+                # Reopening a project records its own folder as the workspace source.
+                # This provenance is not a reference to every obsolete snapshot inside it.
+                if target.is_relative_to(folder):
+                    references = [ref for ref in references if ref != folder]
                 if any(_overlaps(target, ref) for ref in references):
                     raise RuntimeError(f"结果仍被项目“{manifest['name']}”引用，不能删除")
             for state_path in (folder / "processing").rglob("state.json"):
