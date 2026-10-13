@@ -12,6 +12,10 @@
 - 开发指南新增完整能力覆盖表，区分 Python/Notebook、应用/HTTP 与 Vue：纳入时间/趋势、特征距离嵌入、双特征散点、独立结果合并、稳定性 QC、PDF、高级参数、子集适配和底层重建工具。按实际源码澄清 `data[mz]` 是最近 m/z 强度读取、concat 当前面向旧结果目录，以及 SDF 返回候选表等边界；工具级能力先定义/验证，再接界面，不恢复 Panel 或手动 RAW 转换。
 - README、文档索引、分析/参数和工作流程同步当前网页缺口及规划入口；科学定义留在主题文档，未实现功能不写成现有网页操作。重新核对原编号均在活动计划或 CHANGELOG 归档中；14 份 Markdown 的本地链接、章节锚点及围栏检查、文档回归 30 项、Git 差异检查通过。
 - 发布前本机 `PYTHONDONTWRITEBYTECODE=1 PYTHONUTF8=1 MPLCONFIGDIR=/tmp/scmm-roadmap-release-mpl .venv/bin/python -m pytest -W error -q -p no:cacheprovider -o faulthandler_timeout=60` 完整 **346 项通过（44.47s）**；全仓 Ruff/格式、TypeScript/Prettier、暂存 Vite 构建、离线锁检查及 sdist/wheel 构建/内容检查通过。前端源代码未变，暂存构建与当前服务资源一致；沿用清理阶段相同功能代码的无 Panel 环境 7 项浏览器流程证据。本轮未做新的压力测试、真实实验或数值算法验收，远端 CI 和生产结果在执行后另记。
+- 已提交并推送 `dev` 的 `f007520`，连同清理提交 `4f3f08e` 进入本轮发布。生产更新前 worktree 干净、无 5006 连接、未保存/繁忙工作区、未结束任务或处理 worker；使用 `python3 scripts/scmm_env.py release` 将 `main` 从 `92bcc76` 快进到 `f007520`，锁定同步依赖/前端并通过健康检查后推送 `main`。生产已移除 Panel/Bokeh 等 13 个专用依赖；额外清理旧 UI 目录遗留的 15 个被忽略字节码文件，未修改跟踪代码或实验数据。
+- 5006 `scmm-ui.service` 于 **2026-10-13 北京时间 14:42:57（06:42:57 UTC）** 更新启动，PID **895568**、active/running、重启计数 0；实际命令为生产 `.venv/bin/scmm-web`，cwd、项目根、缓存/预设/临时目录及 UTF-8 环境正确，首页 HTTP 200、health 为 Vue/workbench，未保存/繁忙工作区均为 0。5007 PID **884281** 与启动时间未变，首页和 API 健康；发布前后 107 份保存清单/H5AD 的大小、修改时间及清单 SHA-256 均一致。
+- 实际 5006 只读 Chromium 检查六步导航、1440/700/390px 无横向溢出，页面脚本和失败请求均为 0；仅创建并释放空工作区，未打开或保存实验项目。发布结果以纯 CHANGELOG 提交同步 dev/main，不再次重启服务；规划中的新功能仍留待新会话从 M1 开始。
+- 发布版本 `f007520` 的 [dev CI](https://github.com/litredgit/scMM/actions/runs/38358159255) 与 [main CI](https://github.com/litredgit/scMM/actions/runs/38358288240) 均为 **success**。只读核对上轮 `92bcc76` CI 失败来自 UTF-8 测试直接调用本机 5006 空闲检查，清理提交已将该测试的 web_idle 隔离；本次远端通过作为该修正的证据。最终纯记录提交的 CI 与发布版本分别追踪，不将刚触发的检查记为通过。
 
 ### Vue 单一入口与旧代码清理 — 2026-10-13
 
