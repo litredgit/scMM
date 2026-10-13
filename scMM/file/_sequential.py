@@ -24,7 +24,6 @@ def load_directory(
     *,
     feature_strategy="shared",
     feature_merge_ppm=10.0,
-    msconvert_path=None,
     raw_timezone=None,
     dtype=np.float64,
     ppm_tol=10.0,
@@ -39,10 +38,6 @@ def load_directory(
     mz_range=(100.0, 1000.0),
     **preprocess,
 ):
-    if msconvert_path is not None:
-        raise ValueError(
-            "Automatic RAW conversion was removed; use ThermoRawReader or convert explicitly"
-        )
     load_options = {"raw_timezone": raw_timezone} if raw_timezone is not None else {}
     if feature_strategy not in {"shared", "independent"}:
         raise ValueError("feature_strategy must be shared or independent")

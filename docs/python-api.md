@@ -47,8 +47,8 @@ reader 保留完整 profile，遇到 centroid 扫描报错；现有下游提峰�
 默认含 RAW 的 legacy 目录串行，纯 XML 沿用全 CPU；显式 `n_jobs` 覆盖；
 shared/independent 仍串行。独立的 `batch_process()` 旧助手仍仅扫描 XML。
 
-`msconvert_path` / `--msconvert` 不再用于自动 RAW 转换；如确需转换，请在处理外显式
-调用 `scMM.file.msconvert.convert_raw()`。不支持 Thermo RAW 的环境仍可直接读取已有 mzML。
+项目不提供 RAW 格式转换工具；旧 `msconvert_path` / `--msconvert` 参数已移除。
+不支持 Thermo RAW 的环境仍可直接读取已有 mzML/mzXML。
 安装位置、协议、结果差异和验证见 [Thermo RAW 技术说明](thermo-raw.md)。
 网页项目入口现亦支持 Thermo profile RAW，复用本节后台路径。
 

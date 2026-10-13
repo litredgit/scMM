@@ -146,7 +146,7 @@ def test_development_update_guard_without_systemd(monkeypatch):
 
 def test_debug_launch_uses_development_interpreter_and_paths(worktrees, monkeypatch):
     values, *_ = worktrees
-    values.update(raw=Path("/raw"), address="127.0.0.1", origins=["localhost:5007"])
+    values.update(raw=Path("/raw"), address="127.0.0.1")
     calls = []
     monkeypatch.setattr(manager.os, "chdir", lambda *_: None)
     monkeypatch.setattr(manager.os, "execve", lambda *args: calls.append(args))
@@ -154,7 +154,7 @@ def test_debug_launch_uses_development_interpreter_and_paths(worktrees, monkeypa
     executable, args, env = calls[0]
     assert executable == str(values["dev"] / ".venv/bin/python")
     assert args[1:6] == ["-m", "debugpy", "--listen", "127.0.0.1:5678", "--wait-for-client"]
-    assert args[6] == str(values["dev"] / ".venv/bin/scmm-ui")
+    assert args[6] == str(values["dev"] / ".venv/bin/scmm-web")
     assert args[args.index("--port") + 1] == "5007"
     assert args[args.index("--project-root") + 1] == str(values["state"] / "dev/results")
     assert env["SCMM_PREFERENCES"] == str(values["state"] / "dev/preferences.json")
@@ -172,6 +172,32 @@ def test_home_paths_expand_for_preferences_and_systemd(tmp_path, monkeypatch):
     assert preferences_path() == tmp_path / "dev/preferences.json"
     assert manager.unit_path(tmp_path / "scMM-prod") == "%h/scMM-prod"
     assert manager.unit_path(Path("/opt/scmm")) == "/opt/scmm"
+
+
+def test_existing_vue_config_migrates_without_retaining_frontend_switches(tmp_path):
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"prod_frontend": "vue", "dev_frontend": "vue", "origins": ["*"]}))
+    values = manager.settings(config)
+    assert not {"prod_frontend", "dev_frontend", "origins"} & values.keys()
+    config.write_text(json.dumps({"prod_frontend": "panel"}))
+    with pytest.raises(ValueError, match="Only Vue"):
+        manager.settings(config)
+
+
+@pytest.mark.parametrize("health", [[], {}, {"frontend": "unknown"}])
+def test_invalid_health_never_assumes_idle(monkeypatch, health):
+    from io import BytesIO
+
+    class Response(BytesIO):
+        headers: ClassVar[dict] = {"Content-Type": "application/json"}
+
+    monkeypatch.setattr(
+        manager.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: Response(json.dumps(health).encode()),
+    )
+    with pytest.raises(RuntimeError, match="invalid health response"):
+        manager.web_idle(5006)
 
 
 def test_vue_unsaved_workspaces_block_restart_without_sockets(monkeypatch):

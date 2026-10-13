@@ -17,7 +17,7 @@ Notebook 运行开关与网页参数默认值见 [参数参考](parameters.md)�
 这些接口的默认值与输出语义不同，不能互换解释。时间轨迹主要通过 Python/Notebook 使用；
 上游实验轨迹及概率空间 R2/Q2 的定义见 [方法依据](#暂缓方法的依据)，恢复条件见 [roadmap](roadmap.md#明确暂缓)。
 
-Vue/FastAPI 和 Panel 的网页分析复用同一应用层与 Plotly 图形构建，不新增算法或改变统计定义。
+Vue/FastAPI 网页分析使用共享应用层与 Plotly 图形构建；计算仍在 Python 后端完成。
 Vue 按分析面板组织控件，矩阵和可执行模型只保存在后端；报告分页展示，完整下载不受分页影响。
 六步操作及重载边界见[Vue 操作](workflow.md#vue-网页项目与样本)。
 

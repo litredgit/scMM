@@ -7,18 +7,17 @@
 
 ## 代码结构
 
-Vue/FastAPI 网页按功能组织完整六步交互，Panel 保留兼容入口；前端页面在仓库根 `frontend/src/features/`，
+Vue/FastAPI 网页按功能组织完整六步交互；前端页面在仓库根 `frontend/src/features/`，
 共享组件、路由、请求客户端及 Pinia 状态分别在相邻 `components/`、`router/`、`api/`、`stores/`。
 `scMM/api/routers/` 按项目、样本、存储、原始谱、提取、分析、结果和预设拆分 HTTP 边界，
 `schemas.py`、`workflow_schemas.py` 定义接口契约并校验科学参数。
-`application/web_workspace.py` 持有独立浏览器工作区、写入修订及事务候选；不依赖 Panel 或 FastAPI。
+`application/web_workspace.py` 持有独立浏览器工作区、写入修订及事务候选；不依赖前端或 FastAPI。
 `web_raw.py`、`web_analysis.py`、`web_results.py` 分别编排原始谱/任务、分析及下载/管理。
-`plot/presentation.py`、`plot/raw.py`、`plot/workbench.py` 提供不依赖 Panel 的共享图形构建，两个网页入口复用。
-矩阵与模型留在 Python 应用层，前端只接收摘要和展示数据。Panel 入口继续用于功能对照。
+`plot/presentation.py`、`plot/raw.py`、`plot/workbench.py` 提供网页使用的共享图形构建。
+矩阵与模型留在 Python 应用层，前端只接收摘要和展示数据。`api/cli.py` 是唯一网页启动入口。
 
-Panel 入口为 `ui/app.py` 的项目工作台；`ui/project_views.py` 管理项目原始谱展示，
-`ui/layout.py` 管理响应式布局和图形尺寸，`ui/help.py` 管理中文悬停解释。项目持久化与批次编排分别在
-`application/projects.py` 和 `application/project_batch.py`，RAW 流读取在 `file/readers/`。
+项目持久化与批次编排分别在 `application/projects.py` 和 `application/project_batch.py`，
+RAW 流读取在 `file/readers/`。
 下列树保留其他模块职责，使用流程以 [当前网页指南](workflow.md) 为准。
 
 ```text
@@ -40,21 +39,11 @@ scMM/
 │   ├── tasks.py           # 单任务锁、原子状态、日志和进程管理
 │   ├── worker.py          # 独立处理进程、运行清单和质量产物编排
 │   └── quality.py         # 质量统计、PCA/UMAP 及持久化文件
-├── ui/
-│   ├── cli.py             # scmm-ui 服务启动入口
-│   ├── app.py             # 项目首页及六步工作流
-│   ├── project_views.py   # 项目原始谱展示与预览编排
-│   ├── raw_components.py  # 可复用的原始谱及分析控件
-│   ├── file_browser.py    # 根目录内的浏览、搜索与跨目录选择
-│   ├── help.py            # 中文参数悬停解释
-│   ├── presentation.py    # 表格、图形与数值显示
-│   ├── downloads.py       # 挂载页面的下载缓存清除兼容
-│   ├── preflight.py       # 实际参数摘要、分组参数与样本差异
-│   ├── saved_items.py     # 已保存项目/结果管理及回收区交互
-│   ├── analysis_plots.py  # 分析结果图形
-│   ├── layout.py          # 响应式布局和图表比例
-│   ├── workbench.py       # 分析页面控件
-│   └── processing.py      # 旧处理面板及共享处理控件
+├── api/
+│   ├── cli.py             # scmm-web 服务启动入口
+│   ├── app.py             # 同源静态资源、HTTP 边界及单进程工作区
+│   ├── routers/           # 按功能拆分的版本化接口
+│   └── schemas.py         # 请求/响应契约与参数校验
 ├── file/
 │   ├── io.py              # 原始文件分发、XML 完整性与稳定导出
 │   ├── readers/           # Thermo RAW 二进制流、可重开 source 与生命周期
@@ -80,14 +69,14 @@ scMM/
     ├── _trajectory.py     # Palantir、窗口轨迹、速度和趋势统计
     ├── _trend_clustering.py # 趋势距离与聚类算法
     ├── embedding.py       # 轻量降维接口
-    └── msplot.py          # EIC、谱和调试图
+    └── msplot.py          # EIC 与质谱绘图
 ```
 
 `tools/thermo_raw_reader/` 保存 C# helper 与 NuGet 锁文件；`tools/validate_thermo_*.py`
 用于真实 RAW 对照，报告位于 `docs/validation/`。厂商组件不随 Python 包安装。
 
 测试位于 `tests/`，覆盖数据保存/加载、对齐、去同位素、归一化、谱 I/O、输入/输出路径边界、
-原始谱预览、后台任务、项目保存/重载、多样本审核、RAW 协议/流式处理、质量产物、网页控件、绘图、轨迹和 CLI。
+原始谱预览、后台任务、项目保存/重载、多样本审核、RAW 协议/流式处理、质量产物、HTTP 接口、Vue 浏览器交互、绘图、轨迹和 CLI。
 
 ## 开发环境
 
@@ -215,12 +204,12 @@ PY
 - 绘图入口只负责编排；输入整理、类别解析、坐标轴配置和标注选择应拆成可单独测试的模块级辅助
   函数。不得通过 `pop()` 等操作修改调用方传入的参数字典。
 - 网页控件不得直接读取任意客户端路径。所有选择必须经过 `StorageCatalog` 的配置根目录和真实路径
-  双重校验；TIC/EIC 等领域计算保留在 `application/`，Panel 回调只管理会话状态和展示。
+  双重校验；TIC/EIC 等领域计算保留在 `application/`，网页页面与路由只管理边界和展示。
 - 旧任务输出通过 `OutputCatalog` 限制目录；当前项目通过 `ProjectStore` 固定根目录及产物路径校验，
   保存时先写快照、后发布清单，并检查修订冲突。批量提取必须在独立 worker 中执行，
   使用持久状态恢复。细胞预览使用 spawn 独立进程，读取、共同特征、完整提取和缓存均在进程中完成；
   网页轮询 future 与阶段状态，核对会话项目、样本/参数代次及文件身份后接收结果。
-  子进程不得修改活跃项目或 Panel/Bokeh 对象；失败、关闭和过期结果不能启用下载或确认。
+  子进程不得修改活跃项目或前端对象；失败、关闭和过期结果不能启用下载或确认。
   任务完成后释放工作进程；工作进程重新读取原始文件，页面已加载的原始谱仍保留，需计入额外内存。
   每会话只运行一个预览，跨会话与提取批次的资源限制尚未统一。
   原始文件打开、单扫描、分析与保存仍同步，剩余后台化见[待办清单](roadmap.md)。

@@ -46,7 +46,6 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         ms_peak_snr_threshold: float = 10.0,
         prominence_ratio: float | None = None,
         distance: int = 3,
-        msconvert_path=None,
         mz_range=(100.0, 1000.0),
         raw_timezone=None,
         **preprocess_kwds,
@@ -62,7 +61,6 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
             ms_peak_snr_threshold=ms_peak_snr_threshold,
             prominence_ratio=prominence_ratio,
             distance=distance,
-            msconvert_path=msconvert_path,
             mz_range=mz_range,
             raw_timezone=raw_timezone,
         )
@@ -83,7 +81,6 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         distance: int = 3,
         processing_strategy: str = "legacy",
         feature_merge_ppm: float = 10.0,
-        msconvert_path=None,
         mz_range=(100.0, 1000.0),
         raw_timezone=None,
         **preprocess_kwds,
@@ -95,7 +92,6 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
                 ref_mz,
                 feature_strategy=processing_strategy,
                 feature_merge_ppm=feature_merge_ppm,
-                msconvert_path=msconvert_path,
                 mz_range=mz_range,
                 raw_timezone=raw_timezone,
                 dtype=dtype,
@@ -107,10 +103,6 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
                 distance=distance,
                 n_jobs=n_jobs,
                 **preprocess_kwds,
-            )
-        if msconvert_path is not None:
-            raise ValueError(
-                "Automatic RAW conversion was removed; use ThermoRawReader or convert explicitly"
             )
         state = load_raw_directory(
             dir_path,

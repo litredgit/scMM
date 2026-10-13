@@ -125,25 +125,54 @@ def test_raw_web_reader_closes_on_early_scan_and_preview_error(raw_pair, monkeyp
     assert all(r.process.poll() is not None and r.process.stdout.closed for r in readers)
 
 
-def test_raw_web_project_entry(raw_pair, tmp_path, monkeypatch):
-    from scMM.application import StorageRoot
-    from scMM.ui.app import ProjectWorkspace
+def test_raw_vue_project_entry_and_reader_failure(raw_pair, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
 
-    raw, _ = raw_pair
-    ui = ProjectWorkspace((StorageRoot("data", tmp_path),), project_root=tmp_path)
-    ui.name.value = "RAW UI"
-    ui._create()
-    ui.files.value = [str(raw)]
-    ui._add_files()
-    ui._open_raw()
-    assert ui.components.preview.summary.scan_count == 31
-    assert not ui.components.tic.empty
-    monkeypatch.setattr(thermo_raw, "reader_command", lambda: ["/nonexistent/scmm-reader"])
-    with pytest.raises(ValueError, match="原始文件读取失败"):
-        ui._open_raw()
-    assert ui.components.preview is None
-    assert ui.components.tic.empty
-    assert ui.components.cell_download.disabled
+    from scMM.api.app import create_app
+    from scMM.application import StorageRoot
+
+    raw, xml = raw_pair
+    projects = tmp_path / "projects"
+    projects.mkdir()
+    monkeypatch.setenv("SCMM_PREFERENCES", str(tmp_path / "preferences.json"))
+    app = create_app((StorageRoot("data", tmp_path),), project_root=projects, static_root=None)
+    with TestClient(app, headers={"X-SCMM-Client": "web"}) as client:
+        identity = client.post("/api/v1/workspaces").json()["workspace_id"]
+        headers = {"X-SCMM-Workspace": identity}
+        client.post(
+            "/api/v1/workspace/project", headers=headers, json={"revision": 0, "name": "RAW"}
+        )
+        added = client.post(
+            "/api/v1/workspace/samples",
+            headers=headers,
+            json={"revision": 1, "root": "data", "paths": [str(raw)]},
+        )
+        assert added.status_code == 200, added.text
+        sample_id = added.json()["project"]["manifest"]["samples"][0]["id"]
+        opened = client.post(
+            "/api/v1/workspace/raw/open",
+            headers=headers,
+            json={"revision": 2, "sample_id": sample_id},
+        )
+        assert opened.status_code == 200, opened.text
+        assert opened.json()["value"]["summary"]["scan_count"] == 31
+        plot = client.post(
+            "/api/v1/workspace/raw/plot",
+            headers=headers,
+            json={"sample_id": sample_id, "kind": "tic"},
+        )
+        assert plot.status_code == 200 and plot.json()["figure"]["data"]
+        before = client.get("/api/v1/workspace", headers=headers).json()
+        monkeypatch.setattr(thermo_raw, "reader_command", lambda: ["/nonexistent/scmm-reader"])
+        failed = client.post(
+            "/api/v1/workspace/raw/open",
+            headers=headers,
+            json={"revision": before["revision"], "sample_id": sample_id},
+        )
+        assert failed.status_code == 409, failed.text
+        assert failed.json()["error"]["code"] == "operation_conflict"
+        assert client.get("/api/v1/workspace", headers=headers).json() == before
+        assert set(tmp_path.glob("*.mzML")) == {xml}
 
 
 @pytest.mark.parametrize("strategy", ["shared", "independent"])
@@ -288,19 +317,14 @@ def test_alignment_does_not_retain_raw_spectra():
     assert obs.rt.tolist() == [float(i) for i in range(30) if i != 1]
 
 
-def test_missing_reader_never_calls_converter(tmp_path, monkeypatch):
-    from scMM.file import msconvert
-
+def test_missing_reader_fails_without_creating_converted_files(tmp_path, monkeypatch):
     raw = tmp_path / "missing.RAW"
     raw.touch()
     monkeypatch.setenv("SCMM_THERMO_READER", str(tmp_path / "not-installed"))
 
-    def forbidden(*args, **kwargs):
-        pytest.fail("implicit conversion")
-
-    monkeypatch.setattr(msconvert, "convert_raw", forbidden)
     with pytest.raises(ThermoRawError, match="not installed"):
         CyESIData.load_from_file(raw, **OPTIONS)
+    assert list(tmp_path.iterdir()) == [raw]
 
 
 def test_legacy_raw_default_is_serial(raw_pair, tmp_path, monkeypatch):

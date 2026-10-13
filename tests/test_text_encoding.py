@@ -102,8 +102,9 @@ import sys
 from pathlib import Path
 from scripts import scmm_env as manager
 values = manager.settings(Path(sys.argv[1]))
-assert len(values['origins']) == 1
+assert 'origins' not in values
 manager.run = lambda *args, **kwargs: ''
+manager.web_idle = lambda _port: None
 manager.idle(values)
 env, _ = manager.environment(values, 'dev')
 assert env['PYTHONUTF8'] == '1'

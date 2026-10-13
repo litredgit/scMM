@@ -100,7 +100,7 @@ def save_quality_report(report: QualityReport, result_path: str | Path) -> None:
 
 
 def load_quality_report(result_path: str | Path) -> QualityReport:
-    """Load quality artifacts without recomputing an embedding in Panel."""
+    """Load quality artifacts without recomputing an embedding."""
     root = Path(result_path)
     with (root / "quality-summary.json").open(encoding="utf-8") as handle:
         payload = json.load(handle)

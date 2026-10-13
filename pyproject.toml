@@ -45,11 +45,6 @@ cluster = [
     "networkx>=3.2",
     "python-igraph>=0.11",
 ]
-ui = [
-    "panel>=1.8,<2",
-    "plotly>=6,<7",
-    "umap-learn>=0.5",
-]
 notebook = [
     "ipykernel>=6.29",
     "jupyterlab>=4.2",
@@ -76,7 +71,6 @@ dev = [
 
 [project.scripts]
 scmm-process = "scMM.cli:main"
-scmm-ui = "scMM.ui.cli:main"
 scmm-web = "scMM.api.cli:main"
 
 [tool.setuptools.package-data]
@@ -110,5 +104,3 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "scMM/plot/_trajectory.py" = ["E741"]
-"scMM/ui/app.py" = ["RUF001"]
-"scMM/ui/processing.py" = ["RUF001"]

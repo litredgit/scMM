@@ -1,6 +1,6 @@
 """Explicit, isolated browser workspaces for HTTP clients.
 
-No Panel objects or HTTP types live here. A revision guards every mutation;
+No frontend objects or HTTP types live here. A revision guards every mutation;
 project saves retain the existing cross-process manifest conflict check.
 """
 # ruff: noqa: RUF001
@@ -83,7 +83,7 @@ def project_candidate(project):
 
 
 def sync_metadata(project):
-    """Invalidate reports and saved plots using the same dependencies as Panel."""
+    """Invalidate reports and saved plots using their recorded data dependencies."""
     before = set(project.workspace.results)
     changed = project.workspace.sync_sample_metadata(
         project.samples,

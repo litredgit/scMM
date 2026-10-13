@@ -37,7 +37,7 @@ reader 默认查找用户目录中的部署文件，也可用 `SCMM_THERMO_READE
 `SCMM_DOTNET`（运行程序路径）指定。采集时区默认 `Asia/Shanghai`，可通过
 `raw_timezone` / `SCMM_RAW_TIMEZONE` 覆盖。依赖版本、构建步骤、部署路径和验证证据见
 [Thermo RAW 技术说明](thermo-raw.md)。不会在直接读取失败时自动转换 mzML；
-旧 `--msconvert` 参数非空时会提示迁移错误。
+旧 `--msconvert` / `msconvert_path` 参数及手动转换模块已移除。
 
 ## 使用 Notebook
 
@@ -60,7 +60,6 @@ VS Code 也可直接选择仓库内的 `.venv/bin/python`。Notebook 的功能�
 | `plot` | Matplotlib/Seaborn、UMAP、Palantir 和轨迹图 |
 | `cluster` | Leiden 与 Louvain 聚类 |
 | `supervised` | 监督学习、SMOTE 和 SHAP |
-| `ui` | Panel 引导式网页、Plotly 原始谱/质量图和 UMAP 质量检查 |
 | `web` | FastAPI/Uvicorn、Plotly、Matplotlib、NetworkX、UMAP 及兼容依赖；Vue 构建工具由 npm 单独管理 |
 | `notebook` | JupyterLab 与项目内核 |
 | `dev` 依赖组 | pytest、Ruff、构建与覆盖率；不进入发布包依赖 |
@@ -75,7 +74,7 @@ uv sync --locked --no-dev
 
 ```bash
 uv sync --locked --extra plot --extra cluster
-uv sync --locked --extra ui
+uv sync --locked --extra web
 ```
 
 仓库开发和 PR 验证统一使用 `uv sync --locked --all-extras --dev`，确保 notebook、分析和网页
@@ -86,7 +85,7 @@ uv sync --locked --extra ui
 ```bash
 uv run --locked python -c "import scMM, pyopenms, anndata; print('scMM environment ready')"
 uv run --locked scmm-process --help
-uv run --locked scmm-ui --help
+uv run --locked scmm-web --help
 uv run --locked python -m pytest -q
 ```
 
@@ -116,17 +115,17 @@ npm --prefix frontend run build
 uv run --locked scmm-web --storage "原始数据=/mnt/ms-data" --port 5007
 ```
 
-`scmm-web` 等价于 `scmm-ui --frontend vue`；`scmm-ui` 默认仍为 Panel。
+`scmm-web` 是唯一网页命令；旧 `scmm-ui`、`--frontend` 与 `--allow-websocket-origin` 已移除。
 静态资源构建到 `scMM/api/static/`，与 `/api/v1` 接口由同一个服务提供；运行服务不需要 Node 进程。
 `--project-root`、`--storage`、`--output`、`--address` 及 `--config` 延用现有路径和配置规则。
-Vue 不使用 Panel 的 WebSocket origin 参数，修改接口要求同源浏览器请求；不新增账户体系。
+修改接口要求同源浏览器请求；不新增账户体系。
 API 仅运行一个 worker，不能直接增加 Uvicorn workers；工作区在该进程内隔离管理。
 
 构建文件不提交 Git，但在构建 Python sdist/wheel 前必须生成；发行包包含静态页面和资源。
 源码包包含前端源文件及锁文件，可重新构建。仅安装 Python 包时无需本机 Node；核心 API/CLI 不依赖网页 extra。
 缺少 Vue 构建产物时启动明确报错。当前能力见[Vue 操作说明](workflow.md#vue-网页项目与样本)。
 
-### Panel 网页
+### 访问与路径配置
 
 网页面向实验室内网使用。项目根目录默认为 `~/data/results`，可用 `--project-root` 指定，必须存在且可写。
 `--storage` 可重复指定已挂载的服务器目录，Linux 上 `~/data` 存在时会另加入“云盘”。
@@ -139,19 +138,18 @@ API 仅运行一个 worker，不能直接增加 Uvicorn workers；工作区在�
 本地访问配置：
 
 ```bash
-uv run --locked scmm-ui --storage "原始数据=/mnt/ms-data" --port 5006 --show
+uv run --locked scmm-web --storage "原始数据=/mnt/ms-data" --port 5006 --show
 ```
 
-局域网或 Tailscale 访问（将 `scmm-node:5006` 换为实际访问的主机名或 IP 与端口）：
+局域网或 Tailscale 访问：
 
 ```bash
-uv run --locked scmm-ui \
+uv run --locked scmm-web \
   --storage "原始数据=/mnt/ms-data" \
-  --address 0.0.0.0 --port 5006 \
-  --allow-websocket-origin scmm-node:5006
+  --address 0.0.0.0 --port 5006
 ```
 
-从客户端打开 `http://scmm-node:5006`。允许的 origin 可重复指定；防火墙及 Tailscale 路由由部署环境管理。
+从客户端打开 `http://scmm-node:5006`。防火墙及 Tailscale 路由由部署环境管理。
 外部默认参数用 `--config workbench.json` 或 `SCMM_UI_CONFIG` 配置，格式见[参数参考](parameters.md#网页默认参数)。
 Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；缺少 fcntl 的最小兼容不代表完整 Windows 支持。
 
@@ -184,17 +182,12 @@ Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；
 Git、uv、systemd 和 `ss`；包含 Vue 源码的版本同步时还需 Node.js/npm 构建前端，服务运行不启动 Node。
 scMM 本身仍使用 `.venv` 中的 Python 3.12。
 配置默认由上述路径推导；可在 `~/.config/scmm/environments.json` 覆盖
-`dev`、`prod`、`raw`、`prod_results`、`state`、`address`、`origins`、`dev_frontend`、`prod_frontend`，或用 `--config` 指定文件。
-`dev_frontend` 默认 `vue`；可设为 `panel` 使用兼容入口。为兼容旧部署，未配置的
-`prod_frontend` 仍默认 `panel`；生产使用完整 Vue 工作台时，在配置文件中明确设置：
-
-```json
-{"prod_frontend": "vue"}
-```
-
-保留配置文件中的其他已有键。修改后按空闲检查要求执行发布流程或重启相应服务；
-回滚代码时同时核对所需前端配置，代码回滚不会恢复此本机配置。默认 CLI 入口仍兼容 Panel。
-现有访问配置沿用 `0.0.0.0` 和 origin `*`；网络访问策略仍见 [NET-01](roadmap.md#工程改进待设计与实现)。
+`dev`、`prod`、`raw`、`prod_results`、`state`、`address`，或用 `--config` 指定文件。
+开发和生产均通过 `scmm-web` 启动 Vue；用户级服务名称继续为 `scmm-dev.service` / `scmm-ui.service`。
+已有配置中的 `dev_frontend: "vue"`、`prod_frontend: "vue"` 和 `origins` 可读取但不再参与启动，
+可从配置中移除；指定其他前端会明确报错。现有访问地址默认沿用 `0.0.0.0`，网络范围仍见
+[NET-01](roadmap.md#工程改进待设计与实现)。
+稳定启动器更新后仅支持含 `scmm-web` 的 Vue 版本；如需回滚更早的网页入口，须同时恢复其匹配的启动器。
 配置与运行数据不提交到 Git。不同用户/机器先创建对应 worktree，再安装服务：
 
 ```sh

@@ -24,6 +24,8 @@ QC 图例和精度显示、H5AD 分类管理、最新结果预选、SNR 唯一�
 已获用户提交、推送及部署授权，验收与发布进展见
 [本轮记录](../CHANGELOG.md#表格与响应式布局验收及生产发布--2026-10-12)。
 
+移除 Panel、手动 RAW 转换和旧调试辅助函数、保留 Vue 六步功能的清理阶段已于 2026-10-13 通过用户验收；按本轮指令仅本地提交、不发布，见 [CHANGELOG](../CHANGELOG.md)。
+
 ## 优先验证与发布核对
 
 本轮六步布局、单扫描自动显示、网页 SNR 默认值、北京时间命名、项目/结果回收区及特征/聚类着色已通过用户验收，并获准发布生产，见
@@ -51,29 +53,29 @@ QC 图例和精度显示、H5AD 分类管理、最新结果预选、SNR 唯一�
 
 | 编号 / 相关模块 | 当前基础与剩余工作 | 验收条件 |
 |---|---|---|
-| PERF-01：`application/cell_preview.py`、`application/raw_preview.py`、`application/workbench.py`、`ui/app.py` | 细胞预览已移入独立进程并批量构造窗口图形，待用户通过反代专项验收；单扫描自动显示已通过本轮界面验收，RAW 靠后扫描仍需顺序遍历；原始文件打开、分析和保存仍同步 | 预览运行状态可见，重复提交受阻，参数/样本/文件改变后旧结果不应用，失败可重试；反代真实样本专项证据仍待补充，其他后台化先测量瓶颈 |
+| PERF-01：`application/cell_preview.py`、`application/raw_preview.py`、`application/workbench.py`、`application/web_workspace.py` | 细胞预览已移入独立进程并批量构造窗口图形，待用户通过反代专项验收；单扫描自动显示已通过本轮界面验收，RAW 靠后扫描仍需顺序遍历；原始文件打开、分析和保存仍同步 | 预览运行状态可见，重复提交受阻，参数/样本/文件改变后旧结果不应用，失败可重试；反代真实样本专项证据仍待补充，其他后台化先测量瓶颈 |
 | VAL-05：`file/readers/`、`file/_spectrum.py`、`file/_alignment.py`、`application/project_batch.py` | 已有批次阶段状态；补充读取、合谱、对齐的细粒度进度 | 不改变数值与失败/资源回收语义，不把阶段比例解释为 ETA |
 
 ### 分析与统计解释
 
 | 编号 / 相关模块 | 当前基础与剩余工作 | 验收条件 |
 |---|---|---|
-| STAT-01：`analysis/statistics.py`、`analysis/supervised.py`、`ui/workbench.py` | 已有分组 holdout/CV、类别覆盖和 SMOTE 样本量检查；复核独立来源不足及上游插补/选特征泄漏的提示与门禁 | 覆盖独立来源不足及上游预处理情形，明确细胞级探索的解释边界；分组划分不能自动消除预处理泄漏 |
+| STAT-01：`analysis/statistics.py`、`analysis/supervised.py`、`application/web_analysis.py` | 已有分组 holdout/CV、类别覆盖和 SMOTE 样本量检查；复核独立来源不足及上游插补/选特征泄漏的提示与门禁 | 覆盖独立来源不足及上游预处理情形，明确细胞级探索的解释边界；分组划分不能自动消除预处理泄漏 |
 
 ### 部署与环境
 
 | 编号 / 相关模块 | 当前基础与剩余工作 | 验收条件 |
 |---|---|---|
 | ENV-01：`tools/thermo_raw_reader/`（仓库根）、`file/readers/thermo_raw.py` | Python 已按 main/dev worktree 与独立 `.venv` 隔离；外部 .NET/厂商组件仍需干净机器复现 | 按安装说明部署、运行并核对缺失依赖诊断，不能仅以本机已有环境通过替代 |
-| NET-01：`ui/cli.py`、`scripts/scmm_env.py`（仓库根） | 现有部署沿用 WebSocket origin `*`；允许的主机名/IP 和访问范围需先由用户确定 | 按确定的范围验证连接和拒绝规则 |
+| NET-01：`api/cli.py`、`scripts/scmm_env.py`（仓库根） | 当前 Vue 修改接口检查同源，部署默认监听 `0.0.0.0`；允许的主机名/IP 和网络访问范围需先由用户确定 | 按确定的范围验证连接和拒绝规则 |
 
 ## 可选体验与输出改进
 
 | 编号 / 相关模块 | 范围与边界 |
 |---|---|
-| UI-07：`application/workbench.py`、`ui/app.py` | 开放工作台 DBSCAN `eps`/`min_samples` 和图聚类 `resolution`；当前固定为 0.5/5/1，降维参数已开放。新增参数须验证合法性与完整溯源，已有输出键不可覆盖 |
-| UI-06：`ui/layout.py`、`ui/app.py`、`application/projects.py` | 评估自动保存及未应用表单保护；按本轮约定移除离页确认，当前仍需主动保存，先明确与快照/恢复起点的关系 |
-| REPORT-01：`application/quality.py`、`ui/app.py` | 评估网页一键排版实验 PDF；当前已有 H5AD、表格、图和 JSON，后端 QC PDF 不等于完整实验报告 |
+| UI-07：`application/workbench.py`、`application/web_workspace.py` | 开放工作台 DBSCAN `eps`/`min_samples` 和图聚类 `resolution`；当前固定为 0.5/5/1，降维参数已开放。新增参数须验证合法性与完整溯源，已有输出键不可覆盖 |
+| UI-06：`application/web_workspace.py`、`application/projects.py` | 评估自动保存及未应用表单保护；按本轮约定移除离页确认，当前仍需主动保存，先明确与快照/恢复起点的关系 |
+| REPORT-01：`application/quality.py`、`application/web_workspace.py` | 评估网页一键排版实验 PDF；当前已有 H5AD、表格、图和 JSON，后端 QC PDF 不等于完整实验报告 |
 
 ## 明确暂缓
 

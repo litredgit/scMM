@@ -10,7 +10,6 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 
 | 能力 | 使用说明 |
 |---|---|
-| 六步项目网页、多样本信息、参数预检、提取审核、主动保存及可恢复删除 | [当前网页指南](docs/workflow.md) |
 | Vue/FastAPI 六步网页：原始谱、提取审核、预处理、分析、图表与结果保存 | [Vue 网页操作](docs/workflow.md#vue-网页项目与样本) |
 | 持久批处理、共同/独立特征、失败继续、停止后续样本和重试 | [多样本流程](docs/workflow.md) |
 | Thermo profile RAW 直接读取，接入 Python、CLI、目录处理及网页 | [RAW 依赖与真实样本验收](docs/thermo-raw.md) |
@@ -58,8 +57,6 @@ Python 调用、保存重载和目录处理见 [API 与批处理](docs/python-ap
   `uv sync` 不安装厂商组件，详见[安装说明](docs/installation.md#thermo-raw-额外依赖)。
 - 核心依赖：PyOpenMS、NumPy、pandas、SciPy、scikit-learn、AnnData。
 - 可选分析：Matplotlib、Seaborn、UMAP、Palantir、Leiden/Louvain。
-- 网页 UI：Panel、Plotly、UMAP；执行完整同步时已包含，也可单独使用
-  `uv sync --locked --extra ui`。
 - Vue 网页：Vue 3、TypeScript、FastAPI；Python 使用 `web` extra，前端需 Node.js 构建，
   运行入口为 `scmm-web`。完整六步功能与构建步骤见[安装部署](docs/installation.md#vuefastapi-网页)。
 

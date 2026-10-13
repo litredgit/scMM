@@ -1,4 +1,3 @@
-import pickle
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -32,16 +31,6 @@ def eic(
     return ax, (time.values if time is not None else data.index, eic_values)
 
 
-def _plot_cells(
-    ax: plt.Axes, cell_mask: np.ndarray, data: tuple[np.ndarray, np.ndarray]
-) -> plt.Axes:
-    t, eic_values = data
-    t, eic_values = t[cell_mask], eic_values[cell_mask]
-    ax.scatter(t, eic_values, color="red", s=3, label="Cells")
-    ax.legend()
-    return ax
-
-
 def plot_ms(
     ax: plt.Axes, data: pd.DataFrame, frame_range: tuple[int, int] | None = None
 ) -> plt.Axes:
@@ -62,34 +51,6 @@ def plot_ms(
     ax.set_ylabel("Intensity")
     ax.set_title(f"MS Spectrum for rows {start} to {stop - 1}")
     return ax
-
-
-def plot_hook(stage, data):
-    if stage == "find_cells":
-        cell_idx = np.asarray(data["cell_idx"], dtype=int)
-        if cell_idx.size == 0:
-            return
-        output_dir = Path(".tmp")
-        output_dir.mkdir(exist_ok=True)
-        fig, ax = plt.subplots(figsize=(10, 4))
-        signal = data["signal"].sum(axis=1)
-        ax.plot(data["signal"].index, signal, color="black", linewidth=1, label="Signal")
-        ax.scatter(
-            data["signal"].index[cell_idx], signal.iloc[cell_idx], color="red", s=8, label="Cells"
-        )
-        ax.set_xlabel("Scan Index")
-        ax.set_ylabel("Total Intensity")
-        ax.legend()
-        fig.savefig(output_dir / f"{stage}.svg", bbox_inches="tight")
-        plt.close(fig)
-
-
-def save_hook(stage, data):
-    output_dir = Path(".tmp")
-    output_dir.mkdir(exist_ok=True)
-    save_dict = {"stage": stage, "data": dict(data)}
-    with (output_dir / f"{stage}.pkl").open("wb") as fp:
-        pickle.dump(save_dict, fp)
 
 
 def _prepare_spectrum_peaks(

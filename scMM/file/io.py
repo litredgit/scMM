@@ -34,7 +34,6 @@ def load_single_file(
     path: str | Path,
     format: Literal["auto", "mzML", "mzXML"] = "auto",
     *,
-    msconvert_path=None,
     raw_timezone=None,
 ):
     """Return an XML experiment or reopenable profile RAW source, plus metadata.
@@ -45,10 +44,6 @@ def load_single_file(
     if format == "auto" and path.suffix.lower() == ".raw":
         from .readers.source import ThermoRawSource
 
-        if msconvert_path is not None:
-            raise ValueError(
-                "RAW now uses ThermoRawReader; convert explicitly with convert_raw if needed"
-            )
         source = ThermoRawSource(path, timezone=raw_timezone)
         return source, dict(source.metadata)
     if not path.is_file():

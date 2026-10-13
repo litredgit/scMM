@@ -39,7 +39,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reference-mode", choices=["union", "intersection"], default="union")
     parser.add_argument("--feature-snr", type=float, default=3.0, help="SNR-mode feature threshold")
     parser.add_argument("--noise-window", type=int, default=51)
-    parser.add_argument("--msconvert", help="Removed: convert explicitly before processing instead")
     parser.add_argument(
         "--raw-timezone", help="RAW acquisition timezone (env SCMM_RAW_TIMEZONE or Asia/Shanghai)"
     )
@@ -55,8 +54,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command-line data processing workflow."""
     args = build_parser().parse_args(argv)
-    if args.msconvert is not None:
-        raise ValueError("--msconvert automatic conversion was removed; RAW is read directly")
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -78,7 +75,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         "reference_mode": args.reference_mode,
         "feature_snr_threshold": args.feature_snr,
         "noise_window": args.noise_window,
-        "msconvert_path": args.msconvert,
     }
     if args.raw_timezone is not None:
         common["raw_timezone"] = args.raw_timezone

@@ -84,7 +84,7 @@ class ProcessingTaskManager:
         self._lock_path = self.state_root / ".manager.lock"
 
     def submit(self, request: ProcessingRequest) -> ProcessingTask:
-        """Preflight and launch a worker detached from the Panel session."""
+        """Preflight and launch a worker detached from the web session."""
         if not background_tasks_supported():
             raise RuntimeError("Background extraction is currently supported only on Linux")
         plan = self.planner.preflight(request)

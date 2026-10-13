@@ -10,8 +10,8 @@
 
 Thermo RawFileReader → C# helper → 二进制管道 → NumPy 已接入单文件、三种目录策略、CLI 和网页。
 严格接受 profile，任何 centroid scan 报错；包含 reference/exception peaks，保留 float64，
-不排序、去重、补点或自动转换。非空 `msconvert_path` / `--msconvert` 提示迁移错误，
-独立 `convert_raw()` 仍是手动工具，reader 失败不隐式回退。
+不排序、去重、补点或转换格式，reader 失败直接报告错误。项目不再提供手动转换模块，
+也不接受旧 `msconvert_path` / `--msconvert` 参数；已有 mzML/mzXML 可继续直接读取。
 
 RAW source 可重开，合谱与对齐分别顺序读取；两遍之间校验身份、大小及修改时间。
 异常或提前结束会回收子进程。对齐只累积特征行，不缓存整份原始谱；最终矩阵和厂商内部内存仍随规模增长。

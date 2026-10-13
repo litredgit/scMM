@@ -28,12 +28,14 @@ def settings(config=CONFIG):
         "prod_results": str(home / "data/results"),
         "state": str(home / ".local/state/scmm"),
         "address": "0.0.0.0",
-        "origins": ["*"],
-        "dev_frontend": "vue",
-        "prod_frontend": "panel",
     }
     if config.exists():
         overrides = json.loads(config.read_text(encoding="utf-8"))
+        # Accept existing Vue deployment configs without retaining a frontend switch.
+        for key in ("dev_frontend", "prod_frontend"):
+            if overrides.pop(key, "vue") != "vue":
+                raise ValueError("Only Vue is supported; remove obsolete frontend settings")
+        overrides.pop("origins", None)  # Retired WebSocket configuration.
         if set(overrides) - set(values):
             raise ValueError("Unknown environment configuration keys")
         values.update(overrides)
@@ -41,8 +43,6 @@ def settings(config=CONFIG):
         values[key] = Path(values[key]).expanduser().resolve()
     if values["dev"] == values["prod"]:
         raise ValueError("Development and production worktrees must differ")
-    if any(values[key] not in {"panel", "vue"} for key in ("dev_frontend", "prod_frontend")):
-        raise ValueError("dev_frontend and prod_frontend must be panel or vue")
     dev_results = values["state"] / "dev/results"
     if dev_results == values["prod_results"] or (
         dev_results in values["prod_results"].parents
@@ -125,15 +125,11 @@ def web_idle(port):
             if response.headers.get("Content-Type", "").startswith("application/json"):
                 health = json.load(response)
             else:
-                return  # Legacy Panel server: its sessions use established sockets.
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            return
-        raise RuntimeError("Cannot verify web workspace state") from exc
+                raise ValueError("Unexpected health response")
     except (OSError, ValueError) as exc:
         raise RuntimeError("Cannot verify web workspace state") from exc
-    if health.get("frontend") != "vue":
-        return
+    if not isinstance(health, dict) or health.get("frontend") != "vue":
+        raise RuntimeError("Cannot verify Vue workspace state: invalid health response")
     try:
         with urllib.request.urlopen(
             f"http://127.0.0.1:{port}/api/v1/runtime", timeout=2
@@ -239,7 +235,7 @@ def serve(values, name, *, debug=False):
     root = values[name]
     env, results = environment(values, name)
     args = [
-        str(root / ".venv/bin/scmm-ui"),
+        str(root / ".venv/bin/scmm-web"),
         "--storage",
         f"原始数据={values['raw']}",
         "--isolated-storage",
@@ -252,9 +248,6 @@ def serve(values, name, *, debug=False):
         "--port",
         "5006" if name == "prod" else "5007",
     ]
-    for origin in values["origins"]:
-        args.extend(["--allow-websocket-origin", origin])
-    args.extend(["--frontend", values.get(f"{name}_frontend", "vue" if name == "dev" else "panel")])
     if debug:
         python = str(root / ".venv/bin/python")
         args = [python, "-m", "debugpy", "--listen", "127.0.0.1:5678", "--wait-for-client", *args]

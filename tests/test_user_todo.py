@@ -1,25 +1,21 @@
 """User workflow regressions: reuse, metadata, navigation and display boundaries."""
 
 from dataclasses import asdict
-from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 import pytest
 from anndata import AnnData
 from test_project_batch import setup_project
-from test_project_ui import workspace
 
-from scMM.application import RawPreviewService, StorageCatalog, StorageRoot
+from scMM.application import RawPreviewService
 from scMM.application.preferences import cpu_default, load_preferences, save_preferences
 from scMM.application.preview_cache import reusable_preview, save_preview, signature
 from scMM.application.processing import ProcessingParameters
 from scMM.application.project_batch import preflight, read_batch, run_batch
 from scMM.application.projects import write_json
 from scMM.application.workbench import AnalysisWorkspace
-from scMM.ui.analysis_plots import violin_figure, volcano_figure
-from scMM.ui.file_browser import FileBrowser
-from scMM.ui.presentation import QCDataFrame, apply_presentation, qc_file_table
+from scMM.plot.presentation import qc_file_table
 
 
 def test_metadata_preserves_matrix_layers_embedding_and_unrelated_results():
@@ -96,21 +92,6 @@ def test_preview_cache_skips_extraction_and_rejects_changed_inputs(tmp_path, mon
     assert reusable_preview(project.folder, resolved) is None
 
 
-def test_browser_cross_directory_selection_and_root_boundary(tmp_path):
-    (tmp_path / "a.mzML").touch()
-    (tmp_path / "sub").mkdir()
-    (tmp_path / "sub/b.raw").touch()
-    browser = FileBrowser(StorageCatalog([StorageRoot("data", tmp_path)]), "data")
-    browser.choose(tmp_path / "a.mzML")
-    browser.open(tmp_path / "sub")
-    browser.choose(tmp_path / "sub/b.raw")
-    assert len(browser.value) == 2
-    browser.open(tmp_path.parent)
-    assert browser.directory == tmp_path / "sub"
-    browser.selected.value = browser.value[:1]
-    assert len(browser.value) == 1
-
-
 def test_global_presets_and_cpu_defaults(tmp_path, monkeypatch):
     monkeypatch.setenv("SCMM_PREFERENCES", str(tmp_path / "preferences.json"))
     assert load_preferences()["presets"]["哺乳动物"] == 760.5851
@@ -147,54 +128,8 @@ def test_qc_reference_rows_preserve_nearby_ions_and_omit_empty_sample_records():
     assert not isinstance(displayed.columns, pd.MultiIndex)
 
 
-def test_qc_display_formats_by_metric_without_rounding_numerical_data():
-    from html import unescape
-
-    import panel as pn
-    from bokeh.document import Document
-
-    stats = pd.DataFrame(
-        {
-            "metric": ["total_intensity", "detected_features", "reference_intensity"],
-            "count": [3.0, 3.0, 2.0],
-            "mean": [1234567.89, 2.6666666666666665, 98765.4321],
-            "median": [1200000.0, 2.5, 90000.0],
-            "std": [123.45, 0.5773502691896257, float("nan")],
-            "min": [1000000.0, 2.0, 80000.0],
-            "max": [1300000.0, 3.0, 100000.0],
-        }
-    )
-    pane = QCDataFrame(stats, index=False)
-    general = pn.pane.DataFrame(
-        pd.DataFrame(
-            {"detected_features": [3.0], "fdr": [1e-8], "mean_abs_shap": [1e-8], "mean_a": [1e6]}
-        )
-    )
-    apply_presentation(pn.Column(pane, general))
-    model = pane.get_root(Document())
-    html = unescape(model.text)
-    assert "1.235e+06" in html and "9.877e+04" in html
-    assert "2.500e+00" not in html and "5.000e-01" not in html
-    assert "<td>2.7</td>" in html and "<td>0.6</td>" in html and "<td>2</td>" in html
-    assert "2.6666666666666665" not in html and "0.5773502691896257" not in html
-    assert "NaN" in html
-    pd.testing.assert_frame_equal(pane.object, stats)
-    plain = general.get_root(Document())
-    assert unescape(plain.text).count("0.00000001") == 1
-    assert "1.00e-08" in unescape(plain.text)
-    assert "1.000e+06" in unescape(plain.text)
-    assert "<td>3</td>" in unescape(plain.text)
-    pane.object = stats.loc[[1]].copy()
-    assert "e+" not in unescape(model.text) and "e-" not in unescape(model.text)
-    pane._cleanup(model)
-    general._cleanup(plain)
-
-
-def test_display_precision_preserves_tiny_values_and_csv_precision():
-    from io import BytesIO
-
-    from scMM.ui.presentation import count_number, ordinary_number, probability_number
-    from scMM.ui.workbench import _csv
+def test_display_precision_preserves_tiny_values():
+    from scMM.plot.presentation import count_number, ordinary_number, probability_number
 
     assert count_number(123.33333333333333) == "123.3"
     assert count_number(123.0) == "123"
@@ -203,171 +138,6 @@ def test_display_precision_preserves_tiny_values_and_csv_precision():
     assert probability_number(0.123456789) == "1.23e-01"
     assert probability_number(1.23456789e-12) == "1.23e-12"
     assert probability_number(0) == "0"
-    stats = pd.DataFrame({"mean_features": [123.33333333333333], "fdr": [1.23456789e-12]})
-    exported = pd.read_csv(
-        BytesIO(_csv(stats).getvalue()), index_col=0, float_precision="round_trip"
-    )
-    pd.testing.assert_frame_equal(stats, exported)
-
-
-def test_color_sources_search_sort_and_restore(tmp_path):
-    from bokeh.document import Document
-
-    ui = workspace(tmp_path)
-    data = AnnData(
-        np.array([[1, 4, 2.0], [1, 8, 2.0]]),
-        obs=pd.DataFrame({"batch": ["a", "b"], "group": ["x", "y"]}, index=["a", "b"]),
-        var=pd.DataFrame({"mz": [760.58331, 100.12345, 500.0]}, index=["first", "second", "third"]),
-    )
-    data.obsm["X_pca"] = np.array([[1, 2.0], [3, 4.0]])
-    ui.project.workspace.replace(data)
-    a = ui.analysis
-    a.refresh()
-    assert a.color.value == "obs:group"
-    assert list(a.color.options.values()) == ["obs:batch", "obs:group"]
-    assert not a.color_sort.visible
-    a.color_search.value_input = "BATCH"
-    assert "obs:batch" in a.color.options.values()
-    a.color.value = "obs:batch"
-    a.color_search.value_input = ""
-    a.color_source.value = "feature"
-    assert list(a.color.options.values()) == ["feature:second", "feature:third", "feature:first"]
-    assert a.color_sort.visible
-    a.color_sort.value = "mz"
-    model = a.color.get_root(Document())
-    a.color_descending.value = False
-    assert list(a.color.options.values()) == ["feature:second", "feature:third", "feature:first"]
-    assert [label for _value, label in model.options] == list(a.color.options)
-    a.color_descending.value = True
-    assert list(a.color.options.values()) == ["feature:first", "feature:third", "feature:second"]
-    assert [label for _value, label in model.options] == list(a.color.options)
-    a.color._cleanup(model)
-    a.color_search.value_input = "760.58331"
-    assert (
-        "feature:first" in a.color.options.values()
-        and "feature:third" not in a.color.options.values()
-    )
-    a.color.value = "feature:first"
-    np.testing.assert_array_equal(a.embedding_plot.object.data[0].marker.color, data.X[:, 0])
-    # Browser patches can carry a previous committed value and new input in one batch.
-    a.color_search.param.update(value="stale", value_input="")
-    assert a._color_query == "" and len(a.color.options) == data.n_vars
-    a.color_source.value = "annotation"
-    assert a.color.value == "obs:batch"
-    a.color_source.value = "feature"
-    assert a.color.value == "feature:first"
-    a.color_source.value = "none"
-    assert a.color.value == "" and not a.color.visible
-    a.color_source.value = "feature"
-    ui._save()
-    reopened = ui.store.open(ui.project.folder)
-    ui.activate(reopened)
-    assert ui.analysis.color_source.value == "feature"
-    assert ui.analysis.color.value == "feature:first"
-    reopened.views["settings"].pop("color_source")
-    ui.activate(reopened)
-    assert ui.analysis.color_source.value == "feature"
-    assert ui.analysis.color.value == "feature:first"
-
-
-def test_cluster_exposes_new_labels_and_resets_color_filters(tmp_path):
-    from bokeh.document import Document
-
-    ui = workspace(tmp_path)
-    values = np.array([[1, 2, 3], [2, 2, 4], [1, 3, 4], [9, 8, 7], [8, 9, 8], [9, 9, 7.0]])
-    data = AnnData(
-        values,
-        obs=pd.DataFrame(
-            {"reference_mz": [150.0] * 6, "group": ["a"] * 3 + ["b"] * 3},
-            index=[f"c{i}" for i in range(6)],
-        ),
-        var=pd.DataFrame({"mz": [150.0, 200.0, 300.0]}, index=["ref", "other", "third"]),
-    )
-    data.obsm["X_umap"] = values[:, :2].copy()
-    ui.project.workspace.replace(data)
-    a = ui.analysis
-    a.refresh()
-    a.color.value = "obs:reference_mz"
-    model = a.color.get_root(Document())
-    assert [label for _value, label in model.options] == ["reference_mz", "group"]
-    a.color_search.value_input = "reference_mz"
-    assert len(a.color.options) == 1
-    a.color_source.value = "feature"
-    assert not a._color_query and len(a.color.options) == 3
-    assert a.color_search.value == a.color_search.value_input == ""
-    a.color_search.value_input = "200"
-    a._clear_color_search()
-    assert len(model.options) == 3 and a.color_clear.disabled
-    a.color.value = "feature:other"
-    np.testing.assert_array_equal(a.embedding_plot.object.data[0].marker.color, values[:, 1])
-    a.color_search.value_input = "200"
-    a.cluster_method.value = "kmeans"
-    a.clusters.value = 2
-    a.cluster_key.value = "new_clusters"
-    a.run(a._cluster)
-    assert "❌" not in a.status.object
-    assert a.color_source.value == "annotation"
-    assert a.color.value == "obs:new_clusters"
-    assert not a._color_query and "obs:new_clusters" in a.color.options.values()
-    assert "new_clusters" in [label for _value, label in model.options]
-    assert len(a.embedding_plot.object.data) == 2
-    assert a.embedding_view.value == "X_umap"
-    np.testing.assert_array_equal(a.state.data.obsm["X_umap"], data.obsm["X_umap"])
-    a.color_source.value = "feature"
-    assert a.color.value == "feature:other"
-    a.color_search.value_input = "200"
-    a.run(a._cluster)  # A duplicate key fails without changing the current view.
-    assert "❌" in a.status.object
-    assert a.color_source.value == "feature" and a._color_query == "200"
-    a.color._cleanup(model)
-
-
-def test_imported_samples_edit_and_persist(tmp_path):
-    ui = workspace(tmp_path)
-    data = AnnData(
-        np.ones((6, 2)),
-        obs=pd.DataFrame(
-            {"sample": ["a"] * 3 + ["b"] * 3, "group": ["x"] * 3 + ["y"] * 3}, index=list("abcdef")
-        ),
-    )
-    ui.project.workspace.replace(data)
-    ui._prepare_sample_mapping()
-    assert len(ui.project.samples) == 2
-    assert ui.project.workspace.data.obs.sample_id.nunique() == 2
-    ui.project.samples[0]["group"] = "new"
-    ui._sync_metadata()
-    ui._save()
-    reopened = ui.store.open(ui.project.folder)
-    assert reopened.workspace.data.obs.group.iloc[0] == "new"
-    assert reopened.workspace._original.obs.group.iloc[0] == "new"
-
-
-def test_volcano_click_layout_and_input_precision(tmp_path):
-    ui = workspace(tmp_path)
-    data = AnnData(
-        np.arange(1.0, 73.0).reshape(12, 6),
-        obs=pd.DataFrame({"group": ["a"] * 6 + ["b"] * 6}, index=[f"c{i}" for i in range(12)]),
-        var=pd.DataFrame(index=[str(100.123456 + i) for i in range(6)]),
-    )
-    ui.project.workspace.replace(data)
-    ui.analysis.refresh()
-    ui.analysis._differentiate()
-    ui.analysis.refresh()
-    feature = data.var_names[0]
-    event = SimpleNamespace(new={"points": [{"customdata": [feature]}]})
-    ui.analysis._volcano_click(event)
-    assert ui.analysis.features.value == [feature]
-    ui.analysis._volcano_click(event)
-    assert ui.analysis.features.value == []
-    result = ui.project.workspace.result("differential")
-    figure = violin_figure(data, result, list(data.var_names), columns=3)
-    assert figure.layout.height == 680
-    assert "100.1235" in figure.layout.annotations[0].text
-    assert data.var_names[0] == "100.123456"
-    assert volcano_figure(result["table"]).layout.plot_bgcolor == "white"
-    ui.go(5)
-    assert ui.analysis_navigation.visible
-    assert ui.purpose not in ui.analysis_page.objects
 
 
 def test_pca_input_dimension_validation_and_provenance():
@@ -439,37 +209,3 @@ def test_automatic_ranges_do_not_freeze_project_defaults(tmp_path):
     project.manifest["manual_parameters"] = True
     project.manifest["parameters"]["mz_min"] = 120.0
     assert sample_parameters(project, project.samples[0])["mz_min"] == 120.0
-
-
-def test_mixed_imported_annotations_are_preserved_until_explicit_edit(tmp_path):
-    ui = workspace(tmp_path)
-    data = AnnData(
-        np.ones((4, 2)),
-        obs=pd.DataFrame(
-            {"sample": ["one"] * 4, "group": ["a", "b", "a", "b"]}, index=list("abcd")
-        ),
-    )
-    ui.project.workspace.replace(data)
-    ui._prepare_sample_mapping()
-    assert ui.project.workspace.data.obs.group.tolist() == ["a", "b", "a", "b"]
-    ui._edit_sample(SimpleNamespace(row=0, column="group", value="new"))
-    assert ui.project.workspace.data.obs.group.tolist() == ["new"] * 4
-
-
-def test_explicit_config_parameters_override_global_defaults(tmp_path):
-    import json
-
-    from scMM.application.parameters import load_defaults
-    from scMM.ui.app import ProjectWorkspace
-
-    config = tmp_path / "settings.json"
-    config.write_text(
-        json.dumps({"processing": {"ref_mz": 150.0, "mz_min": 140.0, "mz_max": 160.0}})
-    )
-    ui = ProjectWorkspace(
-        (StorageRoot("data", tmp_path),), project_root=tmp_path, defaults=load_defaults(config)
-    )
-    ui.name.value = "configured project"
-    ui._create()
-    assert ui.project.manifest["parameters"]["ref_mz"] == 150.0
-    assert not ui.project.manifest["auto_ranges"]

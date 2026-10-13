@@ -118,7 +118,7 @@ def submit_preview(request):
     """Return a future immediately, with status visible to deployment idle checks.
 
     Each session allows one job. A fresh process releases raw spectra and native
-    library memory on completion; no Panel/Bokeh objects cross the process boundary.
+    library memory on completion; no frontend objects cross the process boundary.
     """
     request = deepcopy(request)
     request["created_at"] = utc_now()

@@ -15,7 +15,7 @@
 Vue 网页的“参数参考”从 `/api/v1/configuration` 读取同一应用层的新项目默认值和中文帮助，
 并列展示当前项目已有参数；该页面只读，不应用新默认值或追溯覆盖旧项目。
 “原始谱与参数”页可编辑完整提取参数，显式应用为项目默认或样本例外；显示范围独立于提取范围。
-Vue 与 Panel 共用应用层参数定义和新项目默认值，分析保留现有算法及固定聚类参数限制，
+Vue 使用应用层参数定义和新项目默认值，分析保留现有算法及固定聚类参数限制，
 具体操作见[Vue 操作](workflow.md#vue-网页项目与样本)。
 
 ## Notebook：路径与运行控制
@@ -200,7 +200,7 @@ uv run --locked scmm-process INPUT OUTPUT --ref-mz REF_MZ [options]
 
 CLI 只负责原始数据预处理和保存，不执行归一化、去同位素或下游分析。需要这些步骤时使用
 Notebook 或 Python API。
-`--msconvert` 已移除自动转换功能，传入时明确报错；手动转换见 [RAW 调用说明](python-api.md#thermo-profile-raw-直接读取)。
+`--msconvert` 参数已移除；RAW 使用外部 reader 直接读取，见 [RAW 调用说明](python-api.md#thermo-profile-raw-直接读取)。
 
 ## 特征轴合并参数
 
@@ -222,7 +222,7 @@ Notebook 或 Python API。
 Vue/FastAPI 网页第二步固定使用 `snr`，取消方法选择器；内部标识仍为 `snr_v1`，用于参数、缓存和旧产物兼容。
 Vue 新项目固定此方法，新参数应用、预览和新批次不接受 legacy。旧项目的 legacy 参数与产物继续可读，
 表单显示 SNR 参数并提示先检查、应用；不会悄悄改写已保存参数或重算旧结果。
-现有 Panel 网页仍按自身配置显示方法；CLI、Python API 和 Notebook 的各自默认值与兼容算法不变。
+CLI、Python API 和 Notebook 的各自默认值与兼容算法不变。
 
 网页首次创建项目的参考离子来自全局细胞类型预设：哺乳动物 `760.5851`（初始默认）、藻类 `734.5929`、细菌 `690.5069`。
 可修改、新增预设并显式保存；项目保留自己的参数，后续修改全局预设不会覆盖旧项目。
@@ -238,7 +238,7 @@ Vue 新项目固定此方法，新参数应用、预览和新批次不接受 leg
 火山图标签默认 FDR≤0.05、abs(log2FC)≥1，FDR 优先/效应量辅助排序，最多标注前 10 个特征；阈值、数量和排序可调整。
 小提琴图每次最多 12 个，默认包含零值。它们是显示设置，不改变检验和数值导出。
 
-用 `scmm-ui --config workbench.json` 或 `SCMM_UI_CONFIG` 指定，命令行优先。
+用 `scmm-web --config workbench.json` 或 `SCMM_UI_CONFIG` 指定，命令行优先。
 
 ```json
 {

@@ -3,7 +3,6 @@
 import asyncio
 import json
 import os
-from concurrent.futures import Future
 from copy import deepcopy
 
 import numpy as np
@@ -19,8 +18,7 @@ from scMM.application.processing import ProcessingParameters
 from scMM.application.project_batch import batches, preflight
 from scMM.application.projects import child_path
 from scMM.file.data import CyESIData
-from scMM.ui.app import ProjectWorkspace
-from scMM.ui.raw_components import cell_detection_figure
+from scMM.plot.raw import cell_detection_figure
 
 
 def preview_request(project, catalog):
@@ -136,112 +134,6 @@ def test_shared_control_edits_require_applying_project_parameters(tmp_path):
     with pytest.raises(ValueError, match="共同特征参数已编辑"):
         run_preview(request, project.folder / "processing" / "preview-state.json")
     assert all("preview" not in sample for sample in project.samples)
-
-
-def controlled_ui(tmp_path, monkeypatch):
-    project, catalog = setup_project(tmp_path)
-    project.manifest["manual_parameters"] = True
-    ui = ProjectWorkspace(catalog.roots, project_root=tmp_path)
-    ui.activate(project)
-    ui._open_raw()
-    future = Future()
-    submitted = []
-
-    def submit(request):
-        submitted.append(deepcopy(request))
-        return future, project.folder / "processing" / "fake-state.json"
-
-    monkeypatch.setattr("scMM.ui.app.submit_preview", submit)
-    return ui, future, submitted
-
-
-def complete(future, request, tmp_path):
-    state = tmp_path / "test-state.json"
-    future.set_result(run_preview({**request, "created_at": "test"}, state))
-
-
-def test_ui_returns_immediately_rejects_duplicates_and_applies_then_saves(tmp_path, monkeypatch):
-    ui, future, submitted = controlled_ui(tmp_path, monkeypatch)
-    ui.project.dirty = False
-    ui.run(ui._preview_cells)
-    assert not future.done() and len(submitted) == 1
-    assert ui.preview_button.disabled and ui.preview_button.loading
-    assert "已启动" in ui.message.object and ui.components.cell_download.disabled
-    ui.poll()  # Polling unrelated batch state must still service preview completion.
-    with pytest.raises(ValueError, match="已有细胞预览"):
-        ui._preview_cells()
-    complete(future, submitted[0], tmp_path)
-    ui.poll()
-    assert not ui.preview_button.disabled and not ui.preview_button.loading
-    assert ui.project.dirty and not ui.components.cell_download.disabled
-    assert not ui.project.samples[0]["preview"]["confirmed"]
-    ui._save()
-    restored = ui.store.open(ui.project.folder)
-    assert not restored.samples[0]["preview"]["confirmed"]
-    assert ui._preview_status(restored.samples[0]) == "已预览"
-    assert child_path(restored.folder, restored.samples[0]["preview"]["artifact"]).is_dir()
-
-
-@pytest.mark.parametrize("change", ["parameter", "sample", "reopen", "project", "file", "strategy"])
-def test_ui_discards_results_after_context_changes(tmp_path, monkeypatch, change):
-    ui, future, submitted = controlled_ui(tmp_path, monkeypatch)
-    ui._preview_cells()
-    complete(future, submitted[0], tmp_path)
-    original = ui.project
-    if change == "parameter":
-        widget = ui.components.processing.parameter_widgets["cell_snr"]
-        before = widget.value
-        widget.value = before + 1
-        widget.value = before  # Editing back must not revive an invalidated job.
-    elif change == "sample":
-        ui.raw_sample.value = ui.project.samples[1]["id"]
-    elif change == "reopen":
-        ui._open_raw()
-    elif change == "project":
-        ui.activate(ui.store.create("other"))
-    elif change == "file":
-        with open(ui.project.samples[0]["path"], "ab") as handle:
-            handle.write(b"\n")
-    else:
-        ui.project.manifest["feature_strategy"] = "independent"
-    ui.poll()
-    assert "结果未应用" in ui.preview_status.object
-    assert all("preview" not in s for s in original.samples)
-    assert ui.components.cell_download.disabled
-    assert not ui.preview_button.disabled
-
-
-def test_ui_failure_can_retry_and_closing_drops_pending_job(tmp_path, monkeypatch):
-    ui, future, _submitted = controlled_ui(tmp_path, monkeypatch)
-    ui._preview_cells()
-    future.set_exception(RuntimeError("reader failed"))
-    ui.poll()
-    assert "reader failed" in ui.preview_status.object
-    assert ui.error_notice.visible and not ui.preview_button.disabled
-    assert ui.components.cell_download.disabled
-    replacement = Future()
-    monkeypatch.setattr("scMM.ui.app.submit_preview", lambda _: (replacement, tmp_path / "status"))
-    ui._preview_cells()
-    ui._close_session(None)
-    assert replacement.cancelled() and ui._cell_preview_job is None
-
-
-def test_failed_render_leaves_project_and_download_unchanged(tmp_path, monkeypatch):
-    ui, future, submitted = controlled_ui(tmp_path, monkeypatch)
-    ui._preview_cells()
-    complete(future, submitted[0], tmp_path)
-    snapshot = deepcopy(ui.project.manifest)
-    ui.project.dirty = False
-
-    def fail(_result):
-        raise ValueError("broken window metadata")
-
-    monkeypatch.setattr("scMM.ui.app.cell_detection_figure", fail)
-    ui.poll()
-    assert ui.project.manifest == snapshot and not ui.project.dirty
-    assert ui.components.cell_download.disabled
-    assert "broken window metadata" in ui.preview_status.object
-    assert not ui.preview_button.disabled
 
 
 def test_window_rendering_matches_vrect_and_keeps_thousands_of_windows(monkeypatch):

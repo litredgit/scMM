@@ -128,7 +128,6 @@ def load_raw_file(
     ms_peak_snr_threshold: float = 10.0,
     prominence_ratio: float | None = None,
     distance: int = 3,
-    msconvert_path=None,
     mz_range=(100.0, 1000.0),
     raw_timezone=None,
 ) -> DatasetState:
@@ -144,7 +143,7 @@ def load_raw_file(
         distance,
         mz_range,
     )
-    load_options = {"msconvert_path": msconvert_path} if msconvert_path else {}
+    load_options = {}
     if raw_timezone is not None:
         load_options["raw_timezone"] = raw_timezone
     experiment, file_meta = load_single_file(str(file_path), format="auto", **load_options)

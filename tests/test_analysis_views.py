@@ -6,8 +6,8 @@ from anndata import AnnData
 pytest.importorskip("plotly")
 
 from scMM.application.workbench import AnalysisWorkspace
-from scMM.ui.analysis_plots import violin_figure, volcano_figure
-from scMM.ui.presentation import style_figure
+from scMM.plot.presentation import style_figure
+from scMM.plot.workbench import violin_figure, volcano_figure
 
 
 def test_feature_selection_and_hiding_zero_never_recompute_fdr(monkeypatch):

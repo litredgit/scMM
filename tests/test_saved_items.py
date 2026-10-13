@@ -265,31 +265,6 @@ def test_cross_device_move_restore_and_copy_failure(tmp_path, monkeypatch):
     assert source.exists() and not manager.list_trash()
 
 
-def test_saved_items_home_does_not_scan_usage_until_project_is_selected(tmp_path, monkeypatch):
-    from scMM.ui.saved_items import SavedItemsPanel
-
-    store, manager = setup(tmp_path)
-    project = store.create("已有项目")
-    calls = []
-    actual_plan = manager.plan
-
-    def plan(*args):
-        calls.append(args)
-        return actual_plan(*args)
-
-    monkeypatch.setattr(manager, "plan", plan)
-    monkeypatch.setattr("scMM.ui.saved_items.SavedItems", lambda *args, **kwargs: manager)
-    panel = SavedItemsPanel(store, (), active_paths=lambda: (), changed=lambda: None)
-    panel.refresh()
-    assert panel.project.value is None
-    assert panel.move_button.disabled
-    assert calls == []
-    panel.project.value = str(project.folder)
-    assert len(calls) == 1
-    assert panel.plan["path"] == str(project.folder)
-    assert not panel.move_button.disabled
-
-
 def test_obsolete_snapshot_cleanup_after_reopen_keeps_current_and_external_references(tmp_path):
     store, manager = setup(tmp_path)
     project = store.create("history")

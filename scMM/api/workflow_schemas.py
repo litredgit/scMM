@@ -1,4 +1,4 @@
-"""Strict contracts for scientific controls; accepted algorithms match Panel."""
+"""Strict contracts for scientific controls; algorithms use the shared application layer."""
 
 from typing import Any, Literal
 
