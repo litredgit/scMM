@@ -5,6 +5,14 @@
 
 ## Unreleased
 
+### 发展规划与 Vue 清理阶段发布 — 2026-10-13
+
+- 用户接受交互可靠性、重任务处理、去同位素、SDF 及其他未接入 Vue 能力的规划，明确本轮只组织文档、提交/推送/部署，在新会话按文档继续实现。该发布授权同时包含此前仅本地提交、已通过用户验收的清理提交 `4f3f08e`；本轮没有实施规划中的新功能。
+- 重组 roadmap 为 M1～M6，补充优先级、依赖、稳定任务编号、对应模块、失败/恢复与验收条件，以及从 M1 开始的新会话阅读和执行起点。原未完成事项均保留；已验收的 UI-08/UI-09/STORE-02 只留历史归档，不重新成为活动待办。
+- 开发指南新增完整能力覆盖表，区分 Python/Notebook、应用/HTTP 与 Vue：纳入时间/趋势、特征距离嵌入、双特征散点、独立结果合并、稳定性 QC、PDF、高级参数、子集适配和底层重建工具。按实际源码澄清 `data[mz]` 是最近 m/z 强度读取、concat 当前面向旧结果目录，以及 SDF 返回候选表等边界；工具级能力先定义/验证，再接界面，不恢复 Panel 或手动 RAW 转换。
+- README、文档索引、分析/参数和工作流程同步当前网页缺口及规划入口；科学定义留在主题文档，未实现功能不写成现有网页操作。重新核对原编号均在活动计划或 CHANGELOG 归档中；14 份 Markdown 的本地链接、章节锚点及围栏检查、文档回归 30 项、Git 差异检查通过。
+- 发布前本机 `PYTHONDONTWRITEBYTECODE=1 PYTHONUTF8=1 MPLCONFIGDIR=/tmp/scmm-roadmap-release-mpl .venv/bin/python -m pytest -W error -q -p no:cacheprovider -o faulthandler_timeout=60` 完整 **346 项通过（44.47s）**；全仓 Ruff/格式、TypeScript/Prettier、暂存 Vite 构建、离线锁检查及 sdist/wheel 构建/内容检查通过。前端源代码未变，暂存构建与当前服务资源一致；沿用清理阶段相同功能代码的无 Panel 环境 7 项浏览器流程证据。本轮未做新的压力测试、真实实验或数值算法验收，远端 CI 和生产结果在执行后另记。
+
 ### Vue 单一入口与旧代码清理 — 2026-10-13
 
 - 按用户确认移除交付代码的整个 `scMM/ui/` Panel 界面、`scmm-ui` 命令、`ui` extra 及前端切换/WebSocket 参数。共用启动逻辑迁至 `api/cli.py`，网页统一为 `scmm-web`；服务名称保留，项目格式、Vue 六步功能和共享应用/绘图层不变，旧项目图形 JSON 的读取兼容保留。

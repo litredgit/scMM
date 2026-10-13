@@ -78,6 +78,45 @@ scMM/
 测试位于 `tests/`，覆盖数据保存/加载、对齐、去同位素、归一化、谱 I/O、输入/输出路径边界、
 原始谱预览、后台任务、项目保存/重载、多样本审核、RAW 协议/流式处理、质量产物、HTTP 接口、Vue 浏览器交互、绘图、轨迹和 CLI。
 
+## 前后端能力覆盖
+
+以下按当前交付代码核对 Python/Notebook、应用层/HTTP 与 Vue 的覆盖范围；只列能力边界，
+执行优先级、依赖及未完成验收统一在 [roadmap](roadmap.md)。规划中的接口和控件尚未实现。
+路径默认相对 `scMM/`；Notebook 和 `frontend/` 相对仓库根。公共门面或图形包装函数存在，
+不等于已有可直接绑定按钮的应用服务。
+
+| 能力 | Python / Notebook 入口 | 当前应用/HTTP/Vue | 规划或保留边界 |
+|---|---|---|---|
+| 原始谱与提取 | `CyESIData.load_from_file()` / `load_from_directory()`、`file/readers/` | Vue 有 TIC/多 EIC/合谱/单扫描、SNR 预览、批次与人工审核 | PERF-01/TASK-01～03/VAL-05 改执行与资源，不改现有数值；legacy 仅保留 Python/CLI/旧产物兼容，不恢复 Vue 方法选择器 |
+| 基础预处理/QC | `analysis/quality.py`、`util/normalize.py`、`file/_dataset_processing.py` | 筛选、七种归一化、三种插补、离群、层恢复/完整起点已有 | PARAM-01 补其余已支持参数及 most_frequent；QC-01 补采集稳定性，不重复基础 QC |
+| 去同位素 | `CyESIData.deisotope()`、`file/_deisotope.py` | 应用层操作集、HTTP 契约和 Vue 均未接入 | ISO-01～03：平方级计算先优化/对照，再接候选、应用与持久化 |
+| SDF 精确质量注释 | `get_annotation()`、`util/annotation.py` / `_annotation_search.py` | 无搜索/管理入口；已有注释的 H5AD 可沿用元数据互操作 | ANN-01～03：完整候选表及特征摘要分别保存；Python get_annotation 只返回表，Notebook 另做摘要映射 |
+| 细胞降维/聚类 | `analysis/embedding.py`、`PlotEngine`、`plot/embedding.py` | 五种降维、五种聚类及着色已有 | PARAM-02/03 补具体参数；三套 Python 入口的默认值/返回值不混用，Matplotlib 包装不重复造按钮 |
+| 差异/Marker/相关网络 | `analysis/statistics.py`、`plot/_engine_statistics.py` | 检验、全局 FDR、筛选/分页、图形与导出已有 | 保持 STAT-01 解释和结果生命周期；不是待重新移植的功能 |
+| 监督诊断/潜变量/SHAP | `analysis/supervised.py` | 分组验证、四模型、ROC/PR/校准、潜变量及 SHAP 已有 | PARAM-03 补模型超参数、SHAP 类别/显示设置；不序列化可执行模型 |
+| Palantir 与窗口轨迹 | `PlotEngine.run_palantir()` / `compute_trajectory()` | 无应用/HTTP/Vue 分析入口 | TIME-01；现有 Python 方法和暂缓的上游启发式方法分别管理 |
+| 代谢速度 | `PlotEngine.metabolic_velocity()` | 无对应入口 | TIME-02，沿现有参数化坐标的窗口变化速度，不能解释为示踪通量 |
+| 代谢物趋势/趋势聚类 | `plot_metabolite_trends()` / `plot_trend_clusters()` | 无对应入口 | TIME-03/04，输入时间、窗口、统计量和趋势距离可追溯 |
+| 特征距离嵌入 | `PlotEngine.feature_network()`、`plot/_engine_network.py` | Vue 已有相关阈值网络，但无此距离嵌入 | PLOT-02；Pearson/Euclidean 距离加 UMAP 的特征图不等于相关图，需独立名称和资源检查 |
+| 双特征散点/回归 | `PlotEngine.plot_feature_scatter()` | 无双特征独立图入口 | PLOT-01；将最近质量读取规则转换成明确的特征选择，不静默错配 |
+| 已处理结果合并 | `CyESIData.alignwith()`、`file.batch.concat()` | 当前已有原始样本提取审核合并；导入独立结果会替换当前数据 | MERGE-01；concat 当前读取旧结果目录，不是任意 H5AD 合并服务，须适配来源/特征/起点 |
+| 显式数据子集 | AnnData 支持 obs/var 切片 | Vue 有条件筛选，无任意细胞/特征 ID 子集应用 | SUBSET-01；CyESIData 的 `data[mz]` 是最近 m/z 的强度向量读取，不是细胞切片 |
+| 采集稳定性 QC | `scMM_workflow.ipynb` 的稳定性段 | 基础样本/细胞 QC 已有，无完整采集稳定性视图 | QC-01，先抽取应用层计算，再接时间/来源图和下载 |
+| QC PDF | `analysis.quality.render_quality_report()` | 当前有 QC 表/图，未接 PDF 生成/下载 | REPORT-01 先 QC PDF，再设计完整实验报告；两种报告范围不同 |
+| 峰重建与秩一分解 | `util.denoise.peak_recon()` / `r1_decomposition()` | 无应用/HTTP/Vue 工作流 | TOOL-01，工具级输入/科学定义/验证先于界面，不能替换现有提取算法 |
+| 互操作/元数据/绘图辅助 | AnnData/H5AD、assign_source_metadata、EIC/质谱 Matplotlib、configure_plotting | Vue 已有保存重载、稳定样本元数据、Plotly 原始谱及导出 | 保留 Python 专用辅助接口，功能等价覆盖不要求逐函数建立控件；恢复原始输入和方法默认值分别管理 |
+
+当前优先审阅入口：`frontend/src/stores/workspace.ts` 的 run/read 与任务状态，
+RawPage/ExtractionPage 的 KeepAlive 轮询，AnalysisPage 的计算→刷新→绘图，
+`application/web_workspace.py` 的工作区锁和候选复制，`web_analysis.py` 的同步操作，
+`web_results.py` 的保存/导出。它们是 M1/M2 的代码审阅起点，不能仅凭文件较长认定性能瓶颈。
+当前层次继续保持，复杂页面可随交互修复拆分组件；性能优化须有输入规模、实际参数与测量证据。
+
+新增能力按领域算法→应用层候选/结果管理→HTTP 契约→Vue 交互→保存/下载与重载的顺序接入。
+当前 Operation/结果类型白名单不会因新增 Python 方法自动扩展；须逐项检查工作区修订、
+矩阵/特征/参数依赖、可下载状态及旧快照兼容。数值、应用失败恢复、HTTP 和浏览器交互分别验证，
+不要用通用“运行任意函数”接口绕过参数与路径边界。
+
 ## 开发环境
 
 日常修改在 `dev` worktree，`main` worktree 专用于生产；目录、服务与发布/回滚命令见

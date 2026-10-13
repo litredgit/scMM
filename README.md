@@ -17,6 +17,8 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | 统一降维、差异/Marker/相关网络、监督模型诊断和 SHAP | [分析说明](docs/analysis.md) |
 
 待验收、工程改进和暂缓决策统一见 [roadmap](docs/roadmap.md)。
+网页覆盖范围与全部 Python 能力不同：去同位素、SDF 候选注释及部分时间/趋势分析目前仍通过
+Python/Notebook 使用；接入规划和新会话起点见 [发展计划](docs/roadmap.md#新会话起点)。
 
 ## 从这里开始
 

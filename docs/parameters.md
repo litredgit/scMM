@@ -66,6 +66,8 @@ Vue 使用应用层参数定义和新项目默认值，分析保留现有算法�
 
 ### 去同位素
 
+此节描述 Python/Notebook；当前 Vue/API 尚无去同位素入口，规划见 [M3](roadmap.md#m3去同位素接入)。
+
 Notebook 默认 `RUN_DEISOTOPE=False`；开启后使用 `DEISOTOPE_OPTIONS`。API 方法
 `CyESIData.deisotope()` 的默认值如下：
 
@@ -136,6 +138,8 @@ Notebook 和 API 的默认方法都是 `total`；Notebook 默认额外传入 `sc
 | `quantile` | 按特征列排序，同一排名替换为各列该排名的平均值 | 统一特征列的分位数分布，并非按细胞行归一化，总和不固定 |
 
 ## SDF 注释
+
+此节描述 Python/Notebook；当前 Vue/API 尚无 SDF 搜索入口，规划见 [M4](roadmap.md#m4sdf-候选注释接入)。
 
 | Notebook 参数 | API 参数 | 默认值 | 含义与推荐 |
 |---|---|---:|---|
