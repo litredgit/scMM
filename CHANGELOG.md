@@ -9,7 +9,10 @@
 
 - 用户明确回复“验收通过”，确认本次连续里程碑：脂质候选/天然同位素标记与审阅导出、五份默认规则预设、注释可选卡片和步骤导航、预处理前后对比、嵌入自动切图。按协作约定授权提交、推送 dev、脚本发布生产及推送 main；从 roadmap 移出已验收范围。M1/M2、其他能力接入、真实实验准确率仍按原边界保留，规则分值不因界面验收变成实验结论。
 - 发布前重新核对生产 main 工作区干净、运行配置正确，5006 未保存/繁忙工作区、TCP 连接、未结束任务和独立 worker 均为 0，远端 dev/main 与本地一致；记录 **115** 份已保存清单/H5AD 身份供发布后对照。
-- 最终本机 `PYTHONUTF8=1 MPLCONFIGDIR=/tmp/scmm-release-pytest .venv/bin/python -m pytest -q -W error -o faulthandler_timeout=60` **406 项通过（60.99s）**；完整隔离 Chromium **9 项通过（43.3s）**，验收文档专项 **30 项通过**。全仓 Ruff/格式、Prettier、锁文件离线检查及构建通过；最终 sdist/wheel 的 **105** 份源码/资源与工作区逐文件一致，含五份规则 JSON。独立安装入口离线检查因缺少 NumPy 缓存失败，随后联网隔离安装 wheel 并执行 `scmm-process --help` 通过；未更改锁文件或服务依赖。生产发布结果继续补充。
+- 最终本机 `PYTHONUTF8=1 MPLCONFIGDIR=/tmp/scmm-release-pytest .venv/bin/python -m pytest -q -W error -o faulthandler_timeout=60` **406 项通过（60.99s）**；完整隔离 Chromium **9 项通过（43.3s）**，验收文档专项 **30 项通过**。全仓 Ruff/格式、Prettier、锁文件离线检查及构建通过；最终 sdist/wheel 的 **105** 份源码/资源与工作区逐文件一致，含五份规则 JSON。独立安装入口离线检查因缺少 NumPy 缓存失败，随后联网隔离安装 wheel 并执行 `scmm-process --help` 通过；未更改锁文件或服务依赖。实现提交和发布结果见下条。
+- 实现提交 **`e5fb4ba`** 已推送 `dev`；通过 `scripts/scmm_env.py release` 将生产从 `c894663` 快进到该提交，锁定同步依赖并构建，5006 `scmm-ui.service` 于 **2026-10-15 04:25:32 UTC** 启动，PID **1075491**、active/running、重启计数 0；发布脚本健康检查通过后已推送 `main`。生产实际 **10** 份静态资源与通过回归的开发构建字节一致，从仓库外核对生产虚拟环境导入路径及五份默认规则预设正常；115 份已保存清单/H5AD 的大小/修改时间及清单摘要与发布前一致。
+- 生产 Chromium 只创建/释放空工作区，检查预处理/分析空态及 1440/700/390px 页面无横向溢出，脚本异常/失败请求为 0；未打开、修改或保存用户项目。检查后 5006/5007 首页/API 健康、未保存/繁忙工作区均为 0。此次验收和发布证据以文档提交同步到 dev/main，不重复重启服务。
+- 远端实现 CI 已触发：[dev](https://github.com/litredgit/scMM/actions/runs/38681348260)、[main](https://github.com/litredgit/scMM/actions/runs/38681419320)，记录时仍在运行；本机检查和用户验收不代替远端通过结论。
 
 ### 预处理前后对比、嵌入自动切图与默认规则预设 — 2026-10-15（用户验收通过）
 
