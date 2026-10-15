@@ -20,6 +20,7 @@ import pandas as pd
 from .projects import Project, ProjectStore
 from .storage import StorageCatalog
 from .web_analysis import AnalysisWorkflow
+from .web_lipids import LipidWorkflow
 from .web_raw import RawWorkflow
 from .web_results import ResultWorkflow
 from .workbench import read_dataset
@@ -152,7 +153,7 @@ def prepare_mapping(project, storage_label):
     project.manifest["sample_mapping"] = {name: matches[name] for name in names if name in matches}
 
 
-class WebWorkspaceService(RawWorkflow, AnalysisWorkflow, ResultWorkflow):
+class WebWorkspaceService(RawWorkflow, AnalysisWorkflow, ResultWorkflow, LipidWorkflow):
     def __init__(
         self, roots, result_roots, project_root, defaults, *, idle_seconds=3600, capacity=128
     ):

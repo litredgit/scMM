@@ -89,8 +89,8 @@ scMM/
 |---|---|---|---|
 | 原始谱与提取 | `CyESIData.load_from_file()` / `load_from_directory()`、`file/readers/` | Vue 有 TIC/多 EIC/合谱/单扫描、SNR 预览、批次与人工审核 | PERF-01/TASK-01～03/VAL-05 改执行与资源，不改现有数值；legacy 仅保留 Python/CLI/旧产物兼容，不恢复 Vue 方法选择器 |
 | 基础预处理/QC | `analysis/quality.py`、`util/normalize.py`、`file/_dataset_processing.py` | 筛选、七种归一化、三种插补、离群、层恢复/完整起点已有 | PARAM-01 补其余已支持参数及 most_frequent；QC-01 补采集稳定性，不重复基础 QC |
-| 去同位素 | `CyESIData.deisotope()`、`file/_deisotope.py` | 应用层操作集、HTTP 契约和 Vue 均未接入 | ISO-01～03：平方级计算先优化/对照，再接候选、应用与持久化 |
-| SDF 精确质量注释 | `get_annotation()`、`util/annotation.py` / `_annotation_search.py` | 无搜索/管理入口；已有注释的 H5AD 可沿用元数据互操作 | ANN-01～03：完整候选表及特征摘要分别保存；Python get_annotation 只返回表，Notebook 另做摘要映射 |
+| 天然同位素 | 原 `CyESIData.deisotope()`、`file/_deisotope.py`；网页 `util/lipid_isotopes.py` | 网页按数据库分子式/加合物计算天然分布，保留所有峰，只标记、审阅与筛选导出 | ISO-01～03 与 ANN 联合；网页不使用旧 API 的删峰/求和及平方矩阵 |
+| SDF 精确质量注释 | 原 `get_annotation()`；网页 `util/lipid_annotation.py` / `lipid_rules.py` | LMSD 本地准备、质量索引、完整候选、规则/预设、人工指定、独立版本及 CSV 已接入 | ANN-01～03；保留用户验收，背景任务迁移仍归 M2；Python/Notebook 旧默认值保持 |
 | 细胞降维/聚类 | `analysis/embedding.py`、`PlotEngine`、`plot/embedding.py` | 五种降维、五种聚类及着色已有 | PARAM-02/03 补具体参数；三套 Python 入口的默认值/返回值不混用，Matplotlib 包装不重复造按钮 |
 | 差异/Marker/相关网络 | `analysis/statistics.py`、`plot/_engine_statistics.py` | 检验、全局 FDR、筛选/分页、图形与导出已有 | 保持 STAT-01 解释和结果生命周期；不是待重新移植的功能 |
 | 监督诊断/潜变量/SHAP | `analysis/supervised.py` | 分组验证、四模型、ROC/PR/校准、潜变量及 SHAP 已有 | PARAM-03 补模型超参数、SHAP 类别/显示设置；不序列化可执行模型 |
@@ -193,6 +193,34 @@ uv run --locked python -m pytest tests/test_documentation.py -q
 
 CI 对 dev/main/refined 的 push 和 pull request 执行 Python 3.11/3.12 矩阵。
 本机通过与远端 CI 通过应分别记录，不以配置存在代替实际验收。
+
+## 脂质注释规模检查
+
+网页领域计算在 `util/lipid_annotation.py` / `lipid_isotopes.py`，声明式规则在 `lipid_rules.py`；
+数据库下载、摘要及加载在 `application/lipid_database.py`，事务/版本/审阅/导出在 `web_lipids.py`，
+严格 HTTP 契约在 `api/lipid_schemas.py`，页面组件在 `frontend/src/features/preprocess/LipidPanel.vue`。
+不通过任意函数执行接口，不改变 `CyESIData.deisotope()` 的原有算法或默认值。
+
+质量搜索对数据库排序索引二分查找，仅对匹配的母峰/理论同位素/观测特征计算关系；
+不构造特征平方矩阵。完整候选包括同质量异构记录，公式分布缓存复用，不以截断候选节省资源。
+按用户确认，本轮限于 ≤500 特征的同步请求，不开展 M1/M2；不能据此宣称其他重任务已后台化。
+
+合成规模报告可在数据库已准备的环境复现：
+
+```sh
+python tools/benchmark_lipid_annotation.py --cells 3000 --samples 10 --features 500 --output /tmp/lipid-3000.json
+python tools/benchmark_lipid_annotation.py --cells 10000 --samples 10 --features 500 --output /tmp/lipid-10000.json
+```
+
+输出仅为参数/规模/耗时/进程峰值内存与数量，不保存矩阵。实际报告见
+[3,000 × 500](validation/lipid-annotation-synthetic-3000x500.json)和
+[10,000 × 500](validation/lipid-annotation-synthetic-10000x500.json)。耗时分开记录数据库首次加载与领域计算，
+峰值内存包含解释器、数据库、矩阵和工作区输入副本，不等于单个算法数组占用；尚不包含完整 HTTP 保存流程峰值。
+用户选择手动验收，不以这些合成结果声明真实样本准确率。
+
+专项检查为 `tests/test_lipid_annotation.py`、`tests/test_web_lipids.py` 和 `frontend/tests/lipids.spec.ts`，
+覆盖双侧比例边界、加合物组成、并列/重复质量、失败原子性、版本/预设、过期下载及保存重载；
+浏览器使用本地合成 SDF，不访问或下载真实数据库，也不打开用户项目。
 
 ## Notebook 检查
 

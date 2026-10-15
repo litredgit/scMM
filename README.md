@@ -15,10 +15,12 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | Thermo profile RAW 直接读取，接入 Python、CLI、目录处理及网页 | [RAW 依赖与真实样本验收](docs/thermo-raw.md) |
 | H5AD、预处理起点恢复、结果失效管理、只读报告与图表重载 | [数据与输出](docs/data-output.md) |
 | 统一降维、差异/Marker/相关网络、监督模型诊断和 SHAP | [分析说明](docs/analysis.md) |
+| 网页 LMSD 精确质量候选、导入评分规则、天然同位素标记及加合物筛选 CSV | [注释与同位素](docs/workflow.md#注释与同位素) |
 
 待验收、工程改进和暂缓决策统一见 [roadmap](docs/roadmap.md)。
-网页覆盖范围与全部 Python 能力不同：去同位素、SDF 候选注释及部分时间/趋势分析目前仍通过
-Python/Notebook 使用；接入规划和新会话起点见 [发展计划](docs/roadmap.md#新会话起点)。
+网页覆盖范围与全部 Python 能力不同：网页注释与同位素功能保留全部峰和候选，只在显示/导出时筛选；
+Python 原有删峰/求和去同位素接口与部分时间/趋势分析继续保留，边界见[分析说明](docs/analysis.md)。
+待验收与新会话起点见 [发展计划](docs/roadmap.md#新会话起点)。
 
 ## 从这里开始
 

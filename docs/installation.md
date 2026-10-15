@@ -206,6 +206,22 @@ python3 scripts/scmm_env.py install
 已有服务可通过用户级 drop-in 添加 `[Service]` / `Environment=PYTHONUTF8=1`，
 在保存并关闭相关页面、确认无活动任务后执行 daemon-reload 和重启；不要修改已有项目文件的编码。
 
+## 脂质数据库
+
+网页注释默认共享 `~/data/results/databases/lipidmaps`，本机对应用户确认的
+`/home/crs/data/results/databases/lipidmaps`。可通过服务环境变量 `SCMM_LIPID_DATABASE_DIR` 指定另一目录；
+服务用户需有读取权限，缺库自动下载时还需写权限和访问 LIPID MAPS 官方 HTTPS。
+该目录只接受本地普通 SDF 文件，HTTP 文件名不能越界或引用符号链接；不允许客户端指定任意下载 URL。
+
+本地缺库时下载 [LMSD 标准 SDF](https://lipidmaps.org/databases/lmsd/download)，先写临时目录、校验压缩包/SDF，
+再发布按 SHA-256 命名的文件与来源记录。已有有效库复用，不自动追踪最新版本，不覆盖损坏文件。
+数据库需有 EXACT_MASS/FORMULA；无效质量记录统计后跳过，缺失/无效分子式的质量候选仍保留并记录分布诊断。
+各项目保存实际数据库摘要及完整搜索结果，重载审阅/下载无需重新连接官网。
+
+评分预设保存为 `SCMM_PREFERENCES` 所在目录的 `lipid-rules.json`，沿用开发/生产预设隔离；
+安装包默认提供五份可选审阅草案；同名用户预设优先保留，不追溯修改旧项目。参数、导入格式和流程见
+[网页参数](parameters.md#网页注释与同位素)与[工作流程](workflow.md#注释与同位素)。
+
 ## 日常开发与调试
 
 ```sh

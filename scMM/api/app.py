@@ -16,7 +16,17 @@ from scMM.application.projects import PROJECT_ROOT
 from scMM.application.storage import StorageRoot
 from scMM.application.web_workspace import WebWorkspaceService, WorkspaceError
 
-from .routers import analysis, extraction, preferences, projects, raw, results, samples, storage
+from .routers import (
+    analysis,
+    extraction,
+    lipids,
+    preferences,
+    projects,
+    raw,
+    results,
+    samples,
+    storage,
+)
 
 STATIC_ROOT = Path(__file__).parent / "static"
 
@@ -125,6 +135,7 @@ def create_app(
         raw.router,
         extraction.router,
         analysis.router,
+        lipids.router,
         results.router,
     ):
         app.include_router(router)

@@ -240,10 +240,8 @@ const parameterTable = computed<DataTable>(() => {
             "
             @click="review()"
           >
-            建立当前数据集</button
-          ><RouterLink v-if="store.project.dataset" class="button" to="/preprocess"
-            >进入预处理 →</RouterLink
-          >
+            建立当前数据集
+          </button>
         </div>
         <PlotView v-for="(figure, i) in figures" :key="i" :figure="figure" :name="`batch-qc-${i}`"
       /></template>

@@ -74,6 +74,7 @@ scmm-process = "scMM.cli:main"
 scmm-web = "scMM.api.cli:main"
 
 [tool.setuptools.package-data]
+"scMM" = ["resources/lipid_rules/*.json"]
 "scMM.api" = ["static/index.html", "static/assets/*"]
 
 [tool.setuptools.packages.find]

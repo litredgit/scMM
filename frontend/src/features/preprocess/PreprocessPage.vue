@@ -5,6 +5,8 @@ import { useWorkspace } from '../../stores/workspace'
 import type { QC, AnalysisInfo, DataTable } from '../../api/types'
 import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
+import LipidPanel from './LipidPanel.vue'
+import QCComparison from './QCComparison.vue'
 const store = useWorkspace()
 const qc = ref<QC>(),
   info = ref<AnalysisInfo>(),
@@ -88,11 +90,31 @@ const history = computed<DataTable>(() => ({
   rows: info.value?.history ?? [],
   total: info.value?.history.length ?? 0,
 }))
-const impactTable = computed<DataTable>(() => ({
-  columns: ['object', 'before', 'after'],
-  rows: impact.value?.impact ?? [],
-  total: impact.value?.impact.length ?? 0,
-}))
+const countTables = computed(() => {
+  const rows = (impact.value?.impact ?? []).map((row) => ({
+    ...row,
+    change: row.after - row.before,
+  }))
+  return {
+    totals: {
+      columns: ['指标', '操作前', '候选后', '变化'],
+      rows: rows
+        .slice(0, 2)
+        .map((r) => ({ 指标: r.object, 操作前: r.before, 候选后: r.after, 变化: r.change })),
+      total: 2,
+    },
+    samples: {
+      columns: ['样本', '操作前细胞数', '候选后细胞数', '细胞数变化'],
+      rows: rows.slice(2).map((r) => ({
+        样本: r.object,
+        操作前细胞数: r.before,
+        候选后细胞数: r.after,
+        细胞数变化: r.change,
+      })),
+      total: Math.max(0, rows.length - 2),
+    },
+  }
+})
 </script>
 <template>
   <section v-if="store.project?.dataset">
@@ -106,13 +128,6 @@ const impactTable = computed<DataTable>(() => ({
         </p>
       </div>
       <span class="step-badge">04 / 06</span>
-    </div>
-    <div class="card">
-      <h2>当前数据质量</h2>
-      <template v-if="qc"
-        ><DataTableView :table="qc.files" qc /><PlotView :figure="qc.figure" name="current-qc" />
-        <p v-for="note in qc.notes" :key="note" class="page-note">{{ note }}</p></template
-      >
     </div>
     <div class="card">
       <h2>处理当前矩阵</h2>
@@ -211,13 +226,38 @@ const impactTable = computed<DataTable>(() => ({
         <button class="preview" :disabled="store.busy" @click="run(true)">检查影响</button
         ><button class="primary" :disabled="store.busy" @click="run(false)">应用到当前数据</button>
       </div>
-      <div v-if="impact">
+    </div>
+    <div class="card preprocess-comparison">
+      <h2>操作前后对比</h2>
+      <template v-if="impact">
         <h3>候选数据（尚未应用）</h3>
-        <DataTableView :table="impactTable" /><DataTableView :table="impact.qc.files" qc /><PlotView
-          :figure="impact.qc.figure"
-          name="candidate-qc"
-        />
-        <p v-for="note in impact.qc.notes" :key="note" class="page-note">{{ note }}</p>
+        <p class="muted">操作前为当前矩阵，候选后为本次参数的检查结果；变化 = 候选后 − 操作前。</p>
+        <h3>数据规模</h3>
+        <DataTableView :table="countTables.totals" />
+        <template v-if="countTables.samples.rows.length">
+          <h3>各样本细胞数</h3>
+          <DataTableView :table="countTables.samples" />
+        </template>
+        <h3>来源文件 QC 指标</h3>
+        <QCComparison v-if="qc" :before="qc.files" :after="impact.qc.files" />
+      </template>
+      <template v-else>
+        <p class="muted">
+          设置上方参数并点击“检查影响”，在此对比操作前与候选后的数量、QC 指标和分布。
+        </p>
+        <DataTableView v-if="qc" :table="qc.files" qc />
+      </template>
+      <div class="qc-plots" :class="{ comparing: impact }">
+        <div v-if="qc">
+          <h3>操作前 · 当前数据</h3>
+          <PlotView :figure="qc.figure" name="current-qc" />
+          <p v-for="note in qc.notes" :key="note" class="page-note">{{ note }}</p>
+        </div>
+        <div v-if="impact">
+          <h3>候选后 · 尚未应用</h3>
+          <PlotView :figure="impact.qc.figure" name="candidate-qc" />
+          <p v-for="note in impact.qc.notes" :key="note" class="page-note">{{ note }}</p>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -253,10 +293,11 @@ const impactTable = computed<DataTable>(() => ({
             )
           "
         >
-          恢复到预处理起点</button
-        ><RouterLink class="button primary" to="/analysis">进入分析 →</RouterLink>
+          恢复到预处理起点
+        </button>
       </div>
     </div>
+    <LipidPanel />
   </section>
   <div v-else class="card empty-state">
     <h1>尚未建立当前数据集</h1>
@@ -264,3 +305,25 @@ const impactTable = computed<DataTable>(() => ({
     <RouterLink to="/extraction">前往提取审核 →</RouterLink>
   </div>
 </template>
+
+<style scoped>
+.preprocess-comparison :deep(th),
+.preprocess-comparison :deep(td) {
+  text-align: center;
+}
+.preprocess-comparison :deep(th .field-label) {
+  justify-content: center;
+}
+.qc-plots {
+  display: grid;
+  gap: 24px;
+}
+.qc-plots > div {
+  min-width: 0;
+}
+@media (min-width: 1200px) {
+  .qc-plots.comparing {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+</style>

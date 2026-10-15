@@ -67,7 +67,8 @@ Vue 使用应用层参数定义和新项目默认值，分析保留现有算法�
 
 ### 去同位素
 
-此节描述 Python/Notebook；当前 Vue/API 尚无去同位素入口，规划见 [M3](roadmap.md#m3去同位素接入)。
+此节描述 Python/Notebook 原有跨细胞回归去同位素接口。网页采用数据库分子式天然分布标记，
+保留全部峰和候选，其参数见[网页注释与同位素](#网页注释与同位素)。两种算法和处理语义不同。
 
 Notebook 默认 `RUN_DEISOTOPE=False`；开启后使用 `DEISOTOPE_OPTIONS`。API 方法
 `CyESIData.deisotope()` 的默认值如下：
@@ -140,7 +141,7 @@ Notebook 和 API 的默认方法都是 `total`；Notebook 默认额外传入 `sc
 
 ## SDF 注释
 
-此节描述 Python/Notebook；当前 Vue/API 尚无 SDF 搜索入口，规划见 [M4](roadmap.md#m4sdf-候选注释接入)。
+此节描述 Python/Notebook 原接口；网页的完整候选、规则与天然同位素参数见[网页注释与同位素](#网页注释与同位素)。
 
 | Notebook 参数 | API 参数 | 默认值 | 含义与推荐 |
 |---|---|---:|---|
@@ -150,6 +151,71 @@ Notebook 和 API 的默认方法都是 `total`；Notebook 默认额外传入 `sc
 | `MAX_ANNOTATIONS_PER_MZ` | `max_results_per_mz` | `5` / API `None` | 每个 m/z 最多保留候选数；探索时可增加 |
 
 自定义加合物可通过 API 的 `adducts_pos`、`adducts_neg` 传入。候选按绝对 ppm 误差排序。
+
+## 网页注释与同位素
+
+第四步“注释与同位素”使用本地 LMSD SDF，保留所有容差内候选，不限制最近候选数。
+正模式支持 `[M+H]+`、`[M+Na]+`、`[M+K]+`、`[M+NH4]+`；负模式支持 `[M-H]-`、
+`[M+Cl]-`、`[M+HCOO]-`、`[M+OAc]-`。均为单电荷天然丰度模型，不包含示踪、多电荷或源内碎片。
+极性和所选加合物需与实验一致；`both` 搜索两组候选，不推断实际采集极性。
+网页从元素质量与电子质量计算离子质量，甲酸/乙酸加合物按实际原子组成计算；不沿用旧 API 的近似加合物常量。
+
+| 参数 | 网页默认值 | 含义 |
+|---|---:|---|
+| `annotation_ppm` | `10` | 实测与理论离子 m/z 的绝对相对误差上限；保留全部命中 |
+| `isotope_ppm` | `10` | 预测同位素与观测特征的 m/z 匹配容差 |
+| `max_isotope_order` | `3` | 检查 M+1～M+3；可选 1～10 |
+| `isotope_tolerance` | `0.2` | 实测/理论强度比例的双侧相对容差；0.2 为理论比例的 80%～120% |
+| `min_valid_cells` | `20` | 每样本最少有效细胞对数；母峰 >0、子峰 ≥0、双方有限，子峰零值参与统计 |
+| `intensity_layer` | 项目的预处理输入层 | 使用未归一化、未插补强度；可显式选择 `X` 或其他层，已知变换层和 SNR 层拒绝使用 |
+| `resolution` | 当前项目参数值，使用前核对 | m/z 200 处的分辨率，沿已有提取的质量缩放定义估计理论细结构合峰；必填正数 |
+
+导入 H5AD 的输入层不保证就是原始强度，需按数据来源核对。比例按样本的有效细胞总强度比计算；
+优先使用稳定 `sample_id`，否则使用 `sample`/`source_file`；没有分组字段时标为单样本。
+样本间一致性、母峰未检出而子峰检出的数量均可审阅，不增加自动删除/强制保留门禁。
+自动标记按每条候选关系和每个样本分别记录；显示/导出隐藏同位素时，默认使用任一样本命中且未被人工否定的关系，
+也可只使用人工接受关系。评分不改变这些计算证据。
+
+`ppm_error = (observed_mz - theoretical_mz) / theoretical_mz * 1e6`；正数表示实测偏高，
+`abs_ppm_error` 取其绝对值。排序先按 `≤2`、`>2 且 ≤5`、`>5` 三档，再按类别分＋加合物分降序；
+分档使用完整精度，同档同分保留并列，不再按更细的误差差异择优。未导入规则时同档候选未评分。
+
+### 评分规则文件
+
+默认提供 PBMC、人癌细胞、小鼠癌细胞、藻类、大肠杆菌五份可选规则预设，须主动选择并应用。JSON 根对象包含 `schema_version: 1`、可选 `name` 和 `rules` 列表。
+每条规则字段为 `kind,level,value,polarity,adduct,score`；未知字段、非有限分值、重复条件和极性冲突拒绝导入。
+`kind=class` 指定类别分；`kind=adduct` 指定加合物分，可用类别条件限定。
+类别 `level` 支持 `CATEGORY`、`MAIN_CLASS`、`SUB_CLASS`、`LIPID_CLASS`；`value` 使用数据库类别名称/代码，
+或缩写中的类别如 PC。较具体层级覆盖同一评分项的通用规则，不重复累加；同层级优先极性明确的规则，
+同样具体的多个别名条件按文件中先出现者，评分证据列记录实际采用项。空 `polarity` 适用两种极性。
+
+以下仅演示格式，分值需自行修改；它不是内置预设：
+
+```json
+{
+  "schema_version": 1,
+  "name": "自定义示例",
+  "rules": [
+    {"kind": "class", "level": "MAIN_CLASS", "value": "GP01", "polarity": "pos", "score": 10},
+    {"kind": "adduct", "level": "LIPID_CLASS", "value": "PC", "polarity": "pos", "adduct": "[M+H]+", "score": 5}
+  ]
+}
+```
+
+CSV 表头和对应示例：
+
+```csv
+kind,level,value,polarity,adduct,score
+class,MAIN_CLASS,GP01,pos,,10
+adduct,LIPID_CLASS,PC,pos,[M+H]+,5
+```
+
+导入先校验并预览，点击应用排序或运行后才成为该版本的规则。命名预设主动保存，拒绝同名覆盖；
+全局预设不追溯更改既有版本。正负模式的规则可保存在同一文件中，模板不包含评分项。
+
+供人工审阅的 PBMC、人癌细胞、小鼠癌细胞、藻类及大肠杆菌草案位于
+[规则文件夹](../rules/lipids/README.md)，附完整分值和原始研究依据。它们随安装包提供，新环境无需手动导入；
+须主动选择预设或导入文件、预览及应用；同名用户预设优先保留保存值。分值是排序建议，不能解释为丰度或鉴定概率。
 
 ## Notebook：分析参数
 

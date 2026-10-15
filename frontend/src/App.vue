@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useWorkspace } from './stores/workspace'
 
 const store = useWorkspace()
+const route = useRoute()
+const router = useRouter()
 onMounted(() => {
   void store.start()
   window.addEventListener('pagehide', store.release)
@@ -14,6 +17,28 @@ const stages = [
   { path: '/preprocess', name: '预处理' },
   { path: '/analysis', name: '分析' },
 ]
+const workflow = [
+  { path: '/samples', name: '项目与样本' },
+  ...stages,
+  { path: '/results', name: '结果与保存' },
+]
+const stepIndex = computed(() => workflow.findIndex((step) => step.path === route.path))
+const previousStep = computed(() =>
+  stepIndex.value === 0 ? { path: '/projects', name: '项目首页' } : workflow[stepIndex.value - 1],
+)
+const nextStep = computed(() => workflow[stepIndex.value + 1])
+const nextBlocked = computed(
+  () =>
+    !store.project ||
+    (['/preprocess', '/analysis'].includes(nextStep.value?.path ?? '') && !store.project.dataset),
+)
+const nextHelp = computed(() =>
+  !store.project
+    ? '请先创建或打开项目。'
+    : nextBlocked.value
+      ? '请先审核纳入提取结果，或导入已有 H5AD，建立当前数据集。'
+      : '',
+)
 </script>
 
 <template>
@@ -87,11 +112,53 @@ const stages = [
             {{ store.busy ? '正在连接…' : '重新连接' }}
           </button>
         </div>
-        <RouterView v-else v-slot="{ Component }"
-          ><KeepAlive><component :is="Component" /></KeepAlive
-        ></RouterView>
+        <template v-else>
+          <RouterView v-slot="{ Component }"
+            ><KeepAlive><component :is="Component" /></KeepAlive
+          ></RouterView>
+          <nav v-if="stepIndex >= 0" class="workflow-navigation" aria-label="步骤切换">
+            <button
+              v-if="previousStep"
+              :disabled="store.busy"
+              @click="router.push(previousStep.path)"
+            >
+              ← 上一步：{{ previousStep.name }}
+            </button>
+            <span class="muted">{{ stepIndex + 1 }} / {{ workflow.length }}</span>
+            <div v-if="nextStep" class="workflow-next">
+              <button
+                class="primary"
+                :disabled="store.busy || nextBlocked"
+                :title="nextHelp"
+                :aria-describedby="nextHelp ? 'workflow-next-help' : undefined"
+                @click="router.push(nextStep.path)"
+              >
+                下一步：{{ nextStep.name }} →
+              </button>
+              <p v-if="nextHelp" id="workflow-next-help" class="muted">{{ nextHelp }}</p>
+            </div>
+          </nav>
+        </template>
       </main>
       <footer>scMM · CyESI 单细胞质谱分析<span>离开或刷新前请主动保存项目</span></footer>
     </div>
   </div>
 </template>
+
+<style scoped>
+.workflow-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.workflow-next {
+  max-width: 100%;
+  text-align: right;
+}
+.workflow-next p {
+  margin-bottom: 0;
+}
+</style>

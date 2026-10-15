@@ -33,6 +33,36 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
   await page.getByLabel('下一项操作', { exact: true }).selectOption('normalize')
   await page.getByRole('button', { name: '检查影响', exact: true }).click()
   await expect(page.getByRole('heading', { name: '候选数据（尚未应用）' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '数据规模', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '各样本细胞数', exact: true })).toBeVisible()
+  const comparison = page.getByRole('table', { name: '操作前后 QC 对比' })
+  await expect(comparison.getByRole('columnheader')).toHaveText([
+    '来源文件',
+    '指标',
+    '统计量',
+    '操作前',
+    '候选后',
+    '变化',
+  ])
+  await expect
+    .poll(() =>
+      comparison
+        .locator('th')
+        .first()
+        .evaluate((el) => getComputedStyle(el).textAlign),
+    )
+    .toBe('center')
+  const detected = comparison.locator('tr').filter({ hasText: '检出特征数' }).first()
+  await expect(detected.locator('td').nth(3)).toHaveText(/^\d+(\.\d)?$/)
+  await page.screenshot({
+    path: test.info().outputPath('preprocess-comparison.png'),
+    fullPage: true,
+  })
+  await page.setViewportSize({ width: 390, height: 900 })
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+    .toBe(true)
+  await page.setViewportSize({ width: 1440, height: 1000 })
   await noError(page)
   await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
   await expect(page.getByRole('status')).toHaveText('预处理已应用，下游分析结果已失效。')
@@ -42,11 +72,35 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
   await page.getByRole('button', { name: '运行降维', exact: true }).click()
   await expect(page.getByLabel('查看嵌入', { exact: true })).toHaveValue('X_pca')
   await expect(page.locator('.js-plotly-plot').first()).toBeVisible()
+  await page.getByLabel('store_key', { exact: true }).fill('X_pca_compare')
+  await page.getByRole('button', { name: '运行降维', exact: true }).click()
+  await expect(page.getByLabel('查看嵌入', { exact: true })).toHaveValue('X_pca_compare')
+  await expect(page.getByRole('button', { name: '更新嵌入图', exact: true })).toBeEnabled()
+  const switchedEmbedding = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/analysis/plot') &&
+      response.request().postDataJSON().options.key === 'X_pca',
+  )
+  await page.getByLabel('查看嵌入', { exact: true }).selectOption('X_pca')
+  expect((await switchedEmbedding).ok()).toBe(true)
   await page.getByRole('button', { name: '运行聚类', exact: true }).click()
   await expect(page.getByLabel('Color', { exact: true })).toHaveValue('obs:clusters')
   await page.getByLabel('Color source', { exact: true }).selectOption('feature')
+  const autoPlot = page.waitForResponse(async (response) => {
+    if (!response.url().endsWith('/analysis/plot')) return false
+    const body = response.request().postDataJSON()
+    return body.kind === 'embedding' && body.options.color === 'feature:f0'
+  })
   await page.getByLabel('Color', { exact: true }).selectOption('feature:f0')
-  await page.getByRole('button', { name: '更新嵌入图', exact: true }).click()
+  expect((await autoPlot).ok()).toBe(true)
+  await expect(page.getByRole('button', { name: '更新嵌入图', exact: true })).toBeEnabled()
+  const uncolored = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/analysis/plot') &&
+      response.request().postDataJSON().options.color === null,
+  )
+  await page.getByLabel('Color source', { exact: true }).selectOption('none')
+  expect((await uncolored).ok()).toBe(true)
   await noError(page)
   await page.getByRole('button', { name: '差异与 Marker', exact: true }).click()
   await page.getByRole('button', { name: '比较全部特征', exact: true }).click()
@@ -233,7 +287,7 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   await expect(
     page.getByText('当前数据集已建立，可进入预处理。项目仍需主动保存。', { exact: true }),
   ).toBeVisible()
-  await page.getByRole('link', { name: '进入预处理 →', exact: true }).click()
+  await page.getByRole('button', { name: '下一步：预处理 →', exact: true }).click()
   await expect(page.getByText('2 细胞 × 1 特征 · 每步成功后保留历史层。')).toBeVisible()
   await noError(page)
   expect(errors).toEqual([])

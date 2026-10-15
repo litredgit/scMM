@@ -44,6 +44,8 @@ function formatted(value: unknown, key: string, row: Record<string, unknown>) {
       ['mean', 'median', 'std', 'min', 'max'].includes(key)
     )
       return value.toExponential(3)
+    if (props.qc && row.metric === '检出特征数')
+      return value.toLocaleString('en-US', { maximumFractionDigits: 1, useGrouping: false })
     if (/intensity|mean_abs_shap|mean_a|mean_b/.test(key)) return value.toExponential(3)
     return Number.isInteger(value)
       ? String(value)

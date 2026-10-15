@@ -66,7 +66,8 @@ const legend = ref('right')
 let generation = 0,
   featureGeneration = 0,
   initializedPath = '',
-  hydrating = false
+  hydrating = false,
+  requestedEmbedding = ''
 const observed = computed(() => Object.keys(info.value?.observations ?? {}))
 const groups = computed(() => info.value?.observations[diff.group_key] ?? [])
 const colors = computed(() =>
@@ -118,6 +119,7 @@ async function refresh() {
   const token = ++generation
   if (!store.project?.dataset) {
     info.value = undefined
+    requestedEmbedding = ''
     figures.value = {}
     tables.value = {}
     return
@@ -215,6 +217,7 @@ async function refresh() {
   if (!value.embeddings.length) delete figures.value.embedding
   await Promise.resolve()
   hydrating = false
+  void autoDrawEmbedding()
   void loadFeatures()
 }
 watch(
@@ -224,6 +227,7 @@ watch(
     () => store.project?.dataset?.revision,
   ],
   () => {
+    requestedEmbedding = ''
     figures.value = {}
     tables.value = {}
     modelReport.value = undefined
@@ -329,6 +333,28 @@ watch(colorSource, () => {
   featureOffset.value = 0
   void loadFeatures()
 })
+const embeddingSignature = computed(() =>
+  JSON.stringify([
+    store.project?.path,
+    store.project?.dataset?.id,
+    store.project?.dataset?.revision,
+    embedding.value,
+    colorSource.value === 'none' ? null : color.value || null,
+  ]),
+)
+async function autoDrawEmbedding() {
+  await nextTick()
+  if (
+    hydrating ||
+    store.busy ||
+    !embedding.value ||
+    !info.value?.embeddings.includes(embedding.value)
+  )
+    return
+  if (requestedEmbedding === embeddingSignature.value) return
+  await draw('embedding')
+}
+watch([embeddingSignature, () => store.busy], () => void autoDrawEmbedding())
 async function execute(operation: string, options: Record<string, unknown>) {
   await store.mutate('/analysis/operation', { operation, options })
   if (store.error) return
@@ -376,6 +402,7 @@ async function loadResult(name: string, offset = 0) {
   if (result?.diagnostics) modelReport.value = result.diagnostics
 }
 async function draw(kind: string) {
+  if (store.busy) return
   const options =
     kind === 'embedding'
       ? { key: embedding.value, color: colorSource.value === 'none' ? null : color.value || null }
@@ -388,8 +415,11 @@ async function draw(kind: string) {
               columns: Math.max(1, Math.min(3, Math.floor(window.innerWidth / 400))),
             }
           : {}
+  const signature = embeddingSignature.value
+  if (kind === 'embedding') requestedEmbedding = signature
   const value = await store.command<Figure>('/analysis/plot', { kind, options })
-  if (value) figures.value[kind] = value
+  if (value && (kind !== 'embedding' || signature === embeddingSignature.value))
+    figures.value[kind] = value
 }
 function toggleFeature(id: string) {
   const current = [...selectedFeatures.value]

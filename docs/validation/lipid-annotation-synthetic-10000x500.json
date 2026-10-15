@@ -1,0 +1,59 @@
+{
+  "scope": "synthetic matrix with downloaded LMSD; not experimental accuracy or user acceptance",
+  "created_at": "2026-10-13T13:54:19.879463+00:00",
+  "python": "3.12.13",
+  "platform": "Linux-5.15.0-191-generic-x86_64-with-glibc2.35",
+  "seed": 42,
+  "cells": 10000,
+  "samples": 10,
+  "features": 500,
+  "dtype": "float64",
+  "parameters": {
+    "database": "LMSD_f77d752c487bdcc9.sdf",
+    "polarity": "pos",
+    "adducts": [
+      "[M+H]+",
+      "[M+Na]+",
+      "[M+K]+",
+      "[M+NH4]+"
+    ],
+    "annotation_ppm": 10.0,
+    "isotope_ppm": 10.0,
+    "max_isotope_order": 3,
+    "isotope_tolerance": 0.2,
+    "min_valid_cells": 20,
+    "intensity_layer": "",
+    "resolution": 35000.0
+  },
+  "pyopenms_version": "3.3.0",
+  "rules": {
+    "schema_version": 1,
+    "name": "",
+    "rules": []
+  },
+  "source_sha256": {
+    "tools/benchmark_lipid_annotation.py": "433337206f142e698b24cfc86aa8084d6dfab672f8fb9981b38ed6baea46948d",
+    "scMM/util/lipid_annotation.py": "54537e5b6abbe518373fedbafc203d8b59a74f72e2aefd3817cfa005496352de",
+    "scMM/util/lipid_isotopes.py": "c0057ae37e794ae69f8d1cd4dcb3ccaae9a033a64b1eb3a32d5bafc2f5b0b25e",
+    "scMM/util/lipid_rules.py": "a43404c54bb0cdb1eab807fdd08e4bfcd2bce5abad50a59328ddfe4331751c91",
+    "scMM/application/lipid_database.py": "ba80b0edc8afe698948d3ec63d77042c999f30b0eed7c209fb01b9ab966befa5"
+  },
+  "database": {
+    "source": "https://lipidmaps.org/files/?ext=sdf.zip&file=LMSD",
+    "downloaded_at": "2026-10-13T12:52:53.741541+00:00",
+    "sha256": "f77d752c487bdcc97c07c6711e0f69c9021b0e3954584ceb72253f388b222512",
+    "license": "CC BY 4.0",
+    "archive_member": "structures.sdf",
+    "filename": "LMSD_f77d752c487bdcc9.sdf",
+    "records": 49981,
+    "invalid_mass_records": 605,
+    "missing_formula_records": 0
+  },
+  "database_load_seconds": 4.547412878135219,
+  "annotation_seconds": 2.9725444389041513,
+  "peak_rss_mib": 588.06640625,
+  "candidate_count": 3773,
+  "isotope_evidence_count": 31560,
+  "matched_evidence_count": 10140,
+  "diagnostics_count": 22
+}

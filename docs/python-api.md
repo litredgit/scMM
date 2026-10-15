@@ -136,6 +136,9 @@ data = (
 
 ### 检查去同位素结果而不修改数据
 
+本节是原 Python 回归/强度上限算法；网页数据库分子式天然分布标记保留所有峰和候选，
+与本方法的删峰/求和语义不同，见[网页操作](workflow.md#注释与同位素)。原接口和 Notebook 默认值不改变。
+
 ```python
 audit = data.deisotope(
     ppm_tol=1.0,

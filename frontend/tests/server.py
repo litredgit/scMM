@@ -1,5 +1,6 @@
 """Ephemeral synthetic server for browser tests; never opens user projects."""
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -63,7 +64,54 @@ def main():
         )
         analysis.X[:32, 0] *= 5
         analysis.write_h5ad(results / "analysis.h5ad")
+        # Local synthetic lipid database and peaks: browser tests never download LMSD.
+        from scMM.util.lipid_isotopes import adduct_shift, resolved_distribution
+
+        formula = "C10H20"
+        mass = oms.EmpiricalFormula(formula).getMonoWeight()
+        protonated = mass + adduct_shift("[M+H]+")
+        peak = resolved_distribution(formula, "[M+H]+", 3, protonated, 35000)[0]
+        parent = np.linspace(100.0, 1000.0, 40)
+        lipids = AnnData(
+            np.column_stack([parent, parent * peak["ratio"], parent * 0.3, parent * 0.1]),
+            obs=pd.DataFrame(
+                {"sample": np.repeat(["a", "b"], 20)}, index=[f"lipid-cell{i}" for i in range(40)]
+            ),
+            var=pd.DataFrame(
+                {"mz": [protonated, peak["mz"], mass + adduct_shift("[M+Na]+"), 300.0]},
+                index=["f_h", "f_iso", "f_na", "f_unknown"],
+            ),
+        )
+        lipids.write_h5ad(results / "lipids.h5ad")
+        database = root / "lipid-database"
+        database.mkdir()
+        records = []
+        for i, name in enumerate(["Synthetic lipid A", "Synthetic lipid B"], 1):
+            properties = {
+                "LM_ID": f"LMGP0101000{i}",
+                "NAME": name,
+                "EXACT_MASS": str(mass),
+                "FORMULA": formula,
+                "CATEGORY": "Glycerophospholipids [GP]",
+                "MAIN_CLASS": "Glycerophosphocholines [GP01]",
+                "ABBREVIATION": "PC 10:0",
+            }
+            records.append(
+                name
+                + "\n  synthetic\n\n"
+                + "".join(f">  <{key}>\n{value}\n\n" for key, value in properties.items())
+                + "$$$$\n"
+            )
+        (database / "synthetic.sdf").write_text("".join(records))
+        os.environ["SCMM_LIPID_DATABASE_DIR"] = str(database)
         os.environ["SCMM_PREFERENCES"] = str(root / "preferences.json")
+        # Load the review files into this temporary preset store, never the live one.
+        from scMM.application.web_lipids import save_rules_preset
+
+        rules_root = Path(__file__).resolve().parents[2] / "rules/lipids"
+        for path in sorted(rules_root.glob("*.review-v1.json")):
+            rules = json.loads(path.read_text(encoding="utf-8"))
+            save_rules_preset(rules["name"], rules)
         app = create_app(
             [StorageRoot("Raw", raw)],
             [StorageRoot("Results", results)],
