@@ -5,6 +5,18 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   test.setTimeout(90000)
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
+  async function selectFeature(id: string) {
+    const query = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/lipids/query') &&
+        response.request().postDataJSON().feature_id === id,
+    )
+    await page.getByLabel('脂质逐特征核对', { exact: true }).selectOption(id)
+    const response = await query
+    expect(response.ok()).toBe(true)
+    await response.finished()
+    await expect(page.getByRole('button', { name: '保存人工指定', exact: true })).toBeEnabled()
+  }
   await page.goto('/')
   await page.getByLabel('项目名称', { exact: true }).fill('脂质标记验收')
   await page.getByRole('button', { name: '创建并添加样本' }).click()
@@ -102,10 +114,12 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await page.getByLabel('加合物保留方式', { exact: true }).selectOption('all')
   await page.getByLabel('同位素状态', { exact: true }).selectOption('all')
   await page.getByRole('button', { name: '应用显示筛选', exact: true }).click()
-  await page.getByLabel('脂质逐特征核对', { exact: true }).selectOption('f_h')
+  await selectFeature('f_h')
   await panel.getByLabel('指定 LMGP01010002 [M+H]+', { exact: true }).uncheck()
+  await expect(panel.getByLabel('指定 LMGP01010002 [M+H]+', { exact: true })).not.toBeChecked()
   await page.getByRole('button', { name: '保存人工指定', exact: true }).click()
   await expect(page.getByRole('status')).toHaveText('人工指定已保存。')
+  await expect(panel.getByLabel('指定 LMGP01010002 [M+H]+', { exact: true })).not.toBeChecked()
   await panel.getByRole('button', { name: '接受', exact: true }).first().click()
   await expect(panel.getByRole('cell', { name: '接受', exact: true }).first()).toBeVisible()
   await page.getByRole('button', { name: '保存项目', exact: true }).first().click()
@@ -122,7 +136,7 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await expect(panel).not.toHaveAttribute('open', '')
   await panel.locator(':scope > summary').click()
   await expect(panel.getByText('4 / 4 特征 · 4 条候选 · 4 条关系证据')).toBeVisible()
-  await page.getByLabel('脂质逐特征核对', { exact: true }).selectOption('f_h')
+  await selectFeature('f_h')
   await expect(panel.getByLabel('指定 LMGP01010001 [M+H]+', { exact: true })).toBeChecked()
   await expect(panel.getByLabel('指定 LMGP01010002 [M+H]+', { exact: true })).not.toBeChecked()
   await expect(panel.getByRole('cell', { name: '接受', exact: true }).first()).toBeVisible()

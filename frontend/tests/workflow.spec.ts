@@ -30,6 +30,7 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
   await importData(page, 'Vue 全部分析')
   await page.getByRole('link', { name: /预处理/ }).click()
   await expect(page.getByRole('heading', { name: '预处理与 QC' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '操作前 · 当前数据', exact: true })).toBeVisible()
   await page.getByLabel('下一项操作', { exact: true }).selectOption('normalize')
   await page.getByRole('button', { name: '检查影响', exact: true }).click()
   await expect(page.getByRole('heading', { name: '候选数据（尚未应用）' })).toBeVisible()
