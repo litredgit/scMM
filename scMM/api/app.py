@@ -90,7 +90,7 @@ def create_app(
                 mutation = request.method not in {"GET", "HEAD", "OPTIONS"}
                 if mutation:
                     origin = request.headers.get("origin")
-                    allowed = server_config.origins or (str(request.base_url).rstrip("/"),)
+                    allowed = (*server_config.origins, str(request.base_url).rstrip("/"))
                     if request.headers.get("x-scmm-client") != "web" or (
                         origin and origin not in allowed
                     ):

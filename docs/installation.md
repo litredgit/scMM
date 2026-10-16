@@ -180,6 +180,10 @@ uv run --locked scmm-admin --server-config ~/.config/scmm/dev.json rotate-operat
 | 监听地址/端口 | `--address` / `--port` | `SCMM_ADDRESS` / `SCMM_PORT` | `address` / `port` |
 | Cookie 名/HTTPS 标记 | `--cookie-name` / `--cookie-secure` / `--no-cookie-secure` | `SCMM_SESSION_COOKIE` / `SCMM_COOKIE_SECURE`，后者为 JSON 布尔值 | `cookie_name` / `cookie_secure` |
 | 允许来源 | 重复 `--origin` | `SCMM_ALLOWED_ORIGINS`，JSON 列表 | `origins` |
+
+外部 Nginx 反代时，管理员在仓库外资源配置 `origins` 中填写浏览器实际访问来源（含协议及非默认端口），
+例如 `https://scmm.example.org`；外层 TLS 和后端 HTTP 的来源不同，不能仅依赖后端请求地址。
+配置列表与后端直连同源地址共同生效，仍保留客户端标记、认证与 CSRF 校验；不通过通配来源或盲目信任代理头放开访问。
 | 空闲/最长会话秒数 | `--session-idle-seconds` / `--session-absolute-seconds` | `SCMM_SESSION_IDLE_SECONDS` / `SCMM_SESSION_ABSOLUTE_SECONDS` | `session_idle_seconds` / `session_absolute_seconds` |
 
 认证数据库、监控数据库、原始目录和项目输出无可用默认值，必须显式配置；其他通用默认值见模板。
