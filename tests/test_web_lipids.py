@@ -261,6 +261,9 @@ def test_builtin_presets_available_without_preferences_and_custom_values_preserv
     assert rules_presets()[name]["rules"] == []
     result = save_rules_preset("custom", {"schema_version": 1, "rules": []})
     assert len(result) == 6
-    assert set(json.loads((tmp_path / "lipid-rules.json").read_text(encoding="utf-8"))) == {name, "custom"}
+    assert set(json.loads((tmp_path / "lipid-rules.json").read_text(encoding="utf-8"))) == {
+        name,
+        "custom",
+    }
     with pytest.raises(ValueError, match="已存在"):
         save_rules_preset(name, override)
