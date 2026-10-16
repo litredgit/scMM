@@ -136,8 +136,14 @@ def test_raw_vue_project_entry_and_reader_failure(raw_pair, tmp_path, monkeypatc
     projects = tmp_path / "projects"
     projects.mkdir()
     monkeypatch.setenv("SCMM_PREFERENCES", str(tmp_path / "preferences.json"))
-    app = create_app((StorageRoot("data", tmp_path),), project_root=projects, static_root=None)
+    from web_auth_support import auth_options, login_client
+
+    options, credential = auth_options(tmp_path)
+    app = create_app(
+        (StorageRoot("data", tmp_path),), project_root=projects, static_root=None, **options
+    )
     with TestClient(app, headers={"X-SCMM-Client": "web"}) as client:
+        login_client(client, credential)
         identity = client.post("/api/v1/workspaces").json()["workspace_id"]
         headers = {"X-SCMM-Workspace": identity}
         client.post(

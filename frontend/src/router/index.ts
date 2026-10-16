@@ -9,6 +9,8 @@ export const router = createRouter({
   routes: [
     { path: '/', redirect: '/projects' },
     { path: '/projects', component: ProjectsPage },
+    { path: '/admin/monitor', component: () => import('../features/monitor/MonitorPage.vue') },
+    { path: '/account', component: () => import('../features/account/AccountPage.vue') },
     { path: '/samples', component: SamplesPage },
     { path: '/parameters', component: ParametersPage },
     { path: '/results', component: ResultsPage },

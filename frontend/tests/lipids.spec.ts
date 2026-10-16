@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { readFile } from 'node:fs/promises'
 
 test('lipid rules, isotope review, filtered adduct CSV and saved versions', async ({ page }) => {

@@ -311,6 +311,7 @@ CLI、Python API 和 Notebook 的默认提取方法仍为 legacy；两种提取�
 小提琴图每次最多 12 个，默认包含零值。它们是显示设置，不改变检验和数值导出。
 
 用 `scmm-web --config workbench.json` 或 `SCMM_UI_CONFIG` 指定，命令行优先。
+这只配置实验参数；服务器路径、认证与可选资源使用独立的[资源配置](installation.md#访问与路径配置)，不能由网页表单修改。
 
 ```json
 {

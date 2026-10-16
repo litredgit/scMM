@@ -1,16 +1,61 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWorkspace } from './stores/workspace'
+import { useAuth } from './stores/auth'
+import { startPresence, updatePresence } from './api/presence'
+import LoginPanel from './components/LoginPanel.vue'
 
 const store = useWorkspace()
+const auth = useAuth()
 const route = useRoute()
 const router = useRouter()
+const standalone = computed(() => ['/admin/monitor', '/account'].includes(route.path))
+let presence: ReturnType<typeof startPresence> | undefined
+let workspaceUser = ''
+async function connect() {
+  if (!auth.user || auth.user.must_change) return
+  await presence?.ready
+  if (workspaceUser !== auth.user.id) store.reset()
+  workspaceUser = auth.user.id
+  if (standalone.value) return
+  if (store.current) await store.refresh()
+  if (!store.current) await store.start()
+}
+watch(
+  () => (auth.user && !auth.user.must_change ? auth.user.id : null),
+  (identity) => {
+    if (identity) void connect()
+  },
+)
+async function logout() {
+  await store.run(async () => {
+    store.release()
+    await auth.logout()
+    store.reset()
+  })
+}
+watch(
+  () => route.path,
+  () => {
+    if (!standalone.value && auth.user && !store.current) void connect()
+  },
+)
+watch(
+  () => [route.path, auth.user?.id, auth.user?.must_change, store.current?.workspace_id],
+  () => {
+    updatePresence(route.path, !!auth.user && !auth.user.must_change, store.current?.workspace_id)
+  },
+)
 onMounted(() => {
-  void store.start()
+  presence = startPresence()
+  void presence.ready.then(() => auth.refresh())
   window.addEventListener('pagehide', store.release)
 })
-onUnmounted(() => window.removeEventListener('pagehide', store.release))
+onUnmounted(() => {
+  window.removeEventListener('pagehide', store.release)
+  presence?.stop()
+})
 const stages = [
   { path: '/raw', name: '原始谱与参数' },
   { path: '/extraction', name: '提取与审核' },
@@ -42,7 +87,9 @@ const nextHelp = computed(() =>
 </script>
 
 <template>
-  <div class="workbench">
+  <main v-if="!auth.ready" class="card">正在检查登录状态…</main>
+  <LoginPanel v-else-if="!auth.user || auth.user.must_change" />
+  <div v-else class="workbench" :key="auth.user.id">
     <aside class="sidebar">
       <RouterLink to="/projects" class="brand" aria-label="scMM 项目首页">
         <span class="brand-mark">s</span><span>scMM<small>单细胞质谱工作台</small></span>
@@ -58,6 +105,8 @@ const nextHelp = computed(() =>
         <RouterLink to="/results"><span class="nav-number">6</span>结果与保存</RouterLink>
       </nav>
       <div class="sidebar-bottom">
+        <RouterLink v-if="auth.admin" to="/admin/monitor">管理员监控</RouterLink>
+        <RouterLink to="/account">{{ auth.admin ? '账号与管理' : '我的账号' }}</RouterLink>
         <RouterLink to="/parameters">参数参考 <span>↗</span></RouterLink>
         <div class="connection">
           <i :class="{ connected: store.current }"></i
@@ -75,6 +124,8 @@ const nextHelp = computed(() =>
           ><strong>{{ store.project?.manifest.name ?? '尚未打开项目' }}</strong>
         </div>
         <div class="topbar-actions">
+          <span>{{ auth.user.username }}</span>
+          <button :disabled="store.busy" @click="logout">退出登录</button>
           <span v-if="store.project" class="save-state" :class="{ dirty: store.project.unsaved }">{{
             store.project.unsaved ? '有未保存修改' : '已保存'
           }}</span>
@@ -95,7 +146,7 @@ const nextHelp = computed(() =>
           </button>
         </div>
       </header>
-      <main id="main-content" :aria-busy="store.busy">
+      <main id="main-content" :aria-busy="!standalone && store.busy">
         <div v-if="store.error" role="alert" class="alert error">
           <span>{{ store.error }}</span>
           <div class="actions">
@@ -105,7 +156,7 @@ const nextHelp = computed(() =>
           </div>
         </div>
         <div v-if="store.notice" role="status" class="alert success">{{ store.notice }}</div>
-        <div v-if="!store.current" class="card empty-state">
+        <div v-if="!store.current && !standalone" class="card empty-state">
           <h1>连接实验工作区</h1>
           <p>服务重启或页面刷新后，请重新打开已保存的项目。</p>
           <button class="primary" :disabled="store.busy" @click="store.start()">

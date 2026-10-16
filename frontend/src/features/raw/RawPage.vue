@@ -3,10 +3,12 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { request } from '../../api/client'
 import type { Figure, DataTable, Job } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
+import { useAuth } from '../../stores/auth'
 import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
 import ProcessingFields from './ProcessingFields.vue'
 const store = useWorkspace()
+const auth = useAuth()
 const sample = ref(''),
   opened = ref(''),
   summary = ref<Record<string, unknown>>()
@@ -506,7 +508,9 @@ async function savePresets() {
                   :disabled="store.busy"
                 ></textarea>
               </label>
-              <button class="save" :disabled="store.busy" @click="savePresets">保存全局预设</button>
+              <button v-if="auth.admin" class="save" :disabled="store.busy" @click="savePresets">
+                保存全局预设
+              </button>
             </template>
           </div>
         </section>

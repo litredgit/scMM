@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
+import { useAuth } from '../../stores/auth'
+import { authenticatedFetch, sessionVersion, ensureSession } from '../../api/client'
 import DataTableView from '../../components/DataTable.vue'
 import type { LipidInfo, LipidResults, LipidRules } from './lipids'
 
 const store = useWorkspace()
+const auth = useAuth()
 const info = ref<LipidInfo>()
 const results = ref<LipidResults>()
 const rules = ref<LipidRules>({ schema_version: 1, name: '', rules: [] })
@@ -298,7 +301,8 @@ async function download(kind: string) {
   const workspace = store.current.workspace_id
   const revision = store.current.revision
   await store.run(async () => {
-    const response = await fetch('/api/v1/workspace/lipids/export', {
+    const epoch = sessionVersion()
+    const response = await authenticatedFetch('/api/v1/workspace/lipids/export', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -319,7 +323,9 @@ async function download(kind: string) {
       const body = await response.json()
       throw new Error(body.error?.message ?? '导出失败。')
     }
-    const url = URL.createObjectURL(await response.blob())
+    const blob = await response.blob()
+    ensureSession(epoch)
+    const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = `lipid-${kind}.${kind === 'rules' ? 'json' : 'csv'}`
@@ -356,6 +362,9 @@ function number(value: unknown) {
     <fieldset :disabled="store.busy">
       <legend>数据库与匹配</legend>
       <p class="lipid-path">数据库目录：{{ info?.database.directory }}</p>
+      <p v-if="info?.database.error" class="muted">
+        {{ info.database.error }}；已有注释仍可查看和导出。
+      </p>
       <div class="field-grid">
         <label
           ><FieldLabel name="数据库文件" /><select
@@ -449,7 +458,12 @@ function number(value: unknown) {
       </div>
       <div class="actions">
         <button class="secondary" @click="template">下载空规则模板</button
-        ><button class="secondary" :disabled="!presetName.trim()" @click="savePreset">
+        ><button
+          v-if="auth.admin"
+          class="secondary"
+          :disabled="!presetName.trim()"
+          @click="savePreset"
+        >
           保存为规则预设</button
         ><button :disabled="!validVersion || !imported" @click="applyRules">应用规则排序</button>
       </div>

@@ -13,6 +13,7 @@ import pytest
 from anndata import AnnData, read_h5ad
 from fastapi.testclient import TestClient
 from test_project_batch import setup_project
+from web_auth_support import auth_options, login_client
 
 from scMM.api.app import create_app
 from scMM.application.cell_preview import run_preview
@@ -29,11 +30,13 @@ def workflow(tmp_path, monkeypatch):
     reference, _ = setup_project(raw)
     reference.manifest["parameters"].update(extraction_method="snr_v1", reference_ppm_tol=50.0)
     monkeypatch.setenv("SCMM_PREFERENCES", str(tmp_path / "preferences.json"))
+    options, credential = auth_options(tmp_path)
     app = create_app(
         [StorageRoot("Raw", raw)],
         [StorageRoot("Output", output)],
         project_root=projects,
         static_root=None,
+        **options,
     )
     manager = app.state.workspaces
     monkeypatch.setattr(
@@ -47,6 +50,7 @@ def workflow(tmp_path, monkeypatch):
         ),
     )
     with TestClient(app, headers={"X-SCMM-Client": "web"}) as client:
+        login_client(client, credential)
         identity = client.post("/api/v1/workspaces").json()["workspace_id"]
         headers = {"X-SCMM-Workspace": identity}
         client.post(

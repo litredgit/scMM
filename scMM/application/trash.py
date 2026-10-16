@@ -56,7 +56,11 @@ class SavedItems:
         roots = [StorageRoot("项目结果", store.root), *roots]
         self.catalog = StorageCatalog(roots)
         self.active_paths = active_paths
-        self.trash_root = Path(trash_root or Path.home() / "data/results/recycle").absolute()
+        self.trash_root = Path(
+            trash_root
+            or os.environ.get("SCMM_RECYCLE_ROOT")
+            or Path.home() / "data/results/recycle"
+        ).absolute()
 
     def _target(self, label, value):
         root = self.catalog.root(label).path

@@ -391,3 +391,72 @@ git show bc3e35d:docs/10-functional-port.md
 git show bc3e35d:docs/15-project-redesign.md
 git show bc3e35d:docs/16-thermo-raw.md
 ```
+
+## 认证与服务器资源边界
+
+`application/auth.py` 管理 SQLite 账号、Argon2id 密码、随机会话摘要、一次性凭据、登录限速及安全日志；
+`application/identity.py` 只承载请求身份上下文，不给核心数值模块引入认证依赖。
+`api/app.py` 统一保护业务接口并检查管理员权限、完整来源和会话绑定 CSRF；静态页面及最小健康检查可匿名访问。
+`api/routers/auth.py` 提供登录、改密和管理接口，认证配置缺失时拒绝构建应用；没有匿名开关。
+`web_workspace.py` 在工作区访问锁内复核所有者，团队共享磁盘项目仍使用原有修订和原子快照契约。
+账号数据库不入项目快照；原生 Python/CLI 使用者仍由服务器操作系统权限管理。
+
+`application/server_config.py` 解析仓库外资源配置，`api/admin_cli.py` 提供显式初始化和离线恢复。
+必需目录在启动时检查，注释及 RAW 可选资源在功能使用时检查；服务器模式下失效路径不回退到其他位置。
+普通启动不创建缺失目录，不自动扩展数据白名单。
+部署布局使用[通用模板](../config/environments.example.json)，网页资源使用[独立模板](../config/server.example.json)；
+优先级、环境变量和命令见[安装部署](installation.md#访问与路径配置)。
+
+认证专项运行 `PYTHONUTF8=1 .venv/bin/python -m pytest tests/test_authentication.py tests/test_server_config.py -q -W error`。
+原有 HTTP 回归使用真实临时数据库及登录，不绕过中间件；浏览器使用隔离合成账号，不读取线上凭据。
+同账号重新登录可继续仍有效的内存工作区，不保证恢复过期工作区或服务重启前的草稿。
+
+## 开源敏感信息检查与历史清理计划
+
+当前文件检查：`python scripts/check_sensitive.py`；全部本地可达历史审计：
+`python scripts/check_sensitive.py --history --report /tmp/scmm-security-audit.json`。
+检查代码、文档、CHANGELOG、Notebook 输出、验证报告，以及 `dist/`、`build/` 和服务静态资源；
+zip/wheel/sdist 在内存中检查，不解压到工作区。规则覆盖个人目录、内网地址、常见凭据格式、私钥、带凭据 URL、
+字面量密码/密钥赋值及凭据文件名；超过扫描上限的压缩包报未完成检查，不当作通过。
+输出只有类别、文件、行号和历史对象摘要，不输出命中值。模式扫描无法证明不存在未知格式的敏感信息，发布前仍须审阅。
+CI 检查当前源码和新构建包；历史单独记录，不能把既有历史问题隐藏成当前源码通过。
+
+本轮按用户确认只审计历史并准备计划，不改写提交、不更新远端；脱敏摘要见
+[开源审计报告](validation/open-source-audit.json)。历史仍含个人路径、内网地址及带输出的旧 Notebook。
+当前文件脱敏不会移除这些 Git 对象；GitHub 旧提交、引用、克隆和缓存也不会因此消失。
+当前未命中所扫描的凭据模式，不能扩展为不存在凭据的结论；未来发现真实凭据必须先撤销或轮换，再处理历史。
+
+后续历史处理需单独审阅以下范围：
+
+1. 冻结协作写入，核对远端分支/标签、本地旧分支、备份 refs 和所有 worktree，创建仓库外私有备份及隔离 mirror。
+2. 对拟公开引用执行路径/地址替换，清空历史 Notebook 输出及执行计数，审阅代码单元中的真实路径。
+   保留科学定义和数值报告；旧源码快照及归档逐项核对。
+3. 在隔离镜像重新扫描全部可达对象，执行文档/Notebook/构建检查，产出旧新提交映射和受影响引用清单。
+4. 审阅并另行授权后协调远端引用更新和必要强推，按 GitHub 要求处理旧 PR/缓存引用，通知协作者重新克隆。
+   重写本地分支不能清除远端、备份、reflog 或第三方克隆，不承诺彻底删除已公开数据。
+5. 用户确认迁移可用后再评估本地旧 refs、reflog、备份和对象回收，不自动删除恢复材料。
+
+依据 [GitHub 敏感数据移除说明](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)。
+认证参考 [Argon2-cffi](https://argon2-cffi.readthedocs.io/en/stable/howto.html) 及
+[OWASP 会话管理](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)。
+
+
+## 管理员监控边界
+
+`application/monitor.py` 在独立线程采样，`monitor_probe.py` 使用仅依赖 psutil/标准库的限时子进程读取固定布局元数据与磁盘容量，
+不导入科学流程、不遍历谱图/快照树、不读取 H5AD。工作区清单和各工作区锁均只尝试非阻塞读取，不调用 `access`、`_prune` 或复制矩阵。
+锁冲突、不可读目录、元数据异常、孤立 worker、采样超时均保留未知证据，不能产生零值成功结论。
+`monitor_store.py` 将监控历史、页面租约摘要和账号最近访问单独保存；旧实例页面在新心跳之前保持待确认。
+`monitor_presence.py` 计算保守更新判断；`monitor_peer.py` 独立读取配置的生产状态并校验协议、时效、计数及一致性。
+HTTP `/presence/register` 与 `/presence/heartbeat` 为登录页提供受限租约，仍校验同源标记/来源，限制路由、字段、容量及注册频率，
+心跳须持有对应随机租约，关闭记录不允许迟到心跳重新打开。所有明细、历史和事件接口均仅管理员可读。
+任务提交记录请求身份；历史任务无提交人时明确显示“未记录”。页面/历史数据不是部署授权或实验用户验收证据。
+
+专项检查：`PYTHONUTF8=1 .venv/bin/python -m pytest tests/test_monitoring.py tests/test_environments.py tests/test_server_config.py -q -W error`，
+浏览器回归包含 `frontend/tests/monitor.spec.ts`；测试仅使用临时目录和合成数据。普通采样不发业务请求、不写项目文件。
+工作区满额/计算锁占用不影响直接访问监控。前端轮询独立于实验 busy 状态，离开监控页停止轮询，旧响应不覆盖新页面状态。
+
+
+首次认证迁移使用 `release --migrate-auth`，前提及人工维护窗口证据见[安装部署](installation.md#监控初始化与生产只读检查)。
+该路径仅支持旧版、不能覆盖新监控状态；测试覆盖非零/非法旧计数、新协议拒绝及安装/同步/健康失败后旧启动器和代码共同恢复。
+常规发布继续使用新协议和时效检查。恢复备份位于仓库外；配置、认证库和监控库不随代码回滚。

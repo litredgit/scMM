@@ -2,9 +2,11 @@
 import { ref, watch, onActivated } from 'vue'
 import { request } from '../api/client'
 import { useWorkspace } from '../stores/workspace'
+import { useAuth } from '../stores/auth'
 import FileBrowser from './FileBrowser.vue'
 import type { SavedProject } from '../api/types'
 const store = useWorkspace()
+const auth = useAuth()
 const emit = defineEmits<{ changed: [] }>()
 const projects = ref<SavedProject[]>([]),
   selected = ref(''),
@@ -177,7 +179,12 @@ async function clear() {
           </tbody>
         </table>
       </div>
-      <button class="danger" :disabled="store.busy || !trash.length" @click="clear">
+      <button
+        v-if="auth.admin"
+        class="danger"
+        :disabled="store.busy || !trash.length"
+        @click="clear"
+      >
         永久清空全部共享回收条目
       </button>
     </details>

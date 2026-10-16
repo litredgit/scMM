@@ -108,10 +108,10 @@ async function add() {
     manual.value = ''
   }
 }
-async function importDataset(trust = false) {
+async function importDataset() {
   const result = await store.mutate(
     '/dataset/import',
-    { root: fileRoot.value, path: chosen.value[0], trust_pickle: trust },
+    { root: fileRoot.value, path: chosen.value[0] },
     'POST',
     '结果已导入，请核对样本关联。',
   )
@@ -258,12 +258,11 @@ async function applyMapping() {
               :disabled="store.busy || chosen.length !== 1"
               @click="importDataset()"
             >
-              导入结果</button
-            ><button :disabled="store.busy || chosen.length !== 1" @click="importDataset(true)">
-              读取可信旧格式结果
+              导入结果
             </button>
             <p class="muted">
-              旧 pickle 格式仅在信任来源时读取；导入会替换当前工作数据。
+              网页仅导入 H5AD 或不含 pickle 的结果目录；旧 pickle
+              请先离线转换。导入会替换当前工作数据。
             </p></template
           >
         </div>

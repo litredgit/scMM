@@ -111,6 +111,9 @@ def submit(project, storage, *, retry_path=None):
     if not background_tasks_supported():
         raise RuntimeError("Project extraction currently requires Linux")
     request = preflight(project, storage)
+    from .identity import actor
+
+    request["submitted_by"] = (actor.get() or {}).get("id")
     for sample in request["samples"]:
         sample["input_identity"] = file_identity(sample["path"])
     prior = None

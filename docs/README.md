@@ -8,9 +8,10 @@
 
 ## 开始使用
 
-1. [安装与部署](installation.md)：uv 环境、RAW 外部依赖、网页启动和服务更新。
-2. [工作流程](workflow.md)：Vue 六步项目与 Notebook，从输入到审核、分析和保存；[注释与同位素](workflow.md#注释与同位素)含规则和筛选导出。
-3. 运行失败时查 [排错与调参](troubleshooting.md)，需要选择或解释参数时查 [参数参考](parameters.md)。
+1. [安装与部署](installation.md)：uv 环境、RAW 外部依赖、服务器资源初始化、账号认证、网页启动和服务更新。
+2. [管理员监控](workflow.md#管理员监控)：页面活动、任务与资源趋势，以及生产更新检查边界。
+3. [工作流程](workflow.md)：Vue 六步项目与 Notebook，从输入到审核、分析和保存；[注释与同位素](workflow.md#注释与同位素)含规则和筛选导出。
+4. 运行失败时查 [排错与调参](troubleshooting.md)，需要选择或解释参数时查 [参数参考](parameters.md)。
 
 ## 按需查阅
 
@@ -26,7 +27,7 @@
 ## 维护
 
 - [代理工作指南](../AGENTS.md)：主要设计、模块职责及提问/提交规则；具体进展见 CHANGELOG。
-- [开发指南](development.md)：模块职责、测试与发布、main/dev 环境分工、上游快照和历史文档追溯。
+- [开发指南](development.md)：模块职责、测试与发布、main/dev 环境分工、上游快照、开源敏感信息检查及历史清理计划。
 - [待办与发展计划](roadmap.md)：交互与重任务优先级、注释/同位素联合验收及其余接入里程碑；已通过验收的工作归 CHANGELOG。
 - [CHANGELOG](../CHANGELOG.md)：实现、验证、验收和部署记录，包括历史环境证据。
 

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 
 test('six workflow steps navigate in both directions and guard missing data', async ({ page }) => {
   const errors: string[] = []

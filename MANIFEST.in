@@ -1,5 +1,7 @@
 recursive-include frontend *.json *.ts *.vue *.css *.html *.mjs *.py
 include frontend/.prettierignore
+recursive-include config *.example.json
+global-exclude .env .env.* *.local.json *.sqlite* *.db *.operations-token *.initial.txt *.pem *.key server.json environments.json
 prune frontend/node_modules
 prune frontend/test-results
 prune frontend/playwright-report

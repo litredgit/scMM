@@ -24,6 +24,8 @@ class ThermoRawError(RuntimeError):
 def reader_command():
     """Resolve an executable, or a DLL plus an explicitly located .NET runtime."""
     configured = os.environ.get("SCMM_THERMO_READER")
+    if os.environ.get("SCMM_SERVER_CONFIG_ACTIVE") == "1" and not configured:
+        raise ThermoRawError("未配置 RAW reader。请由管理员设置 thermo_reader。")
     default = Path.home() / ".local/share/scmm/thermo-reader/scmm-thermo-reader.dll"
     program = configured or shutil.which("scmm-thermo-reader") or str(default)
     path = Path(program).expanduser()
@@ -32,6 +34,8 @@ def reader_command():
             "Thermo reader not installed; set SCMM_THERMO_READER (see docs/thermo-raw.md)"
         )
     if path.suffix.lower() == ".dll":
+        if os.environ.get("SCMM_SERVER_CONFIG_ACTIVE") == "1" and not os.environ.get("SCMM_DOTNET"):
+            raise ThermoRawError("未配置 .NET runtime。请由管理员设置 dotnet。")
         runtime = os.environ.get("SCMM_DOTNET") or shutil.which("dotnet")
         runtime = runtime or str(Path.home() / ".local/share/scmm/dotnet/dotnet")
         if not Path(runtime).is_file():

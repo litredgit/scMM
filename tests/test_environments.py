@@ -45,7 +45,7 @@ def worktrees(tmp_path, monkeypatch):
 
     monkeypatch.setattr(manager, "run", run)
     monkeypatch.setattr(manager, "health", lambda: None)
-    monkeypatch.setattr(manager, "web_idle", lambda _port: None)
+    monkeypatch.setattr(manager, "web_idle", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(manager, "sync", lambda *_: None)
     return values, old, new, service_calls
 
@@ -147,6 +147,10 @@ def test_development_update_guard_without_systemd(monkeypatch):
 def test_debug_launch_uses_development_interpreter_and_paths(worktrees, monkeypatch):
     values, *_ = worktrees
     values.update(raw=Path("/raw"), address="127.0.0.1")
+    config = values["state"] / "dev.json"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text("{}")
+    values["dev_server_config"] = config
     calls = []
     monkeypatch.setattr(manager.os, "chdir", lambda *_: None)
     monkeypatch.setattr(manager.os, "execve", lambda *args: calls.append(args))
@@ -156,8 +160,8 @@ def test_debug_launch_uses_development_interpreter_and_paths(worktrees, monkeypa
     assert args[1:6] == ["-m", "debugpy", "--listen", "127.0.0.1:5678", "--wait-for-client"]
     assert args[6] == str(values["dev"] / ".venv/bin/scmm-web")
     assert args[args.index("--port") + 1] == "5007"
-    assert args[args.index("--project-root") + 1] == str(values["state"] / "dev/results")
-    assert env["SCMM_PREFERENCES"] == str(values["state"] / "dev/preferences.json")
+    assert args[args.index("--server-config") + 1] == str(config)
+    assert "SCMM_PREFERENCES" not in env
     with pytest.raises(ValueError, match="only available"):
         manager.serve(values, "prod", debug=True)
 
@@ -212,7 +216,7 @@ def test_vue_unsaved_workspaces_block_restart_without_sockets(monkeypatch):
         "urlopen",
         lambda *_args, **_kwargs: Response(json.dumps(replies.pop(0)).encode()),
     )
-    with pytest.raises(RuntimeError, match="unsaved or busy Vue"):
+    with pytest.raises(RuntimeError, match="monitoring protocol is unavailable"):
         manager.web_idle(5006)
 
 
@@ -247,3 +251,130 @@ def test_vue_invalid_runtime_never_assumes_idle(monkeypatch, status):
     )
     with pytest.raises(RuntimeError, match="invalid runtime response"):
         manager.web_idle(5006)
+
+
+@pytest.mark.parametrize(
+    "change,allowed",
+    [
+        ({}, True),
+        ({"active_pages": 1}, False),
+        ({"unconfirmed_pages": 1}, False),
+        ({"monitor_pages": 1}, True),
+        ({"active_tasks": 1}, False),
+        ({"open_projects": 1}, False),
+        ({"sampled_at": 1}, False),
+        ({"state": "unknown"}, False),
+        ({"busy_workspaces": True}, False),
+    ],
+)
+def test_update_gate_requires_fresh_explicit_page_evidence(monkeypatch, change, allowed):
+    from io import BytesIO
+
+    from scMM.application.monitor_presence import update_readiness
+
+    class Response(BytesIO):
+        headers: ClassVar[dict] = {"Content-Type": "application/json"}
+
+    decision = update_readiness(pages=[], workspaces=[], tasks=[], sampled_at=manager.time.time())
+    decision.update(change)
+    replies = [
+        {"frontend": "vue"},
+        {
+            "monitor_protocol": 1,
+            "unsaved_workspaces": 0,
+            "busy_workspaces": 0,
+            "update_readiness": decision,
+        },
+    ]
+    monkeypatch.setattr(
+        manager.urllib.request,
+        "urlopen",
+        lambda *_a, **_k: Response(json.dumps(replies.pop(0)).encode()),
+    )
+    if allowed:
+        manager.web_idle(5006)
+    else:
+        with pytest.raises(RuntimeError):
+            manager.web_idle(5006)
+
+
+@pytest.mark.parametrize(
+    "state,allowed",
+    [
+        ({"unsaved_workspaces": 0, "busy_workspaces": 0}, True),
+        ({"unsaved_workspaces": 1, "busy_workspaces": 0}, False),
+        ({"unsaved_workspaces": 0, "busy_workspaces": False}, False),
+        ({"unsaved_workspaces": 0, "busy_workspaces": 0, "monitor_protocol": 1}, False),
+        (
+            {
+                "unsaved_workspaces": 0,
+                "busy_workspaces": 0,
+                "update_readiness": {"state": "unknown"},
+            },
+            False,
+        ),
+        ({}, False),
+    ],
+)
+def test_first_migration_never_overrides_new_protocol_or_busy_state(monkeypatch, state, allowed):
+    from io import BytesIO
+
+    replies = [{"frontend": "vue"}, state]
+    monkeypatch.setattr(
+        manager.urllib.request,
+        "urlopen",
+        lambda *_a, **_k: BytesIO(json.dumps(replies.pop(0)).encode()),
+    )
+    if allowed:
+        manager.legacy_web_idle()
+    else:
+        with pytest.raises(RuntimeError):
+            manager.legacy_web_idle()
+
+
+def test_migration_is_rejected_on_authenticated_revision(worktrees):
+    values, *_ = worktrees
+    module = values["prod"] / "scMM/application/auth.py"
+    module.parent.mkdir(parents=True)
+    module.write_text("existing authentication")
+    with pytest.raises(RuntimeError, match="only allowed from the legacy"):
+        manager.validate_auth_migration(values, "dev")
+
+
+@pytest.mark.parametrize("failure", ["install", "sync", "health"])
+def test_first_migration_failure_restores_legacy_launcher_and_code(worktrees, monkeypatch, failure):
+    values, old, _, calls = worktrees
+    home = values["state"] / "home"
+    home.mkdir(parents=True)
+    monkeypatch.setattr(manager.Path, "home", classmethod(lambda _cls: home))
+    launcher = home / ".local/share/scmm/scmm_env.py"
+    unit = home / ".config/systemd/user/scmm-ui.service"
+    for path in (launcher, unit):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("legacy")
+        path.chmod(0o640)
+    monkeypatch.setattr(manager, "validate_auth_migration", lambda *_: None)
+    monkeypatch.setattr(manager, "legacy_web_idle", lambda: None)
+    attempts = []
+
+    def install(*_):
+        launcher.write_text("new")
+        unit.write_text("new")
+        if failure == "install":
+            raise RuntimeError("simulated migration failure")
+
+    def fail_once(*_):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("simulated migration failure")
+
+    monkeypatch.setattr(manager, "install", install)
+    if failure != "install":
+        monkeypatch.setattr(manager, failure, fail_once)
+    with pytest.raises(RuntimeError, match="simulated migration failure"):
+        manager.deploy(values, "dev", migrate_auth=True)
+    assert manager.git(values["prod"], "rev-parse", "HEAD") == old
+    assert launcher.read_text() == unit.read_text() == "legacy"
+    assert launcher.stat().st_mode & 0o777 == 0o640
+    assert calls[-1] == ("start", manager.SERVICE)
+    assert list(values["state"].glob("pre-auth-launchers-*/manifest.json"))

@@ -1,6 +1,6 @@
 """Feature routes for the remaining five workbench stages."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from scMM.application.preferences import load_preferences, save_preferences
 
@@ -11,8 +11,17 @@ router = APIRouter(prefix="/api/v1", tags=["preferences"])
 
 
 @router.get("/runtime")
-def runtime(manager: Service):
-    return manager.runtime()
+async def runtime(request: Request):
+    state = request.app.state.monitor.snapshot()
+    decision = state["update_readiness"]
+    return {
+        "unsaved_workspaces": decision["unsaved_workspaces"],
+        "busy_workspaces": decision["busy_workspaces"],
+        "monitor_protocol": 1,
+        "environment": state["environment"],
+        "instance": state["instance"],
+        "update_readiness": decision,
+    }
 
 
 @router.get("/preferences")

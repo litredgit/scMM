@@ -14,7 +14,10 @@ from anndata import AnnData
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from types import SimpleNamespace
+
 from scMM.api.app import STATIC_ROOT, create_app
+from scMM.application.auth import AuthStore
 from scMM.application.storage import StorageRoot
 
 
@@ -112,11 +115,18 @@ def main():
         for path in sorted(rules_root.glob("*.review-v1.json")):
             rules = json.loads(path.read_text(encoding="utf-8"))
             save_rules_preset(rules["name"], rules)
+        auth, initial = AuthStore.initialize(root / "auth.sqlite3", "browser")
+        _, principal = auth.login("browser", initial, "local")
+        auth.change_password(
+            principal, "", os.environ.get("SCMM_E2E_PASSWORD", "Synthetic browser passphrase")
+        )
         app = create_app(
             [StorageRoot("Raw", raw)],
             [StorageRoot("Results", results)],
             project_root=projects,
             static_root=os.environ.get("SCMM_TEST_STATIC_ROOT") or STATIC_ROOT,
+            auth_store=auth,
+            server_config=SimpleNamespace(cookie_name="scmm_e2e", cookie_secure=False, origins=()),
         )
         app.state.workspaces.store.create("已有项目", app.state.workspaces.defaults)
         from scMM.application.trash import SavedItems

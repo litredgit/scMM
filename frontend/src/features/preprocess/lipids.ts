@@ -6,7 +6,12 @@ export interface LipidRules {
   rules: Record<string, unknown>[]
 }
 export interface LipidInfo {
-  database: { directory: string; files: { filename: string; bytes: number }[]; available: boolean }
+  database: {
+    directory: string
+    files: { filename: string; bytes: number }[]
+    available: boolean
+    error?: string
+  }
   adducts: Record<string, { polarity: string }>
   presets: Record<string, LipidRules>
   active: string

@@ -17,6 +17,7 @@ from uuid import uuid4
 
 import pandas as pd
 
+from .identity import actor
 from .projects import Project, ProjectStore
 from .storage import StorageCatalog
 from .web_analysis import AnalysisWorkflow
@@ -52,6 +53,7 @@ class BrowserWorkspace:
     raw: dict | None = None
     preview_job: dict | None = None
     trash_plan: tuple | None = None
+    owner_id: str | None = None
 
     def discard_views(self):
         self.raw = None
@@ -194,7 +196,8 @@ class WebWorkspaceService(RawWorkflow, AnalysisWorkflow, ResultWorkflow, LipidWo
                 raise WorkspaceError(
                     "打开的工作区过多，请关闭不用的页面后重试。", code="capacity", status=503
                 )
-            workspace = BrowserWorkspace()
+            principal = actor.get()
+            workspace = BrowserWorkspace(owner_id=principal["id"] if principal else None)
             self._workspaces[workspace.id] = workspace
         return self.view(workspace)
 
@@ -207,6 +210,11 @@ class WebWorkspaceService(RawWorkflow, AnalysisWorkflow, ResultWorkflow, LipidWo
                 "工作区已关闭或服务已重启，请重新打开项目。", code="workspace_missing", status=404
             )
         with workspace.lock:
+            principal = actor.get()
+            if principal is not None and workspace.owner_id != principal["id"]:
+                raise WorkspaceError(
+                    "工作区不存在或不属于当前账号。", code="workspace_missing", status=404
+                )
             if workspace.closed or time.monotonic() - workspace.touched > self.idle_seconds:
                 with self._lock:
                     self._workspaces.pop(identity, None)
@@ -391,6 +399,11 @@ class WebWorkspaceService(RawWorkflow, AnalysisWorkflow, ResultWorkflow, LipidWo
         return self._update_samples(identity, revision, update)
 
     def import_dataset(self, identity, revision, root, path, trust_pickle):
+        if trust_pickle and actor.get() is not None:
+            raise WorkspaceError(
+                "网页不支持导入可执行 pickle，请离线转换为 H5AD。", code="unsafe_import", status=403
+            )
+
         def action(workspace):
             data = read_dataset(self.results, root, path, trust_pickle=trust_pickle)
             candidate = project_candidate(workspace.project)

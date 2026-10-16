@@ -1,0 +1,75 @@
+{
+  "date": "2026-10-16",
+  "scope": "All locally reachable refs; remote branch tips verified; no history rewrite.",
+  "scanner": "scripts/check_sensitive.py",
+  "history": {
+    "objects": 1728,
+    "blobs": 1060,
+    "counts": {
+      "personal_home": 545,
+      "private_ip": 60,
+      "notebook_output": 25
+    }
+  },
+  "affected_files": {
+    "AGENTS.md": 6,
+    "CHANGELOG.md": 72,
+    "README.md": 2,
+    "chloroplast.ipynb": 25,
+    "docs/09-web-ui.md": 6,
+    "docs/10-functional-port.md": 11,
+    "docs/12-upstream-todo.md": 2,
+    "docs/13-workbench.md": 3,
+    "docs/15-project-redesign.md": 16,
+    "docs/16-thermo-raw.md": 71,
+    "docs/17-current-web-guide.md": 1,
+    "docs/README.md": 4,
+    "docs/data-output.md": 2,
+    "docs/installation.md": 9,
+    "docs/parameters.md": 2,
+    "docs/roadmap.md": 6,
+    "docs/thermo-raw.md": 2,
+    "docs/validation/thermo-wt-1-pipeline.json": 6,
+    "docs/validation/thermo-wt-1-reader.json": 2,
+    "docs/validation/thermo-wt-1-web.json": 1,
+    "docs/workflow.md": 3,
+    "frame_cluster.ipynb": 5,
+    "scMM.analysis.ipynb": 51,
+    "scMM.debug.ipynb": 71,
+    "scMM/application/preferences.py": 1,
+    "scMM/application/projects.py": 4,
+    "scMM/debug.py": 44,
+    "scMM/debug_batch.py": 4,
+    "scMM/ui/cli.py": 3,
+    "scMM_stability_test.ipynb": 5,
+    "sum_specs.ipynb": 14,
+    "wholebody.analysis.ipynb": 10,
+    "wormethology.ipynb": 84,
+    "wormmutants.ipynb": 82
+  },
+  "github": {
+    "branches": 3,
+    "tags": 0,
+    "release_assets": 0,
+    "actions_artifacts": 0
+  },
+  "credentials": "No matches for scanned credential patterns; not a guarantee of absence.",
+  "decision": "Audit and prepare a reviewable plan only; no ref rewrites or force-push.",
+  "plan": "docs/development.md#开源敏感信息检查与历史清理计划",
+  "current": {
+    "patterns_matched": 0,
+    "distribution_archive_findings": 0,
+    "notebook_outputs": 0,
+    "note": "Source, docs, validation reports, frontend candidate, sdist and wheel scanned; counts are a point-in-time audit."
+  },
+  "credential_patterns": [
+    "private_key",
+    "github_token",
+    "aws_access_key",
+    "slack_token",
+    "credential_url",
+    "literal_secret"
+  ],
+  "source_commit": "37011b44b744fdb9679058cf391c7d6e83138417",
+  "history_commit_count": 122
+}

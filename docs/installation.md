@@ -112,45 +112,82 @@ Python 和前端分别使用 `uv.lock`、`frontend/package-lock.json` 固定依�
 uv sync --locked --all-extras --dev
 npm --prefix frontend ci
 npm --prefix frontend run build
-uv run --locked scmm-web --storage "原始数据=/mnt/ms-data" --port 5007
+uv run --locked scmm-web --server-config ~/.config/scmm/dev.json --port 5007
 ```
 
 `scmm-web` 是唯一网页命令；旧 `scmm-ui`、`--frontend` 与 `--allow-websocket-origin` 已移除。
 静态资源构建到 `scMM/api/static/`，与 `/api/v1` 接口由同一个服务提供；运行服务不需要 Node 进程。
-`--project-root`、`--storage`、`--output`、`--address` 及 `--config` 延用现有路径和配置规则。
-修改接口要求同源浏览器请求；不新增账户体系。
-API 仅运行一个 worker，不能直接增加 Uvicorn workers；工作区在该进程内隔离管理。
+服务器资源和实验参数独立配置，启动前须完成下节初始化。网页按钮只能选择已授权根目录内的文件，不能新增根目录。
 
-构建文件不提交 Git，但在构建 Python sdist/wheel 前必须生成；发行包包含静态页面和资源。
-源码包包含前端源文件及锁文件，可重新构建。仅安装 Python 包时无需本机 Node；核心 API/CLI 不依赖网页 extra。
-缺少 Vue 构建产物时启动明确报错。当前能力见[Vue 操作说明](workflow.md#vue-网页项目与样本)。
+### 服务器初始化与账号
+
+真实配置、认证数据库、监控数据库、一次性凭据和运维令牌均放在 Git 工作区之外，认证和监控数据库还必须位于网页可浏览目录之外。
+仓库的 [服务器模板](../config/server.example.json) 只展示通用字段，不含真实路径或凭据。
+管理员在服务器终端执行一次初始化，原始数据目录必须已经存在；初始化显式创建输出及运行目录，不覆盖已有配置或数据库：
+
+```bash
+uv run --locked scmm-admin --server-config ~/.config/scmm/dev.json init \
+  --admin admin \
+  --auth-db ~/.local/state/scmm/dev/auth.sqlite3 \
+  --storage "原始数据=/srv/scmm/raw" \
+  --project-root ~/.local/state/scmm/dev/results \
+  --preferences ~/.local/state/scmm/dev/preferences.json \
+  --cache-root ~/.local/state/scmm/dev/cache \
+  --temp-root ~/.local/state/scmm/dev/tmp \
+  --recycle-root ~/.local/state/scmm/dev/recycle \
+  --cookie-name scmm_dev --insecure-cookie --port 5007
+uv run --locked scmm-web --server-config ~/.config/scmm/dev.json
+```
+
+上例用于可信内部 HTTP 环境；`--insecure-cookie` 是显式例外。默认 Cookie 要求 HTTPS。
+仍沿用内部 HTTP 的生产实例也须显式设置该例外；公网开放前必须完成 HTTPS 并恢复 Secure 标记。
+本阶段不包含公网反向代理、TLS 或公网开放。开发与生产分别初始化，使用不同配置、认证数据库及 Cookie 名；
+同主机不同端口不会隔离 Cookie。普通启动不提问、不生成管理员、不创建缺失的必需目录、不回退匿名。
+
+初始化将 24 小时内有效的一次性凭据写入配置同目录的 `.initial.txt` 文件，将运维令牌写入 `.operations-token` 文件，
+均为 600 权限；终端只显示文件位置。首次登录消耗初始化凭据，设置 15–128 字符密码后用新密码登录。
+管理员可在“账号与管理”创建账号、重置密码、启停账号和查看最近安全记录；重置结果只返回一次。
+改密、重置、停用立即撤销相应登录会话；不能停用最后一个管理员。无法登录时在服务器终端恢复：
+
+```bash
+uv run --locked scmm-admin --server-config ~/.config/scmm/dev.json reset-password admin \
+  --credential-file ~/.config/scmm/admin-recovery.initial.txt
+uv run --locked scmm-admin --server-config ~/.config/scmm/dev.json rotate-operations-token
+```
+
+凭据文件不要提交、截图或放进项目目录。数据库只保存 Argon2id 密码哈希和随机会话令牌摘要；
+账号资料与会话独立于项目快照，项目重载不会恢复旧登录权限。
 
 ### 访问与路径配置
 
-网页面向实验室内网使用。项目根目录默认为 `~/data/results`，可用 `--project-root` 指定，必须存在且可写。
-`--storage` 可重复指定已挂载的服务器目录，Linux 上 `~/data` 存在时会另加入“云盘”。
-读取前解析真实路径，拒绝逃逸根目录的路径或符号链接；浏览器电脑的本地路径不能直接使用。
-导入旧结果时含 pickle 的目录须明确信任。`--output` 只保留旧任务兼容，不改变项目根目录。
+配置优先级为 **命令行 > 环境变量 > 本地资源配置 > 通用默认值**。
+资源配置文件由 `--server-config`、`SCMM_SERVER_CONFIG`、`~/.config/scmm/server.json` 依次选择；显式选定的文件不存在即报错。
+`--config` / `SCMM_UI_CONFIG` 仍仅管理实验参数，格式见[参数参考](parameters.md#网页默认参数)。
 
-本机生产服务为 5006 的 `scmm-ui.service`，开发服务为 5007 的 `scmm-dev.service`。
-两者使用独立 worktree、`.venv` 和运行目录；日常操作见下节。以下命令展示通用启动参数。
+| 资源 | 命令行 | 环境变量 | 资源配置字段 |
+|---|---|---|---|
+| 监控数据库 | `--monitor-db` | `SCMM_MONITOR_DB` | `monitor_db` |
+| 环境标识 | `--environment` | `SCMM_ENVIRONMENT` | `environment`（dev/prod/standalone） |
+| 生产只读检查 | `--monitor-peer-url` / `--monitor-peer-token-file` | `SCMM_MONITOR_PEER_URL` / `SCMM_MONITOR_PEER_TOKEN_FILE` | `monitor_peer_url` / `monitor_peer_token_file` |
+| 认证数据库 | `--auth-db` | `SCMM_AUTH_DB` | `auth_db` |
+| 原始目录映射 | 重复 `--storage 名称=路径` | `SCMM_STORAGE_ROOTS`，JSON 对象 | `storage` |
+| 项目输出 | `--project-root` | `SCMM_PROJECT_ROOT` | `project_root` |
+| 其他结果目录映射 | 重复 `--output 名称=路径` | `SCMM_OUTPUT_ROOTS`，JSON 对象 | `output` |
+| 全局预设 | `--preferences` | `SCMM_PREFERENCES` | `preferences` |
+| 回收区/缓存/临时目录 | `--recycle-root` / `--cache-root` / `--temp-root` | `SCMM_RECYCLE_ROOT` / `SCMM_CACHE_DIR` / `SCMM_TMP_DIR` | `recycle_root` / `cache_root` / `temp_root` |
+| 注释数据库 | `--lipid-database-dir` | `SCMM_LIPID_DATABASE_DIR` | `lipid_database_dir` |
+| RAW helper / .NET | `--thermo-reader` / `--dotnet` | `SCMM_THERMO_READER` / `SCMM_DOTNET` | `thermo_reader` / `dotnet` |
+| 监听地址/端口 | `--address` / `--port` | `SCMM_ADDRESS` / `SCMM_PORT` | `address` / `port` |
+| Cookie 名/HTTPS 标记 | `--cookie-name` / `--cookie-secure` / `--no-cookie-secure` | `SCMM_SESSION_COOKIE` / `SCMM_COOKIE_SECURE`，后者为 JSON 布尔值 | `cookie_name` / `cookie_secure` |
+| 允许来源 | 重复 `--origin` | `SCMM_ALLOWED_ORIGINS`，JSON 列表 | `origins` |
+| 空闲/最长会话秒数 | `--session-idle-seconds` / `--session-absolute-seconds` | `SCMM_SESSION_IDLE_SECONDS` / `SCMM_SESSION_ABSOLUTE_SECONDS` | `session_idle_seconds` / `session_absolute_seconds` |
 
-本地访问配置：
+认证数据库、监控数据库、原始目录和项目输出无可用默认值，必须显式配置；其他通用默认值见模板。
+启动检查必需目录及写权限；注释数据库、RAW helper 和 .NET 在使用对应功能时检查，不自动换到其他位置。
+原始目录只暴露显式白名单，不再自动添加 `~/data`；`--isolated-storage` 仅兼容旧命令。
+路径读取继续检查真实路径及符号链接，浏览器只能选择已授权范围。网页关闭 pickle 导入，旧格式请离线转换为 H5AD。
+默认监听 `127.0.0.1`，代理头信任关闭；允许来源为空时只接受当前同源，填写时必须是含协议的完整来源。
 
-```bash
-uv run --locked scmm-web --storage "原始数据=/mnt/ms-data" --port 5006 --show
-```
-
-局域网或 Tailscale 访问：
-
-```bash
-uv run --locked scmm-web \
-  --storage "原始数据=/mnt/ms-data" \
-  --address 0.0.0.0 --port 5006
-```
-
-从客户端打开 `http://scmm-node:5006`。防火墙及 Tailscale 路由由部署环境管理。
-外部默认参数用 `--config workbench.json` 或 `SCMM_UI_CONFIG` 配置，格式见[参数参考](parameters.md#网页默认参数)。
 Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；缺少 fcntl 的最小兼容不代表完整 Windows 支持。
 
 ## 开发与生产分离
@@ -169,11 +206,11 @@ Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；
 | 缓存 / 临时文件 | `~/.local/state/scmm/prod/cache` / `prod/tmp` | `~/.local/state/scmm/dev/cache` / `dev/tmp` |
 | 全局预设 | `~/data/results/.scmm-preferences.json` | `~/.local/state/scmm/dev/preferences.json` |
 
-开发与生产的网页回收区统一为 `~/data/results/recycle`，需要运行服务的用户可读写；
-项目根、缓存、预设和临时目录仍分别隔离。回收及清空操作见[网页指南](workflow.md#保存和离开)。
+已有部署的回收区约定为 `~/data/results/recycle`；新部署由 `recycle_root` 明确指定，需要服务用户可读写；
+项目根、缓存、预设和临时目录仍分别隔离；这些是部署目录约定，实际资源值由仓库外配置指定。回收及清空操作见[网页指南](workflow.md#保存和离开)。
 
-项目内的预览缓存、批次状态和快照随各自的项目根隔离。启动器另行设置 `XDG_CACHE_HOME`、
-`UV_CACHE_DIR`、`NUMBA_CACHE_DIR`、`MPLCONFIGDIR` 和 `TMPDIR`，后台 worker 继承这些配置。
+项目内的预览缓存、批次状态和快照随各自的项目根隔离。启动器为同步工具设置 `XDG_CACHE_HOME`、
+`UV_CACHE_DIR`、`NUMBA_CACHE_DIR`、`MPLCONFIGDIR` 和 `TMPDIR`，网页再应用资源配置中的缓存/临时目录，后台 worker 继承生效值。
 原始数据根沿用现有挂载，其中的生产结果子目录仍可被浏览，但开发保存和任务输出固定写入开发根；
 不自动复制、迁移或清理已有结果。直接调用 Python API/Notebook 时仍应明确指定开发结果路径。
 .NET/Thermo helper 是独立的共享外部依赖，不由分支切换或回滚管理。
@@ -182,13 +219,15 @@ Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；
 Git、uv、systemd 和 `ss`；包含 Vue 源码的版本同步时还需 Node.js/npm 构建前端，服务运行不启动 Node。
 scMM 本身仍使用 `.venv` 中的 Python 3.12。
 配置默认由上述路径推导；可在 `~/.config/scmm/environments.json` 覆盖
-`dev`、`prod`、`raw`、`prod_results`、`state`、`address`，或用 `--config` 指定文件。
+`dev`、`prod`、`raw`、`prod_results`、`state`、`address`，或用管理脚本的 `--config` 指定文件。该部署布局配置与网页资源配置是不同文件。
+`dev_server_config` / `prod_server_config` 分别指向初始化后的资源配置，默认位于 `~/.config/scmm/dev.json` / `prod.json`。
 开发和生产均通过 `scmm-web` 启动 Vue；用户级服务名称继续为 `scmm-dev.service` / `scmm-ui.service`。
 已有配置中的 `dev_frontend: "vue"`、`prod_frontend: "vue"` 和 `origins` 可读取但不再参与启动，
-可从配置中移除；指定其他前端会明确报错。现有访问地址默认沿用 `0.0.0.0`，网络范围仍见
+可从配置中移除；指定其他前端会明确报错。网页实际监听地址由资源配置决定，部署布局中的旧 `address` 不再覆盖它。网络范围仍见
 [NET-01](roadmap.md#工程改进待设计与实现)。
 稳定启动器更新后仅支持含 `scmm-web` 的 Vue 版本；如需回滚更早的网页入口，须同时恢复其匹配的启动器。
-配置与运行数据不提交到 Git。不同用户/机器先创建对应 worktree，再安装服务：
+`/runtime` 要求管理员会话或专用运维令牌；发布脚本从生产资源配置旁的 `.operations-token` 文件读取令牌。
+凭据缺失、运行状态不可读、响应格式错误均拒绝重启，不把认证失败视为空闲。配置与运行数据不提交到 Git。不同用户/机器先创建对应 worktree，再安装服务：
 
 ```sh
 # 当前仓库为 dev；生产 worktree 尚未创建时执行
@@ -198,7 +237,7 @@ python3 scripts/scmm_env.py install
 
 `install` 备份原 service 文件，安装两个用户级 unit，并启用生产服务随用户管理器启动；
 开发服务按需启动，不默认启用。稳定启动器复制到 `~/.local/share/scmm/scmm_env.py`，
-因此回滚到还没有管理脚本的旧提交也能启动网页。管理脚本变化后重新执行 `install`。
+新启动器要求对应 worktree 支持认证配置；回滚到认证之前的版本时须恢复匹配的启动器。管理脚本变化后重新执行 `install`，先完成两套资源初始化。
 安装 unit 不自动重启现有进程。
 
 启动器与新安装的 unit 启用 `PYTHONUTF8=1`，worker 继承该设置。不能只依赖 `LANG`：
@@ -208,8 +247,8 @@ python3 scripts/scmm_env.py install
 
 ## 脂质数据库
 
-网页注释默认共享 `~/data/results/databases/lipidmaps`，本机对应用户确认的
-`/home/crs/data/results/databases/lipidmaps`。可通过服务环境变量 `SCMM_LIPID_DATABASE_DIR` 指定另一目录；
+网页注释使用管理员配置的 `lipid_database_dir`，也可通过命令行或 `SCMM_LIPID_DATABASE_DIR` 覆盖。
+未配置或目录失效时明确报错，不切换到其他目录；
 服务用户需有读取权限，缺库自动下载时还需写权限和访问 LIPID MAPS 官方 HTTPS。
 该目录只接受本地普通 SDF 文件，HTTP 文件名不能越界或引用符号链接；不允许客户端指定任意下载 URL。
 
@@ -300,3 +339,47 @@ journalctl --user -u scmm-ui.service -n 30 --no-pager
 ```
 
 仅修改 Python 代码不需 daemon-reload；重新安装 unit 时脚本会执行 daemon-reload。
+
+
+### 监控初始化与生产只读检查
+
+新建服务器时 `scmm-admin init` 同时创建独立的 600 权限监控 SQLite，默认位于认证数据库同目录的 `monitor.sqlite3`，
+也可用 `init --monitor-db` 显式指定；`init --environment dev|prod|standalone` 标识对应环境，生产须指定 `prod`。已有认证配置须先执行一次迁移命令，再更新对应服务；普通启动不自动初始化或切换数据库：
+
+```bash
+uv run --locked scmm-admin --server-config ~/.config/scmm/dev.json init-monitor \
+  --monitor-db ~/.local/state/scmm/dev/monitor.sqlite3 \
+  --environment dev --monitor-peer-url http://127.0.0.1:5006
+```
+
+此命令只新增独立监控数据库及资源配置字段，不覆盖已有监控库或变更认证凭据。路径必须位于仓库和网页可浏览根之外。
+开发与生产分别保存监控库；不能共用。监控库保存页面租约摘要、最近访问/实际操作时间以及 24 小时分钟汇总，
+不保存会话令牌、密码、请求正文、矩阵或原始任务日志，不纳入项目快照、构建包或 Git。
+安全事件仍从独立认证数据库只读查询；自动监控不延长登录时限。监控采样每 5 秒，磁盘容量每 60 秒；
+目录/任务探测在限时子进程内执行，慢挂载或探测失败显示待确认。
+
+`monitor_peer_url` 仅允许其他端口的本机 HTTP 地址（127.0.0.1/localhost/::1），不允许路径、查询、凭据、代理转发或重定向。
+首次检测旧版生产可不配置令牌，但只会得到“缺少页面登记协议”的无法确认状态；旧版接口的零工作区不再被发布脚本视为空闲。
+生产升级到认证/监控版后，在开发资源配置中显式设置 `monitor_peer_token_file`，指向生产初始化生成的仓库外 600 权限运维令牌文件。
+运维令牌只能读取 `/api/v1/runtime`，不能查询监控明细或实验数据；令牌缺失/失效不尝试匿名替代。
+生产配置使用 `environment: "prod"`，通常不设 peer；生产监控页的“当前实例”即生产本身。
+
+生产首次从旧版迁移须另行协调维护窗口、核实真实用户页面和后台任务，初始化独立认证与监控配置并更新匹配启动器；
+不能因旧版无法提供证据而跳过检查。正常发布脚本要求协议 1、15 秒内的采样及明确可更新状态，
+同时保留原有连接、任务、工作区检查。维护窗口中的检查与正常在线检测均须在实际发布前执行。
+
+
+首次从没有认证模块的旧版迁移，在**管理员已协调所有使用者保存、关闭全部生产页面并确认当前维护窗口**后，
+先用新版本 `scmm-admin init --environment prod` 初始化独立生产配置和凭据，再执行：
+
+```sh
+python3 scripts/scmm_env.py release --migrate-auth
+```
+
+该入口只接受尚无认证模块且旧版状态接口明确没有未保存/繁忙工作区的生产版本；
+仍检查连接、持久任务、独立 worker、干净 worktree、目标提交和独立资源配置。
+页面关闭证据来自已完成的人工协调，脚本不把旧协议的零工作区伪装成页面检测通过。
+如果服务已具备新协议、状态不可读、计数异常或仍有活动任务，迁移入口也会拒绝。
+脚本在停止生产后安装匹配启动器，备份旧启动器与 unit 到仓库外 `~/.local/state/scmm/pre-auth-launchers-*`；
+首次迁移失败时自动恢复旧代码、锁定环境、启动器及 unit，再恢复服务。备份保留供核对；不改动实验数据或撤销新建凭据。
+迁移完成后只使用普通 `release`；跨回认证前版本需在维护窗口使用匹配的旧启动器，不能用该入口绕过新协议的未知状态。

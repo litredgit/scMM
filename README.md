@@ -11,6 +11,8 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | 能力 | 使用说明 |
 |---|---|
 | Vue/FastAPI 六步网页：原始谱、提取审核、预处理、分析、图表与结果保存 | [Vue 网页操作](docs/workflow.md#vue-网页项目与样本) |
+| 管理员只读监控、24 小时资源趋势与活动页面更新检查 | [管理员监控](docs/workflow.md#管理员监控) |
+| 管理员创建账号、会话认证和单团队共享项目 | [服务器初始化与登录](docs/installation.md#服务器初始化与账号) |
 | 持久批处理、共同/独立特征、失败继续、停止后续样本和重试 | [多样本流程](docs/workflow.md) |
 | Thermo profile RAW 直接读取，接入 Python、CLI、目录处理及网页 | [RAW 依赖与真实样本验收](docs/thermo-raw.md) |
 | H5AD、预处理起点恢复、结果失效管理、只读报告与图表重载 | [数据与输出](docs/data-output.md) |
@@ -42,6 +44,7 @@ scMM。后续命令统一通过 `uv run` 执行，无需手工激活环境。
 
 本机生产网页使用 main / 5006，开发使用 dev / 5007，Python 环境及结果分别隔离；
 启动、发布与回滚见 [安装部署](docs/installation.md#开发与生产分离)。
+网页启动前必须完成仓库外资源配置和管理员初始化，不支持匿名启动；普通成员不能配置服务器路径。
 网页操作见 [Vue 六步流程](docs/workflow.md#vue-网页项目与样本)。
 自动化处理可直接使用命令行（参考离子必须按实验修改）：
 

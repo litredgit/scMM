@@ -121,6 +121,9 @@ def submit_preview(request):
     library memory on completion; no frontend objects cross the process boundary.
     """
     request = deepcopy(request)
+    from .identity import actor
+
+    request["submitted_by"] = (actor.get() or {}).get("id")
     request["created_at"] = utc_now()
     folder = child_path(request["project_folder"], f"processing/preview-jobs/{uuid4().hex}")
     folder.mkdir(parents=True)

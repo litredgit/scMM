@@ -26,13 +26,31 @@ _LOCK = threading.RLock()
 
 
 def database_root():
+    if os.environ.get("SCMM_SERVER_CONFIG_ACTIVE") == "1":
+        configured = os.environ.get("SCMM_LIPID_DATABASE_DIR")
+        if not configured:
+            raise ValueError("未配置注释数据库目录，请由管理员设置 lipid_database_dir。")
+        path = Path(configured).expanduser().resolve(strict=True)
+        if not path.is_dir():
+            raise NotADirectoryError("注释数据库配置必须指向有效目录。")
+        return path
     return (
         Path(os.environ.get("SCMM_LIPID_DATABASE_DIR", str(DATABASE_ROOT))).expanduser().resolve()
     )
 
 
 def database_status():
-    root = database_root()
+    try:
+        root = database_root()
+    except (ValueError, OSError) as exc:
+        # Browsing persisted annotations must not require the original optional database.
+        return {
+            "directory": os.environ.get("SCMM_LIPID_DATABASE_DIR", "未配置"),
+            "files": [],
+            "available": False,
+            "source": LMSD_URL,
+            "error": str(exc),
+        }
     files = []
     if root.is_dir():
         for path in sorted(root.iterdir()):

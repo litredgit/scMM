@@ -2189,10 +2189,12 @@ supervised = [
     { name = "shap" },
 ]
 web = [
+    { name = "argon2-cffi" },
     { name = "fastapi" },
     { name = "matplotlib" },
     { name = "networkx" },
     { name = "plotly" },
+    { name = "psutil" },
     { name = "pydantic" },
     { name = "starlette" },
     { name = "umap-learn" },
@@ -2211,6 +2213,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anndata", specifier = ">=0.10,<0.12" },
+    { name = "argon2-cffi", marker = "extra == 'web'", specifier = ">=25.1,<26" },
     { name = "fastapi", marker = "extra == 'web'", specifier = ">=0.115,<0.136" },
     { name = "imbalanced-learn", marker = "extra == 'supervised'", specifier = ">=0.14,<0.15" },
     { name = "ipykernel", marker = "extra == 'notebook'", specifier = ">=6.29" },
@@ -2225,6 +2228,7 @@ requires-dist = [
     { name = "palantir", marker = "extra == 'plot'", specifier = ">=1.3" },
     { name = "pandas", specifier = ">=2.1,<3" },
     { name = "plotly", marker = "extra == 'web'", specifier = ">=6,<7" },
+    { name = "psutil", marker = "extra == 'web'", specifier = ">=7.2,<8" },
     { name = "pydantic", marker = "extra == 'web'", specifier = ">=2.9,<3" },
     { name = "pyopenms", specifier = ">=3.1,<3.4" },
     { name = "python-igraph", marker = "extra == 'cluster'", specifier = ">=0.11" },

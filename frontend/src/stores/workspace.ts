@@ -1,6 +1,13 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
-import { ApiError, request } from '../api/client'
+import {
+  ApiError,
+  request,
+  authenticatedFetch,
+  sessionHeaders,
+  sessionVersion,
+  ensureSession,
+} from '../api/client'
 import type { Configuration, WorkspaceView } from '../api/types'
 
 export const useWorkspace = defineStore('workspace', () => {
@@ -156,8 +163,9 @@ export const useWorkspace = defineStore('workspace', () => {
   async function download(kind: string, filename: string, key = '') {
     if (!current.value) return
     await run(async () => {
+      const version = sessionVersion()
       const query = new URLSearchParams({ kind, filename, key })
-      const response = await fetch(`/api/v1/workspace/results/download?${query}`, {
+      const response = await authenticatedFetch(`/api/v1/workspace/results/download?${query}`, {
         headers: { 'X-SCMM-Workspace': current.value!.workspace_id },
         cache: 'no-store',
       })
@@ -165,7 +173,9 @@ export const useWorkspace = defineStore('workspace', () => {
         const value = await response.json()
         throw new Error(value.error?.message ?? '下载失败。')
       }
-      const url = URL.createObjectURL(await response.blob())
+      const blob = await response.blob()
+      ensureSession(version)
+      const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
       link.download = filename
@@ -180,8 +190,18 @@ export const useWorkspace = defineStore('workspace', () => {
     void fetch('/api/v1/workspace', {
       method: 'DELETE',
       keepalive: true,
-      headers: { 'X-SCMM-Client': 'web', 'X-SCMM-Workspace': current.value.workspace_id },
+      headers: { ...sessionHeaders(false), 'X-SCMM-Workspace': current.value.workspace_id },
     }).catch(() => {})
+  }
+
+  function reset() {
+    if (heartbeat) clearInterval(heartbeat)
+    current.value = null
+    configuration.value = null
+    analysisDraft.value = null
+    error.value = ''
+    notice.value = ''
+    task.value = '暂无活动任务'
   }
 
   return {
@@ -196,6 +216,7 @@ export const useWorkspace = defineStore('workspace', () => {
     refresh,
     run,
     release,
+    reset,
     read,
     command,
     inspect,

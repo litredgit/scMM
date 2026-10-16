@@ -50,6 +50,8 @@ notebook = [
     "jupyterlab>=4.2",
 ]
 web = [
+    "psutil>=7.2,<8",
+    "argon2-cffi>=25.1,<26",
     "fastapi>=0.115,<0.136",
     "matplotlib>=3.8",
     "networkx>=3.2",
@@ -72,6 +74,7 @@ dev = [
 [project.scripts]
 scmm-process = "scMM.cli:main"
 scmm-web = "scMM.api.cli:main"
+scmm-admin = "scMM.api.admin_cli:main"
 
 [tool.setuptools.package-data]
 "scMM" = ["resources/lipid_rules/*.json"]

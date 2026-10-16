@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 from anndata import AnnData
 from fastapi.testclient import TestClient
+from web_auth_support import auth_options, login_client
 
 from scMM.api.app import create_app
 from scMM.application.storage import StorageRoot
@@ -22,13 +23,16 @@ def api(tmp_path, monkeypatch):
     for name in ("alpha.mzML", "beta.mzXML"):
         (raw / name).write_text("synthetic input; no extraction in this milestone")
     monkeypatch.setenv("SCMM_PREFERENCES", str(tmp_path / "preferences.json"))
+    options, credential = auth_options(tmp_path)
     app = create_app(
         [StorageRoot("Raw", raw)],
         [StorageRoot("Results", results)],
         project_root=projects,
         static_root=None,
+        **options,
     )
     with TestClient(app, headers={"X-SCMM-Client": "web"}) as client:
+        login_client(client, credential)
         yield client, app.state.workspaces, raw, projects, results
 
 
@@ -400,13 +404,16 @@ def test_static_routes_and_assets_are_served_without_api_fallback(api, tmp_path)
     (static / "assets").mkdir(parents=True)
     (static / "index.html").write_text("<html>scMM Vue</html>")
     (static / "assets/app.js").write_text("console.log('scMM')")
+    options, credential = auth_options(tmp_path)
     app = create_app(
         manager.storage.roots,
         project_root=manager.store.root,
         defaults=manager.defaults,
         static_root=static,
+        **options,
     )
-    with TestClient(app) as client:
+    with TestClient(app, headers={"X-SCMM-Client": "web"}) as client:
+        login_client(client, credential)
         assert client.get("/samples").text == "<html>scMM Vue</html>"
         assert client.get("/assets/app.js").status_code == 200
         assert client.get("/api/v1/missing").status_code == 404
@@ -440,6 +447,28 @@ def test_vue_cli_starts_without_panel_and_preserves_storage_options(api, monkeyp
     from scMM.api.cli import main
 
     _, manager, raw, projects, results = api
+    from scMM.application.monitor_store import MonitorStore
+    from scMM.application.server_config import DEFAULTS
+
+    monitor = MonitorStore.initialize(raw.parent / "monitor.sqlite3")
+    config_path = raw.parent / "server.json"
+    values = {
+        **DEFAULTS,
+        "auth_db": str(raw.parent / "auth.sqlite3"),
+        "monitor_db": str(monitor.path),
+        "project_root": str(projects),
+        "storage": {"Raw": str(raw)},
+        "output": {"Results": str(results)},
+        "cache_root": str(results),
+        "temp_root": str(results),
+        "recycle_root": str(results),
+        "preferences": str(projects / "preferences.json"),
+        "cookie_secure": False,
+    }
+    config_path.write_text(json.dumps(values))
+    import os
+
+    monkeypatch.setattr(os, "environ", os.environ.copy())
     calls = []
     real_create = web_app.create_app
     monkeypatch.setenv("SCMM_PREFERENCES", str(projects / "preferences.json"))
@@ -453,6 +482,8 @@ def test_vue_cli_starts_without_panel_and_preserves_storage_options(api, monkeyp
     assert (
         main(
             [
+                "--server-config",
+                str(config_path),
                 "--storage",
                 f"Raw={raw}",
                 "--output",
@@ -467,6 +498,6 @@ def test_vue_cli_starts_without_panel_and_preserves_storage_options(api, monkeyp
         == 0
     )
     app, options = calls[0]
-    assert options == {"host": "127.0.0.1", "port": 5118, "workers": 1}
+    assert options == {"host": "127.0.0.1", "port": 5118, "workers": 1, "proxy_headers": False}
     assert app.state.workspaces.store.root == manager.store.root
     assert [root.label for root in app.state.workspaces.storage.roots] == ["Raw"]

@@ -22,6 +22,7 @@ class ResultWorkflow:
             self.store,
             [r for r in self.results.roots if r.label != "项目结果"],
             active_paths=self.active_paths,
+            trash_root=getattr(self, "trash_root", None),
         )
 
     def export_dataset(self, identity, revision, root, directory, filename):

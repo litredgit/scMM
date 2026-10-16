@@ -1,0 +1,26 @@
+{
+  "address": "127.0.0.1",
+  "port": 5006,
+  "cookie_name": "scmm_session",
+  "cookie_secure": true,
+  "origins": [],
+  "storage": {
+    "原始数据": "/srv/scmm/raw"
+  },
+  "output": {},
+  "preferences": "~/.local/state/scmm/preferences.json",
+  "recycle_root": "~/.local/state/scmm/recycle",
+  "cache_root": "~/.local/state/scmm/cache",
+  "temp_root": "~/.local/state/scmm/tmp",
+  "lipid_database_dir": null,
+  "thermo_reader": null,
+  "dotnet": null,
+  "auth_db": "~/.local/state/scmm/auth.sqlite3",
+  "project_root": "/srv/scmm/results",
+  "session_idle_seconds": 3600,
+  "session_absolute_seconds": 43200,
+  "monitor_db": "~/.local/state/scmm/monitor.sqlite3",
+  "environment": "standalone",
+  "monitor_peer_url": null,
+  "monitor_peer_token_file": null
+}

@@ -136,6 +136,21 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.example
+*.local.json
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-journal
+*.operations-token
+*.initial.txt
+*.pem
+*.key
+secrets/
+server.json
+environments.json
 .envrc
 .venv
 env/
