@@ -11,6 +11,7 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | 能力 | 使用说明 |
 |---|---|
 | Vue/FastAPI 六步网页：原始谱、提取审核、预处理、分析、图表与结果保存 | [Vue 网页操作](docs/workflow.md#vue-网页项目与样本) |
+| 个人 API、流式只读 AI 分析助手及匿名上下文 | [AI 分析助手](docs/workflow.md#ai-分析助手) |
 | 管理员只读监控、24 小时资源趋势与活动页面更新检查 | [管理员监控](docs/workflow.md#管理员监控) |
 | 管理员创建账号、会话认证和单团队共享项目 | [服务器初始化与登录](docs/installation.md#服务器初始化与账号) |
 | 持久批处理、共同/独立特征、失败继续、停止后续样本和重试 | [多样本流程](docs/workflow.md) |

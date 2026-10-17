@@ -93,7 +93,7 @@ class RawWorkflow:
         return self.mutate(identity, revision, action)
 
     def raw_open(self, identity, revision, sample_id):
-        with self.access(identity) as workspace:
+        with self.access(identity, operation="raw_open") as workspace:
             workspace.check(revision)
             project = workspace.require_project()
             sample = self.sample(project, sample_id)
@@ -180,7 +180,7 @@ class RawWorkflow:
         return frame, detail
 
     def raw_plot(self, identity, sample_id, kind, options):
-        with self.access(identity) as workspace:
+        with self.access(identity, operation="preview") as workspace:
             frame, detail = self.raw_frame(workspace, sample_id, kind, options)
             x = "mz" if "mz" in frame else "rt_seconds"
             figure = go.Figure()
@@ -212,7 +212,7 @@ class RawWorkflow:
             }
 
     def start_preview(self, identity, revision, sample_id, parameters):
-        with self.access(identity) as workspace:
+        with self.access(identity, operation="preview") as workspace:
             workspace.check(revision)
             project = workspace.require_project()
             if workspace.preview_job and not workspace.preview_job["future"].done():
@@ -270,7 +270,7 @@ class RawWorkflow:
             return self.preview_status_unlocked(workspace)
 
     def collect_preview(self, identity, revision, job_id):
-        with self.access(identity) as workspace:
+        with self.access(identity, operation="preview") as workspace:
             workspace.check(revision)
             job = workspace.preview_job
             project = workspace.require_project()
@@ -330,7 +330,10 @@ class RawWorkflow:
 
     def extraction_batches(self, identity):
         with self.access(identity) as workspace:
-            return [{"path": str(p), **read_batch(p)} for p in batches(workspace.require_project())]
+            paths = tuple(batches(workspace.require_project()))
+            with workspace.ai_lock:
+                workspace.ai_batches = paths
+            return [{"path": str(p), **read_batch(p)} for p in paths]
 
     @staticmethod
     def batch_path(project, path):
@@ -342,7 +345,7 @@ class RawWorkflow:
     def start_extraction(self, identity, revision, retry_path=None):
         from .web_workspace import project_candidate
 
-        with self.access(identity) as workspace:
+        with self.access(identity, operation="extract") as workspace:
             workspace.check(revision)
             candidate = project_candidate(workspace.require_project())
             self.require_snr(candidate)
@@ -359,6 +362,8 @@ class RawWorkflow:
             workspace.revision += 1
             try:
                 path = submit(candidate, self.storage, retry_path=retry_path)
+                with workspace.ai_lock:
+                    workspace.ai_batches = (*workspace.ai_batches, path)
             except Exception as exc:
                 from .web_workspace import WorkspaceError
 
@@ -376,7 +381,7 @@ class RawWorkflow:
     def review_extraction(self, identity, revision, path, ids, *, compare=False):
         from .web_workspace import project_candidate, sync_metadata
 
-        with self.access(identity) as workspace:
+        with self.access(identity, operation="review") as workspace:
             workspace.check(revision)
             project = workspace.require_project()
             path = self.batch_path(project, path)
@@ -401,4 +406,8 @@ class RawWorkflow:
             candidate.dirty = True
             workspace.project = candidate
             workspace.revision += 1
+            # Publish resets dataset identity before recording reviewed batches.
+            self.publish_ai(workspace)
+            with workspace.ai_lock:
+                workspace.ai_reviewed.add(str(path))
             return {"workspace": self.view(workspace), "value": None}

@@ -169,7 +169,7 @@
         "scMM/api/admin_cli.py",
         "config/server.example.json"
       ],
-      "downstream": ["api", "api-raw", "api-lipids", "monitor", "tooling", "browser-auth"],
+      "downstream": ["api", "api-raw", "api-lipids", "monitor", "tooling", "browser-auth", "ai"],
       "extras": ["web"]
     },
     "monitor": {
@@ -261,13 +261,27 @@
       "sources": ["frontend/src/features/preprocess/*Lipid*"],
       "downstream": [],
       "extras": ["web"]
+    },
+    "ai": {
+      "kind": "python",
+      "tests": ["tests/api/test_ai_assistant.py"],
+      "sources": ["scMM/application/ai_*.py", "scMM/api/routers/ai.py"],
+      "downstream": ["browser-ai"],
+      "extras": ["web", "plot", "cluster", "supervised"]
+    },
+    "browser-ai": {
+      "kind": "browser",
+      "tests": ["frontend/tests/assistant.spec.ts"],
+      "sources": ["frontend/src/features/assistant/*"],
+      "downstream": [],
+      "extras": ["web"]
     }
   },
   "support": {
-    "tests/support/auth.py": ["spectra", "api", "api-raw", "api-lipids", "monitor"],
-    "tests/support/project.py": ["processing", "api", "api-raw", "api-lipids", "projects"],
+    "tests/support/auth.py": ["spectra", "api", "api-raw", "api-lipids", "monitor", "ai"],
+    "tests/support/project.py": ["processing", "api", "api-raw", "api-lipids", "projects", "ai"],
     "tests/support/lipids.py": ["annotation", "api-lipids"],
-    "tests/support/workflow.py": ["api", "api-raw", "api-lipids"],
+    "tests/support/workflow.py": ["api", "api-raw", "api-lipids", "ai"],
     "tests/api/conftest.py": ["api", "api-raw", "api-lipids"],
     "frontend/tests/fixtures.ts": [
       "browser-projects",
@@ -275,7 +289,8 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-ai"
     ],
     "frontend/tests/server.py": [
       "browser-projects",
@@ -283,7 +298,8 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-ai"
     ],
     "tests/conftest.py": [
       "spectra",
@@ -362,7 +378,8 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "ai", "browser-ai"
     ],
     "uv.lock": [
       "spectra",
@@ -384,7 +401,8 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "ai", "browser-ai"
     ],
     "frontend/package*.json": [
       "browser-projects",
@@ -424,7 +442,8 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-ai"
     ],
     "frontend/src/main.ts": [
       "browser-projects",
@@ -432,7 +451,8 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-ai"
     ],
     "frontend/src/stores/*": [
       "browser-projects",
@@ -456,7 +476,8 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-ai"
     ],
     "frontend/src/api/types.ts": [
       "browser-projects",
@@ -522,16 +543,16 @@
       "browser-monitor",
       "browser-lipids"
     ],
-    "scMM/api/app.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling"],
-    "scMM/api/dependencies.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling"],
+    "scMM/api/app.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling", "ai"],
+    "scMM/api/dependencies.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling", "ai"],
     "scMM/api/schemas.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling"],
     "scMM/api/workflow_schemas.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling"],
-    "scMM/application/web_workspace.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling"],
+    "scMM/application/web_workspace.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling", "ai"],
     "scMM/application/web_support.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling"],
     "scMM/api/routers/analysis.py": ["api", "api-raw", "api-lipids"],
     "scMM/api/routers/results.py": ["api", "api-raw", "api-lipids"],
     "scMM/api/routers/projects.py": ["api", "api-raw", "api-lipids"],
-    "scMM/application/web_analysis.py": ["api", "api-raw", "api-lipids"],
+    "scMM/application/web_analysis.py": ["api", "api-raw", "api-lipids", "ai"],
     "scMM/application/web_results.py": ["api", "api-raw", "api-lipids"]
   },
   "package_sources": [

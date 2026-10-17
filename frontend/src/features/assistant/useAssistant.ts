@@ -1,0 +1,174 @@
+import { onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { authenticatedFetch, request, sessionVersion, ensureSession } from '../../api/client'
+import { useWorkspace } from '../../stores/workspace'
+import { useAuth } from '../../stores/auth'
+
+type Turn = { role: 'user' | 'assistant'; content: string; note?: string }
+type Configuration = { configured: boolean; model: string; available: boolean }
+export function useAssistant() {
+  const store = useWorkspace()
+  const auth = useAuth()
+  const route = useRoute()
+  const messages = ref<Turn[]>([])
+  const input = ref('')
+  const busy = ref(false)
+  const error = ref('')
+  const context = ref<unknown>(null)
+  const model = ref('')
+  const configured = ref(false)
+  let controller: AbortController | undefined
+  let epoch = 0
+  function stop(note = '已停止生成；已接收部分仅供参考。') {
+    epoch++
+    controller?.abort()
+    controller = undefined
+    if (busy.value) {
+      const last = messages.value.at(-1)
+      if (last?.role === 'assistant') last.note = note
+    }
+    busy.value = false
+  }
+  function clear() {
+    stop()
+    messages.value = []
+    input.value = ''
+    context.value = null
+    error.value = ''
+  }
+  async function loadConfig() {
+    const session = sessionVersion()
+    try {
+      const value = await request<Configuration>('/ai/config')
+      ensureSession(session)
+      configured.value = value.configured
+      model.value = value.model
+    } catch {
+      if (session !== sessionVersion()) return
+      configured.value = false
+      model.value = ''
+    }
+  }
+  const configChanged = () => {
+    stop('API 配置已改变，请重新提问。')
+    void loadConfig()
+  }
+  window.addEventListener('scmm-ai-config-changed', configChanged)
+  watch(
+    () => [auth.user?.id, store.current?.workspace_id, store.project?.path],
+    () => {
+      clear()
+      if (auth.user && !auth.user.must_change) void loadConfig()
+    },
+    { immediate: true, flush: 'sync' },
+  )
+  watch(
+    () => [store.project?.dataset?.id, store.project?.dataset?.revision, store.current?.revision],
+    () => {
+      if (busy.value) stop('项目或数据版本已改变，本回答依据已过期，请重新提问。')
+    },
+    { flush: 'sync' },
+  )
+  onUnmounted(() => {
+    stop()
+    window.removeEventListener('scmm-ai-config-changed', configChanged)
+  })
+  async function send(question = input.value) {
+    if (busy.value || !configured.value || !store.current || !question.trim()) return
+    if (question.length > 8000) {
+      error.value = '单条问题最多 8000 字符。'
+      return
+    }
+    stop()
+    const token = epoch
+    const session = sessionVersion()
+    controller = new AbortController()
+    busy.value = true
+    error.value = ''
+    context.value = null
+    // Incomplete/stale answers are displayed but never reused as model history.
+    const history = messages.value
+      .filter((m) => !m.note && m.content)
+      .map(({ role, content }) => ({ role, content }))
+    messages.value.push({ role: 'user', content: question.trim() })
+    const answer: Turn = { role: 'assistant', content: '' }
+    messages.value.push(answer)
+    const index = messages.value.length - 1
+    input.value = ''
+    let ended = false
+    const current = () => {
+      ensureSession(session)
+      return token === epoch
+    }
+    try {
+      const response = await authenticatedFetch('/api/v1/ai/chat', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SCMM-Workspace': store.current.workspace_id,
+        },
+        body: JSON.stringify({
+          page: route.path.slice(1) || 'projects',
+          messages: [...history.slice(-22), { role: 'user', content: question.trim() }],
+        }),
+      })
+      if (!current()) return
+      if (!response.ok) {
+        const body = await response.json()
+        throw new Error(body.error?.message ?? 'AI 请求失败。')
+      }
+      if (!response.body) throw new Error('浏览器无法读取事件流。')
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      try {
+        while (true) {
+          const { value, done } = await reader.read()
+          if (!current()) return
+          buffer += decoder.decode(value, { stream: !done }).replace(/\r/g, '')
+          if (buffer.length > 150000) throw new Error('AI 事件超过长度限制。')
+          let split: number
+          while ((split = buffer.indexOf('\n\n')) >= 0) {
+            const event = buffer.slice(0, split)
+            buffer = buffer.slice(split + 2)
+            const name = event
+              .split('\n')
+              .find((line) => line.startsWith('event:'))
+              ?.slice(6)
+              .trim()
+            const raw = event
+              .split('\n')
+              .filter((line) => line.startsWith('data:'))
+              .map((line) => line.slice(5).trimStart())
+              .join('\n')
+            if (!raw) continue
+            const data = JSON.parse(raw)
+            if (name === 'context') {
+              context.value = data.context
+              model.value = data.model
+            } else if (name === 'delta') messages.value[index]!.content += data.text
+            else if (name === 'error') throw new Error(data.message)
+            else if (name === 'done') ended = true
+          }
+          if (done || ended) break
+        }
+      } finally {
+        await reader.cancel().catch(() => {})
+        reader.releaseLock()
+      }
+      if (!ended) throw new Error('回答连接已中断；请手动重试。')
+    } catch (cause) {
+      if (token !== epoch) return
+      const message = cause instanceof Error ? cause.message : 'AI 请求失败，请手动重试。'
+      error.value = message
+      messages.value[index]!.note = message
+    } finally {
+      if (token === epoch) {
+        busy.value = false
+        controller = undefined
+      }
+    }
+  }
+  return { messages, input, busy, error, context, model, configured, send, stop, clear }
+}

@@ -232,7 +232,7 @@ class AnalysisWorkflow:
 
         if operation not in PREPROCESS | ANALYSES or (preview and operation not in PREPROCESS):
             raise ValueError("不支持的分析操作。")
-        with self.access(identity) as workspace:
+        with self.access(identity, operation=operation) as workspace:
             workspace.check(revision)
             project = workspace.require_project()
             candidate = project_candidate(project)
@@ -274,6 +274,17 @@ class AnalysisWorkflow:
             candidate.dirty = True
             workspace.project = candidate
             workspace.revision += 1
+            workspace.ai_completed = operation
+            if operation in {"filter", "remove_outliers"}:
+                workspace.ai_before_filter = {
+                    "cells": int(project.workspace.data.n_obs),
+                    "features": int(project.workspace.data.n_vars),
+                }
+            elif operation == "reset":
+                workspace.ai_before_filter = {}
+            if operation in PREPROCESS:
+                workspace.ai_parameters = {}
+            workspace.ai_parameters[operation] = options.copy()
             return self.view(workspace)
 
     def invalidate_results(self, identity, revision, names):

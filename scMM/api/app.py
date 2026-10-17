@@ -19,6 +19,7 @@ from scMM.application.storage import StorageRoot
 from scMM.application.web_workspace import WebWorkspaceService, WorkspaceError
 
 from .routers import (
+    ai,
     analysis,
     auth,
     extraction,
@@ -76,6 +77,17 @@ def create_app(
         redoc_url=None,
         openapi_url=None,
     )
+    from scMM.application.ai_client import ChatClient, EndpointPolicy
+    from scMM.application.ai_config import AIConfigStore, AIError
+
+    values = getattr(server_config, "values", {})
+    app.state.ai_config = (
+        AIConfigStore(values["ai_db"], values["ai_key_file"])
+        if values.get("ai_db") and values.get("ai_key_file")
+        else None
+    )
+    app.state.ai_client = ChatClient(EndpointPolicy(values.get("ai_private_urls", [])))
+    app.state.ai_active = set()
     app.state.monitor = monitoring
     app.state.workspaces = manager
     app.state.auth, app.state.server_config = auth_store, server_config
@@ -203,6 +215,10 @@ def create_app(
         response.headers["Referrer-Policy"] = "same-origin"
         return response
 
+    @app.exception_handler(AIError)
+    async def ai_error(_request, exc):
+        return error(exc.status, exc.code, str(exc))
+
     @app.exception_handler(AuthError)
     async def auth_error(_request, exc):
         return error(exc.status, exc.code, str(exc))
@@ -261,6 +277,7 @@ def create_app(
 
     app.include_router(projects.router)
     app.include_router(auth.router)
+    app.include_router(ai.router)
     app.include_router(monitor.router)
     app.include_router(samples.router)
     app.include_router(storage.router)

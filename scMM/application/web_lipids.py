@@ -157,7 +157,7 @@ class LipidWorkflow:
     def lipid_run(self, identity, revision, options, rules, label):
         from .web_workspace import project_candidate
 
-        with self.access(identity) as workspace:
+        with self.access(identity, operation="lipid_annotation") as workspace:
             workspace.check(revision)
             project = workspace.require_project()
             rules = validate_rules(rules, ADDUCTS)

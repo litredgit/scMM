@@ -653,6 +653,33 @@ CI 检查本次变更源码和按需构建的产物；历史单独记录，不�
 [OWASP 会话管理](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)。
 
 
+## AI 助手边界
+
+`application/ai_config.py` 管理按用户隔离的 Fernet 配置，`ai_client.py` 管理地址策略、DNS 固定连接与
+Chat Completions SSE 解码，`ai_summary.py` 是自动出站字段的唯一白名单；`api/routers/ai.py` 只处理认证边界、
+请求限额和流式生命周期。前端 `features/assistant/` 独立承载账号设置及常驻面板，聊天仅保存在 Vue 内存中。
+不把消息、凭据或摘要写进团队项目快照、浏览器持久存储或审计正文。
+
+工作区在已有科学锁内完成事务后发布独立摘要快照，失败保留旧摘要，失效随已提交修订一起发布。
+`ai_context()` 仅取得管理器和独立摘要短锁，验证用户归属/有效期后释放，再读取已注册轻量任务状态；
+它不调用 `access()`、不读取原始谱、不执行算法。网络等待全程不持科学工作区锁。
+摘要记录完成时间、工作区修订、数据修订及独立快照代次，运行操作与完成结果分开；缺失/失效结果明确标记。
+批次状态仅输出运行/等待审核；无细分进度不产生百分比或 ETA。旧/畸形导入元数据摘要失败时关闭该摘要，
+不得使科学事务失败或向上游转发原始异常。
+
+新增摘要字段必须按语义逐字段提取，数值仅接受有限值，字符串限已知方法/模型枚举；
+不要复用工作区响应、完整处理历史、日志、项目清单、图表 JSON 或任意递归清洗器。
+自定义键、名称、分组及层名不出站。模型验证只取已有 holdout/CV 汇总，差异/Marker 的显著行数以 `fdr < 0.05`
+为明确描述阈值，Marker 行数可能跨簇重复同一特征，不冒充独立特征总数。
+对话历史只能使用 user/assistant 文本，本轮最新摘要作为 system 数据插入最后问题前，不能被旧结果替代。
+每 0.5 秒及每块回答检查登录、工作区代次和个人配置；过期停止并关闭上游，不重放请求。
+
+测试块 `ai` 用带敏感标记的合成数据及模拟上游验证实际出站载荷、加密/隔离、长计算期间提问、
+版本/登录/配置失效、流分块、错误脱敏与失败恢复；`browser-ai` 验证设置、跨页、停止、清空和刷新生命周期。
+测试不能依赖真实 Key。真实服务联调和用户验收另记，不能把模拟回答作为科学准确性证据。
+协议依据：[Chat Completions 流事件](https://developers.openai.com/api/reference/resources/chat/subresources/completions/streaming-events)、
+[API 认证](https://developers.openai.com/api/reference/overview)。
+
 ## 管理员监控边界
 
 `application/monitor.py` 在独立线程采样，`monitor_probe.py` 使用仅依赖 psutil/标准库的限时子进程读取固定布局元数据与磁盘容量，

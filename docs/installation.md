@@ -194,6 +194,34 @@ uv run --locked scmm-admin --server-config ~/.config/scmm/dev.json rotate-operat
 
 Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；缺少 fcntl 的最小兼容不代表完整 Windows 支持。
 
+## 个人 AI 配置
+
+网页的 `web` 运行依赖包含 `httpx` 和 `cryptography`。管理员在仓库外初始化独立数据库与
+Fernet 主密钥，开发和生产各自执行、使用不同文件；此命令不会重启服务，也不会写入项目结果目录：
+
+```bash
+uv run scmm-admin --server-config ~/.config/scmm/dev.json init-ai \
+  --ai-db ~/.local/state/scmm/dev/ai.sqlite3 \
+  --ai-key-file ~/.config/scmm/keys/dev-ai.key
+```
+
+初始化拒绝覆盖已有文件，数据库和主密钥分别保存为 `0600`，不能位于 Git 工作区或网页可浏览目录中。
+服务器配置字段为 `ai_db`、`ai_key_file`，对应环境变量 `SCMM_AI_DB`、`SCMM_AI_KEY_FILE`；两者须同时配置。
+未配置时科学工作台仍可使用，个人 AI 功能显示未启用；显式配置失效时启动报错，不另建密钥或回退明文。
+按既有更新检查核对页面、未保存工作区和任务后重启对应服务。
+请分别备份数据库和主密钥；丢失主密钥后无法解密旧 Key，须让用户重新保存个人配置。
+
+默认目标限 HTTPS 公网 443 端口。每次调用重新解析 DNS，要求全部地址为公网地址，连接固定到已检查的 IP，
+TLS 使用原始主机名验证；不使用环境代理、不跟随重定向。默认不会访问本机、私网、链路本地或云元数据地址。
+确需内网/本机模型或其他端口时，管理员在对应服务器 JSON 的 `ai_private_urls` 中写入**完整 API 根地址**，
+例如 `http://127.0.0.1:8000/v1`；只放行该协议、主机、端口及路径，不是网段或通配符。
+环境变量 `SCMM_AI_PRIVATE_URLS` 为 JSON 列表；留空为 `[]`。请只放行可信模型服务。
+
+用户在[我的账号](workflow.md#ai-分析助手)保存地址、模型和新 Key；配置按登录用户隔离，
+不允许管理员通过网页读取别人的 Key。代理仅发送 Chat Completions 文本请求，不支持工具或模型执行接口。
+请求连接超时 10 秒、读取空闲超时 30 秒、整轮上限 180 秒，测试上限 40 秒；每账号同时仅一个 AI 请求，
+不自动重试。停止/断开会关闭上游连接；上游计费及数据留存由所选服务商决定。
+
 ## 开发与生产分离
 
 本机保留原仓库作为开发 worktree，新增相邻的生产 worktree，共享 Git 对象和原始输入。

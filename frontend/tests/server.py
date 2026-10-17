@@ -128,6 +128,45 @@ def main():
             auth_store=auth,
             server_config=SimpleNamespace(cookie_name="scmm_e2e", cookie_secure=False, origins=()),
         )
+        # AI uses real encrypted settings and HTTP routes, with a synthetic upstream.
+        # No user credentials or external model service are needed by browser tests.
+        import asyncio
+
+        import httpx
+
+        from scMM.application.ai_client import ChatClient, normalize_url
+        from scMM.application.ai_config import AIConfigStore
+
+        app.state.ai_config = AIConfigStore.initialize(
+            root / "private-ai.sqlite3", root / "keys/ai.key"
+        )
+
+        class SyntheticPolicy:
+            async def target(self, value):
+                normalize_url(value)
+                return (
+                    "https://127.0.0.1/v1/chat/completions",
+                    "synthetic.example",
+                    "synthetic.example",
+                )
+
+        class SyntheticStream(httpx.AsyncByteStream):
+            def __init__(self, slow):
+                self.slow = slow
+
+            async def __aiter__(self):
+                yield b'data: {"choices":[{"delta":{"content":"synthetic answer"}}]}\n\n'
+                await asyncio.sleep(5 if self.slow else 0.1)
+                yield b'data: {"choices":[{"delta":{"content":" completed"}}]}\n\ndata: [DONE]\n\n'
+
+        def upstream(request):
+            payload = json.loads(request.content)
+            slow = "慢" in payload["messages"][-1]["content"]
+            return httpx.Response(
+                200, headers={"content-type": "text/event-stream"}, stream=SyntheticStream(slow)
+            )
+
+        app.state.ai_client = ChatClient(SyntheticPolicy(), transport=httpx.MockTransport(upstream))
         app.state.workspaces.store.create("已有项目", app.state.workspaces.defaults)
         from scMM.application.trash import SavedItems
 

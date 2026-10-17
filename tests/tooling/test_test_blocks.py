@@ -64,6 +64,7 @@ def test_source_dependencies_expand_but_tests_and_fixtures_do_not():
     assert "analysis" not in data["selected"]  # Algorithms don't consume CyESIData.
     assert data["package"] and data["frontend"]
     assert set(plan("tests/support/project.py")["selected"]) == {
+        "ai",
         "processing",
         "projects",
         "api",

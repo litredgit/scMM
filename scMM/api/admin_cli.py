@@ -68,6 +68,9 @@ def main(argv=None):
     )
     monitor.add_argument("--monitor-peer-url")
     monitor.add_argument("--monitor-peer-token-file", type=Path)
+    ai = commands.add_parser("init-ai", help="初始化独立的个人 AI 数据库与加密主密钥")
+    ai.add_argument("--ai-db", type=Path, required=True)
+    ai.add_argument("--ai-key-file", type=Path, required=True)
     commands.add_parser("rotate-operations-token")
     args = parser.parse_args(argv)
     if args.command == "init":
@@ -136,6 +139,45 @@ def main(argv=None):
         return 0
     config = load_server_config(args.server_config)
     outside_repository(config.path)
+    if args.command == "init-ai":
+        from scMM.application.ai_config import AIConfigStore
+
+        if config.values.get("ai_db") or config.values.get("ai_key_file"):
+            raise ValueError("AI 配置已存在，拒绝覆盖。")
+        database, key_file = (outside_repository(p) for p in (args.ai_db, args.ai_key_file))
+        private = {
+            config.auth_db.resolve(),
+            config.path.resolve(),
+            Path(config.values["monitor_db"]).resolve(),
+        }
+        if database == key_file or database in private or key_file in private:
+            raise ValueError("AI 数据库、主密钥及其他私有配置必须分别保存。")
+        for directory in [
+            *config.values["storage"].values(),
+            *config.values["output"].values(),
+            config.values["project_root"],
+        ]:
+            if any(p.is_relative_to(Path(directory).resolve()) for p in (database, key_file)):
+                raise ValueError("AI 配置不能位于网页可浏览目录中。")
+        values = json.loads(config.path.read_text(encoding="utf-8"))
+        values.update(ai_db=str(database), ai_key_file=str(key_file))
+        staging = config.path.with_name(config.path.name + ".ai-init")
+        write_private(staging, json.dumps(values, ensure_ascii=False, indent=2) + "\n")
+        created = False
+        try:
+            AIConfigStore.initialize(database, key_file)
+            created = True
+            load_server_config(staging).validate()
+            staging.replace(config.path)
+        except Exception:
+            if created:
+                database.unlink(missing_ok=True)
+                key_file.unlink(missing_ok=True)
+            raise
+        finally:
+            staging.unlink(missing_ok=True)
+        print("个人 AI 配置初始化完成；重启对应服务后启用。")
+        return 0
     if args.command == "init-monitor":
         if config.values.get("monitor_db"):
             raise ValueError("监控数据库已配置，拒绝覆盖。")

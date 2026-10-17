@@ -22,5 +22,8 @@
   "monitor_db": "~/.local/state/scmm/monitor.sqlite3",
   "environment": "standalone",
   "monitor_peer_url": null,
-  "monitor_peer_token_file": null
+  "monitor_peer_token_file": null,
+  "ai_db": null,
+  "ai_key_file": null,
+  "ai_private_urls": []
 }

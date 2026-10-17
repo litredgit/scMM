@@ -15,6 +15,8 @@ from .storage import StorageRoot
 CONFIG_PATH = Path("~/.config/scmm/server.json")
 _PATHS = {
     "auth_db": "SCMM_AUTH_DB",
+    "ai_db": "SCMM_AI_DB",
+    "ai_key_file": "SCMM_AI_KEY_FILE",
     "monitor_db": "SCMM_MONITOR_DB",
     "monitor_peer_token_file": "SCMM_MONITOR_PEER_TOKEN_FILE",
     "project_root": "SCMM_PROJECT_ROOT",
@@ -29,6 +31,7 @@ _PATHS = {
 _ENV = {
     **_PATHS,
     "storage": "SCMM_STORAGE_ROOTS",
+    "ai_private_urls": "SCMM_AI_PRIVATE_URLS",
     "output": "SCMM_OUTPUT_ROOTS",
     "environment": "SCMM_ENVIRONMENT",
     "monitor_peer_url": "SCMM_MONITOR_PEER_URL",
@@ -57,6 +60,9 @@ DEFAULTS = {
     "thermo_reader": None,
     "dotnet": None,
     "auth_db": None,
+    "ai_db": None,
+    "ai_key_file": None,
+    "ai_private_urls": [],
     "monitor_db": None,
     "monitor_peer_url": None,
     "monitor_peer_token_file": None,
@@ -114,6 +120,15 @@ class ServerConfig:
         monitor_path = outside_repository(self.values["monitor_db"])
         auth_path = outside_repository(self.auth_db)
         private_paths = [auth_path, monitor_path, self.path.resolve()]
+        if bool(self.values["ai_db"]) != bool(self.values["ai_key_file"]):
+            raise ValueError("AI 数据库与主密钥必须同时配置，请执行 scmm-admin init-ai。")
+        if self.values["ai_db"]:
+            from .ai_config import AIConfigStore
+
+            private_paths.extend(
+                outside_repository(self.values[k]) for k in ("ai_db", "ai_key_file")
+            )
+            AIConfigStore(self.values["ai_db"], self.values["ai_key_file"])
         if len(set(private_paths)) != len(private_paths):
             raise ValueError("认证、监控数据库与配置必须分别保存。")
         if self.values.get("monitor_peer_token_file"):
@@ -166,7 +181,7 @@ def load_server_config(path=None, overrides=None, *, environ=None):
     for key, name in _ENV.items():
         if name in environ:
             value = environ[name]
-            if key in {"storage", "output", "origins", "cookie_secure"}:
+            if key in {"storage", "output", "origins", "cookie_secure", "ai_private_urls"}:
                 value = json.loads(value)
             values[key] = value
     values.update({k: v for k, v in (overrides or {}).items() if v is not None})
@@ -204,6 +219,14 @@ def load_server_config(path=None, overrides=None, *, environ=None):
             or (parsed.query or parsed.fragment or parsed.username or parsed.password)
         ):
             raise ValueError("来源地址必须包含协议和主机，不能包含路径或凭据。")
+    if not isinstance(values["ai_private_urls"], list) or any(
+        not isinstance(u, str) for u in values["ai_private_urls"]
+    ):
+        raise ValueError("ai_private_urls 必须是明确放行的 API 根地址列表。")
+    if values["ai_private_urls"]:
+        from .ai_client import normalize_url
+
+        values["ai_private_urls"] = [normalize_url(u) for u in values["ai_private_urls"]]
     if values["environment"] not in {"dev", "prod", "standalone"}:
         raise ValueError("environment 必须为 dev、prod 或 standalone。")
     if values["monitor_peer_url"]:

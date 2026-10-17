@@ -1,0 +1,109 @@
+import { test, expect, type Page } from './fixtures'
+
+async function configure(page: Page) {
+  await page.goto('/account')
+  const form = page.getByRole('form', { name: '个人 AI API 配置' })
+  await form.getByLabel('Base URL').fill('https://synthetic.example/v1')
+  await form.getByLabel('Model', { exact: true }).fill('synthetic-model')
+  await form.getByLabel('API Key').fill('synthetic-secret-browser')
+  await form.getByRole('button', { name: '保存 API 配置' }).click()
+  await expect(form.getByText('个人 API 配置已保存。')).toBeVisible()
+  await expect(form.getByLabel('API Key')).toHaveValue('')
+  return form
+}
+async function create(page: Page) {
+  await page
+    .getByRole('link', { name: /项目首页/ })
+    .first()
+    .click()
+  await page.getByLabel('项目名称', { exact: true }).fill('AI synthetic project')
+  await page.getByRole('button', { name: '创建并添加样本' }).click()
+  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+}
+
+test('personal API configuration, test, persistence and delete', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  const form = await configure(page)
+  await form.getByRole('button', { name: '测试连接' }).click()
+  await expect(form.getByText(/连接测试通过/)).toBeVisible()
+  await page.reload()
+  await expect(form.getByText('API Key：已配置，可替换或删除')).toBeVisible()
+  await expect(form.getByLabel('API Key')).toHaveValue('')
+  await expect(form.getByLabel('Model', { exact: true })).toHaveValue('synthetic-model')
+  const storage = await page.evaluate(() =>
+    JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }),
+  )
+  expect(storage).not.toContain('synthetic-secret-browser')
+  await form.getByRole('button', { name: '删除 API 配置' }).click()
+  await expect(form.getByText('API Key：未配置')).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('stream, context, cross-page retention, stop, clear, refresh and project switch', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await configure(page)
+  await create(page)
+  await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+  const assistant = page.getByRole('complementary', { name: 'AI 分析助手' })
+  await assistant.getByRole('button', { name: '当前进行到哪一步了？' }).click()
+  await expect(assistant.getByText('synthetic answer completed', { exact: true })).toBeVisible()
+  await page.screenshot({ path: test.info().outputPath('assistant-desktop.png') })
+  await assistant.getByText('本次发送的上下文').click()
+  await expect(assistant.locator('pre')).toContainText('samples')
+  await expect(assistant.locator('pre')).not.toContainText('AI synthetic project')
+  await page.getByRole('link', { name: /参数参考/ }).click()
+  await expect(assistant.getByText('synthetic answer completed', { exact: true })).toBeVisible()
+  await assistant.getByLabel('问题', { exact: true }).fill('慢回答')
+  await assistant.getByRole('button', { name: '发送', exact: true }).click()
+  await expect(assistant.getByText('synthetic answer', { exact: true })).toBeVisible()
+  await assistant.getByRole('button', { name: '停止生成' }).click()
+  await expect(assistant.getByText('已停止生成；已接收部分仅供参考。')).toBeVisible()
+  await assistant.getByRole('button', { name: '清空对话' }).click()
+  await expect(assistant.getByLabel('当前对话').locator('article')).toHaveCount(0)
+  await expect(assistant.locator('details')).toHaveCount(0)
+  await assistant.getByRole('button', { name: '下一步建议做什么？' }).click()
+  await expect(assistant.getByText('synthetic answer completed', { exact: true })).toBeVisible()
+  await page.reload()
+  await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+  await expect(assistant.getByLabel('当前对话').locator('article')).toHaveCount(0)
+  await assistant.getByRole('button', { name: '收起 AI 助手', exact: true }).click()
+  await page
+    .getByRole('link', { name: /项目首页/ })
+    .first()
+    .click()
+  await page
+    .getByRole('row')
+    .filter({ hasText: 'AI synthetic project' })
+    .getByRole('button', { name: '打开项目 →' })
+    .click()
+  await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+  await assistant.getByLabel('问题', { exact: true }).fill('慢回答')
+  await assistant.getByRole('button', { name: '发送', exact: true }).click()
+  await expect(assistant.getByText('synthetic answer', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '关闭项目', exact: true }).click()
+  await expect(assistant.getByLabel('当前对话').locator('article')).toHaveCount(0)
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: test.info().outputPath('assistant-390.png') })
+  expect(errors).toEqual([])
+})
+
+test('logout cancels pending answer and clears conversation', async ({ page }) => {
+  await configure(page)
+  await page
+    .getByRole('link', { name: /项目首页/ })
+    .first()
+    .click()
+  await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+  const assistant = page.getByRole('complementary', { name: 'AI 分析助手' })
+  await assistant.getByLabel('问题', { exact: true }).fill('慢回答')
+  await assistant.getByRole('button', { name: '发送', exact: true }).click()
+  await expect(assistant.getByText('synthetic answer', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '退出登录', exact: true }).click()
+  await expect(assistant).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '登录', exact: true })).toBeVisible()
+})

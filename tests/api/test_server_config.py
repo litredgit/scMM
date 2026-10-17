@@ -213,3 +213,52 @@ def test_existing_auth_config_monitor_migration_does_not_change_accounts(resourc
     assert Path(values["auth_db"]).read_bytes() == original
     with pytest.raises(ValueError, match="拒绝覆盖"):
         main(args)
+
+
+def test_ai_initialization_private_paths_and_restart_persistence(resources):
+    from scMM.application.ai_config import AIConfigStore
+
+    config, _, folders = resources
+    database = config.parent / "ai.sqlite3"
+    master = config.parent / "keys/ai.key"
+    assert (
+        main(
+            [
+                "--server-config",
+                str(config),
+                "init-ai",
+                "--ai-db",
+                str(database),
+                "--ai-key-file",
+                str(master),
+            ]
+        )
+        == 0
+    )
+    cfg = load_server_config(config).validate()
+    assert cfg.values["ai_db"] == str(database)
+    store = AIConfigStore(database, master)
+    store.save("user1", "https://provider.example/v1", "test-model", "synthetic-secret")
+    assert AIConfigStore(database, master).load("user1")["key"] == "synthetic-secret"
+    with pytest.raises(ValueError, match="已存在"):
+        main(
+            [
+                "--server-config",
+                str(config),
+                "init-ai",
+                "--ai-db",
+                str(database),
+                "--ai-key-file",
+                str(master),
+            ]
+        )
+    values = json.loads(config.read_text())
+    values["storage"] = {"Bad": str(config.parent)}
+    config.write_text(json.dumps(values))
+    with pytest.raises(ValueError, match="可浏览"):
+        load_server_config(config).validate()
+    values["storage"] = {"Raw": str(folders["raw"])}
+    values["ai_key_file"] = None
+    config.write_text(json.dumps(values))
+    with pytest.raises(ValueError, match="同时配置"):
+        load_server_config(config).validate()

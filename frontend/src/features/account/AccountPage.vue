@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import AISettings from '../assistant/AISettings.vue'
 import { request } from '../../api/client'
 import { useAuth } from '../../stores/auth'
 import { useWorkspace } from '../../stores/workspace'
@@ -85,6 +86,7 @@ onMounted(() => store.run(refresh))
       <p v-if="auth.error" role="alert">{{ auth.error }}</p>
       <button class="primary" :disabled="auth.busy || store.busy">修改密码</button>
     </form>
+    <AISettings />
     <template v-if="auth.admin">
       <form class="card" @submit.prevent="create">
         <h2>创建账号</h2>

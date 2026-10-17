@@ -5,6 +5,7 @@ import { useWorkspace } from './stores/workspace'
 import { useAuth } from './stores/auth'
 import { startPresence, updatePresence } from './api/presence'
 import LoginPanel from './components/LoginPanel.vue'
+import AssistantPanel from './features/assistant/AssistantPanel.vue'
 
 const store = useWorkspace()
 const auth = useAuth()
@@ -191,6 +192,7 @@ const nextHelp = computed(() =>
           </nav>
         </template>
       </main>
+      <AssistantPanel v-if="route.path !== '/admin/monitor'" />
       <footer>scMM · CyESI 单细胞质谱分析<span>离开或刷新前请主动保存项目</span></footer>
     </div>
   </div>
