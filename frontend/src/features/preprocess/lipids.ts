@@ -16,6 +16,11 @@ export interface LipidInfo {
   presets: Record<string, LipidRules>
   active: string
   layers: string[]
+  molecule_layers: string[]
+  sample_field: string
+  samples: string[]
+  condition_fields: string[]
+  condition_values: Record<string, string[]>
   default_layer: string
   resolution: number
   versions: {
@@ -41,5 +46,64 @@ export interface LipidResults {
   diagnostics: Record<string, unknown>[]
   classification: Record<string, string[]>
   classification_tree: Record<string, string>[]
+  chart_view?: Partial<LipidChartView>
+  chart_filters?: Record<string, unknown>
+  network_parameters?: Record<string, unknown>
   total_features: number
+}
+
+export interface LipidChartView {
+  classification_level: string
+  graph: string
+  scope: string
+  sign: string
+  node_limit: number
+  search: string
+  category: string
+  focus: string
+}
+export interface LipidNode {
+  id: string
+  feature_id: string
+  mz: number
+  label: string
+  classification: string
+  review?: string
+  features?: string[]
+}
+export interface LipidEdge {
+  source: string
+  target: string
+  sample: string
+  rho_all: number
+  rho_joint: number | null
+  joint_cells: number
+  joint_fraction: number
+  sign: string
+  relation_types: string[]
+}
+export interface LipidCharts {
+  options: LipidChartView
+  pie: {
+    level: string
+    denominator: number
+    candidate_mode: string
+    filters: Record<string, unknown>
+    counts: { classification: string; count: number }[]
+  }
+  network: null | {
+    kind: string
+    layer: string
+    method: string
+    scope: string
+    scopes: string[]
+    nodes: LipidNode[]
+    edges: LipidEdge[]
+    total_nodes: number
+    truncated: boolean
+    molecule_nodes: LipidNode[]
+    undetermined_features: string[]
+    parameters: Record<string, unknown>
+  }
+  evidence?: Record<string, unknown>[]
 }

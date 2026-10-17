@@ -141,9 +141,23 @@ def rank_candidates(rows, rules):
         error = row["abs_ppm_error"]
         row["ppm_band"] = 1 if error <= 2 else 2 if error <= 5 else 3
         row.update(score_candidate(row, rules))
-    rows.sort(key=lambda r: (r["feature_id"], r["ppm_band"], -r["rule_score"], r["candidate_id"]))
+    rows.sort(
+        key=lambda r: (
+            r["feature_id"],
+            r["ppm_band"],
+            -r.get("network_level", 0),
+            -r["rule_score"],
+            r["candidate_id"],
+        )
+    )
     best = {}
     for row in rows:
-        best.setdefault(row["feature_id"], (row["ppm_band"], row["rule_score"]))
-        row["top_ranked"] = best[row["feature_id"]] == (row["ppm_band"], row["rule_score"])
+        best.setdefault(
+            row["feature_id"], (row["ppm_band"], row.get("network_level", 0), row["rule_score"])
+        )
+        row["top_ranked"] = best[row["feature_id"]] == (
+            row["ppm_band"],
+            row.get("network_level", 0),
+            row["rule_score"],
+        )
     return rows

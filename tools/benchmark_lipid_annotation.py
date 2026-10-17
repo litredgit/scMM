@@ -99,6 +99,13 @@ def main():
         "database_load_seconds": database_seconds,
         "annotation_seconds": elapsed,
         "peak_rss_mib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024,
+        "network_parameters": result["network"]["parameters"],
+        "network_feature_pairs": len(result["network"]["feature_edges"]),
+        "network_molecule_pairs": len(result["network"]["molecule_edges"]),
+        "network_chemical_links": len(result["network"]["chemical_links"]),
+        "serialized_version_bytes": len(
+            json.dumps(result, ensure_ascii=False, allow_nan=False).encode()
+        ),
         "candidate_count": len(result["candidates"]),
         "isotope_evidence_count": len(result["relations"]),
         "matched_evidence_count": sum(r["matched"] for r in result["relations"]),

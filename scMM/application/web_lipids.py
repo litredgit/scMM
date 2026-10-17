@@ -20,6 +20,8 @@ from scMM.util.lipid_annotation import (
     version_valid,
 )
 from scMM.util.lipid_isotopes import ADDUCTS
+from scMM.util.lipid_network import apply_support, intensity_layers
+from scMM.util.lipid_network_views import annotation_charts, representatives
 from scMM.util.lipid_rules import import_rules, rank_candidates, validate_rules
 
 from .lipid_database import database_status, load_database, prepare_database
@@ -104,7 +106,32 @@ class LipidWorkflow:
                 "adducts": ADDUCTS,
                 "presets": rules_presets(),
                 "active": store["active"],
-                "layers": [key for key in data.layers if key != "feature_snr"],
+                "layers": intensity_layers(data)["raw"],
+                "molecule_layers": intensity_layers(data)["molecule"],
+                "sample_field": next(
+                    (k for k in ("sample_id", "sample", "source_file") if k in data.obs), ""
+                ),
+                "samples": sorted(
+                    data.obs[
+                        next(k for k in ("sample_id", "sample", "source_file") if k in data.obs)
+                    ]
+                    .astype(str)
+                    .unique()
+                    .tolist()
+                )
+                if any(k in data.obs for k in ("sample_id", "sample", "source_file"))
+                else ["单样本"],
+                "condition_fields": [
+                    str(k)
+                    for k in data.obs
+                    if k not in {"sample_id", "sample", "source_file"}
+                    and data.obs[k].nunique() <= 100
+                ],
+                "condition_values": {
+                    str(k): sorted(data.obs[k].dropna().astype(str).unique().tolist())
+                    for k in data.obs
+                    if data.obs[k].nunique() <= 100
+                },
                 "default_layer": data.uns.get("scmm_workbench", {}).get("original_layer", ""),
                 "resolution": project.manifest["parameters"].get("resolution"),
                 "versions": [
@@ -177,6 +204,8 @@ class LipidWorkflow:
             data = candidate.workspace.require_data()
             store, version = selected_version(data, version_id)
             action(version)
+            apply_support(version)
+            rank_candidates(version["candidates"], version["rules"])
             persist_annotation(data, store)
             candidate.dirty = True
             workspace.project = candidate
@@ -330,9 +359,56 @@ class LipidWorkflow:
                     )
                 ],
                 "total_features": data.n_vars,
+                "chart_view": version.get("network", {}).get("view", {}),
+                "chart_filters": version.get("network", {}).get("chart_filters", {}),
+                "network_parameters": version.get("network", {}).get("parameters"),
             }
 
-    def lipid_export(self, identity, revision, version_id, filters, kind):
+    def lipid_charts(self, identity, revision, version_id, filters, view):
+        with self.access(identity) as workspace:
+            workspace.check(revision)
+            data = workspace.require_project().workspace.require_data()
+            _, version = selected_version(data, version_id)
+            if filters["adduct_mode"] == "specified" and not filters["adducts"]:
+                raise ValueError("请指定保留的加合物。")
+            ids = filtered_feature_ids(data, version, filters)
+            mz = dict(
+                zip(
+                    data.var_names,
+                    np.asarray(data.var.get("mz", data.var_names), dtype=float),
+                    strict=True,
+                )
+            )
+            return annotation_charts(
+                version, ids, mz, filtered_candidates(version, filters), filters, view
+            )
+
+    def lipid_chart_view(self, identity, revision, version_id, filters, view):
+        def action(version):
+            if "network" not in version:
+                raise ValueError("旧版本未计算相关网络，请重新运行注释。")
+            version["network"]["view"] = view
+            version["network"]["chart_filters"] = filters
+
+        # Validate scope and filters before committing the display settings.
+        self.lipid_charts(identity, revision, version_id, filters, view)
+        return self.lipid_edit(identity, revision, version_id, action)
+
+    def lipid_representative(self, identity, revision, version_id, database_id, feature_id):
+        def action(version):
+            if "network" not in version:
+                raise ValueError("请重新运行注释以计算相关网络。")
+            _, groups, _ = representatives(version)
+            if database_id not in groups or (feature_id and feature_id not in groups[database_id]):
+                raise ValueError("代表特征必须无歧义地属于所选数据库分子。")
+            if feature_id:
+                version["network"]["representatives"][database_id] = feature_id
+            else:
+                version["network"]["representatives"].pop(database_id, None)
+
+        return self.lipid_edit(identity, revision, version_id, action)
+
+    def lipid_export(self, identity, revision, version_id, filters, kind, view=None):
         with self.access(identity) as workspace:
             workspace.check(revision)
             project = workspace.require_project()
@@ -341,6 +417,103 @@ class LipidWorkflow:
             if filters["adduct_mode"] == "specified" and not filters["adducts"]:
                 raise ValueError("请指定保留的加合物。")
             ids = filtered_feature_ids(data, version, filters)
+            if kind in {
+                "charts",
+                "pie",
+                "feature_nodes",
+                "feature_edges",
+                "molecule_nodes",
+                "molecule_edges",
+                "network_evidence",
+            }:
+                view = dict(view or {})
+                view["node_limit"] = max(data.n_vars, 1)
+                if kind.startswith("feature_"):
+                    view["graph"] = "feature"
+                elif kind.startswith("molecule_"):
+                    view["graph"] = "molecule"
+                mz = dict(
+                    zip(
+                        data.var_names,
+                        np.asarray(data.var.get("mz", data.var_names), dtype=float),
+                        strict=True,
+                    )
+                )
+                charts = annotation_charts(
+                    version, ids, mz, filtered_candidates(version, filters), filters, view
+                )
+                if kind == "charts":
+                    return json.dumps(
+                        charts, ensure_ascii=False, allow_nan=False
+                    ).encode(), "application/json"
+                if kind == "pie":
+                    rows = [
+                        {
+                            **r,
+                            "denominator": charts["pie"]["denominator"],
+                            "level": charts["pie"]["level"],
+                            "candidate_mode": charts["pie"]["candidate_mode"],
+                            "filters": filters,
+                        }
+                        for r in charts["pie"]["counts"]
+                    ]
+                elif kind == "network_evidence":
+                    rows = charts.get("evidence", [])
+                else:
+                    graph = charts["network"]
+                    if graph is None:
+                        raise ValueError("旧版本未计算相关网络，请重新运行。")
+                    rows = [
+                        {
+                            **r,
+                            "layer": graph["layer"],
+                            "method": graph["method"],
+                            "scope": graph["scope"],
+                            "annotation_version": version_id,
+                            "parameters": graph["parameters"],
+                            "filters": filters,
+                        }
+                        for r in graph["nodes" if kind.endswith("nodes") else "edges"]
+                    ]
+                # Nested evidence is encoded as JSON inside CSV, retaining every sample.
+                columns = {
+                    "pie": ["classification", "count", "denominator", "level"],
+                    "network_evidence": [
+                        "source",
+                        "target",
+                        "type",
+                        "candidate_ids",
+                        "samples",
+                        "consensus",
+                    ],
+                }
+                frame = (
+                    pd.DataFrame(rows)
+                    if rows
+                    else pd.DataFrame(
+                        columns=columns.get(
+                            kind,
+                            [
+                                "id",
+                                "source",
+                                "target",
+                                "layer",
+                                "method",
+                                "scope",
+                                "annotation_version",
+                            ],
+                        )
+                    )
+                )
+                for column in frame:
+                    frame[column] = frame[column].map(
+                        lambda v: (
+                            json.dumps(v, ensure_ascii=False, allow_nan=False)
+                            if isinstance(v, (dict, list))
+                            else v
+                        )
+                    )
+                return frame.to_csv(index=False).encode(), "text/csv; charset=utf-8"
             if kind == "matrix":
                 return data[:, ids].to_df().to_csv(index=True).encode(), "text/csv; charset=utf-8"
             if kind == "candidates":

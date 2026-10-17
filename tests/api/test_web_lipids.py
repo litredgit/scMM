@@ -266,3 +266,108 @@ def test_builtin_presets_available_without_preferences_and_custom_values_preserv
     }
     with pytest.raises(ValueError, match="已存在"):
         save_rules_preset(name, override)
+
+
+def test_network_charts_save_manual_mapping_exports_and_failed_update(workflow, monkeypatch):
+    setup_lipids(workflow, monkeypatch)
+    version = run_lipids(workflow, network={"min_joint_cells": 10})
+    body = {"version": version, "view": {"node_limit": 1}}
+    response = workflow[-1]("/lipids/charts", body)
+    assert response.status_code == 200, response.text
+    chart = response.json()
+    assert chart["pie"]["denominator"] == 4
+    assert sum(r["count"] for r in chart["pie"]["counts"]) == 4
+    assert chart["network"]["truncated"] and len(chart["network"]["nodes"]) == 1
+    assert not chart["network"]["molecule_nodes"]  # Two isomer candidates per feature.
+    before = workflow[-2]()
+    invalid = workflow[-1](
+        "/lipids/representative", {"version": version, "database_id": "invalid", "feature_id": "f0"}
+    )
+    assert invalid.status_code == 400 and before == workflow[-2]()
+    invalid = workflow[-1](
+        "/lipids/charts/save", {"version": version, "view": {"scope": "condition:guessed"}}
+    )
+    assert invalid.status_code == 400 and before == workflow[-2]()
+    invalid = workflow[-1](
+        "/lipids/run", {"options": {**options(), "network": {"condition_field": "not-a-field"}}}
+    )
+    assert invalid.status_code == 400 and before == workflow[-2]()
+    assert (
+        workflow[-1](
+            "/lipids/run", {"options": {**options(), "network": {"support_all": 1.1}}}
+        ).status_code
+        == 422
+    )
+    rows = query(workflow, version)["candidates"]["rows"]
+    selected = next(r for r in rows if r["feature_id"] == "f0")
+    workflow[-1](
+        "/lipids/review",
+        {"version": version, "feature_id": "f0", "candidate_ids": [selected["candidate_id"]]},
+    ).raise_for_status()
+    chart = workflow[-1](
+        "/lipids/charts", {"version": version, "view": {"graph": "molecule"}}
+    ).json()
+    assert len(chart["network"]["molecule_nodes"]) == 1
+    identity = chart["network"]["nodes"][0]["id"]
+    workflow[-1](
+        "/lipids/representative", {"version": version, "database_id": identity, "feature_id": "f0"}
+    ).raise_for_status()
+    workflow[-1](
+        "/lipids/charts/save",
+        {
+            "version": version,
+            "view": {"graph": "molecule", "node_limit": 2},
+            "filters": {"isotopes": "hide"},
+        },
+    ).raise_for_status()
+    workflow[-1]("/project/save").raise_for_status()
+    path = workflow[-2]()["project"]["path"]
+    workflow[-1]("/project/open", {"path": path}).raise_for_status()
+    assert query(workflow, version)["chart_view"]["graph"] == "molecule"
+    assert query(workflow, version)["chart_filters"]["isotopes"] == "hide"
+    chart = workflow[-1]("/lipids/charts", {"version": version}).json()
+    assert (
+        chart["network"]["kind"] == "feature"
+    )  # Explicit request defaults override saved settings.
+    for kind in [
+        "pie",
+        "feature_nodes",
+        "feature_edges",
+        "molecule_nodes",
+        "molecule_edges",
+        "network_evidence",
+        "charts",
+    ]:
+        response = workflow[-1](
+            "/lipids/export", {"version": version, "kind": kind, "view": {"node_limit": 1}}
+        )
+        assert response.status_code == 200, response.text
+        if kind == "feature_nodes":
+            frame = pd.read_csv(StringIO(response.text))
+            assert len(frame) == 4  # Node cap is never a table-export cap.
+            assert set(frame.layer) == {"scmm_input_0"}
+        if kind == "charts":
+            assert response.json()["network"]["method"] == "spearman"
+            assert response.json()["evidence"]
+
+
+def test_network_condition_changes_stale_download_and_preserve_other_fields(workflow, monkeypatch):
+    setup_lipids(workflow, monkeypatch)
+    manager, headers = workflow[2], workflow[1]
+    with manager.access(headers["X-SCMM-Workspace"]) as workspace:
+        workspace.project.workspace.data.obs["condition"] = "control"
+    version = run_lipids(workflow, network={"condition_field": "condition", "min_joint_cells": 10})
+    response = workflow[-1](
+        "/lipids/charts", {"version": version, "view": {"scope": "condition:control"}}
+    )
+    assert response.status_code == 200
+    assert response.json()["network"]["edges"]
+    with manager.access(headers["X-SCMM-Workspace"]) as workspace:
+        workspace.project.workspace.data.obs["unrelated"] = "new"
+    assert get(workflow, "/lipids").json()["versions"][0]["valid"]
+    with manager.access(headers["X-SCMM-Workspace"]) as workspace:
+        data = workspace.project.workspace.data
+        data.obs.loc[data.obs["sample"] == "a", "condition"] = "treated"
+    assert not get(workflow, "/lipids").json()["versions"][0]["valid"]
+    for kind in ["charts", "feature_edges", "molecule_nodes", "network_evidence"]:
+        assert workflow[-1]("/lipids/export", {"version": version, "kind": kind}).status_code == 400

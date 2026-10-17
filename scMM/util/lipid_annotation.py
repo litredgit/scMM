@@ -38,6 +38,8 @@ def dataset_inputs(data, layer=""):
         raise ValueError("注释需要唯一特征 ID 和正的有限 m/z；允许不同 ID 对应相同 m/z。")
     layer = layer or data.uns.get("scmm_workbench", {}).get("original_layer", "")
     validate_intensity_layer(data, layer)
+    if layer not in {"", "X"} and layer not in data.layers:
+        raise ValueError("所选强度层不存在，请重新选择。")
     matrix = data.X if layer in {"", "X"} else data.layers[layer]
     values = matrix.toarray() if hasattr(matrix, "toarray") else np.asarray(matrix)
     if not np.isfinite(values).all() or (values < 0).any():
@@ -122,7 +124,7 @@ def annotate_lipids(data, database, database_identity, parameters, rules):
     relations, diagnostics = isotope_evidence(rows, mz, ids, values, samples, parameters)
     import pyopenms
 
-    return {
+    version = {
         "schema_version": 1,
         "input_identity": identity,
         "intensity_layer": layer,
@@ -137,6 +139,14 @@ def annotate_lipids(data, database, database_identity, parameters, rules):
         "pyopenms_version": pyopenms.__version__,
         "distribution_probability_tail": 1e-6,
     }
+    from .lipid_network import apply_support, build_network, intensity_layers
+
+    if (layer or "X") not in intensity_layers(data)["raw"]:
+        raise ValueError("辅助注释需要有未变换、未插补溯源的原始强度层。")
+    version["network"] = build_network(data, version, values, ids, samples)
+    apply_support(version)
+    rank_candidates(rows, rules)
+    return version
 
 
 def annotation_store(data):
@@ -148,7 +158,17 @@ def annotation_store(data):
 
 def version_valid(data, version):
     try:
-        return dataset_inputs(data, version["intensity_layer"])[-1] == version["input_identity"]
+        inputs = dataset_inputs(data, version["intensity_layer"])
+        if inputs[-1] != version["input_identity"]:
+            return False
+        if "network" in version:
+            from .lipid_network import network_inputs
+
+            identity = network_inputs(
+                data, inputs[2], inputs[3], version["network"]["parameters"], inputs[4]
+            )[-1]
+            return identity == version["network"]["input_identity"]
+        return True
     except (ValueError, KeyError):
         return False
 

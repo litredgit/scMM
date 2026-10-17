@@ -247,7 +247,9 @@ uv run --no-sync python -m pytest -W error --cov=scMM --cov-report=term-missing
 不通过任意函数执行接口，不改变 `CyESIData.deisotope()` 的原有算法或默认值。
 
 质量搜索对数据库排序索引二分查找，仅对匹配的母峰/理论同位素/观测特征计算关系；
-不构造特征平方矩阵。完整候选包括同质量异构记录，公式分布缓存复用，不以截断候选节省资源。
+质量/同位素搜索不构造特征平方矩阵。相关网络在 `util/lipid_network.py` 按样本使用临时特征平方相关矩阵，
+只对绘图阈值以上或化学关系对计算共同检出相关；审阅感知的饼图/分子映射/显示投影在 `lipid_network_views.py`。
+节点显示上限不减少辅助证据计算，完整候选包括同质量异构记录，公式分布缓存复用，不以截断候选节省资源。
 按用户确认，本轮限于 ≤500 特征的同步请求，不开展 M1/M2；不能据此宣称其他重任务已后台化。
 
 合成规模报告可在数据库已准备的环境复现：
@@ -262,6 +264,12 @@ python tools/benchmark_lipid_annotation.py --cells 10000 --samples 10 --features
 [10,000 × 500](validation/lipid-annotation-synthetic-10000x500.json)。耗时分开记录数据库首次加载与领域计算，
 峰值内存包含解释器、数据库、矩阵和工作区输入副本，不等于单个算法数组占用；尚不包含完整 HTTP 保存流程峰值。
 用户选择手动验收，不以这些合成结果声明真实样本准确率。
+
+相关网络的当前合成规模证据另见
+[3,000 × 500 网络报告](validation/lipid-network-synthetic-3000x500.json)和
+[10,000 × 500 网络报告](validation/lipid-network-synthetic-10000x500.json)。复用上述命令并更换输出文件名可复现；
+本次领域总耗时包含相关网络，报告新增两层边对数、化学关系数和注释版本 JSON 大小。
+图表/网络模块在安装包内，版本数据随 H5AD/项目保存；前端不持有矩阵或执行化学判定。
 
 专项检查为 `tests/domain/test_lipid_annotation.py`、`tests/api/test_web_lipids.py` 和 `frontend/tests/lipids.spec.ts`，
 覆盖双侧比例边界、加合物组成、并列/重复质量、失败原子性、版本/预设、过期下载及保存重载；

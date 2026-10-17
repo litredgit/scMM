@@ -8,6 +8,31 @@ from .schemas import RevisionRequest
 from .workflow_schemas import Controls
 
 
+class LipidNetworkOptions(Controls):
+    method: Literal["spearman", "pearson"] = "spearman"
+    support_all: float = Field(default=0.8, ge=0, le=1)
+    support_joint: float = Field(default=0.7, ge=0, le=1)
+    min_joint_cells: int = Field(default=30, ge=2)
+    plot_threshold: float = Field(default=0.7, ge=0, le=1)
+    consensus_fraction: float = Field(default=2 / 3, ge=0, le=1)
+    min_support_samples: int = Field(default=2, ge=2)
+    condition_field: str = ""
+    samples: list[str] = Field(default_factory=list)
+    conditions: list[str] = Field(default_factory=list)
+    molecule_layer: str = "total"
+
+
+class LipidChartOptions(Controls):
+    classification_level: Literal["CATEGORY", "MAIN_CLASS", "SUB_CLASS"] = "MAIN_CLASS"
+    graph: Literal["feature", "molecule"] = "feature"
+    scope: str = ""
+    sign: Literal["both", "positive", "negative"] = "both"
+    node_limit: int = Field(default=100, ge=1, le=2000)
+    search: str = Field(default="", max_length=1000)
+    category: str = ""
+    focus: str = ""
+
+
 class LipidOptions(Controls):
     database: str = ""
     polarity: Literal["pos", "neg", "both"] = "pos"
@@ -19,6 +44,7 @@ class LipidOptions(Controls):
     min_valid_cells: int = Field(default=20, ge=1)
     intensity_layer: str = ""
     resolution: float = Field(gt=0, le=1e8)
+    network: LipidNetworkOptions = Field(default_factory=LipidNetworkOptions)
 
 
 class LipidRun(RevisionRequest):
@@ -74,6 +100,28 @@ class LipidQuery(LipidActivate):
     limit: int = Field(default=100, ge=1, le=500)
 
 
-class LipidExport(LipidActivate):
+class LipidCharts(LipidActivate):
     filters: LipidFilters = Field(default_factory=LipidFilters)
-    kind: Literal["matrix", "candidates", "isotopes", "rules"] = "matrix"
+    view: LipidChartOptions = Field(default_factory=LipidChartOptions)
+
+
+class LipidRepresentative(LipidActivate):
+    database_id: str
+    feature_id: str = ""
+
+
+class LipidExport(LipidCharts):
+    filters: LipidFilters = Field(default_factory=LipidFilters)
+    kind: Literal[
+        "matrix",
+        "candidates",
+        "isotopes",
+        "rules",
+        "charts",
+        "pie",
+        "feature_nodes",
+        "feature_edges",
+        "molecule_nodes",
+        "molecule_edges",
+        "network_evidence",
+    ] = "matrix"

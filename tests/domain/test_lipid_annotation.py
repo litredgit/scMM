@@ -14,6 +14,7 @@ from scMM.application import lipid_database as db
 from scMM.application.workbench import AnalysisWorkspace
 from scMM.util.lipid_annotation import (
     annotate_lipids,
+    dataset_inputs,
     filtered_feature_ids,
     mass_candidates,
     version_valid,
@@ -249,3 +250,356 @@ def test_missing_and_invalid_formula_keep_mass_candidates(lipid_database, formul
     assert len(result["diagnostics"]) == 1
     assert result["relations"]
     assert json.dumps(deepcopy(result), allow_nan=False)
+
+
+def network_data(conflict=False):
+    from anndata import AnnData
+
+    parent_mz = EmpiricalFormula("C10H20").getMonoWeight() + adduct_shift("[M+H]+")
+    isotope = resolved_distribution("C10H20", "[M+H]+", 3, parent_mz, 35000)[0]
+    x = np.tile(np.arange(1, 61, dtype=float), 3)
+    sodium = x * 2
+    if conflict:
+        sodium[-60:] = sodium[-60:][::-1]
+    matrix = np.column_stack([x, sodium, x * isotope["ratio"], x**2 + 3, np.ones(180)])
+    data = AnnData(
+        matrix,
+        obs=pd.DataFrame(
+            {"sample_id": np.repeat(["a", "b", "c"], 60), "group": "control"},
+            index=[f"c{i}" for i in range(180)],
+        ),
+        var=pd.DataFrame(
+            {
+                "mz": [
+                    parent_mz,
+                    parent_mz + adduct_shift("[M+Na]+") - adduct_shift("[M+H]+"),
+                    isotope["mz"],
+                    300.0,
+                    400.0,
+                ]
+            },
+            index=["h", "na", "iso", "unknown", "constant"],
+        ),
+    )
+    workspace = AnalysisWorkspace()
+    workspace.replace(data)
+    return workspace.require_data()
+
+
+def network_annotation(data, lipid_database, **network):
+    database, identity = lipid_database
+    return annotate_lipids(
+        data,
+        database,
+        identity,
+        {
+            **options(),
+            "adducts": ["[M+H]+", "[M+Na]+"],
+            "network": {"condition_field": "group", **network},
+        },
+        {},
+    )
+
+
+def test_network_chemical_gate_isomer_ties_and_replicate_conflict(lipid_database):
+    data = network_data(conflict=True)
+    version = network_annotation(data, lipid_database)
+    assert len(version["candidates"]) == 4
+    for row in version["candidates"]:
+        assert row["network_level"] == 2
+        assert row["top_ranked"]
+    adducts = [link for link in version["network"]["chemical_links"] if link["type"] == "adduct"]
+    assert len(adducts) == 2
+    for link in adducts:
+        summary = link["consensus"][0]
+        assert summary["support_samples"] == ["a", "b"]
+        assert summary["evaluable_samples"] == 3
+        assert summary["support_fraction"] == 2 / 3
+        assert summary["direction_conflict"] and summary["inconsistent"]
+    # Unrelated but highly correlated feature has exploratory edges, no chemical support.
+    assert any(e["target"] == "unknown" for e in version["network"]["feature_edges"])
+    assert not any(
+        "unknown" in {e["source"], e["target"]} for e in version["network"]["chemical_links"]
+    )
+    assert all(r["network_inconsistent"] for r in version["candidates"])
+
+
+def test_network_joint_zeros_constant_and_insufficient_are_not_opposition():
+    from scMM.util.lipid_network import DEFAULTS, consensus, correlation_matrix, pair_statistics
+
+    raw = np.column_stack(
+        [
+            np.r_[np.zeros(90), np.arange(1, 11)],
+            np.r_[np.zeros(90), np.arange(10, 0, -1)],
+            np.ones(100),
+        ]
+    )
+    rho = correlation_matrix(raw, "spearman")
+    assert rho[0, 1] > 0.9  # Shared zeros alone would misleadingly support the pair.
+    row = pair_statistics(raw, raw > 0, 0, 1, rho[0, 1], {**DEFAULTS, "min_joint_cells": 5})
+    assert row["rho_joint"] == pytest.approx(-1) and not row["supported"]
+    insufficient = pair_statistics(raw, raw > 0, 0, 1, rho[0, 1], DEFAULTS)
+    assert not insufficient["evaluable"] and insufficient["joint_cells"] == 10
+    constant = pair_statistics(raw, raw > 0, 0, 2, rho[0, 2], {**DEFAULTS, "min_joint_cells": 5})
+    assert constant["rho_all"] is None and not constant["evaluable"]
+    result = consensus(
+        [
+            {"sample": "a", **row, "supported": True},
+            {"sample": "b", **row, "supported": True},
+            {"sample": "c", **insufficient},
+        ],
+        dict.fromkeys(["a", "b", "c"], "control"),
+        DEFAULTS,
+    )[0]
+    assert result["evaluable_samples"] == 2 and result["support_fraction"] == 1
+    assert result["replicate_support"]
+
+
+def test_network_sample_separation_and_no_implicit_replicates():
+    from scMM.util.lipid_network import DEFAULTS, calculate_network, consensus, correlation_matrix
+
+    x = np.r_[np.arange(1.0, 61), np.arange(101.0, 161)]
+    y = np.r_[np.arange(60.0, 0, -1), np.arange(160.0, 100, -1)]
+    values = np.column_stack([x, y])
+    assert correlation_matrix(values, "spearman")[0, 1] > 0
+    rows = calculate_network(
+        values, values, ["a", "b"], np.repeat(["s1", "s2"], 60), ["s1", "s2"], DEFAULTS
+    )[0]["samples"]
+    assert all(r["rho_all"] == pytest.approx(-1) and not r["supported"] for r in rows)
+    assert consensus(rows, {}, DEFAULTS) == []
+
+
+def test_network_methods_ranks_and_total_full_features(lipid_database):
+    from scipy.stats import pearsonr, spearmanr
+
+    from scMM.util.lipid_network import DEFAULTS, correlation_matrix, network_inputs
+
+    data = network_data()
+    ids, _, raw, samples, layer, _ = dataset_inputs(data)
+    molecular, mapping, selected, _ = network_inputs(data, raw, samples, DEFAULTS, layer)
+    np.testing.assert_allclose(molecular, raw / raw.sum(axis=1, keepdims=True))
+    assert mapping == {} and selected == ["a", "b", "c"] and len(ids) == 5
+    array = raw[:60, [0, 3]]
+    assert correlation_matrix(array, "pearson")[0, 1] == pytest.approx(pearsonr(*array.T).statistic)
+    assert correlation_matrix(array, "spearman")[0, 1] == pytest.approx(
+        spearmanr(*array.T).statistic
+    )
+    version = network_annotation(data, lipid_database, condition_field="")
+    assert all(r["network_level"] == 1 for r in version["candidates"])
+    assert version["network"]["conditions"] == {}
+
+
+def test_network_identity_layers_group_scope_and_failure(lipid_database):
+    from scMM.util.lipid_network import intensity_layers
+
+    data = network_data()
+    version = network_annotation(data, lipid_database)
+    assert version_valid(data, version)
+    changed = data.copy()
+    changed.obs.loc[changed.obs.sample_id == "a", "group"] = "treated"
+    assert not version_valid(changed, version)
+    changed = data.copy()
+    changed.layers[version["intensity_layer"]][0, 0] += 1
+    assert not version_valid(changed, version)
+    with pytest.raises(ValueError, match="条件必须唯一"):
+        data.obs.loc["c0", "group"] = "other"
+        network_annotation(data, lipid_database)
+    data.obs["group"] = "control"
+    with pytest.raises(ValueError, match="不存在"):
+        network_annotation(data, lipid_database, samples=["missing"])
+    workspace = AnalysisWorkspace()
+    workspace.replace(data)
+    workspace.normalize("total")
+    layer = "scmm_normalize_0"
+    assert layer in intensity_layers(workspace.data)["molecule"]
+    assert layer not in intensity_layers(workspace.data)["raw"]
+    version = network_annotation(workspace.data, lipid_database, molecule_layer=layer)
+    assert version_valid(workspace.data, version)
+    workspace.data.layers[layer][0, 0] += 0.1
+    assert not version_valid(workspace.data, version)
+    workspace.impute()
+    assert "scmm_impute_0" not in intensity_layers(workspace.data)["molecule"]
+    with pytest.raises(ValueError, match="未插补强度"):
+        network_annotation(workspace.data, lipid_database, molecule_layer="scmm_impute_0")
+
+
+def test_network_representatives_pie_and_manual_priority(lipid_database):
+    from scMM.util.lipid_network_views import annotation_charts, representatives
+
+    data = network_data()
+    version = network_annotation(data, lipid_database)
+    version["id"] = "v"
+    assert representatives(version)[1] == {}  # Ranking first never resolves two isomers.
+    first = next(r for r in version["candidates"] if r["feature_id"] == "h")
+    same = next(
+        r
+        for r in version["candidates"]
+        if r["feature_id"] == "na" and r["database_id"] == first["database_id"]
+    )
+    version["selected"] = {"h": [first["candidate_id"]], "na": [same["candidate_id"]]}
+    assert (
+        representatives(version)[2][first["database_id"]] == "na"
+    )  # Equal detection, stronger raw.
+    version["network"]["representatives"][first["database_id"]] = "h"
+    assert representatives(version)[2][first["database_id"]] == "h"
+    # One feature with cross-class candidates must be counted once as ambiguous.
+    other = next(r for r in version["candidates"] if r["feature_id"] == "h" and r != first)
+    other["MAIN_CLASS"] = "other class"
+    mz = dict(zip(data.var_names, data.var.mz, strict=True))
+    chart = annotation_charts(
+        version, list(data.var_names), mz, version["candidates"], {}, {"node_limit": 1}
+    )
+    assert chart["pie"]["denominator"] == 5
+    assert sum(r["count"] for r in chart["pie"]["counts"]) == 5
+    assert not any(r["classification"] == "多义" for r in chart["pie"]["counts"])
+    assert chart["network"]["truncated"]
+    assert len(version["network"]["feature_edges"]) > 1
+    version["selected"].pop("h")
+    chart = annotation_charts(version, list(data.var_names), mz, version["candidates"], {})
+    assert next(r for r in chart["pie"]["counts"] if r["classification"] == "多义")["count"] == 1
+    assert "h" not in representatives(version)[0]
+
+
+def test_network_representative_detection_equal_sample_weight(lipid_database):
+    from scMM.util.lipid_network_views import representatives
+
+    data = network_data()
+    raw = data.layers["scmm_input_0"]
+    # H is detected in a,b only; Na in all samples, despite H's huge mean intensity.
+    raw[:, 0] *= 10000
+    raw[120:, 0] = 0
+    version = network_annotation(data, lipid_database)
+    rows = version["candidates"]
+    identity = rows[0]["database_id"]
+    version["selected"] = {
+        f: [
+            next(
+                r["candidate_id"]
+                for r in rows
+                if r["database_id"] == identity and r["feature_id"] == f
+            )
+        ]
+        for f in ["h", "na"]
+    }
+    assert representatives(version)[2][identity] == "na"
+    assert version["network"]["representative_metrics"]["h"]["detection_rate"] == pytest.approx(
+        2 / 3
+    )
+
+
+def test_network_level_follows_ppm_before_rule_score():
+    rows = [
+        dict(
+            feature_id="f",
+            candidate_id=str(i),
+            abs_ppm_error=ppm,
+            polarity="pos",
+            adduct="[M+H]+",
+            network_level=level,
+        )
+        for i, (ppm, level) in enumerate([(1.0, 0), (1.0, 2), (3.0, 2)])
+    ]
+    ranked = rank_candidates(rows, validate_rules({}, ADDUCTS))
+    assert [r["candidate_id"] for r in ranked] == ["1", "0", "2"]
+    assert [r["candidate_id"] for r in ranked if r["top_ranked"]] == ["1"]
+
+
+def test_network_different_layers_can_have_opposite_edges(lipid_database):
+    version = network_annotation(network_data(), lipid_database)
+    raw = next(
+        e
+        for e in version["network"]["feature_edges"]
+        if {e["source"], e["target"]} == {"h", "unknown"}
+    )
+    total = next(
+        e
+        for e in version["network"]["molecule_edges"]
+        if {e["source"], e["target"]} == {"h", "unknown"}
+    )
+    assert raw["samples"][0]["rho_all"] > 0.99
+    assert total["samples"][0]["rho_all"] < -0.9
+
+
+def test_network_representative_does_not_weight_large_sample_more(lipid_database):
+    from scMM.util.lipid_network_views import representatives
+
+    data = network_data()[list(range(60)) + list(range(60, 66)) + list(range(120, 126))].copy()
+    raw = data.layers["scmm_input_0"]
+    raw[:, 0] *= 10000
+    raw[60:, 0] = 0
+    raw[:30, 1] = 0
+    version = network_annotation(data, lipid_database, samples=["a"])
+    rows = version["candidates"]
+    identity = rows[0]["database_id"]
+    version["selected"] = {
+        f: [
+            next(
+                r["candidate_id"]
+                for r in rows
+                if r["database_id"] == identity and r["feature_id"] == f
+            )
+        ]
+        for f in ["h", "na"]
+    }
+    assert (raw[:, 0] > 0).mean() > (raw[:, 1] > 0).mean()  # Pooled detection would choose H.
+    assert representatives(version)[2][identity] == "na"
+    assert version["network"]["representative_metrics"]["h"]["detection_rate"] == pytest.approx(
+        1 / 3
+    )
+    # Representative metrics also include samples outside the correlation display scope.
+    assert version["network"]["samples"] == ["a"]
+
+
+def test_network_review_does_not_bypass_theoretical_ratio(lipid_database):
+    from scMM.util.lipid_network import apply_support
+
+    version = network_annotation(network_data(), lipid_database)
+    for relation in version["relations"]:
+        relation["matched"] = False
+        relation["review"] = "accepted"
+    apply_support(version)
+    assert not any(
+        link["level"] for link in version["network"]["chemical_links"] if link["type"] == "isotope"
+    )
+    for relation in version["relations"]:
+        relation["matched"] = True
+        relation["review"] = "rejected"
+    apply_support(version)
+    assert not any(
+        link["level"] for link in version["network"]["chemical_links"] if link["type"] == "isotope"
+    )
+
+
+def test_network_insufficient_isotope_ratio_and_missing_sample(lipid_database):
+    from scMM.util.lipid_network import apply_support
+
+    data = network_data()
+    version = network_annotation(data, lipid_database)
+    for row in version["relations"]:
+        row["valid_cells"] = 1
+        row["matched"] = False
+    apply_support(version)
+    for link in version["network"]["chemical_links"]:
+        if link["type"] == "isotope":
+            assert not any(r["evaluable"] for r in link["samples"])
+            assert link["consensus"][0]["evaluable_samples"] == 0
+    data.obs.loc["c0", "sample_id"] = ""
+    with pytest.raises(ValueError, match="样本身份存在缺失"):
+        network_annotation(data, lipid_database)
+
+
+def test_network_same_formula_support_is_shared_without_recursive_propagation(lipid_database):
+    from scMM.util.lipid_network import apply_support
+
+    version = network_annotation(network_data(), lipid_database)
+    source = next(r for r in version["candidates"] if r["feature_id"] == "h")
+    clone = {**source, "candidate_id": "other-isomer", "database_id": "other-structure"}
+    version["candidates"].append(clone)
+    # New isomer has no Na candidate and no isotope records of its own.
+    apply_support(version)
+    assert clone["network_level"] == source["network_level"] == 2
+    assert clone["network_samples"] == source["network_samples"]
+    assert any(
+        "other-isomer" in link["equivalent_candidate_ids"]
+        for link in version["network"]["chemical_links"]
+    )

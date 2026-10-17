@@ -57,12 +57,38 @@ def query(body: s.LipidQuery, manager: Service, identity: Identity):
     return manager.lipid_query(identity, body.revision, body.model_dump())
 
 
+@router.post("/charts")
+def charts(body: s.LipidCharts, manager: Service, identity: Identity):
+    return manager.lipid_charts(
+        identity, body.revision, body.version, body.filters.model_dump(), body.view.model_dump()
+    )
+
+
+@router.post("/charts/save")
+def save_charts(body: s.LipidCharts, manager: Service, identity: Identity):
+    return manager.lipid_chart_view(
+        identity, body.revision, body.version, body.filters.model_dump(), body.view.model_dump()
+    )
+
+
+@router.post("/representative")
+def representative(body: s.LipidRepresentative, manager: Service, identity: Identity):
+    return manager.lipid_representative(
+        identity, body.revision, body.version, body.database_id, body.feature_id
+    )
+
+
 @router.post("/export")
 def export(body: s.LipidExport, manager: Service, identity: Identity):
     content, media = manager.lipid_export(
-        identity, body.revision, body.version, body.filters.model_dump(), body.kind
+        identity,
+        body.revision,
+        body.version,
+        body.filters.model_dump(),
+        body.kind,
+        body.view.model_dump(),
     )
-    extension = "json" if body.kind == "rules" else "csv"
+    extension = "json" if body.kind in {"rules", "charts"} else "csv"
     return Response(
         content,
         media_type=media,

@@ -1,0 +1,78 @@
+{
+  "scope": "synthetic matrix with downloaded LMSD; not experimental accuracy or user acceptance",
+  "created_at": "2026-10-17T02:18:28.642570+00:00",
+  "python": "3.12.13",
+  "platform": "Linux-5.15.0-191-generic-x86_64-with-glibc2.35",
+  "seed": 42,
+  "cells": 3000,
+  "samples": 10,
+  "features": 500,
+  "dtype": "float64",
+  "parameters": {
+    "database": "LMSD_f77d752c487bdcc9.sdf",
+    "polarity": "pos",
+    "adducts": [
+      "[M+H]+",
+      "[M+Na]+",
+      "[M+K]+",
+      "[M+NH4]+"
+    ],
+    "annotation_ppm": 10.0,
+    "isotope_ppm": 10.0,
+    "max_isotope_order": 3,
+    "isotope_tolerance": 0.2,
+    "min_valid_cells": 20,
+    "intensity_layer": "",
+    "resolution": 35000.0
+  },
+  "pyopenms_version": "3.3.0",
+  "rules": {
+    "schema_version": 1,
+    "name": "",
+    "rules": []
+  },
+  "source_sha256": {
+    "tools/benchmark_lipid_annotation.py": "9fc1ce1570c11519f2541d98badb78e99def06d9059004bf450894f65ca158c2",
+    "scMM/util/lipid_annotation.py": "6ef5a592fcfbac6feb96aef7c2524fab492d20928233eb0d0c33803d9f5764d2",
+    "scMM/util/lipid_isotopes.py": "c0057ae37e794ae69f8d1cd4dcb3ccaae9a033a64b1eb3a32d5bafc2f5b0b25e",
+    "scMM/util/lipid_network.py": "852e4714ff249e55dc8fa959195403098aea15a7f0ec15405b8b08836ec7d845",
+    "scMM/util/lipid_network_views.py": "201335c0b0489139c3fe8d56c85c3ae782253f5e900b196bcd0b1ffeb0097789",
+    "scMM/util/lipid_rules.py": "e954efcc7dad308aabbc4d86e1e843306b11d29546aa45301304695a09613395",
+    "scMM/application/lipid_database.py": "59d21515213a3c2bba1ea778cd930744bcee4d79893dcadc2d1b96ecbd14f72c"
+  },
+  "database": {
+    "source": "https://lipidmaps.org/files/?ext=sdf.zip&file=LMSD",
+    "downloaded_at": "2026-10-13T12:52:53.741541+00:00",
+    "sha256": "f77d752c487bdcc97c07c6711e0f69c9021b0e3954584ceb72253f388b222512",
+    "license": "CC BY 4.0",
+    "archive_member": "structures.sdf",
+    "filename": "LMSD_f77d752c487bdcc9.sdf",
+    "records": 49981,
+    "invalid_mass_records": 605,
+    "missing_formula_records": 0
+  },
+  "database_load_seconds": 4.605078687425703,
+  "annotation_seconds": 4.279365461785346,
+  "peak_rss_mib": 724.2109375,
+  "network_parameters": {
+    "method": "spearman",
+    "support_all": 0.8,
+    "support_joint": 0.7,
+    "min_joint_cells": 30,
+    "plot_threshold": 0.7,
+    "consensus_fraction": 0.6666666666666666,
+    "min_support_samples": 2,
+    "condition_field": "",
+    "samples": [],
+    "conditions": [],
+    "molecule_layer": "total"
+  },
+  "network_feature_pairs": 316,
+  "network_molecule_pairs": 250,
+  "network_chemical_links": 3339,
+  "serialized_version_bytes": 35941537,
+  "candidate_count": 3773,
+  "isotope_evidence_count": 31560,
+  "matched_evidence_count": 10140,
+  "diagnostics_count": 22
+}

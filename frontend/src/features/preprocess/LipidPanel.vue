@@ -4,6 +4,8 @@ import { useWorkspace } from '../../stores/workspace'
 import { useAuth } from '../../stores/auth'
 import { authenticatedFetch, sessionVersion, ensureSession } from '../../api/client'
 import DataTableView from '../../components/DataTable.vue'
+import LipidNetworkOptions from './LipidNetworkOptions.vue'
+import LipidNetworkPanel from './LipidNetworkPanel.vue'
 import type { LipidInfo, LipidResults, LipidRules } from './lipids'
 
 const store = useWorkspace()
@@ -34,6 +36,19 @@ const options = reactive({
   min_valid_cells: 20,
   intensity_layer: '',
   resolution: 35000,
+  network: {
+    method: 'spearman',
+    support_all: 0.8,
+    support_joint: 0.7,
+    min_joint_cells: 30,
+    plot_threshold: 0.7,
+    consensus_fraction: 2 / 3,
+    min_support_samples: 2,
+    condition_field: '',
+    samples: [] as string[],
+    conditions: [] as string[],
+    molecule_layer: 'total',
+  },
 })
 const filters = reactive({
   query: '',
@@ -88,6 +103,7 @@ const validVersion = computed(
 )
 let generation = 0
 let queryGeneration = 0
+let restoredVersion = ''
 
 async function refresh(reset = false) {
   const token = ++generation
@@ -103,6 +119,7 @@ async function refresh(reset = false) {
     imported.value = false
     rules.value = { schema_version: 1, name: '', rules: [] }
     results.value = undefined
+    restoredVersion = ''
     feature.value = ''
   }
 }
@@ -163,6 +180,13 @@ async function loadResults(reset = false): Promise<boolean> {
     selectedVersion !== version.value
   )
     return false
+  if (restoredVersion !== selectedVersion) {
+    restoredVersion = selectedVersion
+    if (value.chart_filters && Object.keys(value.chart_filters).length) {
+      Object.assign(filters, value.chart_filters)
+      return await loadResults(true)
+    }
+  }
   results.value = value
   if (!imported.value) rules.value = value.rules
   selection.value =
@@ -495,13 +519,13 @@ function number(value: unknown) {
 
     <fieldset :disabled="store.busy">
       <legend>天然同位素设置</legend>
+      <LipidNetworkOptions v-model="options.network" :info="info" />
       <div class="field-grid">
         <label
           ><FieldLabel
             name="intensity_layer"
             text="选择未归一化、未插补的强度层。导入数据的初始层未必是原始强度，请按来源核对。"
           /><select aria-label="脂质 intensity_layer" v-model="options.intensity_layer">
-            <option value="X">当前 X</option>
             <option v-for="item in info?.layers" :key="item" :value="item">{{ item }}</option>
           </select></label
         >
@@ -598,6 +622,15 @@ function number(value: unknown) {
     </fieldset>
 
     <div v-if="results" class="lipid-results">
+      <LipidNetworkPanel
+        :results="results"
+        :filters="{
+          ...filters,
+          adducts: filters.adduct_mode === 'specified' ? filters.adducts : [],
+        }"
+        @select="selectFeature"
+        @updated="loadResults()"
+      />
       <aside class="lipid-filters">
         <h3>显示与导出筛选</h3>
         <fieldset :disabled="store.busy">
@@ -769,6 +802,7 @@ function number(value: unknown) {
                   />
                 </th>
                 <th>ppm 档</th>
+                <th>网络支持</th>
                 <th>类别分</th>
                 <th>加合物分</th>
                 <th>规则分</th>
@@ -799,6 +833,17 @@ function number(value: unknown) {
                 <td>{{ row.adduct }}</td>
                 <td>{{ number(row.ppm_error) }}</td>
                 <td>{{ row.ppm_band }}</td>
+                <td
+                  :title="
+                    JSON.stringify({
+                      samples: row.network_samples,
+                      relations: row.network_relations,
+                    })
+                  "
+                >
+                  {{ ['无可用支持', '单样本支持', '同条件重复支持'][Number(row.network_level ?? 0)]
+                  }}{{ row.network_inconsistent ? ' · 重复不一致' : '' }}
+                </td>
                 <td>{{ row.class_score }}</td>
                 <td>{{ row.adduct_score }}</td>
                 <td>{{ row.scored ? row.rule_score : '未评分' }}</td>
