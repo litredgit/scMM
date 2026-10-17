@@ -7,6 +7,10 @@
 
 ### 测试结构与按改动分块 CI — 2026-10-16 实现，2026-10-17 用户验收通过
 
+- 用户验收后，实现提交 **`7287dde`** 已推送 dev，使用普通 `scripts/scmm_env.py release` 完成生产更新、锁定同步/资源构建、健康检查及 main 推送。发布前监控 fresh ready，无活动/失联页面、未保存/繁忙工作区、连接或活动任务/worker；生产 5006 于 **2026-10-17 09:09:42（北京时间）** 启动，PID **1459660**、active/running、重启计数 0，首页及健康接口 200、发布后监控 fresh ready，开发 5007 首页及健康接口仍为 200。发布脚本按既有流程构建静态资源（含类型检查），未额外运行本地 Python/浏览器回归；本次只对验收记录改动执行相关文档检查。未执行真实实验或生产公网端到端检查。发布后的验证/部署记录仅同步 dev/main，不再次重启服务。
+- 首次远端分块 CI：[dev run 38989635907](https://github.com/litredgit/scMM/actions/runs/38989635907) 与 [main run 38989667522](https://github.com/litredgit/scMM/actions/runs/38989667522) 均通过。两次均正确比较 `efaecfc`→`7287dde`：Python 3.11/3.12 各 **462 项通过**，文档/Notebook **15 项通过**，Ruff/格式及改动源码扫描通过；Node 安装、前端构建、浏览器、发行包与产物扫描均跳过。该范围涵盖本次全部迁移的 Python 测试，不表示以后常规改动运行全量；本机分块、远端执行与用户验收为独立证据。
+
+
 - 核对起点为 dev、干净工作区。将全部 Python 测试归入 `domain/`、`application/`、`api/`、`tooling/`，共享数据/真实认证/HTTP 构造归入 `tests/support/`；消除测试文件互相导入。八项 `test_user_todo` 回归分别归入元数据/生命周期、预览缓存、参数、项目范围、显示和降维；原始谱/提取 HTTP 检查从工作流文件拆出，Notebook 与 Markdown 分开。上述均为移动/拆分，不计作删除。
 - **实际删除**：`test_full_synthetic_processing_and_h5ad` 与 RAW/mzML 同输入等价流程重复，由 `tests/domain/test_thermo_pipeline.py::test_full_raw_and_mzml_processing_equal` 继续验证完整 XML/RAW 路径，并保留两细胞/有限值断言；SNR、层/嵌入及 H5AD 保真由该等价检查及 `tests/domain/test_h5ad_interop.py` 保障。删除 `test_project_environment_is_managed_by_uv` 中禁止特定文字、固定 Python 小版本和旧文件不存在的脆弱约束；支持版本来自 pyproject、CI 矩阵，环境安装使用 `uv sync --locked`。
 - **合并**：每篇文档的链接与 Python 示例检查合并为一次读取，增加章节锚点校验；改变文档或链接目标时检查关联文档。仅这两项旧检查合并，不把减少参数化用例或函数数当作删减成果。保存原子性/失败恢复、修订冲突、缓存/路径/回收保护、认证隔离、真实 worker、RAW 超时/回收、发布阻塞/回滚等独立边界保留；七个浏览器 spec 的十二项交互用例均保留。
