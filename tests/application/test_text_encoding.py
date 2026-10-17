@@ -20,7 +20,7 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="Requires POSIX C loc
 def ascii_process(source, *args):
     result = subprocess.run(
         [sys.executable, "-c", source, *map(str, args)],
-        cwd=Path(__file__).parents[1],
+        cwd=Path(__file__).resolve().parents[2],
         env={
             **os.environ,
             "LC_ALL": "C",

@@ -8,7 +8,6 @@ from copy import deepcopy
 import numpy as np
 import pandas as pd
 import pytest
-from anndata import AnnData
 from pyopenms import EmpiricalFormula
 
 from scMM.application import lipid_database as db
@@ -21,36 +20,7 @@ from scMM.util.lipid_annotation import (
 )
 from scMM.util.lipid_isotopes import ADDUCTS, adduct_shift, resolved_distribution
 from scMM.util.lipid_rules import import_rules, rank_candidates, validate_rules
-
-
-def sdf_record(identifier="LMGP01010001", formula="C10H20", name="Synthetic A"):
-    mass = EmpiricalFormula(formula).getMonoWeight()
-    return f"""{name}
-  scMM synthetic
-
->  <LM_ID>
-{identifier}
-
->  <NAME>
-{name}
-
->  <EXACT_MASS>
-{mass:.12f}
-
->  <FORMULA>
-{formula}
-
->  <CATEGORY>
-Glycerophospholipids [GP]
-
->  <MAIN_CLASS>
-Glycerophosphocholines [GP01]
-
->  <ABBREVIATION>
-PC 10:0
-
-$$$$
-"""
+from tests.support.lipids import options, sdf_record, synthetic_data
 
 
 @pytest.fixture
@@ -61,43 +31,6 @@ def lipid_database(tmp_path, monkeypatch):
     monkeypatch.setenv("SCMM_LIPID_DATABASE_DIR", str(root))
     db._load_cached.cache_clear()
     return db.load_database()
-
-
-def synthetic_data(adduct="[M+H]+", ratios=(1.0, 1.0), duplicate=False):
-    parent_mz = EmpiricalFormula("C10H20").getMonoWeight() + adduct_shift(adduct)
-    peak = resolved_distribution("C10H20", adduct, 3, parent_mz, 35000)[0]
-    parent = np.linspace(100.0, 1000.0, 40)
-    child = parent * peak["ratio"] * np.repeat(ratios, 20)
-    X = np.column_stack((parent, child, parent * 0.3))
-    masses = [parent_mz, peak["mz"], parent_mz + 10]
-    if duplicate:
-        X = np.column_stack((X, parent * 0.2))
-        masses.append(parent_mz)
-    data = AnnData(
-        X,
-        obs=pd.DataFrame({"sample": np.repeat(["a", "b"], 20)}, index=[f"c{i}" for i in range(40)]),
-        var=pd.DataFrame({"mz": masses}, index=[f"f{i}" for i in range(len(masses))]),
-    )
-    state = AnalysisWorkspace()
-    state.replace(data)
-    data = state.require_data()
-    data.layers["feature_snr"] = np.ones(data.shape) * 50
-    return data
-
-
-def options(adduct="[M+H]+"):
-    return {
-        "database": "test.sdf",
-        "polarity": ADDUCTS[adduct]["polarity"],
-        "adducts": [adduct],
-        "annotation_ppm": 10.0,
-        "isotope_ppm": 10.0,
-        "max_isotope_order": 3,
-        "isotope_tolerance": 0.2,
-        "min_valid_cells": 20,
-        "intensity_layer": "",
-        "resolution": 35000.0,
-    }
 
 
 def test_ppm_bands_precede_scores_and_ties_remain_separate():

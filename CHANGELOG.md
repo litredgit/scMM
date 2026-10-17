@@ -5,6 +5,18 @@
 
 ## Unreleased
 
+### 测试结构与按改动分块 CI — 2026-10-16 实现，2026-10-17 用户验收通过
+
+- 核对起点为 dev、干净工作区。将全部 Python 测试归入 `domain/`、`application/`、`api/`、`tooling/`，共享数据/真实认证/HTTP 构造归入 `tests/support/`；消除测试文件互相导入。八项 `test_user_todo` 回归分别归入元数据/生命周期、预览缓存、参数、项目范围、显示和降维；原始谱/提取 HTTP 检查从工作流文件拆出，Notebook 与 Markdown 分开。上述均为移动/拆分，不计作删除。
+- **实际删除**：`test_full_synthetic_processing_and_h5ad` 与 RAW/mzML 同输入等价流程重复，由 `tests/domain/test_thermo_pipeline.py::test_full_raw_and_mzml_processing_equal` 继续验证完整 XML/RAW 路径，并保留两细胞/有限值断言；SNR、层/嵌入及 H5AD 保真由该等价检查及 `tests/domain/test_h5ad_interop.py` 保障。删除 `test_project_environment_is_managed_by_uv` 中禁止特定文字、固定 Python 小版本和旧文件不存在的脆弱约束；支持版本来自 pyproject、CI 矩阵，环境安装使用 `uv sync --locked`。
+- **合并**：每篇文档的链接与 Python 示例检查合并为一次读取，增加章节锚点校验；改变文档或链接目标时检查关联文档。仅这两项旧检查合并，不把减少参数化用例或函数数当作删减成果。保存原子性/失败恢复、修订冲突、缓存/路径/回收保护、认证隔离、真实 worker、RAW 超时/回收、发布阻塞/回滚等独立边界保留；七个浏览器 spec 的十二项交互用例均保留。
+- 新增 `tests/blocks.json` 与 `scripts/test_blocks.py`，本地/CI 共用显式文件及依赖方映射；显示选择理由和跳过范围。测试单独变化仅选择所属块，fixture 变化按实际消费者选择；领域公共层/契约/锁文件按影响扩大。新增位置在已知区域内保守选择并标明 UNMAPPED，其他未知路径失败要求补映射。保留显式 `--all` 及手动 CI 全量入口，不默认执行。
+- CI 先计算一次计划，PR 比较共同祖先→PR head，push 比较事件 before→after（涵盖全部提交），首次分支 push 使用全部文件；选中的 Python 块继续在 3.11/3.12 以 `-W error` 执行。Node/格式/类型/构建及浏览器、文档、发行包按条件运行，前端只构建一次；按所选块安装锁定 extras，移除默认 Notebook 工具链。扫描拆为改动源码一次及实际构建产物一次，保留独立完整/历史审计，避免重复扫描静态文件。
+- 本机 Python 3.12 验证：对准备迁移的块分别建立本次基线；整理后用 `PYTHONUTF8=1 .venv/bin/python scripts/test_blocks.py --block <块> --phase python --run` 分组验证，领域 `spectra/data/analysis/annotation/plotting` **208 项（34.55s）**，应用 `processing/projects/workbench` **96 项（12.26s）**，HTTP `api/api-raw/api-lipids/auth/monitor` **95 项（36.31s）**，工具 `tooling` **63 项（3.27s）**；`--block docs --block notebook --phase docs --run` **15 项（0.06s）**。累计 **477 项**，已通过且后续未受影响的领域/应用/HTTP 块未再执行；没有最后统一重跑全量。选择器测试覆盖多提交 push、分叉 PR、新分支、本地暂存/未暂存/未跟踪/重命名、未知路径、fixture 实际使用者与清单完整性、格式配置独立选择及首次 push 的全部受管文件映射。
+- 改动 Python 的 Ruff/格式、`git diff --check`、Actionlint 1.7.7 工作流校验及改动源码扫描通过；同步开发指南、安装检查示例和 roadmap 引用。原 44 个测试文件/321 个函数重组后为 47 个文件/329 个函数（含新增选择器/扫描保障），不宣称测试数量减少。
+- 未运行：前端实现/浏览器用例、发行包、真实 RAW/规模实验（均未改动且不受本轮影响）；本机 Python 3.11 和远端 CI 在验收前尚未执行；用户于 2026-10-17 明确验收通过，授权本范围提交、推送与生产发布。此次计划明确跳过全部 browser 块与发行包构建。开发服务更新前核对独立项目根、配置、连接、页面/未保存工作区及任务/worker，均无阻塞；5007 `scmm-dev.service` 于 **2026-10-16 15:25:17 UTC** 刷新，PID **1414458**、active/running、重启计数 0，首页/健康接口 200、监控协议 1 fresh ready。运行代码、锁文件与前端未改动，沿用现有锁定环境与静态资源，没有额外构建/检查前端。验收前保持未提交、未推送、未部署生产；本次发布结果后续记录。
+
+
 ### 外部 Nginx 反代来源配置 — 2026-10-16
 
 - 实现 **`b0459c0`** 已推送 dev，并通过普通 `scripts/scmm_env.py release` 完成生产更新及 main 推送。发布前状态为 ready，无业务页面、未保存/繁忙工作区或活动任务，仅有只读监控页；5006 于 **2026-10-16 22:46:04（北京时间）** 启动，PID **1363169**、active、重启计数 0，首页及健康接口正常。实际公网端到端请求仍未验证。

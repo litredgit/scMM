@@ -11,6 +11,11 @@
 Vue 既有六步工作台和旧代码清理的验收已归档，均不作为待开发；后续按独立里程碑推进。
 本页不承诺完成日期，不替用户指定实验参数、真实验证样本或新的生产发布时机。
 
+## CI 待核验
+
+测试结构与 CI 分块选择已于 2026-10-17 用户验收通过；首次远端 Python 3.11/3.12 分块执行结果待核验。
+本机验证与发布证据见 CHANGELOG，日常只检查修改及受影响部分，规则见[开发验证](development.md#完整验证)。
+
 ## 新会话起点
 
 登录认证、服务器资源配置、当前文件清理及管理员监控已于 2026-10-16 用户验收通过，发布状态见 CHANGELOG。
@@ -24,7 +29,7 @@ Vue 既有六步工作台和旧代码清理的验收已归档，均不作为待�
    `features/raw/RawPage.vue`、`features/extraction/ExtractionPage.vue`、`features/analysis/AnalysisPage.vue`、
    `components/SavedItems.vue`；其中前端路径均相对 `frontend/src/`。
 3. 记录现有行为和可复现的失败路径，再实现最小完整里程碑；保留工作区修订、候选提交、结果失效、人工纳入和主动保存语义。
-4. 相关 HTTP/应用回归在 `tests/test_web_api.py`、`tests/test_web_workflow.py`、`tests/test_cell_preview.py`；
+4. 相关 HTTP/应用回归在 `tests/api/test_web_api.py`、`tests/api/test_web_workflow.py`、`tests/api/test_raw_extraction.py`、`tests/application/test_cell_preview.py`；
    浏览器回归在 `frontend/tests/`。按改动补充连点、慢响应、切页、失败和恢复用例，完整检查见
    [开发验证](development.md#完整验证)。不要把代码审阅推断或合成数据写成真实实验验收。
 5. 每个里程碑完成后更新主题文档和 CHANGELOG，更新 5007 供验收并保留未提交修改；

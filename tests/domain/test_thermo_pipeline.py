@@ -136,7 +136,7 @@ def test_raw_vue_project_entry_and_reader_failure(raw_pair, tmp_path, monkeypatc
     projects = tmp_path / "projects"
     projects.mkdir()
     monkeypatch.setenv("SCMM_PREFERENCES", str(tmp_path / "preferences.json"))
-    from web_auth_support import auth_options, login_client
+    from tests.support.auth import auth_options, login_client
 
     options, credential = auth_options(tmp_path)
     app = create_app(
@@ -238,6 +238,8 @@ def test_full_raw_and_mzml_processing_equal(raw_pair, tmp_path):
     raw, xml = raw_pair
     direct = CyESIData.load_from_file(raw, **OPTIONS)
     baseline = CyESIData.load_from_file(xml, **OPTIONS)
+    assert len(baseline.data) == 2
+    assert np.isfinite(baseline.data.to_numpy()).all()
     pd.testing.assert_frame_equal(direct.data, baseline.data)
     pd.testing.assert_frame_equal(direct.feature_snr, baseline.feature_snr)
     pd.testing.assert_frame_equal(

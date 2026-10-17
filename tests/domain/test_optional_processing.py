@@ -107,39 +107,3 @@ def test_sequential_file_boundaries_with_real_mzml(tmp_path, monkeypatch, strate
     assert progress == sorted(progress)
     assert all(0 <= value <= 1 for value in progress)
     assert obj.file_meta["processing"]["feature_strategy"] == strategy
-
-
-def test_full_synthetic_processing_and_h5ad(tmp_path):
-    import pyopenms as oms
-
-    from scMM.file.io import save_spectra
-
-    spectra = []
-    mz = np.array([149.8, 149.9, 150.0, 150.1, 150.2, 199.8, 199.9, 200.0, 200.1, 200.2])
-    for i in range(31):
-        signal = 20.0 if i in {8, 22} else 1.0
-        spec = oms.MSSpectrum()
-        spec.setMSLevel(1)
-        spec.setRT(float(i))
-        spec.set_peaks((mz, np.array([0, 0, signal, 0, 0, 0, 0, signal * 0.7, 0, 0])))
-        spectra.append(spec)
-    path = save_spectra(spectra, tmp_path / "synthetic.mzML")
-    data = CyESIData.load_from_file(
-        path,
-        150.0,
-        resolution=5000.0,
-        resample_points_per_fwhm=2.0,
-        ppm_tol=500.0,
-        extraction_method="snr_v1",
-        reference_ppm_tol=500.0,
-        baseline_filter_size=5,
-        cell_min_signal=0,
-        noise_window=5,
-        show_progress=False,
-    )
-    assert len(data.data) == 2
-    assert np.isfinite(data.data.to_numpy()).all()
-    exported = data.save_h5ad(tmp_path / "synthetic.h5ad")
-    restored = CyESIData.read_h5ad(exported)
-    np.testing.assert_array_equal(restored.data, data.data)
-    np.testing.assert_array_equal(restored.feature_snr, data.feature_snr)

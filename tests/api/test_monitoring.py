@@ -18,7 +18,7 @@ from scMM.application.monitor_presence import update_readiness
 from scMM.application.monitor_probe import task_scan
 from scMM.application.monitor_store import MonitorStore
 from scMM.application.storage import StorageRoot
-from tests.web_auth_support import login_client
+from tests.support.auth import login_client
 
 
 def decision(**kwargs):

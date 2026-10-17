@@ -1,0 +1,606 @@
+{
+  "blocks": {
+    "spectra": {
+      "kind": "python",
+      "tests": [
+        "tests/domain/test_io.py",
+        "tests/domain/test_peak.py",
+        "tests/domain/test_cell_min_signal.py",
+        "tests/domain/test_optional_processing.py",
+        "tests/domain/test_extraction_preview.py",
+        "tests/domain/test_thermo_raw.py",
+        "tests/domain/test_thermo_pipeline.py"
+      ],
+      "sources": [
+        "scMM/file/io.py",
+        "scMM/file/_spectrum.py",
+        "scMM/file/_alignment.py",
+        "scMM/file/_dataset_loading.py",
+        "scMM/file/_sequential.py",
+        "scMM/file/readers/*",
+        "scMM/util/peak.py",
+        "scMM/util/_cell_snr.py",
+        "tools/thermo_raw_reader/*",
+        "tools/validate_thermo_*.py"
+      ],
+      "downstream": ["processing", "data"],
+      "extras": ["web"]
+    },
+    "data": {
+      "kind": "python",
+      "tests": [
+        "tests/domain/test_data.py",
+        "tests/domain/test_h5ad_interop.py",
+        "tests/domain/test_normalize.py",
+        "tests/domain/test_denoise.py"
+      ],
+      "sources": [
+        "scMM/file/data.py",
+        "scMM/file/_dataset_processing.py",
+        "scMM/file/_dataset_interop.py",
+        "scMM/file/_deisotope.py",
+        "scMM/file/batch.py",
+        "scMM/util/normalize.py",
+        "scMM/util/denoise.py"
+      ],
+      "downstream": ["processing", "workbench", "projects", "annotation", "plotting"],
+      "extras": []
+    },
+    "analysis": {
+      "kind": "python",
+      "tests": [
+        "tests/domain/test_analysis.py",
+        "tests/domain/test_probability_diagnostics.py",
+        "tests/domain/test_unified_embedding.py"
+      ],
+      "sources": ["scMM/analysis/*"],
+      "downstream": ["workbench", "processing", "plotting"],
+      "extras": ["plot", "cluster", "supervised"]
+    },
+    "annotation": {
+      "kind": "python",
+      "tests": ["tests/domain/test_annotation.py", "tests/domain/test_lipid_annotation.py"],
+      "sources": [
+        "scMM/util/*adduct*.py",
+        "scMM/util/*annotation*.py",
+        "scMM/util/lipid_*.py",
+        "scMM/resources/lipid_rules/*",
+        "scMM/application/lipid_database.py",
+        "tools/benchmark_lipid_annotation.py",
+        "rules/lipids/*"
+      ],
+      "downstream": ["api-lipids"],
+      "extras": []
+    },
+    "plotting": {
+      "kind": "python",
+      "tests": ["tests/domain/test_plotting.py", "tests/domain/test_trajectory.py", "tests/domain/test_analysis_views.py"],
+      "sources": ["scMM/plot/*"],
+      "downstream": ["api", "api-raw"],
+      "extras": ["plot", "cluster", "web"]
+    },
+    "processing": {
+      "kind": "python",
+      "tests": [
+        "tests/application/test_application.py",
+        "tests/application/test_processing_application.py",
+        "tests/application/test_processing_tasks.py",
+        "tests/application/test_project_batch.py",
+        "tests/application/test_cell_preview.py",
+        "tests/application/test_workbench_parameters.py",
+        "tests/application/test_preview_cache.py",
+        "tests/application/test_quality_application.py",
+        "tests/application/test_cli.py"
+      ],
+      "sources": [
+        "scMM/application/raw_preview.py",
+        "scMM/application/processing.py",
+        "scMM/application/tasks.py",
+        "scMM/application/worker.py",
+        "scMM/application/project_batch.py",
+        "scMM/application/cell_preview.py",
+        "scMM/application/preview_cache.py",
+        "scMM/application/parameters.py",
+        "scMM/application/preferences.py",
+        "scMM/application/quality.py",
+        "scMM/cli.py"
+      ],
+      "downstream": ["api-raw", "api", "tooling"],
+      "extras": ["web"]
+    },
+    "projects": {
+      "kind": "python",
+      "tests": [
+        "tests/application/test_projects.py",
+        "tests/application/test_saved_items.py",
+        "tests/application/test_text_encoding.py"
+      ],
+      "sources": [
+        "scMM/application/projects.py",
+        "scMM/application/trash.py",
+        "scMM/application/saved_catalog.py",
+        "scMM/application/naming.py",
+        "scMM/application/storage.py"
+      ],
+      "downstream": ["processing", "workbench", "api", "api-raw", "monitor"],
+      "extras": []
+    },
+    "workbench": {
+      "kind": "python",
+      "tests": ["tests/application/test_workbench_state.py"],
+      "sources": ["scMM/application/workbench.py"],
+      "downstream": ["api", "api-lipids", "plotting"],
+      "extras": []
+    },
+    "api": {
+      "kind": "python",
+      "tests": ["tests/api/test_web_api.py", "tests/api/test_web_workflow.py", "tests/api/test_web_cli.py"],
+      "sources": [
+        "scMM/api/cli.py",
+        "scMM/api/routers/samples.py",
+        "scMM/api/routers/storage.py",
+        "scMM/api/routers/preferences.py"
+      ],
+      "downstream": ["browser-projects", "browser-workflow", "browser-navigation"],
+      "extras": ["web", "plot", "cluster", "supervised"]
+    },
+    "api-raw": {
+      "kind": "python",
+      "tests": ["tests/api/test_raw_extraction.py"],
+      "sources": ["scMM/api/routers/raw.py", "scMM/api/routers/extraction.py", "scMM/application/web_raw.py"],
+      "downstream": ["browser-workflow"],
+      "extras": ["web"]
+    },
+    "api-lipids": {
+      "kind": "python",
+      "tests": ["tests/api/test_web_lipids.py"],
+      "sources": ["scMM/api/lipid_schemas.py", "scMM/api/routers/lipids.py", "scMM/application/web_lipids.py"],
+      "downstream": ["browser-lipids"],
+      "extras": ["web"]
+    },
+    "auth": {
+      "kind": "python",
+      "tests": ["tests/api/test_authentication.py", "tests/api/test_server_config.py"],
+      "sources": [
+        "scMM/application/auth.py",
+        "scMM/application/identity.py",
+        "scMM/application/server_config.py",
+        "scMM/api/routers/auth.py",
+        "scMM/api/admin_cli.py",
+        "config/server.example.json"
+      ],
+      "downstream": ["api", "api-raw", "api-lipids", "monitor", "tooling", "browser-auth"],
+      "extras": ["web"]
+    },
+    "monitor": {
+      "kind": "python",
+      "tests": ["tests/api/test_monitoring.py"],
+      "sources": ["scMM/application/monitor*.py", "scMM/api/routers/monitor.py"],
+      "downstream": ["tooling", "browser-monitor"],
+      "extras": ["web"]
+    },
+    "tooling": {
+      "kind": "python",
+      "tests": [
+        "tests/tooling/test_environments.py",
+        "tests/tooling/test_sensitive_check.py",
+        "tests/tooling/test_snapshot_import.py",
+        "tests/tooling/test_windows_read_mode.py",
+        "tests/tooling/test_test_blocks.py"
+      ],
+      "sources": [
+        "scripts/*",
+        "tests/blocks.json",
+        ".github/*",
+        "config/environments.example.json",
+        ".gitignore",
+        ".gitattributes",
+        ".python-version"
+      ],
+      "downstream": [],
+      "extras": []
+    },
+    "docs": {
+      "kind": "docs",
+      "tests": ["tests/tooling/test_documentation.py"],
+      "sources": ["*.md", "docs/*"],
+      "downstream": [],
+      "extras": []
+    },
+    "notebook": {
+      "kind": "docs",
+      "tests": ["tests/tooling/test_notebook.py"],
+      "sources": ["scMM_workflow.ipynb"],
+      "downstream": [],
+      "extras": []
+    },
+    "browser-projects": {
+      "kind": "browser",
+      "tests": ["frontend/tests/projects.spec.ts"],
+      "sources": ["frontend/src/features/samples/*", "frontend/src/features/projects/*"],
+      "downstream": ["browser-workflow"],
+      "extras": ["web"]
+    },
+    "browser-workflow": {
+      "kind": "browser",
+      "tests": ["frontend/tests/workflow.spec.ts"],
+      "sources": [
+        "frontend/src/features/raw/*",
+        "frontend/src/features/extraction/*",
+        "frontend/src/features/preprocess/*",
+        "frontend/src/features/analysis/*",
+        "frontend/src/features/results/*"
+      ],
+      "downstream": [],
+      "extras": ["web", "plot", "cluster", "supervised"]
+    },
+    "browser-navigation": {
+      "kind": "browser",
+      "tests": ["frontend/tests/navigation.spec.ts"],
+      "sources": ["frontend/src/features/parameters/*"],
+      "downstream": [],
+      "extras": ["web"]
+    },
+    "browser-auth": {
+      "kind": "browser",
+      "tests": ["frontend/tests/auth.spec.ts", "frontend/tests/insecure-http.spec.ts"],
+      "sources": ["frontend/src/features/auth/*", "frontend/src/api/auth.ts", "frontend/src/features/account/*"],
+      "downstream": ["browser-monitor"],
+      "extras": ["web"]
+    },
+    "browser-monitor": {
+      "kind": "browser",
+      "tests": ["frontend/tests/monitor.spec.ts"],
+      "sources": ["frontend/src/features/monitor/*"],
+      "downstream": [],
+      "extras": ["web"]
+    },
+    "browser-lipids": {
+      "kind": "browser",
+      "tests": ["frontend/tests/lipids.spec.ts"],
+      "sources": ["frontend/src/features/preprocess/*Lipid*"],
+      "downstream": [],
+      "extras": ["web"]
+    }
+  },
+  "support": {
+    "tests/support/auth.py": ["spectra", "api", "api-raw", "api-lipids", "monitor"],
+    "tests/support/project.py": ["processing", "api", "api-raw", "api-lipids", "projects"],
+    "tests/support/lipids.py": ["annotation", "api-lipids"],
+    "tests/support/workflow.py": ["api", "api-raw", "api-lipids"],
+    "tests/api/conftest.py": ["api", "api-raw", "api-lipids"],
+    "frontend/tests/fixtures.ts": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/tests/server.py": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "tests/conftest.py": [
+      "spectra",
+      "data",
+      "analysis",
+      "annotation",
+      "plotting",
+      "processing",
+      "projects",
+      "workbench",
+      "api",
+      "api-raw",
+      "api-lipids",
+      "auth",
+      "monitor",
+      "tooling",
+      "docs",
+      "notebook"
+    ]
+  },
+  "shared": {
+    "scMM/__init__.py": [
+      "spectra",
+      "data",
+      "analysis",
+      "annotation",
+      "plotting",
+      "processing",
+      "projects",
+      "workbench",
+      "api",
+      "api-raw",
+      "api-lipids",
+      "auth",
+      "monitor",
+      "tooling"
+    ],
+    "scMM/application/__init__.py": [
+      "processing",
+      "projects",
+      "workbench",
+      "api",
+      "api-raw",
+      "api-lipids",
+      "auth",
+      "monitor",
+      "spectra",
+      "annotation",
+      "tooling"
+    ],
+    "scMM/file/__init__.py": ["spectra", "data"],
+    "scMM/util/__init__.py": ["spectra", "data", "annotation"],
+    "scMM/util/tool.py": ["spectra", "data", "plotting"],
+    "scMM/debug.py": ["spectra", "processing"],
+    "scMM/api/__init__.py": ["api"],
+    "scMM/api/routers/__init__.py": ["api"],
+    "pyproject.toml": [
+      "spectra",
+      "data",
+      "analysis",
+      "annotation",
+      "plotting",
+      "processing",
+      "projects",
+      "workbench",
+      "api",
+      "api-raw",
+      "api-lipids",
+      "auth",
+      "monitor",
+      "tooling",
+      "docs",
+      "notebook",
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "uv.lock": [
+      "spectra",
+      "data",
+      "analysis",
+      "annotation",
+      "plotting",
+      "processing",
+      "projects",
+      "workbench",
+      "api",
+      "api-raw",
+      "api-lipids",
+      "auth",
+      "monitor",
+      "tooling",
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/package*.json": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/*config*": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/index.html": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "scMM/api/static/*": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/App.vue": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/main.ts": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/stores/*": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/router/*": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/api/client.ts": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/api/types.ts": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/components/*": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/assets/*": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/styles.css": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/api/presence.ts": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/api/pageIdentity.ts": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/plotly.d.ts": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/src/help/*": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "scMM/api/app.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling"],
+    "scMM/api/dependencies.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling"],
+    "scMM/api/schemas.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling"],
+    "scMM/api/workflow_schemas.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling"],
+    "scMM/application/web_workspace.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling"],
+    "scMM/application/web_support.py": ["api", "api-raw", "api-lipids", "auth", "monitor", "tooling"],
+    "scMM/api/routers/analysis.py": ["api", "api-raw", "api-lipids"],
+    "scMM/api/routers/results.py": ["api", "api-raw", "api-lipids"],
+    "scMM/api/routers/projects.py": ["api", "api-raw", "api-lipids"],
+    "scMM/application/web_analysis.py": ["api", "api-raw", "api-lipids"],
+    "scMM/application/web_results.py": ["api", "api-raw", "api-lipids"]
+  },
+  "package_sources": [
+    "scMM/*",
+    "pyproject.toml",
+    "uv.lock",
+    "MANIFEST.in",
+    "LICENSE*",
+    "frontend/src/*",
+    "frontend/package*.json",
+    "frontend/index.html",
+    "config/*.example.json",
+    "frontend/vite.config.ts",
+    "frontend/tsconfig.json"
+  ],
+  "frontend_sources": ["frontend/src/*", "frontend/package*.json", "frontend/*config*", "frontend/index.html", "scMM/api/static/*"],
+  "fallbacks": {
+    "frontend/src/": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "frontend/tests/": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids"
+    ],
+    "tests/domain/": ["spectra", "data", "analysis", "annotation", "plotting"],
+    "tests/application/": ["processing", "projects", "workbench"],
+    "tests/api/": ["api", "api-raw", "api-lipids", "auth", "monitor"],
+    "tests/tooling/": ["tooling", "docs", "notebook"],
+    "tests/support/": [
+      "spectra",
+      "data",
+      "analysis",
+      "annotation",
+      "plotting",
+      "processing",
+      "projects",
+      "workbench",
+      "api",
+      "api-raw",
+      "api-lipids",
+      "auth",
+      "monitor",
+      "tooling"
+    ],
+    "scMM/": [
+      "spectra",
+      "data",
+      "analysis",
+      "annotation",
+      "plotting",
+      "processing",
+      "projects",
+      "workbench",
+      "api",
+      "api-raw",
+      "api-lipids",
+      "auth",
+      "monitor",
+      "tooling"
+    ]
+  },
+  "format_sources": ["frontend/.prettierignore", "frontend/.prettierrc.json"]
+}

@@ -1,3 +1,5 @@
+"""User workflow regressions: reuse, metadata, navigation and display boundaries."""
+
 import json
 
 import numpy as np
@@ -6,6 +8,7 @@ import pytest
 from anndata import AnnData
 
 from scMM.application.projects import ProjectStore, child_path
+from tests.support.project import setup_project
 
 
 def test_project_roundtrip_reset_and_conflict(tmp_path):
@@ -55,3 +58,20 @@ def test_manifest_cannot_escape_project(tmp_path):
     manifest["schema_version"] = 99
     (project.folder / "project.json").write_text(json.dumps(manifest))
     assert store.list() == []
+
+
+def test_automatic_ranges_do_not_freeze_project_defaults(tmp_path):
+    from scMM.application.projects import sample_parameters
+
+    project, _ = setup_project(tmp_path)
+    project.manifest["auto_ranges"] = True
+    project.samples[0]["auto_mz_range"] = [140.0, 160.0]
+    project.samples[1]["auto_mz_range"] = [130.0, 170.0]
+    assert sample_parameters(project, project.samples[0])["mz_min"] == 130.0
+    project.manifest["parameters"]["cell_snr"] = 8.0
+    assert sample_parameters(project, project.samples[0])["cell_snr"] == 8.0
+    project.manifest["feature_strategy"] = "independent"
+    assert sample_parameters(project, project.samples[0])["mz_min"] == 140.0
+    project.manifest["manual_parameters"] = True
+    project.manifest["parameters"]["mz_min"] = 120.0
+    assert sample_parameters(project, project.samples[0])["mz_min"] == 120.0

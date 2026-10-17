@@ -4,12 +4,41 @@ on:
   push:
     branches: [dev, main, refined]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  quality:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.plan.outputs.python }}
+      docs: ${{ steps.plan.outputs.docs }}
+      frontend: ${{ steps.plan.outputs.frontend }}
+      package: ${{ steps.plan.outputs.package }}
+      node: ${{ steps.plan.outputs.node }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Select affected blocks (PR merge base / push before-to-after)
+        id: plan
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            python scripts/test_blocks.py --all --write-plan /tmp/test-plan.json --github-output "$GITHUB_OUTPUT"
+          else
+            python scripts/test_blocks.py --ci-event "$GITHUB_EVENT_PATH" --write-plan /tmp/test-plan.json --github-output "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-plan
+          path: /tmp/test-plan.json
+
+  python:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -17,43 +46,91 @@ jobs:
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv and Python
-        uses: astral-sh/setup-uv@v10.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-plan
+          path: /tmp
+      - uses: astral-sh/setup-uv@v10.0.0
         with:
           version: "0.12.3"
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-      - name: Install locked project environment
-        run: uv sync --locked --all-extras --dev
+      - name: Install only the selected blocks' locked dependencies
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          plan = json.load(open('/tmp/test-plan.json'))
+          command = ['uv', 'sync', '--locked', '--dev']
+          for extra in plan['extras']:
+              command += ['--extra', extra]
+          subprocess.run(command, check=True)
+          PY
+      - name: Selected Python blocks (warnings are errors)
+        run: uv run --no-sync python scripts/test_blocks.py --plan /tmp/test-plan.json --phase python --run
+
+  checks:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-plan
+          path: /tmp
+      - uses: astral-sh/setup-uv@v10.0.0
+        with:
+          version: "0.12.3"
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install checks or browser dependencies without notebook tools
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          plan = json.load(open('/tmp/test-plan.json'))
+          command = ['uv', 'sync', '--locked']
+          if plan['browser_paths']:
+              command += ['--dev']
+              for extra in plan['browser_extras']:
+                  command += ['--extra', extra]
+          else:
+              command += ['--only-group', 'dev']
+          subprocess.run(command, check=True)
+          PY
+      - name: Changed Python formatting and lint
+        run: uv run --no-sync python scripts/test_blocks.py --plan /tmp/test-plan.json --phase lint --run
+      - name: Changed sources scan (once)
+        run: python scripts/test_blocks.py --plan /tmp/test-plan.json --phase scan --run
+      - name: Related documentation / notebook contracts
+        if: needs.changes.outputs.docs == 'true'
+        run: uv run --no-sync python scripts/test_blocks.py --plan /tmp/test-plan.json --phase docs --run
       - uses: actions/setup-node@v4
+        if: needs.changes.outputs.node == 'true'
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Build Vue frontend
-        working-directory: frontend
+      - name: Install frontend dependencies
+        if: needs.changes.outputs.node == 'true'
+        run: npm --prefix frontend ci
+      - name: Frontend formatting, typecheck and single build
+        if: needs.changes.outputs.node == 'true'
+        run: uv run --no-sync python scripts/test_blocks.py --plan /tmp/test-plan.json --phase frontend --run
+      - name: Selected browser specs
+        if: needs.changes.outputs.frontend == 'true'
         run: |
-          npm ci
-          npm run format:check
-          npm run build
-      - name: Browser regression
-        if: matrix.python-version == '3.12'
-        working-directory: frontend
-        run: |
-          npx playwright install --with-deps chromium
-          npm run test:e2e
-      - name: Lint
-        if: matrix.python-version == '3.12'
-        run: |
-          uv run --locked ruff format --check .
-          uv run --locked ruff check .
-      - name: Check public source and build inputs
-        run: python scripts/check_sensitive.py
-      - name: Test
-        run: uv run --locked python -m pytest -W error
-      - name: Build distributions
-        if: matrix.python-version == '3.12'
-        run: uv build --no-sources
-      - name: Check distribution contents
-        if: matrix.python-version == '3.12'
-        run: python scripts/check_sensitive.py
+          python - <<'PY'
+          import json, subprocess
+          if json.load(open('/tmp/test-plan.json'))['browser_paths']:
+              subprocess.run(['npm', '--prefix', 'frontend', 'exec', '--', 'playwright', 'install', '--with-deps', 'chromium'], check=True)
+              subprocess.run(['uv', 'run', '--no-sync', 'python', 'scripts/test_blocks.py', '--plan', '/tmp/test-plan.json', '--phase', 'browser', '--run'], check=True)
+          PY
+      - name: Build relevant distributions
+        if: needs.changes.outputs.package == 'true'
+        run: uv run --no-sync python scripts/test_blocks.py --plan /tmp/test-plan.json --phase package --run
+      - name: Built artifacts scan (once, without rescanning sources)
+        if: needs.changes.outputs.frontend == 'true'
+        run: python scripts/test_blocks.py --plan /tmp/test-plan.json --phase artifacts --run

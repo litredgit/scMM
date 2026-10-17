@@ -1,3 +1,5 @@
+"""User workflow regressions: reuse, metadata, navigation and display boundaries."""
+
 import json
 import os
 
@@ -144,3 +146,35 @@ def test_legacy_requires_trust_and_rejects_child_symlink(tmp_path):
     (result / "data.pkl").symlink_to(outside)
     with pytest.raises(PermissionError, match="outside"):
         read_dataset(catalog, "Root", ".", trust_pickle=True)
+
+
+def test_metadata_preserves_matrix_layers_embedding_and_unrelated_results():
+    state = AnalysisWorkspace()
+    data = AnnData(
+        np.arange(1.0, 25.0).reshape(6, 4),
+        obs=pd.DataFrame(
+            {
+                "sample_id": ["a"] * 3 + ["b"] * 3,
+                "sample": ["one"] * 3 + ["two"] * 3,
+                "group": ["old"] * 3 + ["control"] * 3,
+            },
+            index=list("abcdef"),
+        ),
+    )
+    data.obsm["X_pca"] = np.ones((6, 2))
+    state.replace(data)
+    state.differential("group", "old", "control")
+    state.put_result("network", {"table": pd.DataFrame()}, state.token)
+    samples = [
+        {"id": "a", "name": "renamed", "group": "new", "subject": "s1", "batch": "b1"},
+        {"id": "b", "name": "two", "group": "control", "subject": "s2", "batch": "b2"},
+    ]
+    changed = state.sync_sample_metadata(samples)
+    assert "group" in changed
+    assert "differential" not in state.results and "network" in state.results
+    np.testing.assert_array_equal(state.data.X, data.X)
+    np.testing.assert_array_equal(state.data.obsm["X_pca"], data.obsm["X_pca"])
+    assert state.data.layers
+    state.reset()
+    assert state.data.obs.group.iloc[0] == "new"
+    assert state.data.obs["sample"].iloc[0] == "renamed"

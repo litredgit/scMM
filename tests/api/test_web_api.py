@@ -9,10 +9,10 @@ import pandas as pd
 import pytest
 from anndata import AnnData
 from fastapi.testclient import TestClient
-from web_auth_support import auth_options, login_client
 
 from scMM.api.app import create_app
 from scMM.application.storage import StorageRoot
+from tests.support.auth import auth_options, login_client
 
 
 @pytest.fixture

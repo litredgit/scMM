@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import pytest
-from test_project_batch import setup_project
 
 from scMM.application import CellDetectionPreview, RawPreviewService
 from scMM.application.cell_preview import run_preview, submit_preview
@@ -19,6 +18,7 @@ from scMM.application.project_batch import batches, preflight
 from scMM.application.projects import child_path
 from scMM.file.data import CyESIData
 from scMM.plot.raw import cell_detection_figure
+from tests.support.project import setup_project
 
 
 def preview_request(project, catalog):

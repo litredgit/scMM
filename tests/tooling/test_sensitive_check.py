@@ -64,3 +64,23 @@ def test_ignored_build_files_are_checked(tmp_path):
     (tmp_path / "dist").mkdir()
     (tmp_path / "dist" / "bundle.txt").write_text("gh" + "p_" + secrets.token_hex(20))
     assert current_files(tmp_path)["counts"]["github_token"] == 1
+
+
+def test_changed_sources_and_artifacts_are_scanned_separately_without_duplicates(tmp_path, capsys):
+    repository(tmp_path)
+    token = "gh" + "p_" + secrets.token_hex(20)
+    (tmp_path / "unchanged.txt").write_text(token)
+    (tmp_path / "changed.txt").write_text("safe")
+    static = tmp_path / "scMM/api/static"
+    static.mkdir(parents=True)
+    (static / "asset.js").write_text(token)
+    # Source mode excludes unchanged files and existing artifacts, and tolerates deletion.
+    assert main(["--root", str(tmp_path), "--files", "changed.txt", "deleted.txt"]) == 0
+    assert current_files(tmp_path, files=["changed.txt", "changed.txt"])["files"] == 1
+    # Artifact mode catches output findings without reading unchanged source.
+    report = current_files(tmp_path, artifacts_only=True)
+    assert report["files"] == 1 and report["counts"]["github_token"] == 1
+    # Default full audit visits tracked static files only once.
+    full = current_files(tmp_path)
+    assert full["files"] == 3 and full["counts"]["github_token"] == 2
+    assert token not in capsys.readouterr().out

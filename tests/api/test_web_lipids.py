@@ -5,11 +5,10 @@ from io import StringIO
 import numpy as np
 import pandas as pd
 import pytest
-from test_lipid_annotation import options, sdf_record, synthetic_data
-from test_web_workflow import get
-from test_web_workflow import workflow as workflow
 
 from scMM.util.lipid_annotation import STORAGE_KEY, annotation_store
+from tests.support.lipids import options, sdf_record, synthetic_data
+from tests.support.workflow import get
 
 
 def setup_lipids(workflow, monkeypatch):

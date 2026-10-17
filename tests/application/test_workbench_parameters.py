@@ -1,3 +1,5 @@
+"""User workflow regressions: reuse, metadata, navigation and display boundaries."""
+
 import json
 
 import numpy as np
@@ -5,6 +7,7 @@ import pyopenms as oms
 import pytest
 
 from scMM.application.parameters import load_defaults
+from scMM.application.preferences import cpu_default, load_preferences, save_preferences
 from scMM.application.processing import ProcessingParameters
 from scMM.application.raw_preview import RawFilePreview
 from scMM.file.data import CyESIData
@@ -111,3 +114,13 @@ def test_preview_range_single_scan_and_multiple_eics(tmp_path):
     assert all(140 <= mz <= 160 for mz in preview.reference_mz)
     with pytest.raises(ValueError, match="mz_range"):
         ProcessingParameters(ref_mz=150.0, mz_min=200.0)
+
+
+def test_global_presets_and_cpu_defaults(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCMM_PREFERENCES", str(tmp_path / "preferences.json"))
+    assert load_preferences()["presets"]["哺乳动物"] == 760.5851
+    save_preferences({"custom": 123.4567}, "custom")
+    assert load_preferences()["selected"] == "custom"
+    monkeypatch.setattr("os.cpu_count", lambda: 12)
+    monkeypatch.setattr("os.sched_getaffinity", lambda _: {0, 1})
+    assert cpu_default() == 2

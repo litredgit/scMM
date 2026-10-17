@@ -90,27 +90,40 @@ def archive_findings(data, name):
     return result
 
 
-def current_files(root):
-    names = (
-        subprocess.check_output(
-            ["git", "-C", str(root), "ls-files", "--cached", "--others", "--exclude-standard", "-z"]
+def current_files(root, *, files=None, artifacts_only=False):
+    names = [] if artifacts_only else files
+    if names is None:
+        names = (
+            subprocess.check_output(
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    "ls-files",
+                    "--cached",
+                    "--others",
+                    "--exclude-standard",
+                    "-z",
+                ]
+            )
+            .decode()
+            .split("\0")
         )
-        .decode()
-        .split("\0")
-    )
-    result, count = [], 0
+    result, count, visited = [], 0, set()
     for name in names:
         path = root / name
-        if not name or not path.is_file() or path.is_symlink():
+        if not name or not path.is_file() or path.is_symlink() or path.resolve() in visited:
             continue
+        visited.add(path.resolve())
         data = path.read_bytes()
         result.extend(findings(data, name))
         result.extend(archive_findings(data, name))
         count += 1
     # Ignored distributions and static assets are still release surfaces.
-    for directory in ("dist", "build", "scMM/api/static"):
+    for directory in () if files is not None else ("dist", "build", "scMM/api/static"):
         for path in (root / directory).rglob("*"):
-            if path.is_file() and not path.is_symlink():
+            if path.is_file() and not path.is_symlink() and path.resolve() not in visited:
+                visited.add(path.resolve())
                 name = str(path.relative_to(root))
                 data = path.read_bytes()
                 result.extend(findings(data, name))
@@ -167,9 +180,20 @@ def main(argv=None):
         action="store_true",
         help="Audit all locally reachable refs; never rewrites history",
     )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--files", nargs="*", help="Scan only changed source files; skip removed files"
+    )
+    mode.add_argument(
+        "--artifacts-only",
+        action="store_true",
+        help="Scan build/static/dist once, without rescanning source",
+    )
     parser.add_argument("--report", type=Path)
     args = parser.parse_args(argv)
-    report = {"current": current_files(args.root)}
+    report = {
+        "current": current_files(args.root, files=args.files, artifacts_only=args.artifacts_only)
+    }
     if args.history:
         report["history"] = history(args.root)
     if args.report:

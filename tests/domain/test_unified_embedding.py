@@ -1,3 +1,5 @@
+"""User workflow regressions: reuse, metadata, navigation and display boundaries."""
+
 import sys
 from types import SimpleNamespace
 
@@ -55,3 +57,13 @@ def test_small_sample_settings_fail_without_silent_changes(method, options):
     with pytest.raises(ValueError):
         reduce_dimension(data, method, **options)
     assert not data.obsm
+
+
+def test_pca_input_dimension_validation_and_provenance():
+    from scMM.analysis.embedding import reduce_dimension
+
+    data = AnnData(np.random.default_rng(42).normal(size=(30, 25)))
+    reduce_dimension(data, "pca", pca_components=20, n_components=2, whiten=True)
+    assert data.uns["X_pca_params"]["pca_components"] == 20
+    with pytest.raises(ValueError, match="PCA input dimensions"):
+        reduce_dimension(data, "umap", pca_components=40)

@@ -137,62 +137,107 @@ uv sync --locked --all-extras --dev
 
 ## 完整验证
 
-从仓库根目录运行：
+日常本地检查与 CI **只运行修改或受影响的块**。先看计划，再执行；没有修改且不受影响的块跳过。
+逐块整理时先对准备修改的块建立基线，修改后验证该块与受影响部分；已经通过且后续未受影响的块不重复运行，
+不在结束时默认再跑全量。`-W error` 继续将警告作为错误。
 
 ```bash
-uv lock --check
-uv run --locked ruff format --check .
-uv run --locked ruff check .
-uv run --locked python -m pytest -W error
-uv build --no-sources
+# 默认比较 HEAD 与暂存区/工作区，并纳入未跟踪文件；只输出计划
+uv run --no-sync python scripts/test_blocks.py
+# 执行计划中的检查（使用已同步的开发环境）
+uv run --no-sync python scripts/test_blocks.py --run
+# 比较完整提交范围；本地 feature 分支可将 --base 指向共同祖先
+uv run --no-sync python scripts/test_blocks.py --base origin/dev --head HEAD
+# 显式指定块，不混入当前工作区的其他改动；适用于逐块基线与验证
+uv run --no-sync python scripts/test_blocks.py --block spectra --phase python --run
+# 只查看指定文件的影响，不需要实际修改文件
+uv run --no-sync python scripts/test_blocks.py --files frontend/src/features/monitor/MonitorPage.vue
 ```
 
-Vue 改动还需在仓库根执行以下检查；构建产物先于 Python 发行包构建：
+唯一映射为 [`tests/blocks.json`](../tests/blocks.json)，选择器为
+[`scripts/test_blocks.py`](../scripts/test_blocks.py)。每次输出选择、原因和跳过的块；
+`--write-plan` 保存计划，`--plan` 复用同一份计划，`--phase` 只执行其中一个阶段。
+`--files` 可提供明确的文件集合，`--block` 可重复。移动文件同时检查旧/新路径，不能只看重命名后的路径。
+选择器使用目录/文件列表与显式依赖关系，不使用全局 `-k`。
+
+### 测试目录与块
+
+```text
+tests/
+  support/       # 显式导入的小型谱、项目、脂质与认证/HTTP 构造
+  domain/        # 数值定义、数据容器、RAW/XML、统计、注释与绘图
+  application/   # 参数、预览/提取、持久任务、项目、回收和结果生命周期
+  api/           # HTTP 请求、权限、修订、下载及必要贯通检查；局部 conftest
+  tooling/       # 发布/回滚、扫描、快照、选择器、文档与 Notebook
+  blocks.json    # 本地/CI 共用的文件 → 块及依赖方映射
+frontend/tests/  # fixtures.ts、server.py 和按交互划分的 spec
+```
+
+| 块 | 保障范围 |
+|---|---|
+| `spectra` | 谱 I/O、峰/细胞、SNR、ppm、RAW 协议/资源回收与 RAW/XML 等价 |
+| `data` | 矩阵/元数据、合并、H5AD/旧目录、原子写入、归一化及零分母 |
+| `analysis` | 统计、分组验证、监督诊断、统一降维 |
+| `annotation` | 质量候选、同位素、规则、数据库下载/完整性 |
+| `plotting` | Notebook 绘图、轨迹、趋势及网页显示精度 |
+| `processing` | 原始预览、参数、缓存、持久 worker、提取审核、质量产物及处理 CLI |
+| `projects` | 项目/快照、恢复起点、修订冲突、路径与回收保护、UTF-8 持久边界 |
+| `workbench` | 变换事务、结果失效、历史层与潜变量持久化 |
+| `api` / `api-raw` / `api-lipids` | 工作区/样本/分析/保存下载、原始谱与提取、脂质 HTTP 契约 |
+| `auth` / `monitor` | 认证/服务器配置及管理员监控 |
+| `tooling` | 发布阻塞与回滚、扫描、上游快照、跨平台导入与分块选择 |
+| `docs` / `notebook` | 受影响文档的链接/锚点与 Python 示例；Notebook 清洁及语法 |
+| `browser-*` | 项目、工作流、导航、登录/普通 HTTP、监控、脂质六块；七个 spec |
+
+数值断言集中领域层，应用层验证失败/恢复和生命周期，API 验证边界/序列化/状态，浏览器保留真实交互。
+不同边界不能只因功能同名而删除；共享构造从 `support` 导入，不从另一个测试文件导入。
+根目录不放通用重型 fixture，HTTP 工作流 fixture 只在 `tests/api/conftest.py` 注册。
+
+### 选择规则与 CI
+
+- 测试文件变化只运行其所属块；共享 fixture 变化只运行实际使用它的块，不扩展到业务依赖方。
+- 业务源码变化按映射扩展到使用者；公共数据层、接口/工作区契约、依赖锁文件会扩大范围，并输出原因。
+- 纯前端变化不运行 Python 测试；按功能选浏览器 spec。共享组件、路由、状态/客户端及前端依赖会影响全部浏览器块。
+  Prettier 配置单独变化只检查前端格式，不运行构建或浏览器测试；格式规则/前端依赖变化时检查全部前端格式输入。
+- 文档变化只检查相关文档；链接目标变化同时检查引用它的文档。文档检查器本身改变时检查全部维护文档。
+  Notebook 独立成块，普通 Markdown 改动不执行 Notebook 检查，更不执行其中的实验代码。
+- 已知目录中的新文件若缺少细分映射，明确报告 `UNMAPPED` 并选择该区域的保守范围；其他未知路径报错，须补映射。
+  不能静默当作无影响，也不把每次常规改动都退回全量。
+
+CI 保留 dev/main/refined push 与 pull request 触发；手动 `workflow_dispatch` 可显式运行全部测试。`changes` 只计算一次计划：PR 使用目标分支与 PR head 的
+共同祖先到 head；push 使用事件的 before→after，包含本次所有提交；新分支首次 push 检查该分支全部文件。
+比较失败会使 CI 失败，不能解释为空差异。Python job 保留 3.11/3.12，只运行选中的 Python 块；
+checks job 在 3.12 执行相关文档、改动 Python 文件的 Ruff 与源码扫描，按需安装 Node、格式检查、类型检查和构建一次前端，
+再运行选中的浏览器 spec、构建相关发行包及扫描产物。源码只扫描改动文件一次，产物扫描不再重扫源码；
+独立的完整源码/历史审计仍保留。测试依赖取所选块的 extras 并使用锁文件，不安装 Notebook 工具链或升级依赖。
+发行包包含静态资源，相关包输入变化时前端构建是必要前置；测试或 Markdown 单独变化不构建发行包。
+
+浏览器自动启动 5117 的隔离服务，使用临时项目和合成数据，不访问开发或生产实验。
+`SCMM_E2E_PORT`、`SCMM_TEST_PYTHON`、`SCMM_CHROMIUM` 可指定端口、解释器与已有浏览器；
+`SCMM_TEST_STATIC_ROOT` 可指向暂存 Vite 资源。首次浏览器执行前安装依赖及 Chromium：
 
 ```bash
 npm --prefix frontend ci
-npm --prefix frontend run format:check
-npm --prefix frontend run build
 npm --prefix frontend exec -- playwright install chromium
-npm --prefix frontend run test:e2e
-uv build --no-sources
 ```
 
-浏览器回归自动启动 5117 的隔离服务，使用临时原始文件占位与小型 AnnData，不访问开发或生产项目。
-测试端口可用 `SCMM_E2E_PORT` 修改；`SCMM_TEST_PYTHON` 和 `SCMM_CHROMIUM` 可指定测试解释器与已有浏览器。
-`SCMM_TEST_STATIC_ROOT` 可指向暂存 Vite 构建目录，供隔离测试验证待发布资源而不替换开发服务静态文件。
-服务器退出删除临时项目；截图、trace 和测试报告保留在被忽略的前端测试输出目录。
-浏览器回归覆盖六步合成流程、模型/SHAP、保存重载、精度下载及回收恢复；不能替代真实实验和用户验收。
-预览为独立进程，提取为持久 worker；其余 HTTP 计算在线程池执行并持有工作区锁，避免阻塞整个 ASGI 事件循环。
-`/api/v1/runtime` 报告未保存/繁忙工作区；发布脚本对 Vue 检查此状态，接口失联时拒绝重启。
+截图、trace 和报告保留在被忽略的测试输出目录。合成检查不替代真实实验、用户验收或远端 CI。
+原始预览使用独立进程、提取使用持久 worker；其余 HTTP 计算持有工作区锁。
+`/api/v1/runtime` 的未保存/繁忙工作区与页面活动证据继续约束发布，不因测试分块而放松。
 
-`pytest -W error` 会把警告提升为错误，有助于尽早发现 pandas、NumPy、scikit-learn 或 PyOpenMS
-升级引入的兼容问题。
-从仓库根目录使用 `python -m pytest`，确保本地 `scripts` 快照工具也位于导入路径；
-部分环境中直接运行 pytest 入口脚本会在收集快照测试时找不到该模块。
+### 手动全量入口
 
-只运行相关测试：
+仅在明确需要完整检查时执行；日常修改和本轮整理不默认执行：
 
 ```bash
-uv run --locked python -m pytest tests/test_data.py -q
-uv run --locked python -m pytest tests/test_io.py -q
-uv run --locked python -m pytest tests/test_trajectory.py -q
+uv run --no-sync python scripts/test_blocks.py --all --run
+# 只运行全部 Python 测试并统计覆盖率
+uv run --no-sync python -m pytest -W error --cov=scMM --cov-report=term-missing
 ```
 
-覆盖率：
-
-```bash
-uv run --locked python -m pytest --cov=scMM --cov-report=term-missing
-```
-
-文档修改可单独运行以下检查，验证本地链接、Python 示例和 Notebook 基本约定：
-
-```bash
-uv run --locked python -m pytest tests/test_documentation.py -q
-```
-
-CI 对 dev/main/refined 的 push 和 pull request 执行 Python 3.11/3.12 矩阵。
-本机通过与远端 CI 通过应分别记录，不以配置存在代替实际验收。
+单文件诊断仍可使用 `uv run --no-sync python -m pytest tests/domain/test_data.py -q -W error`。
+从仓库根使用 `python -m pytest`，确保本地 `scripts` 与 `tests.support` 可导入。
+依赖同步、真实 RAW 对照及规模检查按实际改动单独执行，不作为每次运行的隐含前置。
 
 ## 脂质注释规模检查
 
@@ -218,7 +263,7 @@ python tools/benchmark_lipid_annotation.py --cells 10000 --samples 10 --features
 峰值内存包含解释器、数据库、矩阵和工作区输入副本，不等于单个算法数组占用；尚不包含完整 HTTP 保存流程峰值。
 用户选择手动验收，不以这些合成结果声明真实样本准确率。
 
-专项检查为 `tests/test_lipid_annotation.py`、`tests/test_web_lipids.py` 和 `frontend/tests/lipids.spec.ts`，
+专项检查为 `tests/domain/test_lipid_annotation.py`、`tests/api/test_web_lipids.py` 和 `frontend/tests/lipids.spec.ts`，
 覆盖双侧比例边界、加合物组成、并列/重复质量、失败原子性、版本/预设、过期下载及保存重载；
 浏览器使用本地合成 SDF，不访问或下载真实数据库，也不打开用户项目。
 
@@ -307,7 +352,7 @@ def norm_custom(X, params):
     return X * scale
 ```
 
-新方法应验证二维输入、零分母、NaN/Inf 和参数类型，并在 `tests/test_normalize.py` 添加测试。
+新方法应验证二维输入、零分母、NaN/Inf 和参数类型，并在 `tests/domain/test_normalize.py` 添加测试。
 
 ## 添加降维方法
 
@@ -338,7 +383,7 @@ def run_custom(X, params):
 完成相关开发检查后，更新 5007 开发服务供用户验收，保留工作区修改。用户明确验收通过后，
 再提交、推送并部署生产；执行顺序见 [发布、更新与回滚](installation.md#发布更新与回滚)。
 
-先同步锁定环境并完成 [完整验证](#完整验证)，再用本次构建的 wheel 检查独立安装入口。
+先完成本次改动涉及的[分块验证](#完整验证)；包输入改变时构建发行包，再用本次 wheel 检查独立安装入口。
 核对 dist 中选中的文件确为本次产物：
 
 ```bash
@@ -347,7 +392,7 @@ uv run --isolated --no-project \
   scmm-process --help
 ```
 
-还应在受支持的 Python 版本和至少一个代表性 mzML/mzXML 文件上完成端到端验证。
+提取/读取链改变时，还应在受支持的 Python 版本和代表性 mzML/mzXML 文件上完成相关端到端验证。
 
 ## 上游源码快照
 
@@ -407,7 +452,7 @@ git show bc3e35d:docs/16-thermo-raw.md
 部署布局使用[通用模板](../config/environments.example.json)，网页资源使用[独立模板](../config/server.example.json)；
 优先级、环境变量和命令见[安装部署](installation.md#访问与路径配置)。
 
-认证专项运行 `PYTHONUTF8=1 .venv/bin/python -m pytest tests/test_authentication.py tests/test_server_config.py -q -W error`。
+认证专项运行 `PYTHONUTF8=1 .venv/bin/python -m pytest tests/api/test_authentication.py tests/api/test_server_config.py -q -W error`。
 原有 HTTP 回归使用真实临时数据库及登录，不绕过中间件；浏览器使用隔离合成账号，不读取线上凭据。
 同账号重新登录可继续仍有效的内存工作区，不保证恢复过期工作区或服务重启前的草稿。
 
@@ -419,7 +464,7 @@ git show bc3e35d:docs/16-thermo-raw.md
 zip/wheel/sdist 在内存中检查，不解压到工作区。规则覆盖个人目录、内网地址、常见凭据格式、私钥、带凭据 URL、
 字面量密码/密钥赋值及凭据文件名；超过扫描上限的压缩包报未完成检查，不当作通过。
 输出只有类别、文件、行号和历史对象摘要，不输出命中值。模式扫描无法证明不存在未知格式的敏感信息，发布前仍须审阅。
-CI 检查当前源码和新构建包；历史单独记录，不能把既有历史问题隐藏成当前源码通过。
+CI 检查本次变更源码和按需构建的产物；历史单独记录，不能把既有历史问题隐藏成当前源码通过。
 
 本轮按用户确认只审计历史并准备计划，不改写提交、不更新远端；脱敏摘要见
 [开源审计报告](validation/open-source-audit.json)。历史仍含个人路径、内网地址及带输出的旧 Notebook。
@@ -452,7 +497,7 @@ HTTP `/presence/register` 与 `/presence/heartbeat` 为登录页提供受限租�
 心跳须持有对应随机租约，关闭记录不允许迟到心跳重新打开。所有明细、历史和事件接口均仅管理员可读。
 任务提交记录请求身份；历史任务无提交人时明确显示“未记录”。页面/历史数据不是部署授权或实验用户验收证据。
 
-专项检查：`PYTHONUTF8=1 .venv/bin/python -m pytest tests/test_monitoring.py tests/test_environments.py tests/test_server_config.py -q -W error`，
+专项检查：`PYTHONUTF8=1 .venv/bin/python -m pytest tests/api/test_monitoring.py tests/tooling/test_environments.py tests/api/test_server_config.py -q -W error`，
 浏览器回归包含 `frontend/tests/monitor.spec.ts`；测试仅使用临时目录和合成数据。普通采样不发业务请求、不写项目文件。
 工作区满额/计算锁占用不影响直接访问监控。前端轮询独立于实验 busy 状态，离开监控页停止轮询，旧响应不覆盖新页面状态。
 

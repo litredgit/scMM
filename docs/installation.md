@@ -77,8 +77,8 @@ uv sync --locked --extra plot --extra cluster
 uv sync --locked --extra web
 ```
 
-仓库开发和 PR 验证统一使用 `uv sync --locked --all-extras --dev`，确保 notebook、分析和网页
-入口共享同一份锁文件。
+完整交互开发环境可使用 `uv sync --locked --all-extras --dev`。PR 验证按
+[受影响测试块](development.md#选择规则与-ci)安装需要的 extras，仍共享同一份锁文件，不默认安装 Notebook 工具链。
 
 ## 验证安装
 
@@ -86,7 +86,7 @@ uv sync --locked --extra web
 uv run --locked python -c "import scMM, pyopenms, anndata; print('scMM environment ready')"
 uv run --locked scmm-process --help
 uv run --locked scmm-web --help
-uv run --locked python -m pytest -q
+uv run --no-sync python scripts/test_blocks.py --block data --phase python --run
 ```
 
 如果入口不存在，先运行 `uv sync --locked --all-extras --dev`，并确认命令从包含 `pyproject.toml`
