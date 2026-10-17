@@ -21,6 +21,13 @@ async function noError(page: Page) {
   await expect(page.getByRole('alert')).toHaveCount(0)
 }
 
+async function analysisModule(page: Page, id: string, label: string) {
+  const select = page.getByRole('combobox', { name: '分析功能', exact: true, includeHidden: true })
+  await expect(select).toBeAttached()
+  if (await select.isVisible()) await select.selectOption(id)
+  else await page.getByRole('button', { name: label, exact: true }).click()
+}
+
 test('preprocessing, all analysis panels, precision export and snapshot restore', async ({
   page,
 }) => {
@@ -103,7 +110,7 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
   await page.getByLabel('Color source', { exact: true }).selectOption('none')
   expect((await uncolored).ok()).toBe(true)
   await noError(page)
-  await page.getByRole('button', { name: '差异与 Marker', exact: true }).click()
+  await analysisModule(page, 'differential', '差异与 Marker')
   await page.getByRole('button', { name: '比较全部特征', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'differential', exact: true })).toBeVisible()
   await page
@@ -112,11 +119,11 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
   await page.getByRole('button', { name: '更新小提琴图', exact: true }).click()
   await page.getByRole('button', { name: '计算全部簇 Marker', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'markers', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '相关网络', exact: true }).click()
+  await analysisModule(page, 'network', '相关网络')
   await page.getByRole('button', { name: '计算相关网络', exact: true }).click()
   await expect(page.locator('.js-plotly-plot').last()).toBeVisible()
   await noError(page)
-  await page.getByRole('button', { name: '监督与 SHAP', exact: true }).click()
+  await analysisModule(page, 'supervised', '监督与 SHAP')
   await page.getByRole('combobox', { name: 'model', exact: true }).selectOption('lda')
   await page.getByLabel('cv', { exact: true }).fill('2')
   await page.getByLabel('test_size', { exact: true }).fill('0.5')
@@ -160,25 +167,24 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
     .click()
   await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
-  await page.getByRole('button', { name: '监督与 SHAP', exact: true }).click()
+  await analysisModule(page, 'supervised', '监督与 SHAP')
   await expect(
     page.getByRole('button', { name: '解释当前模型（SHAP）', exact: true }),
   ).toBeDisabled()
   await expect(page.getByRole('combobox', { name: '图例', exact: true })).toHaveValue('hidden')
   await page.getByRole('button', { name: '读取监督诊断', exact: true }).click()
   await noError(page)
-  await page.getByRole('button', { name: '差异与 Marker', exact: true }).click()
+  await analysisModule(page, 'differential', '差异与 Marker')
   const invalidated = page.waitForResponse((response) =>
     response.url().endsWith('/analysis/invalidate'),
   )
   await page.getByRole('combobox', { name: 'layer', exact: true }).selectOption('scmm_input_0')
   const invalidation = await invalidated
   expect(invalidation.status()).toBe(200)
-  expect(invalidation.request().postDataJSON().names.sort()).toEqual([
-    'differential',
-    'markers',
-    'network',
-  ])
+  expect(invalidation.request().postDataJSON().names.sort()).toEqual(['differential', 'markers'])
+  await analysisModule(page, 'network', '相关网络')
+  await expect(page.getByRole('combobox', { name: 'layer', exact: true })).toHaveValue('当前 X')
+  await expect(page.getByRole('button', { name: '读取相关网络', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /结果与保存/ }).click()
   await expect(
     page

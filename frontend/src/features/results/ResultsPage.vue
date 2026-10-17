@@ -2,6 +2,7 @@
 import { ref, watch, computed, onActivated } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import type { AnalysisInfo, Figure } from '../../api/types'
+import { resultDownloads } from '../analysis/results'
 import SavedItems from '../../components/SavedItems.vue'
 import PlotView from '../../components/PlotView.vue'
 const store = useWorkspace(),
@@ -27,11 +28,7 @@ const defaults: Record<string, string> = {
   embedding: 'embedding.csv',
   qc: 'cell_qc.csv',
   history: 'history.csv',
-  differential: 'differential.csv',
-  markers: 'markers.csv',
-  network: 'network.csv',
-  shap: 'shap.csv',
-  supervised: 'supervised.json',
+  ...resultDownloads,
   snapshot: 'snapshot.h5ad',
 }
 const available = computed(() => [

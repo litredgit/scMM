@@ -223,7 +223,7 @@
     },
     "browser-workflow": {
       "kind": "browser",
-      "tests": ["frontend/tests/workflow.spec.ts"],
+      "tests": ["frontend/tests/workflow.spec.ts", "frontend/tests/analysis.spec.ts"],
       "sources": [
         "frontend/src/features/raw/*",
         "frontend/src/features/extraction/*",

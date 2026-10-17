@@ -8,6 +8,7 @@ import {
   sessionVersion,
   ensureSession,
 } from '../api/client'
+import type { AnalysisTransport } from '../features/analysis/types'
 import type { Configuration, WorkspaceView } from '../api/types'
 
 export const useWorkspace = defineStore('workspace', () => {
@@ -107,6 +108,66 @@ export const useWorkspace = defineStore('workspace', () => {
     }, success)
   }
 
+  // Hold the shared lock across calculation, workspace update, report and plots.
+  async function analysisTransaction(action: (api: AnalysisTransport) => Promise<unknown>) {
+    if (!current.value) return
+    const workspace = current.value.workspace_id
+    const projectPath = project.value?.path
+    const datasetId = project.value?.dataset?.id
+    let expectedRevision = current.value.revision
+    const valid = () =>
+      current.value?.workspace_id === workspace &&
+      project.value?.path === projectPath &&
+      project.value?.dataset?.id === datasetId &&
+      current.value?.revision === expectedRevision
+    const check = () => {
+      if (!valid()) throw new Error('当前项目或数据已改变，旧分析请求已丢弃。')
+    }
+    return run(async () => {
+      const api: AnalysisTransport = {
+        isCurrent: valid,
+        async read<T>(path: string) {
+          check()
+          const value = await request<T>(`/workspace${path}`, { workspace })
+          check()
+          return value
+        },
+        async mutate(path, body) {
+          check()
+          const value = await request<WorkspaceView>(`/workspace${path}`, {
+            workspace,
+            method: 'POST',
+            body: { ...body, revision: current.value!.revision },
+          })
+          check()
+          current.value = value
+          expectedRevision = value.revision
+          return value
+        },
+        async command<T>(path: string, body: Record<string, unknown>) {
+          check()
+          const response = await request<{ workspace: WorkspaceView; value: T }>(
+            `/workspace${path}`,
+            {
+              workspace,
+              method: 'POST',
+              body: { ...body, revision: current.value!.revision },
+            },
+          )
+          check()
+          current.value = response.workspace
+          expectedRevision = response.workspace.revision
+          return response.value
+        },
+      }
+      try {
+        await action(api)
+      } catch (cause) {
+        if (valid()) throw cause
+      }
+    })
+  }
+
   async function refresh() {
     if (!current.value) return
     await run(async () => {
@@ -118,14 +179,19 @@ export const useWorkspace = defineStore('workspace', () => {
 
   async function read<T>(path: string, body?: Record<string, unknown>): Promise<T | undefined> {
     if (!current.value) return
+    const snapshot = current.value
+    const valid = () =>
+      current.value?.workspace_id === snapshot.workspace_id &&
+      current.value?.revision === snapshot.revision
     try {
-      return await request<T>(`/workspace${path}`, {
-        workspace: current.value.workspace_id,
+      const value = await request<T>(`/workspace${path}`, {
+        workspace: snapshot.workspace_id,
         method: body ? 'POST' : 'GET',
         body,
       })
+      if (valid()) return value
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : String(cause)
+      if (valid()) error.value = cause instanceof Error ? cause.message : String(cause)
     }
   }
 
@@ -222,6 +288,7 @@ export const useWorkspace = defineStore('workspace', () => {
     inspect,
     download,
     analysisDraft,
+    analysisTransaction,
     task,
   }
 })

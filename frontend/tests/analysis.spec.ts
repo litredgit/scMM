@@ -1,0 +1,225 @@
+import { test, expect, type Page } from './fixtures'
+
+let pageErrors: string[] = []
+test.beforeEach(async ({ page }) => {
+  pageErrors = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+})
+test.afterEach(() => expect(pageErrors).toEqual([]))
+
+async function importAnalysis(page: Page, name: string) {
+  if (page.url() === 'about:blank') await page.goto('/')
+  else await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
+  await page.getByLabel('项目名称', { exact: true }).fill(name)
+  await page.getByRole('button', { name: '创建并添加样本' }).click()
+  await page.getByRole('button', { name: '导入已有结果', exact: true }).click()
+  await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
+  await page.getByRole('button', { name: /^(?:▤ )?analysis\.h5ad\s/ }).click()
+  await page.getByRole('button', { name: '导入结果', exact: true }).click()
+  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await expect(page.getByLabel('group_key', { exact: true }).first()).toBeAttached()
+}
+async function module(page: Page, name: string) {
+  await page.getByRole('button', { name, exact: true }).click()
+}
+
+test('legacy settings, independent parameters, draft and project reset, narrow panels', async ({
+  page,
+}) => {
+  let legacy = true
+  await page.route('**/workspace/analysis', async (route) => {
+    const response = await route.fetch()
+    const body = await response.json()
+    if (legacy)
+      body.settings = {
+        reduction: { random_state: 73, store_key: 'X_old', scale: true },
+        diff: { layer: 'scmm_input_0' },
+        colorSource: 'feature',
+        color: 'feature:f0',
+        latentKey: 'X_old_latent',
+        usePca: false,
+      }
+    await route.fulfill({ response, json: body })
+  })
+  await importAnalysis(page, '分析设置迁移')
+  await expect(page.getByLabel('store_key', { exact: true })).toHaveValue('X_old')
+  await expect(page.getByLabel('Color', { exact: true })).toHaveValue('feature:f0')
+  await module(page, '监督与 SHAP')
+  await expect(page.getByRole('button', { name: '监督与 SHAP', exact: true })).toHaveCSS(
+    'background-color',
+    'rgb(239, 246, 255)',
+  )
+  await expect(
+    page.getByLabel('random_state', { exact: true }).filter({ visible: true }),
+  ).toHaveValue('73')
+  await page.getByLabel('random_state', { exact: true }).filter({ visible: true }).fill('91')
+  await module(page, '相关网络')
+  await expect(page.getByLabel('layer', { exact: true }).filter({ visible: true })).toHaveValue(
+    'scmm_input_0',
+  )
+  await page
+    .getByLabel('layer', { exact: true })
+    .filter({ visible: true })
+    .selectOption({ label: '当前 X' })
+  let computations = 0
+  page.on('request', (request) => {
+    if (request.url().endsWith('/analysis/operation')) computations++
+  })
+  await module(page, '降维与聚类')
+  await page.getByLabel('random_state', { exact: true }).filter({ visible: true }).fill('12')
+  await module(page, '监督与 SHAP')
+  await expect(
+    page.getByLabel('random_state', { exact: true }).filter({ visible: true }),
+  ).toHaveValue('91')
+  await page.getByRole('link', { name: /结果与保存/ }).click()
+  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await expect(
+    page.getByLabel('random_state', { exact: true }).filter({ visible: true }),
+  ).toHaveValue('91')
+  expect(computations).toBe(0)
+  await page.getByRole('button', { name: '保存项目', exact: true }).click()
+  await expect(page.getByText('已保存', { exact: true })).toBeVisible()
+  legacy = false
+  await page.getByRole('button', { name: '关闭项目', exact: true }).click()
+  await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
+  await page
+    .getByRole('row')
+    .filter({ hasText: '分析设置迁移' })
+    .getByRole('button', { name: '打开项目 →' })
+    .click()
+  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await module(page, '监督与 SHAP')
+  await expect(
+    page.getByLabel('random_state', { exact: true }).filter({ visible: true }),
+  ).toHaveValue('91')
+  await expect(page.getByLabel('latent_key', { exact: true })).toHaveValue('X_old_latent')
+  await module(page, '相关网络')
+  await expect(page.getByLabel('layer', { exact: true }).filter({ visible: true })).toHaveValue(
+    '当前 X',
+  )
+  for (const width of [700, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    for (const id of ['embedding', 'differential', 'network', 'supervised']) {
+      await page.getByRole('combobox', { name: '分析功能', exact: true }).selectOption(id)
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+        .toBe(true)
+    }
+    await page.screenshot({ path: test.info().outputPath(`analysis-${width}.png`), fullPage: true })
+  }
+  legacy = false
+  await page.getByRole('button', { name: '关闭项目', exact: true }).click()
+  await importAnalysis(page, '分析新项目重置')
+  await page.getByRole('combobox', { name: '分析功能', exact: true }).selectOption('embedding')
+  await expect(page.getByLabel('store_key', { exact: true })).toHaveValue('X_pca')
+  await expect(
+    page.getByLabel('random_state', { exact: true }).filter({ visible: true }),
+  ).toHaveValue('42')
+  await page.getByRole('combobox', { name: '分析功能', exact: true }).selectOption('supervised')
+  await expect(page.getByLabel('latent_key', { exact: true })).toHaveValue('X_latent')
+  await expect(
+    page.getByLabel('random_state', { exact: true }).filter({ visible: true }),
+  ).toHaveValue('42')
+})
+
+test('whole execution chain stays locked, plot retry and calculation failure retain results', async ({
+  page,
+}) => {
+  await importAnalysis(page, '分析执行互斥')
+  await module(page, '相关网络')
+  let release!: () => void
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let entered!: () => void
+  const reading = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  let hold = true,
+    failPlot = true,
+    failCalculation = false,
+    calculations = 0
+  await page.route('**/analysis/results/network?*', async (route) => {
+    if (hold) {
+      entered()
+      await held
+      hold = false
+    }
+    await route.continue()
+  })
+  await page.route('**/analysis/operation', async (route) => {
+    calculations++
+    if (failCalculation)
+      await route.fulfill({ status: 400, json: { error: { message: '合成计算失败' } } })
+    else await route.continue()
+  })
+  await page.route('**/analysis/plot', async (route) => {
+    if (failPlot) {
+      failPlot = false
+      await route.fulfill({ status: 400, json: { error: { message: '合成绘图失败' } } })
+    } else await route.continue()
+  })
+  await page.getByRole('button', { name: '计算相关网络', exact: true }).click()
+  await reading
+  await expect(page.getByRole('button', { name: '计算相关网络', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '应用视图设置', exact: true })).toBeDisabled()
+  await page.getByRole('button', { name: '计算相关网络', exact: true }).dispatchEvent('click')
+  expect(calculations).toBe(1)
+  release()
+  await expect(page.getByRole('alert')).toContainText('计算已完成，结果已保留')
+  await expect(page.locator('.js-plotly-plot')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '读取相关网络', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: '读取相关网络', exact: true }).click()
+  await expect(page.locator('.js-plotly-plot')).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  failCalculation = true
+  await page.getByRole('button', { name: '计算相关网络', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('合成计算失败')
+  await expect(page.locator('.js-plotly-plot')).toBeVisible()
+  await expect(page.getByRole('button', { name: '读取相关网络', exact: true })).toBeVisible()
+})
+
+for (const staleFailure of [false, true]) {
+  test(`late feature ${staleFailure ? 'failure' : 'success'} from a closed project is ignored`, async ({
+    page,
+  }) => {
+    await importAnalysis(page, '迟到响应旧项目')
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let entered!: () => void
+    const requested = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    await page.route('**/analysis/features?*', async (route) => {
+      if (new URL(route.request().url()).searchParams.get('query') === 'delayed') {
+        entered()
+        await held
+        await route.fulfill(
+          staleFailure
+            ? { status: 400, json: { error: { message: '旧项目迟到错误' } } }
+            : { json: { rows: [{ value: 'OLD', label: '旧项目迟到特征' }], total: 1 } },
+        )
+      } else await route.continue()
+    })
+    await page.getByLabel('Color source', { exact: true }).selectOption('feature')
+    await page.getByLabel('Search', { exact: true }).fill('delayed')
+    await requested
+    await page.getByRole('button', { name: '关闭项目', exact: true }).click()
+    await importAnalysis(page, '迟到响应新项目')
+    const late = page.waitForResponse((response) => response.url().includes('query=delayed'))
+    release()
+    await late
+    await page.getByLabel('Color source', { exact: true }).selectOption('feature')
+    await expect(
+      page.getByLabel('Color', { exact: true }).locator('option[value="f0"]'),
+    ).toHaveCount(0)
+    await expect(
+      page.getByLabel('Color', { exact: true }).locator('option[value="feature:f0"]'),
+    ).toHaveCount(1)
+    await expect(page.getByText('旧项目迟到特征', { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('alert')).toHaveCount(0)
+  })
+}

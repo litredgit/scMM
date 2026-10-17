@@ -291,3 +291,34 @@ def test_latest_export_and_foreign_project_are_classified_without_cross_root_ope
     assert item["project_path"] is None
     assert "所属环境" in item["protection"]
     assert workflow[-1]("/project/open", {"path": str(foreign.folder)}).status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("name", "options"),
+    [
+        ("differential", {"group_key": "group", "group_a": "a", "group_b": "b"}),
+        ("markers", {"group_key": "group"}),
+        ("network", {"top_features": 5, "min_abs_correlation": 0.2}),
+    ],
+)
+def test_analysis_failed_replacement_retains_complete_precision_export(workflow, name, options):
+    import_data(workflow)
+    operation(workflow, name, options)
+    before = workflow[-2]()
+    payload = get(workflow, f"/results/download?kind={name}").content
+    with workflow[2].access(workflow[1]["X-SCMM-Workspace"]) as workspace:
+        expected = workspace.project.workspace.result(name)["table"].copy()
+    exported = pd.read_csv(StringIO(payload.decode()), float_precision="round_trip")
+    for column in exported.select_dtypes(include="number"):
+        np.testing.assert_array_equal(exported[column].to_numpy(), expected[column].to_numpy())
+    failure = workflow[-1](
+        "/analysis/operation",
+        {"operation": name, "options": {**options, "layer": "missing_layer"}},
+    )
+    assert failure.status_code == 400
+    assert workflow[-2]() == before
+    assert get(workflow, f"/results/download?kind={name}").content == payload
+    assert workflow[-1]("/project/save").status_code == 200
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    assert get(workflow, f"/results/download?kind={name}").content == payload

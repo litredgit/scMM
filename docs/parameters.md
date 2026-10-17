@@ -333,6 +333,11 @@ CLI、Python API 和 Notebook 的默认提取方法仍为 legacy；两种提取�
 首次读取原始文件时 m/z 下限向下、上限向上取整到 10 的倍数；共同特征采用各文件范围的并集，独立模式使用各文件范围。
 手动应用的参数优先；自动范围不冻结其他项目默认参数。UMAP 默认 PCA 输入为 20 维，维数不足时需手动调整。
 
+分析页网络的 `layer` 独立于差异比较，默认 `null`（当前 X）；监督训练的 `random_state`
+独立于降维，初始来自分析配置的 `random_state`（通用默认 42），SHAP 使用该监督 seed。
+聚类仍共享降维面板的 `use_rep`、`n_neighbors` 和 `random_state`。旧项目缺独立字段时保留原先借用值，
+恢复/保存操作见[分析流程](workflow.md#分析显示与导出)，开发兼容规则见[接入指南](development.md#参数草稿与恢复)。
+
 网页分析默认 `color_source=annotation`（列标签），优先选择有效 group、其次 sample；
 可切换为 `feature` 或 `none`。Feature 默认 `color_sort=mean`、`color_descending=True`，即平均强度降序；
 排序还支持 `total`、`median`、`detection`、`mz`、`name`。下拉选择与搜索的操作见[工作流程](workflow.md#分析显示与导出)。
