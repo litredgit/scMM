@@ -547,6 +547,11 @@ def run_custom(X, params):
 
 ## 发布前检查
 
+Windows 内部软件包的构建、适配、升级回滚与验收见 [Windows 分发设计](windows-distribution.md)；
+已开始 WIN-01，依赖审计/下载/离线组装及计算验证工具的当前用法见
+[PoC 操作](windows-distribution.md#win-01-当前工具与执行方式)。完整安装包尚未实现，
+与本节当前 Linux 服务发布流程分别管理。
+
 完成相关开发检查后，更新 5007 开发服务供用户验收，保留工作区修改。用户明确验收通过后，
 再提交、推送并部署生产；执行顺序见 [发布、更新与回滚](installation.md#发布更新与回滚)。
 

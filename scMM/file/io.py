@@ -10,6 +10,7 @@ from typing import Any, Literal
 import pyopenms as oms
 
 from ._alignment import align_frame
+from ._native_paths import require_openms_path_encoding
 from ._spectrum import (
     _prepare_sorted_unique_peaks,
     build_orbitrap_grid,
@@ -49,6 +50,7 @@ def load_single_file(
     if not path.is_file():
         raise FileNotFoundError(path)
     resolved_format = _resolve_ms_format(path, format)
+    require_openms_path_encoding(path)
     validate_ms_file(path, format=resolved_format)
     experiment = oms.MSExperiment()
     try:
@@ -219,6 +221,7 @@ def save_spectra(spectra, output_path: str | Path) -> Path:
     else:
         raise TypeError("spectra must be an MSSpectrum or a sequence of MSSpectrum objects")
     output = Path(output_path).expanduser()
+    require_openms_path_encoding(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     oms.MzMLFile().store(str(output), experiment)
     return output

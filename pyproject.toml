@@ -60,6 +60,7 @@ web = [
     "plotly>=6,<7",
     "pydantic>=2.9,<3",
     "starlette>=0.46,<1",
+    "tzdata>=2025.2; sys_platform == 'win32'",
     "umap-learn>=0.5",
     "uvicorn>=0.30,<1",
 ]

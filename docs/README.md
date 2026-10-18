@@ -28,6 +28,7 @@
 
 - [代理工作指南](../AGENTS.md)：主要设计、模块职责及提问/提交规则；具体进展见 CHANGELOG。
 - [开发指南](development.md)：模块职责、测试与发布、main/dev 环境分工、上游快照、开源敏感信息检查及历史清理计划。
+- [Windows 适配与软件打包方案](windows-distribution.md)：内部单机浏览器版设计、已实现的运行环境/源码与 wheel 复核工具及原生证据；[Windows Codex 交接起点](windows-distribution.md#windows-codex-交接起点)包含接手命令和后续顺序，完整安装版仍在实施。
 - [待办与发展计划](roadmap.md)：交互与重任务优先级、注释/同位素联合验收及其余接入里程碑；已通过验收的工作归 CHANGELOG。
 - [CHANGELOG](../CHANGELOG.md)：实现、验证、验收和部署记录，包括历史环境证据。
 

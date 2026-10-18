@@ -5,6 +5,64 @@
 
 ## Unreleased
 
+### Windows Codex 开发交接 — 2026-10-18
+
+- 用户明确要求整理当前情况、提交并推送，由 Windows 上的 Codex 继续后续任务。本次授权范围为开发分支交接，不是完整 Windows 验收或 Linux 生产部署。交接入口已加入 [Windows 方案文档](docs/windows-distribution.md#windows-codex-交接起点)，包含真实通过范围、私有 UTF-8 种子/独立源码环境命令、Git 外交付物摘要、待完成门槛及 WIN-02/03 → PKG-01/02 顺序；同步索引与 roadmap。
+- 提交前以 `python -m pytest tests/tooling/test_windows_packaging.py tests/tooling/test_test_blocks.py tests/domain/test_io.py tests/domain/test_thermo_raw.py tests/domain/test_thermo_pipeline.py -q -W error` 复核，**89 项通过（12.18s）**；15 项文档/链接/锚点检查、12 个 Python 文件 Ruff/格式及差异空白检查通过，39 个本次变更文件敏感模式检查无命中。Windows 证据仍是用户返回的四份原生报告，本轮未新增 Windows 执行、真实 RAW、远端 CI 或干净机验收。
+- 本次将相关实现、测试、配置、原生脱敏证据及交接文档一起提交并推送 `dev`；推送会包含原先领先远端的三个既有提交（脂质相关性注释、分析面板模块化、个人只读 AI 助手），不改写历史、不推送 `main`。大型二进制/依赖种子/实验数据继续留在 Git 外。5007 沿用此前已更新的开发服务，本轮交接文档无须重启；5006 未操作。实际提交号和远端核对结果由本轮交接消息提供。
+
+### Windows 源码与 wheel 双入口实机复核通过 — 2026-10-18
+
+- 用户返回 v2 `delivery-report.json`：整体、wheel 和源码均为 **`checks_passed`**，两份内容摘要与本次交付清单完全一致；复制/搬迁路径预检最长 **188 UTF-16 单位**，前一轮过深目录复制失败已跨过。脱敏总报告与原附件摘要见[双入口实机记录](docs/validation/windows-source-wheel-native-pass.json)。
+- 随后收到 `wheel-before/after.json`、`source-before/after.json`：四份均为 Windows 11 x64、Python 3.12.13、隔离模式，每份七组检查通过，共 **28 次组检查通过**；验证脚本摘要匹配交付包，全部 **76 个锁定 wheel** 版本匹配，四次包集合与输入身份一致。wheel 确认从私有 site-packages 加载，源码从中文仓库加载。检查包含 XML API 和 Windows RAW 合成协议，不表示真实 Thermo reader/RAW 已验证。
+- wheel 原位置/搬迁后耗时 **27.125s / 24.313s**，源码 **26.250s / 23.453s**；峰值工作集 **530,116,608–531,279,872 bytes**。完整脱敏细项及各附件 SHA-256 已补入机器记录，耗时只是本次观测；日志和实际 OS 断网状态无新增证据。两套运行时已搬迁，源码目录本身未移动，源码仓库换位置后重新绑定仍待检查。
+- 更新 Windows 主题文档和 roadmap：双入口原生复核细项证据补齐，干净机/中文账号、ACL、任务/锁/恢复/监控、真实 RAW/helper、完整安装器/网页仍未完成。15 项文档检查及差异空白检查通过。仅记录实机证据，无代码/依赖/服务变更；保持未提交、未推送、未部署生产，机器成功报告不视为用户整体验收或发布授权。
+
+### Windows 双入口复核目录过深修复（待实机重跑）— 2026-10-18
+
+- 用户总报告显示种子复制产生 **88** 个 `[WinError 3]`，失败目标长 **260–276 UTF-16 单位**；源码/wheel 科学检查尚未执行。旧入口默认在已有中文搬迁目录旁继续嵌套，是此次路径过深的原因。保留既有 UTF-8 通过证据及失败目录，不将本次失败归为已验证的编码修复失效。
+- 默认复核根改为系统临时目录下短名称，两套副本及中文空格搬迁目录缩短；复制前检查源码、运行时及所有搬迁目的地的已有条目，文件/目录分别按 259/247 UTF-16 单位保守拒绝。源码独立 `prepare` 也接入预检；不修改种子、科学依赖或系统长路径配置。
+- `python -m pytest tests/tooling/test_windows_packaging.py -q -W error` **18 项通过（0.44s）**，包含搬迁目标预检、失败无写入、UTF-16 计数、目录预留与临时目录默认值；相关 Ruff/格式通过。新包 `scMM-source-wheel-check-v2.zip` **3,823,338 bytes**，SHA-256 **`e5cee042198f497a85a8872e671a20b515f9a897385c5a6baff1f36a5ba51ef5`**，134 个清单成员摘要核对通过；沿用相同 wheel，未改科学代码。证据见[复制失败与修复记录](docs/validation/windows-delivery-path-copy-failure.json)。Windows 新结果待返回，完整平台门槛仍未验收；仅验证工具/文档修复，开发服务沿用上一条更新，不提交、推送或部署生产。
+
+### Windows 源码与 wheel 共用运行边界（实现，待双入口实机复核）— 2026-10-18
+
+- 用户返回进程 UTF-8 复测文件：Windows 11 `10.0.26300`、Python 3.12.13，ACP **65001**、全部 **28 个路径探针通过**，六组计算在原位置和中文空格目录搬迁后均通过（**30.891s / 23.172s**，峰值工作集 **531,222,528 / 531,890,176 bytes**）；原始 Python 摘要未改变。脱敏证据见 [原生 UTF-8 记录](docs/validation/windows-win01-native-utf8-pass.json)。这是科学依赖/路径的原生证据，不是干净机、完整网页、真实 RAW 或用户整体验收。
+- 用户要求同时保障原仓库和打包产物的 Windows 运行。默认离线组装接入已验证的私有 Python manifest UTF-8 配置，先确认 ACP=65001，再安装锁定依赖，记录源/修改后 EXE 和所有 manifest 语言资源摘要。新增 `scripts/scmm_windows.py prepare/run`：从已验证环境复制独立源码解释器，核对 Python 3.12 x64/ACP/prefix/锁身份，按明确仓库写入仅属于开发副本的 `.pth`，检查实际 scMM 身份及 pyproject 修订；API、CLI、`-m` worker 和 spawn 共享源码，不静默混入已安装 wheel 或用户 Python 环境。发行包不携带该开发绑定。
+- XML API 在 Windows 非 UTF-8 进程收到中文路径时提前明确报环境问题，不再误报损坏 XML，失败不创建输出目录；正常路径仍直接由 OpenMS 解析，不引入 buffer/原始数据复制/精度降级。新增 Windows stdout 管道适配：单一读取方使用 PeekNamedPipe 查询后限量读，monotonic 超时、OS 有界缓冲、无 stdout 预读线程；Linux selectors 保持。大 stderr 排空、结束标记/EOF/退出码和回收语义保留。该部分尚待 Windows 合成管道复核及真实 reader，不能标为真实 RAW 已支持。
+- 新增源码/wheel 独立复核交付：构建时逐文件核对两份 scMM 代码/资源一致，原生入口分别复制 wheel 环境和中文目录源码环境，核对代码身份、三个 CLI 帮助入口、应用 API 的 mzML 与显式 float64 mzXML 输入、七组科学/合成协议检查，分别搬迁后重跑。新 mzXML 检查初用 OpenMS writer 发现其输出为 float32，改为显式 float64 合成输入而非放宽相等断言；不改变产品输出或计算精度。复核包返回四份计算报告和总报告，明确 ACL、任务/锁/恢复/监控、真实 RAW/helper、干净机/中文账号、完整安装器及网页仍是未完成门槛。
+- 本机 `python -m pytest tests/tooling/test_windows_packaging.py tests/tooling/test_test_blocks.py tests/domain/test_io.py tests/domain/test_thermo_raw.py tests/domain/test_thermo_pipeline.py -q -W error` **86 项通过（12.22s）**，覆盖不兼容编码下的失败原子性、源码绑定对子进程有效、过期 wheel 拒绝、pipe 就绪/EOF/截止时间以及已有协议/完整处理回归。七组更新后的 Linux 合成计算检查通过，仅调试新验证工具；相关 Ruff/格式、15 份文档链接/锚点通过。新 wheel 构建成功并与源码/资源一致，待用户返回新的 Windows 源码与 wheel 对照报告；用户此次要求不视为整体验收、提交、推送或生产部署授权。
+- 源码/wheel 清单与内容共 **128 个 scMM 文件一致**，新源码/产物复核包 **3,822,707 bytes**，SHA-256 **`3839c2444f2e1ac849ba7b4288eadf231b12c7b0404f4a37d43641b4c4ee310e`**；包含默认 UTF-8 的完整 WIN-01 输入包 **323,072,671 bytes**，SHA-256 **`73a749a509b786f4144b480374bcd078626cb0fa0e65f4df010073e03b2ba521`**。归档逐成员摘要复核通过，仍是验证产物而非最终安装器。额外加强 wheel 多余旧文件拒绝后，打包工具专项 **15 项通过（0.44s）**；机器记录见 [源码/wheel 本机检查](docs/validation/windows-source-wheel-linux-check.json)。
+- 5007 更新前重新检查独立配置/项目根、fresh ready 证据、页面/工作区/请求、连接、持久任务与 worker，均无阻塞。停止开发 service 后通过 `scripts/scmm_env.py sync dev` 锁定同步（检查 158 包，无依赖升级）及前端类型检查/构建，沿用 Plotly 大包提示；5007 于 **2026-10-18 12:05:58（北京时间）** 启动，PID **1723007**、active/running、重启计数 0，首页/健康接口 200、监控 fresh ready，wheel 与刷新后的源码/静态资源仍一致。5006 未操作；保持未提交、未推送、未部署生产。
+
+### WIN-01 首轮 Windows 报告与路径诊断（未通过）— 2026-10-18
+
+- 收到用户返回的 session/before/diagnostics，匹配既有 kit ID；Windows 11 `10.0.26300`、候选 Python 3.12.13 原生隔离启动完成，77 包离线安装及 uv 依赖检查通过。六组计算中五组通过，唯一失败为 PyOpenMS 3.3.0 `MzMLFile.store` 无法创建中文临时父目录/文件名下的 mzML；整体 failed，原脚本正确停止，搬迁未执行。耗时 **32.687s**、峰值工作集 **549,539,840 bytes**、展开运行目录 **1,121,518,006 bytes**；仅此合成规模，不推导最低配置。PATH 可发现 Python/Node/.NET，不作为干净机证据；断网和中文账号未验收。脱敏摘要与附件 SHA-256 见 [首轮实机记录](docs/validation/windows-win01-native-first-run.json)，原附件不改写、不提交。
+- 新增小型 `scripts/diagnose_windows_openms.py`，直接复用已组装解释器，独立比较 ASCII/中文文件名/中文父目录、OpenMS 直接读写、Python I/O + 合成 XML buffer 往返，以及 str/UTF-8/ACP bytes；记录系统代码页，全部临时合成谱清理，保留逐项失败且报告防覆盖。此工具是定位手段，未把 buffer 或路径改名用作生产读取替代，也未升级依赖/修改系统区域设置/规避中文路径验收。
+- 本机 Linux 对诊断工具实际运行 **20 个探针均通过**；`python -m pytest tests/tooling/test_windows_packaging.py -q -W error` **11 项通过（0.39s）**，新增合成原生中文路径拒绝时保留 ASCII 基线、独立读取与 buffer 结果的检查。相关 Ruff/格式通过；同步方案失败说明、复测入口及 roadmap。新增诊断尚待用户在 Windows 运行，具体编码原因及修复方案未确认，WIN-01 保持进行中。本轮只增加诊断/文档，不改网页运行代码或锁定依赖，沿用已更新的开发服务，未操作生产；保持未提交、未推送。
+- 用户随后返回原生路径报告：ACP **936**、Python filesystem UTF-8，**28 个探针中 13 项通过、15 项失败**。ASCII 及 Python I/O + 小型 buffer 往返通过，中文 `str`/UTF-8 bytes 直接读写失败，CP936 bytes 仅写入成功，读取仍在 OpenMS XMLFile 层失败。完整脱敏分项见 [路径诊断摘要](docs/validation/windows-win01-native-path-diagnosis.json)，不将诊断执行完毕解释为门槛通过。
+- 新增 `probe_windows_utf8.py` 候选修复复测：校验原始 Python EXE 摘要、拒绝签名 EXE/链接/已有目录，复制独立环境后，仅在副本已有 PE manifest 的全部语言资源中加入进程级 UTF-8，保留原身份/安全/长路径声明，不改变系统区域设置或依赖。检测 ACP=65001 后才执行全部路径探针、六组计算及中文空格目录搬迁复测，保存资源/EXE 摘要、失败日志与报告；原运行环境保留。该机制依据微软 activeCodePage 文档，当前是待 Windows 验证的候选，不接入默认构建、不宣称已修复。
+- 本机相关工具检查现为 **13 项通过（0.40s）**，新增 manifest 声明保留/幂等/结构拒绝及签名 PE 防改写；从固定 PBS 原归档中提取的实际 Python manifest 解析/变更成功，确认该源 EXE 无证书且原摘要匹配。Ruff/格式通过；这不是 ctypes 资源更新或候选解释器的 Windows 执行证据，需用户返回新的 `utf8-probe/openms-utf8-report/before/after`。本轮仍只变更工具/文档，未改运行依赖或网页服务，保持未提交、未推送、未发布。
+- 候选复测 ZIP **10,497 字节**，SHA-256 **`083aa367de1014362142f9b5667c93db363bb9da734688c99c15bbf7fba8270e`**，包含候选修复/路径诊断/六组计算脚本及说明，CRC 和与工作区源文件逐项一致性通过。15 份文档链接/锚点检查、相关源码扫描及差异检查通过；5007 健康接口 200，未重启服务。
+
+### Windows WIN-01 启动（工具与离线验证包完成，待实机报告）— 2026-10-17
+
+- 用户明确要求按既定 Windows 迁移/打包方案执行。核对起点为 `dev` / `c8b00a8`、领先远端 3 个提交，保留已有 7 份方案文档修改；未把本次执行授权解释为用户验收或生产发布授权。按 WIN-01 → 平台适配 → 安装器顺序实施，已询问原生 Windows 验证环境，当前 Linux 主机不能给出 Windows 验收结论。
+- `packaging/windows/runtime.json` 固定候选 Python **3.12.13 / 20260807**、Windows x64、uv **0.12.3** 和四组运行 extras；从官方 Release asset digest 核对 Python SHA-256。新增 `scripts/build_windows.py`，按 Windows marker/CPython ABI 选择锁定 wheel，拒绝 sdist、缺包/版本歧义和损坏输入；校验下载、原生 Windows 离线组装及完整 extras 安装、`uv pip check`，记录来源/锁摘要/工作区状态/wheel 摘要。Windows `web` 显式声明 tzdata；`uv lock --offline` 仅增加该直接依赖的元数据，无任何包版本升级。
+- 新增随便携目录携带的 PowerShell 隔离启动及科学计算报告脚本，覆盖 NumPy/SciPy/scMM 归一化、float64 H5AD 中文路径往返、PyOpenMS mzML 往返、Numba JIT、SMOTE/SHAP、igraph/Leiden/UMAP、Matplotlib、静态/规则资源及时区；保留失败报告，拒绝覆盖旧证据。Python 审计钩子禁止 Python 网络调用，原生 DLL 离线仍须测试机断网；Linux 调试明确记录 `native_windows_x64=false`。
+- 本机实际导出并下载 **76 个 Windows wheel + Python 归档**，逐项 SHA-256 复核通过，输入保留在 Git 忽略的 `.tmp/windows-poc/inputs`（约 290 MiB，不是安装包大小）。`uv build --wheel --no-sources --out-dir .tmp/windows-poc/dist` 成功，包含当前 Vue/规则资源；Windows 目标离线 `uv pip install --dry-run --python-platform x86_64-pc-windows-msvc --python-version 3.12 --no-index --only-binary :all: --require-hashes` 从本地 wheelhouse 和 scMM wheel 完整解析 **77 包**，没有安装或执行 Windows 二进制。机器证据见 [WIN-01 本机报告](docs/validation/windows-win01-linux-poc.json)。
+- 本机 `python -m pytest tests/tooling/test_windows_packaging.py tests/tooling/test_test_blocks.py -q -W error` **24 项通过**，覆盖跨平台标记/ABI、缺包/歧义、下载污染/临时文件清理、归档越界/链接、非 Windows 拒绝组装、失败报告防覆盖及选择器映射；既有环境/Windows 最小模式回归 **39 项通过**。六组计算用当前 Linux Python 3.12 的隔离解释器实际运行通过，仅调试验证工具；新增工具纳入分块清单。相关 Ruff/格式与文档链接/锚点检查通过。同步方案当前操作、安装/开发链接和 roadmap，WIN-01 保持进行中；README 的已支持能力未扩大，AGENTS 未新增日常进度。
+- 更新前核对 5007 独立配置/项目根、fresh ready 监控、活动/失联页面、工作区、连接、请求、持久任务与 worker，无阻塞。停止开发 service 后用 `scripts/scmm_env.py sync dev` 锁定同步及 Vue 类型检查/构建成功；仅重建 scMM 本地包，保留既有 Plotly 大包提示。5007 `scmm-dev.service` 于 **2026-10-17 12:08:57 UTC** 启动，PID **1670251**、active/running、重启计数 0，首页/健康接口 200，更新后 fresh ready，wheel 静态资源与新构建逐项一致。5006 未操作。原生 Windows 组装/计算、干净机/中文用户/搬迁/断网、完整 Windows 平台/RAW/.NET/许可、安装器、远端 CI 和用户验收均未完成；本次保留未提交、未推送、未部署生产。
+- 用户随后选择在自己的 Windows 11 电脑运行。新增 `build_windows.py kit`、固定 Windows uv 0.12.3 输入与双许可原文、独立 PowerShell 引导入口和包内说明，生成自带 Python、uv、76 个依赖 wheel 与 scMM wheel 的离线验证 ZIP；不要求目标机预装开发工具，不执行网页/账号初始化。入口核对所有文件摘要，从纯 Python packaging wheel 引导私有解释器离线组装，自动执行原路径与中文空格路径搬迁计算，保留 session/before/after 报告及日志；明确用户须实际断网，已有开发环境与中文目录不替代干净机/中文账号验收。修正 Windows PowerShell 5 原生 stderr 被视为终止错误的问题，仍以进程退出码判失败。
+- `.tmp/windows-poc/scMM-WIN01-win-x64.zip` **323,064,373 字节**（约 308 MiB），SHA-256 **`a087a43f063abed616c1a7b4fd14db79db76988781bfd611fd5cfb129bf3f484`**；逐文件摘要和归档成员复核通过，无用户设置/实验数据/开发 `.venv`。相关打包/选择器检查现为 **25 项通过（0.97s）**，新增合成完整验证包的内容/摘要、防覆盖与损坏输入拒绝；Ruff/格式通过。另在临时目录使用官方 PowerShell **7.4.13 Linux x64** 解析两份脚本，并以 Legacy 参数传递检查实际命令的空格参数、stderr 日志和非零退出，均通过；不是 Windows PowerShell 5 或 Windows 实机验证。机器记录见 [离线验证包本机检查](docs/validation/windows-win01-kit-linux-check.json)。本轮仅构建工具/文档/临时验证包变化，开发环境与网页运行代码无变化，沿用上项已更新的 5007，未再次重启或操作生产；未提交、未推送，等待用户返回实机报告。
+
+### Windows 适配与内部软件发行方案（设计，未实现）— 2026-10-17
+
+- 起始为干净的 `dev`，代码核对基线 `c8b00a8`。用户明确选择实验室内部使用、本机安装版、浏览器界面，包含完整分析依赖与 Thermo profile RAW；产品范围确认不视为技术方案验收或实现/发布授权。
+- 新增 [Windows 分发设计](docs/windows-distribution.md)，建议采用固定 Python 3.12 便携运行目录、普通 scMM wheel、C# 本机启动器与 Inno Setup 离线安装包，复用 Vue/FastAPI 和一个 API 进程。方案覆盖平台锁/任务身份与恢复、Windows RAW 有界管道、路径/NTFS ACL、首次配置和登录、托盘退出保护、离线依赖闭包、版本清单、升级回滚、卸载保数据及内部再分发边界；不将未接入网页的 API/Notebook 功能标为已交付。
+- 审阅确认当前后台提取仅 Linux、任务存活依赖 `/proc`、RAW 的 selectors 管道实现不适用于 Windows；项目保存已有 `msvcrt` 分支但未实机验收，私有文件 `0600` 检查需映射 Windows ACL。锁文件中主要计算包列有 Windows x64 wheel，这不是安装/计算通过的证据。核对 Python、Astral、微软、Thermo 和安装器官方资料；记录 .NET 8 于 2026-11-10 结束支持，建议独立验证迁移 .NET 10 LTS，不推定厂商 reader 兼容或具备再分发授权。
+- roadmap 新增 WIN-01～03、PKG-01～02，全部实现未开始；同步文档索引、安装/开发交叉链接。AGENTS 仅增加新主题文档的职责行，README 当前能力未改变。
+- 本机 `.venv/bin/python scripts/test_blocks.py --phase docs --run` 文档链接/锚点及 Python 示例 **15 项通过（0.07s）**；新增本条记录后以 `SCMM_DOCUMENTS` 仅选择 CHANGELOG，定向检查 **1 项通过（0.02s）**，7 份改动文档围栏及差异检查通过。未执行 Windows 安装、科学计算、真实 RAW、安装包构建、远端 CI 或用户验收。本任务仅设计文档，无运行代码、依赖或页面变化，不同步环境或重启 5007/5006；保留未提交、未推送，未部署生产。
+
 ### AI 分析助手首版（实现待用户验收）— 2026-10-17
 
 - 起始核对为干净的 `dev`，领先 `origin/dev` 两个提交；5007/5006 均在运行。新增个人 `Base URL` / `Model` / `API Key` 配置、保存/最小连接测试/删除，使用独立 SQLite 与 `cryptography.Fernet` 加密整个配置元组并绑定用户。主密钥与数据库分别置于仓库及项目根外，启动不自动生成或回退；新增 `scmm-admin init-ai`，失败回收本次创建文件。保存必须同时提供新 Key，网页不回显 Key；`httpx` 移入 web 运行依赖，新增 cryptography 并通过 uv 锁定。

@@ -2244,6 +2244,7 @@ web = [
     { name = "psutil" },
     { name = "pydantic" },
     { name = "starlette" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
     { name = "umap-learn" },
     { name = "uvicorn" },
 ]
@@ -2287,6 +2288,7 @@ requires-dist = [
     { name = "shap", marker = "extra == 'supervised'", specifier = ">=0.45,<0.49" },
     { name = "starlette", marker = "extra == 'web'", specifier = ">=0.46,<1" },
     { name = "tqdm", specifier = ">=4.66" },
+    { name = "tzdata", marker = "sys_platform == 'win32' and extra == 'web'", specifier = ">=2025.2" },
     { name = "umap-learn", marker = "extra == 'plot'", specifier = ">=0.5" },
     { name = "umap-learn", marker = "extra == 'web'", specifier = ">=0.5" },
     { name = "uvicorn", marker = "extra == 'web'", specifier = ">=0.30,<1" },

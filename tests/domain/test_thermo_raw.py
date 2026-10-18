@@ -10,6 +10,23 @@ import pytest
 from scMM.file.readers import ThermoRawError, ThermoRawReader
 
 
+def test_windows_pipe_wait_has_a_deadline_and_exposes_data_and_eof():
+    from scMM.file.readers.thermo_raw import _WindowsPipeSelector
+
+    pipe = object.__new__(_WindowsPipeSelector)
+    pipe.stream = object()
+    pipe._closed = False
+    values = iter([0, 16])
+    pipe._available = lambda: next(values)
+    assert pipe.select(0.1)
+    pipe._available = lambda: None
+    assert pipe.select(0.1)  # EOF must wake the caller for the existing protocol checks.
+    pipe._available = lambda: 0
+    assert pipe.select(0.01) == []
+    pipe.close()
+    assert pipe.select(0.1) == []
+
+
 def text_record(value):
     value = value.encode("utf-8")
     return struct.pack("<i", len(value)) + value

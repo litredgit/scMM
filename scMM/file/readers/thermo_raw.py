@@ -1,4 +1,4 @@
-"""Strict-profile Thermo reader. Linux binary pipe; no converted intermediate files."""
+"""Strict-profile Thermo reader with bounded native pipes; no converted intermediates."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import selectors
 import shutil
 import struct
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -19,6 +20,59 @@ from .base import Spectrum
 
 class ThermoRawError(RuntimeError):
     """A missing reader, invalid protocol, non-profile input or vendor failure."""
+
+
+class _WindowsPipeSelector:
+    """Single stdout owner: peek available bytes before the synchronous read.
+
+    Uses the OS pipe's bounded buffer; no prefetch thread or Python data queue.
+    The stderr thread owns a separate pipe and never reads this handle.
+    """
+
+    def __init__(self, stream):
+        import ctypes
+        import msvcrt
+
+        self.stream = stream
+        self._closed = False
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        peek = kernel.PeekNamedPipe
+        peek.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_uint32),
+            ctypes.c_void_p,
+        ]
+        peek.restype = ctypes.c_int
+        handle = msvcrt.get_osfhandle(stream.fileno())
+
+        def available():
+            size = ctypes.c_uint32()
+            if peek(handle, None, 0, None, ctypes.byref(size), None):
+                return size.value
+            error = ctypes.get_last_error()
+            if error in (109, 232, 233):  # broken/closed/disconnected pipe: expose EOF
+                return None
+            raise ThermoRawError(f"Windows stdout pipe failed: {ctypes.WinError(error)}")
+
+        self._available = available
+
+    def select(self, timeout):
+        deadline = time.monotonic() + timeout
+        while not self._closed:
+            size = self._available()
+            if size is None or size > 0:
+                return [(self.stream, selectors.EVENT_READ)]
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return []
+            time.sleep(min(0.01, remaining))
+        return []
+
+    def close(self):
+        self._closed = True
 
 
 def reader_command():
@@ -82,8 +136,11 @@ class ThermoRawReader:
             )
             self._thread = threading.Thread(target=self._drain_stderr, daemon=True)
             self._thread.start()
-            self._selector = selectors.DefaultSelector()
-            self._selector.register(self.process.stdout, selectors.EVENT_READ)
+            if sys.platform == "win32":
+                self._selector = _WindowsPipeSelector(self.process.stdout)
+            else:
+                self._selector = selectors.DefaultSelector()
+                self._selector.register(self.process.stdout, selectors.EVENT_READ)
             if self._read(8) != b"SCMMRAW1":
                 raise ThermoRawError("Invalid SCMMRAW1 magic/version")
             self.scan_count = self._unpack("<i")[0]
@@ -115,7 +172,13 @@ class ThermoRawReader:
             remaining = deadline - time.monotonic()
             if remaining <= 0 or not self._selector.select(remaining):
                 raise ThermoRawError("Thermo reader stalled (read timeout)")
-            chunk = os.read(self.process.stdout.fileno(), min(size - len(chunks), 1024 * 1024))
+            read_size = min(size - len(chunks), 1024 * 1024)
+            if isinstance(self._selector, _WindowsPipeSelector):
+                available = self._selector._available()
+                if available == 0:
+                    continue
+                read_size = min(read_size, available) if available is not None else 1
+            chunk = os.read(self.process.stdout.fileno(), read_size)
             if not chunk:
                 raise ThermoRawError("Truncated Thermo stream (unexpected EOF)")
             chunks.extend(chunk)

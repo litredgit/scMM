@@ -193,6 +193,11 @@ uv run --locked scmm-admin --server-config ~/.config/scmm/dev.json rotate-operat
 默认监听 `127.0.0.1`，代理头信任关闭；允许来源为空时只接受当前同源，填写时必须是含协议的完整来源。
 
 Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；缺少 fcntl 的最小兼容不代表完整 Windows 支持。
+实验室内部单机安装版见 [Windows 适配与软件打包方案](windows-distribution.md)，已开始开发者运行环境 PoC；
+完整目录/启动器/安装包仍未交付，普通用户不要将 PoC 工具视为 Windows 安装入口。
+原生 Windows 11 已验证私有解释器进程 UTF-8 下的科学计算与中文路径搬迁；源码与 wheel 共用这一边界，
+源码的独立环境准备及 Python/API/CLI 入口见 [Windows 源码运行](windows-distribution.md#源码运行入口)。
+认证 ACL、完整后台提取与真实 RAW 仍未通过 Windows 验收，不能据 CLI `--help` 成功判断网页可交付。
 
 ## 个人 AI 配置
 

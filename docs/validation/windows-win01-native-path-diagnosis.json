@@ -1,0 +1,142 @@
+{
+  "schema": 1,
+  "received_on": "2026-10-18",
+  "date_timezone": "Asia/Shanghai",
+  "scope": "Windows path diagnosis; candidate repair still requires native validation",
+  "attachment_sha256": "6bbf8db66250219ceeb3564091736b26491b339e162ca844921f27f090cfbdd8",
+  "python": "3.12.13",
+  "os": "Windows-11-10.0.26300-SP0",
+  "pyopenms": "3.3.0",
+  "windows_ansi_codepage": 936,
+  "preferred_encoding": "cp936",
+  "python_utf8_mode": 0,
+  "base_path_ascii": true,
+  "checks": {
+    "ascii/python_io_openms_buffer": {
+      "status": "passed",
+      "details": {
+        "bytes": 4728
+      }
+    },
+    "ascii/str/store": {
+      "status": "passed",
+      "details": {
+        "requested_file_exists": true
+      }
+    },
+    "ascii/str/load_python_created_file": {
+      "status": "passed",
+      "details": null
+    },
+    "ascii/utf8_bytes/store": {
+      "status": "passed",
+      "details": {
+        "requested_file_exists": true
+      }
+    },
+    "ascii/utf8_bytes/load_python_created_file": {
+      "status": "passed",
+      "details": null
+    },
+    "ascii/mbcs_bytes/store": {
+      "status": "passed",
+      "details": {
+        "requested_file_exists": true
+      }
+    },
+    "ascii/mbcs_bytes/load_python_created_file": {
+      "status": "passed",
+      "details": null
+    },
+    "unicode_filename/python_io_openms_buffer": {
+      "status": "passed",
+      "details": {
+        "bytes": 4728
+      }
+    },
+    "unicode_filename/str/store": {
+      "status": "failed"
+    },
+    "unicode_filename/str/load_python_created_file": {
+      "status": "failed"
+    },
+    "unicode_filename/utf8_bytes/store": {
+      "status": "failed"
+    },
+    "unicode_filename/utf8_bytes/load_python_created_file": {
+      "status": "failed"
+    },
+    "unicode_filename/mbcs_bytes/store": {
+      "status": "passed",
+      "details": {
+        "requested_file_exists": true
+      }
+    },
+    "unicode_filename/mbcs_bytes/load_python_created_file": {
+      "status": "failed"
+    },
+    "unicode_parent/python_io_openms_buffer": {
+      "status": "passed",
+      "details": {
+        "bytes": 4728
+      }
+    },
+    "unicode_parent/str/store": {
+      "status": "failed"
+    },
+    "unicode_parent/str/load_python_created_file": {
+      "status": "failed"
+    },
+    "unicode_parent/utf8_bytes/store": {
+      "status": "failed"
+    },
+    "unicode_parent/utf8_bytes/load_python_created_file": {
+      "status": "failed"
+    },
+    "unicode_parent/mbcs_bytes/store": {
+      "status": "passed",
+      "details": {
+        "requested_file_exists": true
+      }
+    },
+    "unicode_parent/mbcs_bytes/load_python_created_file": {
+      "status": "failed"
+    },
+    "unicode_both/python_io_openms_buffer": {
+      "status": "passed",
+      "details": {
+        "bytes": 4728
+      }
+    },
+    "unicode_both/str/store": {
+      "status": "failed"
+    },
+    "unicode_both/str/load_python_created_file": {
+      "status": "failed"
+    },
+    "unicode_both/utf8_bytes/store": {
+      "status": "failed"
+    },
+    "unicode_both/utf8_bytes/load_python_created_file": {
+      "status": "failed"
+    },
+    "unicode_both/mbcs_bytes/store": {
+      "status": "passed",
+      "details": {
+        "requested_file_exists": true
+      }
+    },
+    "unicode_both/mbcs_bytes/load_python_created_file": {
+      "status": "failed"
+    }
+  },
+  "summary": {
+    "passed": 13,
+    "failed": 15
+  },
+  "observed": "ASCII paths and Python file IO plus small OpenMS buffer parsing pass. Unicode str/UTF-8 byte load/store fail. CP936 bytes store passes but load fails.",
+  "candidate": "Test process-local activeCodePage=UTF-8 in a fresh runtime copy, then direct path reads/writes and complete scientific checks before/after relocation.",
+  "candidate_native_result": "pending",
+  "system_locale_changed": false,
+  "user_acceptance": false
+}

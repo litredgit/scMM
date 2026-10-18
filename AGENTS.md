@@ -122,6 +122,7 @@ AI 助手仅解释与建议：个人 API 凭据在仓库外按用户加密隔离
 | [thermo-raw.md](docs/thermo-raw.md) | 外部 reader、协议、精度边界、对照报告与复现 | reader 构建/协议/精度/资源行为改变，或新增有原始报告的 RAW 对照 |
 | [troubleshooting.md](docs/troubleshooting.md) | 按症状诊断、修复和调参 | 新故障、诊断方式或处置方法改变；已解决故障保留适用的诊断提示 |
 | [development.md](docs/development.md) | 详细模块分工、扩展、回归边界、检查/发布、上游快照 | 代码职责、开发工具、检查/发布流程或快照管理方式改变 |
+| [windows-distribution.md](docs/windows-distribution.md) | Windows 适配、软件打包、升级回滚和验收设计 | Windows 分发范围、平台技术路线或验收设计改变；已实现的安装操作迁入 installation |
 | [roadmap.md](docs/roadmap.md) | 未完成事项、待用户验收、暂缓与恢复条件 | 新待办、范围/优先级/验收条件变化，或取得足以改变状态的验收证据 |
 
 `docs/validation/` 的机器报告保存原始证据，主题文档解释条件与结论，CHANGELOG 记录验收发生的时间和范围。

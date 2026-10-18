@@ -116,6 +116,25 @@ def test_mzml_save_load_round_trip_infers_format_and_uses_timestamp_fallback(tmp
     assert metadata["timestamp"] == pytest.approx(output.stat().st_mtime, abs=1.0)
 
 
+def test_windows_unicode_encoding_failure_is_explicit_and_does_not_create_output(
+    tmp_path, monkeypatch
+):
+    from scMM.file import _native_paths
+
+    existing = tmp_path / "中文 输入.mzML"
+    save_spectra(list(make_experiment()), existing)
+    monkeypatch.setattr(_native_paths, "process_ansi_codepage", lambda: 936)
+    output = tmp_path / "中文 新目录" / "谱.mzML"
+    with pytest.raises(RuntimeError, match="原生 UTF-8"):
+        save_spectra(list(make_experiment()), output)
+    assert not output.parent.exists()
+    with pytest.raises(RuntimeError, match="原生 UTF-8"):
+        load_single_file(existing)
+    monkeypatch.setattr(_native_paths, "process_ansi_codepage", lambda: 65001)
+    restored, _ = load_single_file(existing)
+    assert restored.getNrSpectra() == 2
+
+
 def test_load_single_file_infers_mzxml_by_default(tmp_path) -> None:
     output = tmp_path / "synthetic.mzXML"
     oms.MzXMLFile().store(str(output), make_experiment())

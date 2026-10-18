@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "recorded_on": "2026-10-18",
+  "scope": "Copy-stage failure and short-path validation tool repair; new native source/wheel checks pending",
+  "attachment_sha256": "b48b0a0f359cc0b13224d7b59333e638fbe9371015649ead264ca50eebf642b3",
+  "native_result": {
+    "status": "failed",
+    "stage": "shutil.copytree seed to wheel runtime",
+    "copy_errors": 88,
+    "destination_utf16_units_min": 260,
+    "destination_utf16_units_max": 276,
+    "scientific_checks_started": false
+  },
+  "repair": {
+    "default_output": "system temporary directory / sd-MMDD-HHMMSS",
+    "runtime_directories": [
+      "w",
+      "s",
+      "中文 w",
+      "中文 s"
+    ],
+    "preflight": "All existing runtime and source entries at initial and relocation targets; 259 UTF-16 file / 247 directory limits; failure before output creation",
+    "seed_modified": false
+  },
+  "linux_regression": {
+    "passed": 18,
+    "command": "python -m pytest tests/tooling/test_windows_packaging.py -q -W error"
+  },
+  "artifact": {
+    "name": "scMM-source-wheel-check-v2.zip",
+    "bytes": 3823338,
+    "sha256": "e5cee042198f497a85a8872e671a20b515f9a897385c5a6baff1f36a5ba51ef5",
+    "manifested_files": 134
+  },
+  "native_retest": "pending"
+}

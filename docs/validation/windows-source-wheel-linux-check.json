@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "recorded_on": "2026-10-18",
+  "date_timezone": "Asia/Shanghai",
+  "scope": "Linux source/wheel consistency, synthetic regression and updated native validation artifacts; new Windows source/wheel result pending",
+  "source_commit": "c8b00a8cb02f9b9b64c2aa70e39c77bfa16b8b7d",
+  "dirty": true,
+  "checked_source_wheel_files": 128,
+  "source_sha256": {
+    "scMM/file/io.py": "854aac2a7c4568398e7eaa8e1462903ae94441b1f0a9be6808b24b05dddfc5ae",
+    "scMM/file/_native_paths.py": "37542949c60d7b895c642c3526446155e3df16744fa0411e00e8ca271918c160",
+    "scMM/file/readers/thermo_raw.py": "b766c46562837b5c7fa77696321ffaabd91ce6b5ce98ab29b67479aa8edf116f",
+    "scripts/scmm_windows.py": "d3aec0b791adbcdace12d55ad9ca39fc040abddd87e691bddb0790cdbc450b45",
+    "scripts/build_windows.py": "2902ec5f37c2360e08e641759f8061c75ee2671b1b30e3cd48348182c493ffd1",
+    "scripts/validate_windows_runtime.py": "a456260341ca87dee1afca985480a0c4a259193ad2f510d014af15455b2c7f99",
+    "scripts/validate_windows_delivery.py": "b7d5d67deb55b7eea89143e47eb800ae2a3c12973484eab973b867fc236d51b3"
+  },
+  "artifacts": [
+    {
+      "name": "scMM-source-wheel-check.zip",
+      "bytes": 3822707,
+      "sha256": "3839c2444f2e1ac849ba7b4288eadf231b12c7b0404f4a37d43641b4c4ee310e",
+      "manifested_files": 134
+    },
+    {
+      "name": "scMM-WIN01-win-x64-utf8.zip",
+      "bytes": 323072671,
+      "sha256": "73a749a509b786f4144b480374bcd078626cb0fa0e65f4df010073e03b2ba521",
+      "manifested_files": 92
+    }
+  ],
+  "regression": {
+    "passed": 86,
+    "seconds": 12.22,
+    "command": "python -m pytest tests/tooling/test_windows_packaging.py tests/tooling/test_test_blocks.py tests/domain/test_io.py tests/domain/test_thermo_raw.py tests/domain/test_thermo_pipeline.py -q -W error"
+  },
+  "linux_synthetic_smoke": {
+    "native_windows_x64": false,
+    "status": "passed",
+    "checks": {
+      "numpy_scipy_h5ad_scmm": {
+        "status": "passed",
+        "seconds": 0.29146981704980135
+      },
+      "pyopenms_mzml": {
+        "status": "passed",
+        "seconds": 0.2802263870835304
+      },
+      "numba_jit": {
+        "status": "passed",
+        "seconds": 0.47586242388933897
+      },
+      "smote_shap": {
+        "status": "passed",
+        "seconds": 0.7741942079737782
+      },
+      "igraph_leiden_umap": {
+        "status": "passed",
+        "seconds": 11.440811226144433
+      },
+      "plot_resources_tzdata": {
+        "status": "passed",
+        "seconds": 0.035084288101643324
+      },
+      "raw_synthetic_protocol": {
+        "status": "passed",
+        "seconds": 0.26236702082678676
+      }
+    },
+    "seconds": 13.65094815287739
+  },
+  "native_evidence": "windows-win01-native-utf8-pass.json",
+  "native_source_wheel_validation": "pending",
+  "remaining": [
+    "source/wheel delivery native checks",
+    "Windows authentication ACL and persistent task/monitoring platform boundaries",
+    "real RAW and runtime/license checks",
+    "clean-machine and Chinese account",
+    "full installer and UI"
+  ]
+}

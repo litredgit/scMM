@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-10-17T12:15:19.430200+00:00",
+  "scope": "Linux kit construction/integrity and PowerShell parser/helper checks; not native Windows acceptance",
+  "artifact": {
+    "filename": "scMM-WIN01-win-x64.zip",
+    "bytes": 323064373,
+    "sha256": "a087a43f063abed616c1a7b4fd14db79db76988781bfd611fd5cfb129bf3f484",
+    "kit_id": "1df32d5451f4240b5d7d29217ac50b6c952eec5acbe735d1edbd708bbe873ac0",
+    "manifested_files": 91
+  },
+  "source_sha256": {
+    "scripts/build_windows.py": "cf7ad9b559ec8d1716b11d5510fd62abc646d6adee5d0f2316374fac5eee315e",
+    "packaging/windows/run-win01.ps1": "5556750a9fa6d41466e38b7c34b008149d60c153c825d494eb7640c582f7d4da",
+    "packaging/windows/validate-runtime.ps1": "b2d0028e8e9d0ee90f71ea25890ac96441411c5eeddd05e891b120923a544b67",
+    "packaging/windows/build-tools.json": "d65fff78ee9c2f89a46197970286d62c2d352f2aac18b5406b9453de418370f7",
+    "tests/tooling/test_windows_packaging.py": "e0aeb205d7905cb7886a5d69147e59ccd5df77bea67f688ad914fd0cb097b07b"
+  },
+  "checks": {
+    "archive_exact_members_and_sha256": "passed",
+    "packaging_and_test_selector": {
+      "passed": 25,
+      "seconds": 0.97
+    },
+    "powershell_parser": {
+      "version": "7.4.13",
+      "host": "Linux x64",
+      "scripts": 2,
+      "status": "passed"
+    },
+    "native_helper_legacy_arguments_stderr_and_failed_exit": {
+      "host": "Linux",
+      "status": "passed"
+    }
+  },
+  "build_tools": {
+    "uv": {
+      "version": "0.12.3",
+      "url": "https://github.com/astral-sh/uv/releases/download/0.12.3/uv-x86_64-pc-windows-msvc.zip",
+      "sha256": "b23350c79e8ad0192b8124af13a0f17e8d4e4549524785e1aef389ae5a06990e"
+    }
+  },
+  "native_windows_execution": false,
+  "user_acceptance": false,
+  "pending": [
+    "user Windows 11 x64 execution",
+    "actual disconnected networking",
+    "clean-machine condition",
+    "separate Chinese Windows account",
+    "native failure/diagnostic review"
+  ]
+}

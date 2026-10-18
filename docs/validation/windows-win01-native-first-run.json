@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "received_on": "2026-10-18",
+  "date_timezone": "Asia/Shanghai",
+  "scope": "User Windows 11 first run; failure evidence, not acceptance",
+  "attachment_sha256": {
+    "session.json": "a09776e0c0d8dde0f9eb30808846ef83287635a3bb236f58d79f9f5d09724387",
+    "before.json": "9208153f2b3148f333403fbd7e441ef51ab9997896d71cbc0ee094befac63ae3",
+    "diagnostics.txt": "b05f759ba51f553c0eb0de938692a21faebde1e014a612868c44133137b20455"
+  },
+  "kit_id": "1df32d5451f4240b5d7d29217ac50b6c952eec5acbe735d1edbd708bbe873ac0",
+  "os": "Windows-11-10.0.26300-SP0",
+  "python": "3.12.13",
+  "pyopenms": "3.3.0",
+  "native_windows_x64": true,
+  "isolated": true,
+  "offline_assembly": "completed, installed 77 packages; uv pip check reported 78 including bundled pip",
+  "status": "failed",
+  "checks": {
+    "numpy_scipy_h5ad_scmm": {
+      "status": "passed",
+      "seconds": 2.73499999998603
+    },
+    "pyopenms_mzml": {
+      "status": "failed"
+    },
+    "numba_jit": {
+      "status": "passed",
+      "seconds": 1.437000000034459
+    },
+    "smote_shap": {
+      "status": "passed",
+      "seconds": 7.796999999962281
+    },
+    "igraph_leiden_umap": {
+      "status": "passed",
+      "seconds": 20.35899999999674
+    },
+    "plot_resources_tzdata": {
+      "status": "passed",
+      "seconds": 0.06300000002374873
+    }
+  },
+  "failure": "PyOpenMS MzMLFile.store could not create the requested Unicode directory/filename; cause under diagnosis",
+  "seconds": 32.68699999997625,
+  "peak_working_set_bytes": 549539840,
+  "runtime_bytes": 1121518006,
+  "host_tools_on_path": {
+    "node": true,
+    "uv": false,
+    "dotnet": true,
+    "python": true
+  },
+  "chinese_user_name": false,
+  "relocation": "not reached",
+  "offline_condition": "not independently confirmed",
+  "pending": [
+    "ASCII baseline and Unicode filename/parent isolation",
+    "native string vs UTF-8/ACP bytes diagnosis",
+    "path fix and relocation rerun",
+    "clean-machine and Chinese account validation"
+  ]
+}

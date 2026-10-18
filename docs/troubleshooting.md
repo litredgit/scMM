@@ -240,6 +240,18 @@ engine.adata.uns["metabolite_trends"]["pooled"]
 
 ## 网页任务与服务
 
+Windows WIN-01 离线验证若在 `Running scientific checks` 后失败，先读取 `before.json` 的
+具体失败项；最外层 `run-win01.ps1` 的 throw 只是汇总。已观察到 PyOpenMS 3.3.0
+创建中文 mzML 路径失败，其余五组计算通过的情况。保留原环境与日志，使用
+[小型路径诊断](windows-distribution.md#首轮实机失败与小型诊断)区分直接读写/路径编码，
+不要把更改系统区域设置、重命名原始文件或重新下载依赖作为已经验证的修复。
+
+源码/wheel 复核若停在 `Copying the packaged dependency seed`，总报告包含大量
+`shutil.Error` / `[WinError 3]`，核对失败目标的完整路径长度。已观察到旧入口将复核目录
+嵌套在中文搬迁目录中，88 个目标达到 260–276 个 UTF-16 单位；此时计算检查尚未开始。
+使用更新后的短目录复核入口，保留原种子和失败报告；若预检查仍提示路径过长，指定更短的
+`--output <新目录>`。无需重新下载依赖，操作见[双入口复核](windows-distribution.md#源码与-wheel-独立复核)。
+
 - **打开项目报 `'ascii' codec can't decode`**：中文全局预设按 UTF-8 保存，但旧代码可能随进程默认编码读取。
   本机 PyOpenMS 导入会将原生 locale 切换为 `C`，即使 `LANG` 原先是 UTF-8 也可能出现。
   修复使用显式 UTF-8 读取预设/缓存；旧服务可启用 `PYTHONUTF8=1` 后重启，

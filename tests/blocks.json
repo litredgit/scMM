@@ -13,6 +13,7 @@
       ],
       "sources": [
         "scMM/file/io.py",
+        "scMM/file/_native_paths.py",
         "scMM/file/_spectrum.py",
         "scMM/file/_alignment.py",
         "scMM/file/_dataset_loading.py",
@@ -186,10 +187,12 @@
         "tests/tooling/test_sensitive_check.py",
         "tests/tooling/test_snapshot_import.py",
         "tests/tooling/test_windows_read_mode.py",
+        "tests/tooling/test_windows_packaging.py",
         "tests/tooling/test_test_blocks.py"
       ],
       "sources": [
         "scripts/*",
+        "packaging/windows/*",
         "tests/blocks.json",
         ".github/*",
         "config/environments.example.json",
