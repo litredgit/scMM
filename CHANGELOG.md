@@ -5,6 +5,47 @@
 
 ## Unreleased
 
+### REV-01 / REV-06 用户验收与发布核对 — 2026-10-18
+
+- 用户明确确认本次验收通过，范围为 REV-01 强度来源/reset/restore/保存重载、MOD-01 的来源共享部分及 REV-06 插补轴保持，连同相关回归和文档。此前本机 469 项 Python、19 项分批浏览器、文档/构建/扫描证据继续适用；本次只更新验收/发布记录，未重复运行无代码变化的算法检查，不扩展为真实实验或 AI 助手验收。
+- 生产发布前验证配置、独立资源、fresh ready、连接及任务/worker 均允许更新，但生产 `02d5e94` 到 dev 还包含 `666f95c` 脂质网络、`29cd07c` 分析页重构和 `c8b00a8` AI 助手三个前置功能提交。前两项历史授权为只提交，AI 仍待验收；直接 release 会超出本次验收范围，已集中向用户询问一并发布授权。先完成本次提交与 dev 推送，生产操作依该回答继续，不绕过快进发布或监控检查。
+- 用户随后明确授权上述三个前置提交与 REV-01/REV-06 一并发布，并明确不视为 AI 助手验收通过；发布范围据此确认，AI 待验收事项继续保留。
+
+### REV-01：强度来源与恢复起点（用户验收通过）— 2026-10-18
+
+- 用户接受旧文件兼容建议：缺少可靠来源时标为 unknown，允许导入、常规分析和保存，但不能用于要求原始强度的注释/网络证据。该确认是兼容策略决定，不作为本项或 REV-06 的用户验收，也不作为提交、推送或生产发布授权；保留起始工作区的交接文档及 REV-06 未提交修改。
+- 新增领域辅助模块 `util/intensity.py`，集中 raw、仅 `total`/`max`/`pqn` 归一化、已插补/其他变换、未知来源的分类与传播。注释后端检查和网络可选层使用同一规则，SNR 始终排除；旧层名、非负值、空历史和 reset 不再证明 raw。H5AD 使用独立版本化来源 JSON，畸形/不支持版本报错；旧历史只用于识别已有变换，不补造原始来源。
+- 工作区导入及每次变换保存 X/各层来源，reset 从完整 baseline 恢复真实来源，restore 使用选定层来源；项目重载分别校验 current 与 baseline。新原始谱提取显式记录 raw，Python normalize/impute、同位素求和及两条合并入口传播来源，H5AD/旧目录往返保留状态，不改变数值算法或公开门面。不同时处理 REV-04 的 Python 下游结果失效问题。
+- 新增合成回归覆盖原始/归一化/插补 H5AD 的反复导入、reset/restore、项目独立恢复起点、旧来源未知文件、畸形来源导入失败保留旧工作区、Python/旧目录往返和混合来源合并。既有真实解析小型合成 mzML 的 shared/independent 批次测试增加 raw 来源断言；脂质领域/浏览器合成夹具显式声明生成来源，不将夹具声明用于推断旧用户数据。
+- 同步数据格式、分析含义、参数、排错、开发模块职责及 roadmap；MOD-01 的强度来源共享部分随本项完成，结果生命周期部分仍归 REV-04。真实实验、历史文件来源人工核实、远端 CI 和用户验收尚未执行。
+- 本机按 `scripts/test_blocks.py --write-plan /tmp/scmm-rev01-final-plan.json` 的影响映射检查；Python 使用实现阶段同范围计划 `/tmp/scmm-rev01-plan.json --phase python --run`，**469 项通过（82.63s）**，保持 `python -m pytest -q -W error`。最终计划的 Ruff 格式/规则、前端类型检查/构建、相关文档链接/锚点与示例语法 **15 项**通过。wheel/sdist 构建及独立安装本次 wheel 后的“已变换 X/未变换输入层”H5AD 往返通过；当前改动扫描 28 文件、产物扫描 146 文件无规则命中，差异检查通过。
+- 浏览器使用临时共享库/字体配置和隔离合成服务器，主批 **18 项通过、1 项失败**；失败的普通 HTTP 用例请求 `scmm.test` 返回 502，补入 `NO_PROXY`/`no_proxy` 后仅定向复核 `insecure-http.spec.ts`，**1 项通过（2.9s）**，未修改产品代码或测试断言。共 19 项分批通过，保留主批失败及环境处置证据；无真实实验或用户验收结论。
+- 更新前重新验证开发配置、5007 独立项目根、监控协议/新鲜度及活动/失联页面、未保存/忙碌/未知工作区、任务和在途请求，全部允许更新；停止开发服务后以 `scripts/scmm_env.py sync dev` 完成锁定同步及前端重建。`scmm-dev.service` 于 **2026-10-18 04:57:10 UTC** 启动，PID **1796002**、active/running、重启计数 0；首页与健康接口 HTTP 200，fresh runtime ready、无阻塞。5006 保持 PID **1459660**、active/running，未操作；所有改动保持未提交、未推送、未部署生产，REV-01/REV-06 均待用户验收。
+
+### 审阅改进首个修复：REV-06 插补轴保持（用户验收通过）— 2026-10-18
+
+- 起始核对为 `dev`，保留已有 CHANGELOG、文档索引、开发指南、roadmap 及未跟踪交接文档的修改。按交接优先复现 REV-01：已插补 H5AD 导入后 reset 不改矩阵，却让 X/reset 层被当作 raw；归一化及插补的临时回归均复现。旧 H5AD 缺少可靠来源时的兼容策略已向用户提问，尚未收到决定，本轮未修改 REV-01 实现或默认解释。
+- 等待期间独立修复 REV-06：Python 默认 KNN 与 SimpleImputer 均强制保留全空特征；拒绝 `keep_empty_features=False`，保持原细胞/特征轴。计算使用候选输入副本，验证形状及有限值后才替换矩阵，估计器异常、错误形状及非有限结果保留原状态；不改变各入口默认方法或已有非空列插补定义。
+- 新增 16 项合成回归，覆盖 KNN/mean/median/most_frequent 的全空列、零值/NaN 全空矩阵、已观测值及元数据/SNR 保留，并注入异常、形状丢失及非有限结果检查失败语义。修复前针对性复现 5 项失败；修复后按 `scripts/test_blocks.py --files scMM/file/_dataset_processing.py tests/domain/test_data.py --write-plan /tmp/scmm-rev06-plan.json` 计算影响范围，`--plan /tmp/scmm-rev06-plan.json --phase python --run` 本机 **341 项通过**（`python -m pytest -q -W error`）。Ruff 格式/规则、前端类型检查及构建通过，保留既有 Plotly 大包提示；`uv build --no-sources` wheel/sdist 构建通过，独立临时环境安装本次 wheel 后，默认 KNN 数值对照与 `scmm-process --help` 通过。
+- 同一计划的 `--phase browser --run` 首次因本机缺 Chromium 的 libatk 等共享库未进入页面；复用已有 `/tmp/scmm-ui-browser-deps` 库和字体配置后，隔离合成浏览器 **14 项通过**（51.0s）。相关文档的 `--phase docs --run` **15 项通过**；源码/文档敏感扫描 8 文件、产物扫描 146 文件均无规则命中，差异检查通过。浏览器证据不替代真实实验或用户验收。
+- 同步参数正文、roadmap 待验收状态及交接材料的证据边界。未执行真实实验、干净环境安装或远端 CI；REV-01～05、07～09 及其余里程碑保持待办，不把本项修复视为整份改进计划完成。
+- 更新前再次校验开发配置、5007 独立项目根及 fresh 协议 1 活动证据，无活动/失联页面、未保存/忙碌/未知工作区、任务或在途请求；停止开发服务后以 `scripts/scmm_env.py sync dev` 锁定同步及重建前端，`scmm-dev.service` 于 **2026-10-18 04:49:41 UTC** 启动，PID **1769529**、active/running、重启计数 0。首页和 `/api/v1/health` 均 HTTP 200，fresh runtime ready、无阻塞。5006 保持 PID **1459660**、active/running，未操作生产；本轮保持未提交、未推送、未部署生产，等待 REV-06 用户验收及 REV-01 兼容策略决定。
+
+### 全面审阅与改进交接 — 2026-10-18
+
+- 本轮起始核对为干净的 `dev / c8b00a8cb02f9b9b64c2aa70e39c77bfa16b8b7d`，与本地 origin/dev 跟踪引用一致，未实时查询远端。生产工作树为 `02d5e94`；只读查询确认 5006/5007 systemd active/running、重启计数 0，最小健康接口 HTTP 200。工作树和健康接口不作为服务加载资源、可重启状态或全流程验收证据。
+- 前一轮只读审阅在小型合成数据、临时目录及故障注入中复现：导入已插补 H5AD 后 reset 误判原始强度、quantile 并列值的细胞顺序依赖、旧目录覆盖保存中断后新矩阵混用旧元数据、Python 归一化后导出保留旧嵌入/参数、监督报告缺有效训练配置、默认 KNN 全零列维度错误、PQN NumPy 参考谱异常；另以缺依赖导入模拟定位 networkx 隔离问题，以实际选择器输出确认 workspace store 改动漏选 browser-ai。这些发现不表示真实实验结果已受到影响，也不代表已完成修复。
+- 同一会话前一轮本机针对性回归分两组运行，第一组 **103 项通过（31.65s）**，第二组 **142 项通过（20.47s）**，合计 **245 项**。公共前缀为 `PYTHONDONTWRITEBYTECODE=1 PYTHONUTF8=1 MPLCONFIGDIR=/tmp/scmm-review-mpl .venv/bin/python -m pytest`，公共后缀为 `-q -W error -p no:cacheprovider -o faulthandler_timeout=60`；中间分别为以下文件列表。它们是审阅基线，未在纯文档整理时重复执行，终端输出未另存机器报告。
+
+```text
+第一组：tests/domain/test_normalize.py tests/domain/test_analysis.py tests/domain/test_probability_diagnostics.py tests/domain/test_h5ad_interop.py tests/application/test_workbench_state.py tests/application/test_projects.py tests/api/test_web_workflow.py tests/api/test_authentication.py tests/api/test_ai_assistant.py tests/tooling/test_documentation.py
+第二组：tests/domain/test_lipid_annotation.py tests/api/test_web_lipids.py tests/domain/test_io.py tests/domain/test_peak.py tests/domain/test_thermo_raw.py tests/domain/test_thermo_pipeline.py tests/application/test_processing_tasks.py tests/application/test_project_batch.py tests/application/test_preview_cache.py
+```
+
+- 前一轮 `npm --prefix frontend run typecheck`、`.venv/bin/python -m ruff check scMM scripts tests` 通过；`.venv/bin/python scripts/check_sensitive.py` 检查当前范围 430 个文件，规则无命中，未重新审计 Git 历史。未执行全量浏览器、真实实验、干净机器安装、公网压力或本轮远端 CI；既有测试通过与新增反例同时保留，不把回归通过等同科学验收。
+- 用户要求综合前述审阅并补充代码模块化、文档、前端三方面，写入文档交给另一会话实施。新增 `docs/improvement-review.md` 保存证据、代码入口、REV-01～09、MOD-01～04、DOC-02～04、FE-01～04 的实施边界与验收要求；roadmap 统一维护任务状态，默认起点调整为正确性修复，再继续 M1/M2；同步文档索引和开发指南，修正浏览器块说明遗漏 AI 的事实漂移。未将建议写成当前能力或已验收实现，AGENTS 的主要设计与协作规则保持。
+- 本次选择器仅选中 docs 块；`.venv/bin/python scripts/test_blocks.py --plan /tmp/scmm-review-docs-plan.json --phase docs --run` 的相关文档链接/锚点及 Python 示例语法检查 **15 项通过**；`scripts/check_sensitive.py --files CHANGELOG.md docs/README.md docs/development.md docs/improvement-review.md docs/roadmap.md` 检查 5 份改动文档无规则命中，Git 差异检查通过。本轮仅整理交接文档，未改运行代码、锁定依赖或静态资源，未操作开发/生产服务，未提交、推送或部署；后续实现及发布依当前会话授权和 AGENTS 执行。
+
 ### AI 分析助手首版（实现待用户验收）— 2026-10-17
 
 - 起始核对为干净的 `dev`，领先 `origin/dev` 两个提交；5007/5006 均在运行。新增个人 `Base URL` / `Model` / `API Key` 配置、保存/最小连接测试/删除，使用独立 SQLite 与 `cryptography.Fernet` 加密整个配置元组并绑定用户。主密钥与数据库分别置于仓库及项目根外，启动不自动生成或回退；新增 `scmm-admin init-ai`，失败回收本次创建文件。保存必须同时提供新 Key，网页不回显 Key；`httpx` 移入 web 运行依赖，新增 cryptography 并通过 uv 锁定。

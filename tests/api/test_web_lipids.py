@@ -28,6 +28,27 @@ def run_lipids(workflow, **overrides):
     return get(workflow, "/lipids").json()["active"]
 
 
+def test_unknown_import_origin_is_not_offered_or_accepted_after_reset(workflow, monkeypatch):
+    from scMM.util.intensity import PROVENANCE_KEY
+
+    data = setup_lipids(workflow, monkeypatch)
+    del data.uns[PROVENANCE_KEY]
+    data.write_h5ad(workflow[4] / "unknown.h5ad")
+    post = workflow[-1]
+    post("/dataset/import", {"root": "Output", "path": "unknown.h5ad"}).raise_for_status()
+    for reopen in (False, True):
+        if reopen:
+            post("/project/save").raise_for_status()
+            path = workflow[-2]()["project"]["path"]
+            post("/project/open", {"path": path}).raise_for_status()
+        post("/analysis/operation", {"operation": "reset", "options": {}}).raise_for_status()
+        summary = get(workflow, "/lipids").json()
+        assert summary["layers"] == [] and summary["molecule_layers"] == []
+        response = post("/lipids/run", {"options": options()})
+        assert response.status_code == 400
+        assert "来源未知" in response.text
+
+
 def query(workflow, version, **kwargs):
     response = workflow[-1]("/lipids/query", {"version": version, **kwargs})
     assert response.status_code == 200, response.text

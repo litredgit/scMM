@@ -17,6 +17,8 @@ from uuid import uuid4
 
 from anndata import read_h5ad
 
+from scMM.util.intensity import intensity_states, write_intensity_states
+
 from .naming import beijing_time, project_dataset_filename, safe_name
 from .parameters import load_defaults
 from .processing import ProcessingParameters
@@ -244,6 +246,7 @@ class ProjectStore:
             baseline = read_h5ad(child_path(folder, artifacts["baseline"]))
             project.workspace.replace(data, source=str(folder))
             project.workspace._validate(baseline)
+            write_intensity_states(baseline, intensity_states(baseline))
             project.workspace._original = baseline
             project.saved_reports = json.loads(
                 data.uns.get("scmm_workbench", {}).get("reports_json", "{}")

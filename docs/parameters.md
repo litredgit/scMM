@@ -110,6 +110,8 @@ OUTLIER_OPTIONS = dict(contamination="auto", random_state=42)
 | `IMPUTE_OPTIONS` | `n_neighbors=5` | 传给相应 scikit-learn imputer | KNN 可从 5 开始；细胞少时不得超过有效样本规模 |
 
 API 默认是 `impute(method="knn", missing_values=0)`。所有方法都会修改当前对象，并保留原行列索引。
+KNN、mean、median、most_frequent 保留全空特征列，并将该列填为 0；不会删除特征或更改细胞/特征元数据。
+`keep_empty_features` 固定为 `True`，显式传入 `False` 会报错。结果形状或有限值检查失败时保留原矩阵。
 
 ### 归一化
 
@@ -205,6 +207,8 @@ Notebook 和 API 的默认方法都是 `total`；Notebook 默认额外传入 `sc
 | `representative_feature` | 自动 | 检出率优先，再按原始平均强度破同分，两者均各样本等权；可人工指定该无歧义分子的特征 |
 
 注释辅助与 m/z 特征网络共用未变换、未插补原始强度；天然同位素比例仍使用该原始层。
+旧 H5AD/项目没有可靠溯源时允许常规分析，但不提供为上述可选强度层；reset/restore 不改变来源定义。
+具体兼容与恢复规则见[强度溯源](data-output.md#强度溯源)。
 分子网络 `total` 的分母在本次输入的完整特征集合上计算，不随候选、代表离子或显示筛选重算，
 也不覆盖当前 `X`。已有层按其完整溯源使用，不因数值相似而假定匹配当前原始输入。
 导入初始层是否真实原始强度仍须由使用者核对；系统无法从数值逆推导入前处理历史。

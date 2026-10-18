@@ -6,6 +6,7 @@ from anndata import AnnData
 from pyopenms import EmpiricalFormula
 
 from scMM.application.workbench import AnalysisWorkspace
+from scMM.util.intensity import write_intensity_states
 from scMM.util.lipid_isotopes import ADDUCTS, adduct_shift, resolved_distribution
 
 
@@ -55,6 +56,7 @@ def synthetic_data(adduct="[M+H]+", ratios=(1.0, 1.0), duplicate=False):
         var=pd.DataFrame({"mz": masses}, index=[f"f{i}" for i in range(len(masses))]),
     )
     state = AnalysisWorkspace()
+    write_intensity_states(data, {"X": "raw"})
     state.replace(data)
     data = state.require_data()
     data.layers["feature_snr"] = np.ones(data.shape) * 50

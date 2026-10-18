@@ -12,6 +12,7 @@ import pandas as pd
 from anndata import AnnData
 
 from ..util.annotation import SDFMzSearcher
+from ..util.intensity import dataset_intensity_state, intensity_states, write_intensity_states
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,9 @@ class DatasetInteropMixin:
         }
         if hasattr(self, "feature_snr"):
             adata.layers["feature_snr"] = self.feature_snr.to_numpy(copy=True)
+        states = intensity_states(adata) if template is not None else {}
+        states["X"] = dataset_intensity_state(self)
+        write_intensity_states(adata, states)
         return adata
 
     @classmethod
@@ -118,6 +122,7 @@ class DatasetInteropMixin:
         if payload.get("schema_version", 1) != 1:
             raise ValueError("unsupported scMM H5AD schema version")
         metadata = json.loads(payload.get("file_meta_json", "{}"))
+        metadata["intensity_state"] = intensity_states(data)["X"]
         metadata.setdefault("name", name)
         if ref_mz is not None:
             metadata["ref_mz"] = ref_mz

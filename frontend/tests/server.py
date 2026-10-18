@@ -85,6 +85,9 @@ def main():
                 index=["f_h", "f_iso", "f_na", "f_unknown"],
             ),
         )
+        from scMM.util.intensity import write_intensity_states
+
+        write_intensity_states(lipids, {"X": "raw"})
         lipids.write_h5ad(results / "lipids.h5ad")
         database = root / "lipid-database"
         database.mkdir()

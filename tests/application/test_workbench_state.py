@@ -13,7 +13,9 @@ from scMM.application.workbench import AnalysisWorkspace, read_dataset
 
 
 def example():
-    return AnnData(
+    from scMM.util.intensity import write_intensity_states
+
+    data = AnnData(
         np.random.default_rng(12).uniform(1, 3, (80, 5)),
         obs=pd.DataFrame(
             {"condition": ["a", "b"] * 40, "sample": np.repeat(np.arange(20).astype(str), 4)},
@@ -21,6 +23,8 @@ def example():
         ),
         var=pd.DataFrame({"mz": np.arange(100.0, 105.0)}, index=list(map(str, range(100, 105)))),
     )
+    write_intensity_states(data, {"X": "raw"})
+    return data
 
 
 def workspace():
@@ -101,6 +105,56 @@ def test_h5ad_history_safe_save_and_read(tmp_path):
     if os.name != "nt":
         with pytest.raises(ValueError, match="Windows"):
             catalog.resolve("云盘", "C:\\data\\result.h5ad")
+
+
+@pytest.mark.parametrize("operation", ["raw", "normalize", "impute"])
+def test_imported_intensity_keeps_baseline_state_across_reset_restore(tmp_path, operation):
+    from scMM.util.intensity import intensity_states
+    from scMM.util.lipid_annotation import dataset_inputs
+    from scMM.util.lipid_network import intensity_layers
+
+    state = workspace()
+    if operation != "raw":
+        getattr(state, operation)("total" if operation == "normalize" else "median")
+    path = tmp_path / "processed.h5ad"
+    state.data.write_h5ad(path)
+    imported = AnalysisWorkspace()
+    imported.replace(read_h5ad(path))
+    before = imported.data.X.copy()
+    expected = {"raw": "raw", "normalize": "normalized", "impute": "transformed"}[operation]
+    for _ in range(2):
+        imported.impute()
+        imported.reset()
+        np.testing.assert_array_equal(imported.data.X, before)
+        assert intensity_states(imported.data)["X"] == expected
+        layers = intensity_layers(imported.data)
+        assert ("X" in layers["raw"]) == (operation == "raw")
+        assert ("X" in layers["molecule"]) == (operation != "impute")
+        reset_layer = imported.history()[-1]["layer"]
+        assert intensity_states(imported.data)[reset_layer] == expected
+        imported.restore(reset_layer)
+        assert intensity_states(imported.data)["X"] == expected
+        if operation == "raw":
+            dataset_inputs(imported.data, "X")
+        else:
+            with pytest.raises(ValueError):
+                dataset_inputs(imported.data, "X")
+        # The original input layer remains raw even when the import baseline is processed.
+        dataset_inputs(imported.data)
+        imported.data.write_h5ad(path)
+        imported.replace(read_h5ad(path))
+
+
+def test_invalid_provenance_import_preserves_usable_workspace():
+    from scMM.util.intensity import PROVENANCE_KEY
+
+    state = workspace()
+    before, token = state.data, state.token
+    bad = example()
+    bad.uns[PROVENANCE_KEY] = '{"schema_version": 2, "states": {"X": "raw"}}'
+    with pytest.raises(ValueError, match="intensity provenance"):
+        state.replace(bad)
+    assert state.data is before and state.token == token
 
 
 @pytest.mark.parametrize("model,params", [("lda", {}), ("plsda", {})])

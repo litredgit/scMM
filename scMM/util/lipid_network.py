@@ -8,6 +8,7 @@ from itertools import combinations
 import numpy as np
 from scipy.stats import rankdata
 
+from .intensity import intensity_states
 from .normalize import normalize
 
 DEFAULTS = {
@@ -75,33 +76,10 @@ def sample_conditions(data, samples, options):
 
 def intensity_layers(data):
     """Only offer layers with known untransformed or normalization-only provenance."""
-    metadata = data.uns.get("scmm_workbench", {})
-    original = metadata.get("original_layer", "")
-    states = {original: "raw"} if original else {"X": "raw"}
-    state = "raw"
-    for step in json.loads(metadata.get("history_json", "[]")):
-        operation = step.get("operation")
-        if operation == "impute":
-            state = "invalid"
-        elif operation == "normalize":
-            method = step.get("parameters", {}).get("method")
-            state = (
-                "intensity"
-                if state != "invalid" and method in {"total", "max", "pqn"}
-                else "invalid"
-            )
-        elif operation == "restore":
-            state = states.get(step.get("parameters", {}).get("layer"), "invalid")
-        elif operation == "reset":
-            state = "raw"
-        if step.get("layer"):
-            states[step["layer"]] = state
-    states["X"] = state
+    states = intensity_states(data)
     return {
         "raw": [k for k, v in states.items() if v == "raw" and (k == "X" or k in data.layers)],
-        "molecule": [
-            k for k, v in states.items() if v != "invalid" and (k == "X" or k in data.layers)
-        ],
+        "molecule": [k for k, v in states.items() if v in {"raw", "normalized"}],
     }
 
 

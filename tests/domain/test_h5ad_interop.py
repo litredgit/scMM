@@ -4,6 +4,7 @@ import pytest
 from anndata import AnnData, read_h5ad
 
 from scMM.file.data import CyESIData
+from scMM.util.intensity import PROVENANCE_KEY, intensity_states, write_intensity_states
 
 
 def source():
@@ -16,6 +17,101 @@ def source():
     data.obsm["X_pca"] = np.array([[1.0, 2.0], [2.0, 3.0], [3.0, 4.0]])
     data.uns["experiment"] = {"name": "example"}
     return data
+
+
+def test_unrecorded_origin_is_not_inferred_from_names_values_or_reset(tmp_path):
+    from scMM.application.workbench import AnalysisWorkspace
+    from scMM.util.lipid_annotation import dataset_inputs
+    from scMM.util.lipid_network import intensity_layers
+
+    data = source()
+    data.layers["raw"] = data.X.copy()
+    data.uns["scmm_workbench"] = {"original_layer": "raw", "history_json": "[]"}
+    state = AnalysisWorkspace()
+    state.replace(data)
+    state.normalize("total")
+    state.reset()
+    assert intensity_layers(state.data) == {"raw": [], "molecule": []}
+    for layer in ["X", "raw", state.history()[-1]["layer"]]:
+        with pytest.raises(ValueError, match="来源未知"):
+            dataset_inputs(state.data, layer)
+    # Unknown origin does not prevent normal analysis or independent persistence.
+    state.reduce("pca", store_key="X_pca_new")
+    exported = CyESIData.from_anndata(state.data).save_h5ad(tmp_path / "unknown.h5ad")
+    restored = CyESIData.read_h5ad(exported).to_anndata()
+    assert intensity_states(restored)["X"] == "unknown"
+    np.testing.assert_array_equal(restored.X, data.X)
+
+
+@pytest.mark.parametrize(
+    "operation,expected", [("normalize", "normalized"), ("impute", "transformed")]
+)
+def test_python_transform_lineage_survives_h5ad_and_legacy_save(tmp_path, operation, expected):
+    data = source()
+    write_intensity_states(data, {"X": "raw"})
+    dataset = CyESIData.from_anndata(data)
+    getattr(dataset, operation)("total" if operation == "normalize" else "median")
+    adata = dataset.to_anndata()
+    assert intensity_states(adata)["X"] == expected
+    folder = dataset.save(tmp_path)
+    assert intensity_states(CyESIData.load_from_processed(folder).to_anndata())["X"] == expected
+    path = dataset.save_h5ad(tmp_path / "processed.h5ad")
+    assert intensity_states(CyESIData.read_h5ad(path).to_anndata())["X"] == expected
+
+
+def test_legacy_imputation_history_cannot_become_raw_by_reset():
+    import json
+
+    from scMM.application.workbench import AnalysisWorkspace
+
+    data = source()
+    data.uns["scmm_workbench"] = {
+        "history_json": json.dumps([{"operation": "impute", "layer": "imputed"}])
+    }
+    data.layers["imputed"] = data.X.copy()
+    state = AnalysisWorkspace()
+    state.replace(data)
+    state.reset()
+    assert intensity_states(state.data)["X"] == "transformed"
+    state.restore("imputed")
+    assert intensity_states(state.data)["X"] == "transformed"
+
+
+@pytest.mark.parametrize("payload", ["[]", "null", '{"schema_version":1,"states":{"X":"invalid"}}'])
+def test_malformed_lineage_is_rejected(payload):
+    data = source()
+    data.uns[PROVENANCE_KEY] = payload
+    with pytest.raises(ValueError, match="intensity provenance"):
+        CyESIData.from_anndata(data)
+
+
+@pytest.mark.parametrize("method,expected", [("total", "normalized"), ("log", "transformed")])
+def test_lineage_never_recovers_from_imputation_by_normalizing(method, expected):
+    from scMM.application.workbench import AnalysisWorkspace
+
+    state = AnalysisWorkspace()
+    data = source()
+    write_intensity_states(data, {"X": "raw"})
+    state.replace(data)
+    state.normalize(method)
+    assert intensity_states(state.data)["X"] == expected
+    state.impute()
+    state.normalize(method)
+    assert intensity_states(state.data)["X"] == "transformed"
+
+
+@pytest.mark.parametrize("method", ["alignwith", "merge_objects"])
+def test_merging_unknown_or_transformed_intensity_does_not_invent_raw(method):
+    from scMM.file._sequential import merge_objects
+
+    left = source()
+    write_intensity_states(left, {"X": "raw"})
+    for provenance in ("unknown", "transformed", "raw"):
+        right = source()
+        write_intensity_states(right, {"X": provenance})
+        a, b = CyESIData.from_anndata(left), CyESIData.from_anndata(right)
+        result = a.alignwith(b) if method == "alignwith" else merge_objects(CyESIData, [a, b], 0)
+        assert intensity_states(result.to_anndata())["X"] == provenance
 
 
 def test_h5ad_and_legacy_directory_round_trip(tmp_path):

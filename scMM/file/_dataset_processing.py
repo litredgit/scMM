@@ -12,6 +12,7 @@ from scipy.ndimage import median_filter
 from sklearn.ensemble import IsolationForest
 from sklearn.impute import KNNImputer, SimpleImputer
 
+from ..util.intensity import dataset_intensity_state, merged_intensity_state, transformed_state
 from ..util.normalize import normalize
 from ..util.peak import find_cell_peaks
 from ._dataset_loading import DatasetState
@@ -44,6 +45,7 @@ class DatasetProcessingMixin:
         cell_min_signal: float = 1e5,
         **kwargs,
     ) -> Self:
+        input_state = dataset_intensity_state(self)
         if self.ref_mz is None or not np.isfinite(self.ref_mz) or self.ref_mz <= 0:
             raise ValueError("A positive finite ref_mz is required for preprocessing")
         if extraction_method not in {"legacy", "snr_v1"}:
@@ -137,20 +139,30 @@ class DatasetProcessingMixin:
                 noise_window=noise_window,
             )
         self.file_meta["length"] = self.data.shape[0]
+        self.file_meta["intensity_state"] = (
+            "transformed" if input_state == "normalized" else input_state
+        )
         return self
 
     def impute(self, method: str = "knn", missing_values=0, **kwargs) -> Self:
         logger.info("Imputing %s with method %s", self.get_name(), method)
+        if kwargs.get("keep_empty_features", True) is not True:
+            raise ValueError("keep_empty_features must be True to preserve the feature axis")
+        kwargs["keep_empty_features"] = True
         if method == "knn":
             imputer = KNNImputer(missing_values=missing_values, **kwargs)
         else:
-            kwargs.setdefault("keep_empty_features", True)
             imputer = SimpleImputer(missing_values=missing_values, strategy=method, **kwargs)
-        self.data = pd.DataFrame(
-            imputer.fit_transform(self.data),
+        values = imputer.fit_transform(self.data.copy())
+        if values.shape != self.data.shape or not np.isfinite(values).all():
+            raise ValueError("imputation must preserve matrix shape and produce finite values")
+        candidate = pd.DataFrame(
+            values,
             index=self.data.index,
             columns=self.data.columns,
         )
+        self.data = candidate
+        self.file_meta["intensity_state"] = "transformed"
         return self
 
     def remove_outlier(self, **kwargs) -> Self:
@@ -163,11 +175,14 @@ class DatasetProcessingMixin:
 
     def normalize(self, method: str = "total", **norm_kwargs) -> Self:
         logger.info("Normalizing %s with method %s", self.get_name(), method)
-        self.data = pd.DataFrame(
+        state = transformed_state(dataset_intensity_state(self), "normalize", {"method": method})
+        candidate = pd.DataFrame(
             normalize(self.data.values, method, norm_kwargs),
             index=self.data.index,
             columns=self.data.columns,
         )
+        self.data = candidate
+        self.file_meta["intensity_state"] = state
         return self
 
     def alignwith(
@@ -242,6 +257,8 @@ class DatasetProcessingMixin:
                 self.feature_snr = self.feature_snr.loc[:, self.data.columns]
         if not hasattr(self, "file_meta") or self.file_meta is None:
             self.file_meta = {}
+        if merge_mode == "sum":
+            self.file_meta["intensity_state"] = "transformed"
         self.file_meta["deisotope"] = {
             "params": result["params"],
             "n_candidate_pairs": len(result["candidate_table"]),
@@ -283,6 +300,7 @@ def merge_dataset_states(left, right, ppm_tol: float, merge_mode: str) -> Datase
             "name": f"{left.get_name()}+{right.get_name()}",
             "ref_mz": left.ref_mz,
             "per_file_meta": [*_source_metadata(left), *_source_metadata(right)],
+            "intensity_state": merged_intensity_state(left, right),
         },
         ref_mz=left.ref_mz,
     )

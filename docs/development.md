@@ -4,6 +4,8 @@
 
 本页负责模块分工、扩展方式、兼容性回归、检查与发布流程。主要设计和协作规则见
 [AGENTS.md](../AGENTS.md)，环境安装见安装说明；实现进展不在本页维护。
+2026-10-18 的改进依据与实施建议见[审阅交接](improvement-review.md)，任务当前状态见
+[roadmap](roadmap.md#审阅新增改进)；建议中的模块拆分不代表本页所述现有结构已经改变。
 
 ## 代码结构
 
@@ -59,6 +61,7 @@ scMM/
 ├── util/
 │   ├── peak.py            # 局部谱统计与细胞事件窗口归约
 │   ├── normalize.py       # 归一化注册表和内置方法
+│   ├── intensity.py       # 共享强度来源分类、变换传播与版本化持久化
 │   ├── annotation.py      # SDF 读取与稳定搜索门面
 │   ├── _adducts.py        # 加合物定义与质量换算
 │   ├── _annotation_search.py # 候选生成、排序与结果模式
@@ -187,7 +190,7 @@ frontend/tests/  # fixtures.ts、server.py 和按交互划分的 spec
 | `auth` / `monitor` | 认证/服务器配置及管理员监控 |
 | `tooling` | 发布阻塞与回滚、扫描、上游快照、跨平台导入与分块选择 |
 | `docs` / `notebook` | 受影响文档的链接/锚点与 Python 示例；Notebook 清洁及语法 |
-| `browser-*` | 项目、工作流、导航、登录/普通 HTTP、监控、脂质六块；七个 spec |
+| `browser-*` | 项目、工作流/分析、导航、登录/普通 HTTP、监控、脂质及 AI；实际 spec 与影响范围以 blocks.json 为准 |
 
 数值断言集中领域层，应用层验证失败/恢复和生命周期，API 验证边界/序列化/状态，浏览器保留真实交互。
 不同边界不能只因功能同名而删除；共享构造从 `support` 导入，不从另一个测试文件导入。

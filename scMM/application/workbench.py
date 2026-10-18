@@ -20,6 +20,7 @@ from scMM.analysis.embedding import reduce_dimension
 from scMM.analysis.quality import quality_metrics
 from scMM.analysis.statistics import feature_correlation_network, marker_features
 from scMM.file.data import CyESIData
+from scMM.util.intensity import intensity_states, transformed_state, write_intensity_states
 from scMM.util.normalize import normalize
 
 
@@ -90,17 +91,20 @@ class AnalysisWorkspace:
             raise ValueError("invalid scmm_workbench metadata")
         if metadata.get("schema_version", 1) != 1:
             raise ValueError("unsupported scmm_workbench schema version")
+        states = intensity_states(candidate)
         metadata["schema_version"] = 1
         if "original_layer" not in metadata:
             layer = self._layer_key(candidate, "input")
             candidate.layers[layer] = candidate.X.copy()
             metadata["original_layer"] = layer
+            states[layer] = states["X"]
         if metadata["original_layer"] not in candidate.layers:
             raise ValueError("preprocessing input layer is missing")
         metadata.setdefault("history_json", "[]")
         # Validate serialized history before replacing a usable session.
         if not isinstance(json.loads(metadata["history_json"]), list):
             raise ValueError("invalid preprocessing history")
+        write_intensity_states(candidate, states)
         self.dataset_id = uuid4().hex
         self.revision = 0
         self.source = str(source)
@@ -139,6 +143,12 @@ class AnalysisWorkspace:
 
     def _commit(self, candidate, operation, parameters, *, clear_derived=True, save_layer=True):
         self._validate(candidate)
+        states = intensity_states(candidate)
+        if operation == "restore":
+            states["X"] = states.get(parameters["layer"], "unknown")
+        elif operation != "reset":
+            states["X"] = transformed_state(states["X"], operation, parameters)
+        # Reset's candidate is the full baseline, including its actual X lineage.
         if clear_derived:
             self._clear_derived(candidate)
         metadata = candidate.uns.setdefault("scmm_workbench", {})
@@ -147,6 +157,8 @@ class AnalysisWorkspace:
         if save_layer:
             layer = self._layer_key(candidate, operation)
             candidate.layers[layer] = candidate.X.copy()
+            states[layer] = states["X"]
+        write_intensity_states(candidate, states)
         history.append(
             {
                 "operation": operation,

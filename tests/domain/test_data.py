@@ -80,6 +80,62 @@ def test_save_load_round_trip(tmp_path: Path) -> None:
     assert dataset.save(tmp_path, overwrite=True) == result_path
 
 
+@pytest.mark.parametrize("method", ["knn", "mean", "median", "most_frequent"])
+def test_impute_preserves_empty_features_and_metadata(method):
+    dataset = make_dataset("sample", [[0.0, 0.0], [0.0, 4.0], [0.0, 8.0]], [100.0, 200.0])
+    before = dataset.data.copy()
+    cells, features = dataset.peak_meta.copy(), dataset.feature_meta.copy()
+    dataset.feature_snr = before + 1
+    snr = dataset.feature_snr.copy()
+    assert dataset.impute(method=method) is dataset
+    pd.testing.assert_index_equal(dataset.data.index, before.index)
+    pd.testing.assert_index_equal(dataset.data.columns, before.columns)
+    np.testing.assert_array_equal(dataset.data.iloc[:, 0], 0)
+    np.testing.assert_array_equal(dataset.data.iloc[1:, 1], [4, 8])
+    assert dataset.data.iloc[0, 1] == (4 if method == "most_frequent" else 6)
+    pd.testing.assert_frame_equal(dataset.peak_meta, cells)
+    pd.testing.assert_frame_equal(dataset.feature_meta, features)
+    pd.testing.assert_frame_equal(dataset.feature_snr, snr)
+
+
+@pytest.mark.parametrize("failure", ["shape", "nonfinite", "exception"])
+def test_impute_bad_candidate_preserves_state(monkeypatch, failure):
+    from sklearn.impute import KNNImputer
+
+    dataset = make_dataset("sample", [[0.0, 2.0], [0.0, 4.0]], [100.0, 200.0])
+    before = dataset.data.copy()
+
+    def bad_result(self, values):
+        # An estimator must not be able to mutate the live frame on failure.
+        values.iloc[0, 1] = 99
+        if failure == "exception":
+            raise ValueError("estimator failed")
+        if failure == "shape":
+            return np.ones((2, 1))
+        return np.full((2, 2), np.inf)
+
+    monkeypatch.setattr(KNNImputer, "fit_transform", bad_result)
+    with pytest.raises(ValueError):
+        dataset.impute()
+    pd.testing.assert_frame_equal(dataset.data, before)
+
+
+def test_impute_rejects_axis_dropping_override_without_mutation():
+    dataset = make_dataset("sample", [[0.0, 2.0], [0.0, 4.0]], [100.0, 200.0])
+    before = dataset.data.copy()
+    with pytest.raises(ValueError, match="keep_empty_features"):
+        dataset.impute(keep_empty_features=False)
+    pd.testing.assert_frame_equal(dataset.data, before)
+
+
+@pytest.mark.parametrize("method", ["knn", "mean", "median", "most_frequent"])
+@pytest.mark.parametrize("missing", [0.0, np.nan])
+def test_impute_all_missing_matrix_keeps_axes(method, missing):
+    dataset = make_dataset("sample", [[missing, missing]] * 3, [100.0, 200.0])
+    dataset.impute(method=method, missing_values=missing)
+    np.testing.assert_array_equal(dataset.data.to_numpy(), np.zeros((3, 2)))
+
+
 def test_to_anndata_uses_stable_unique_identifiers() -> None:
     dataset = make_dataset("sample", [[1.0, 2.0], [3.0, 4.0]], [100.0, 200.0])
 

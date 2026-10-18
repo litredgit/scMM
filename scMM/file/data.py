@@ -131,6 +131,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
     def _from_raw_state(cls, state: DatasetState, preprocess_kwds: dict) -> Self:
         obj = object.__new__(cls)
         obj._apply_state(state)
+        obj.file_meta["intensity_state"] = "raw"
         obj.preprocess(**preprocess_kwds)
         obj.feature_meta = make_feature_metadata(obj.data)
         return obj

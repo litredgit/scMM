@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pyopenms as oms
 
+from ..util.intensity import merged_intensity_state
 from ..util.peak import filter_spectrum
 from ._dataset_loading import (
     DatasetState,
@@ -210,6 +211,7 @@ def merge_objects(cls, objects, ppm_tolerance):
                 "name": "merged",
                 "ref_mz": objects[0].ref_mz,
                 "per_file_meta": [obj.file_meta for obj in objects],
+                "intensity_state": merged_intensity_state(*objects),
             },
             objects[0].ref_mz,
             var,

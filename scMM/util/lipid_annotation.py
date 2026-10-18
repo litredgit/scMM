@@ -6,6 +6,7 @@ import json
 
 import numpy as np
 
+from .intensity import intensity_states
 from .lipid_isotopes import ADDUCTS, adduct_shift, isotope_evidence
 from .lipid_rules import rank_candidates, validate_rules
 
@@ -15,20 +16,8 @@ STORAGE_KEY = "scmm_lipid_annotations_json"
 def validate_intensity_layer(data, layer):
     if layer == "feature_snr":
         raise ValueError("SNR 不是强度，不能用作同位素比例来源。")
-    transformed, current = set(), False
-    history = json.loads(data.uns.get("scmm_workbench", {}).get("history_json", "[]"))
-    for step in history:
-        operation = step.get("operation")
-        if operation in {"normalize", "impute"}:
-            current = True
-        elif operation == "restore":
-            current = step.get("parameters", {}).get("layer") in transformed
-        elif operation == "reset":
-            current = False
-        if step.get("layer") and current:
-            transformed.add(step["layer"])
-    if (layer == "X" and current) or layer in transformed:
-        raise ValueError("所选强度已归一化或插补，请选择未变换的输入强度层。")
+    if intensity_states(data).get(layer or "X", "unknown") != "raw":
+        raise ValueError("所选强度已变换或来源未知，请选择有未归一化、未插补溯源的原始强度层。")
 
 
 def dataset_inputs(data, layer=""):
@@ -37,9 +26,9 @@ def dataset_inputs(data, layer=""):
     if not np.isfinite(mz).all() or (mz <= 0).any() or not data.var_names.is_unique:
         raise ValueError("注释需要唯一特征 ID 和正的有限 m/z；允许不同 ID 对应相同 m/z。")
     layer = layer or data.uns.get("scmm_workbench", {}).get("original_layer", "")
-    validate_intensity_layer(data, layer)
     if layer not in {"", "X"} and layer not in data.layers:
         raise ValueError("所选强度层不存在，请重新选择。")
+    validate_intensity_layer(data, layer)
     matrix = data.X if layer in {"", "X"} else data.layers[layer]
     values = matrix.toarray() if hasattr(matrix, "toarray") else np.asarray(matrix)
     if not np.isfinite(values).all() or (values < 0).any():

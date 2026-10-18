@@ -255,6 +255,8 @@ def test_missing_and_invalid_formula_keep_mass_candidates(lipid_database, formul
 def network_data(conflict=False):
     from anndata import AnnData
 
+    from scMM.util.intensity import write_intensity_states
+
     parent_mz = EmpiricalFormula("C10H20").getMonoWeight() + adduct_shift("[M+H]+")
     isotope = resolved_distribution("C10H20", "[M+H]+", 3, parent_mz, 35000)[0]
     x = np.tile(np.arange(1, 61, dtype=float), 3)
@@ -282,6 +284,7 @@ def network_data(conflict=False):
         ),
     )
     workspace = AnalysisWorkspace()
+    write_intensity_states(data, {"X": "raw"})
     workspace.replace(data)
     return workspace.require_data()
 

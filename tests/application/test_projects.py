@@ -46,6 +46,32 @@ def test_failed_snapshot_preserves_manifest(tmp_path, monkeypatch):
     assert (project.folder / "project.json").read_bytes() == before
 
 
+@pytest.mark.parametrize("baseline", ["raw", "normalized", "transformed"])
+def test_project_reset_preserves_separate_baseline_intensity_lineage(tmp_path, baseline):
+    from scMM.application.workbench import AnalysisWorkspace
+    from scMM.util.intensity import intensity_states, write_intensity_states
+
+    data = AnnData(np.array([[0.0, 2.0], [4.0, 6.0]]))
+    write_intensity_states(data, {"X": "raw"})
+    prepared = AnalysisWorkspace()
+    prepared.replace(data)
+    if baseline == "normalized":
+        prepared.normalize("total")
+    elif baseline == "transformed":
+        prepared.impute()
+    store = ProjectStore(tmp_path)
+    project = store.create("lineage")
+    project.workspace.replace(prepared.data)
+    baseline_matrix = project.workspace.data.X.copy()
+    project.workspace.restore("scmm_input_0")
+    assert intensity_states(project.workspace.data)["X"] == "raw"
+    store.save(project)
+    restored = store.open(project.folder)
+    restored.workspace.reset()
+    np.testing.assert_array_equal(restored.workspace.data.X, baseline_matrix)
+    assert intensity_states(restored.workspace.data)["X"] == baseline
+
+
 def test_manifest_cannot_escape_project(tmp_path):
     store = ProjectStore(tmp_path)
     project = store.create("test")

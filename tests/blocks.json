@@ -41,6 +41,7 @@
         "scMM/file/_deisotope.py",
         "scMM/file/batch.py",
         "scMM/util/normalize.py",
+        "scMM/util/intensity.py",
         "scMM/util/denoise.py"
       ],
       "downstream": ["processing", "workbench", "projects", "annotation", "plotting"],

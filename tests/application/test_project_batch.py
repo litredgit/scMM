@@ -12,6 +12,7 @@ from scMM.application.project_batch import (
     submit,
 )
 from scMM.application.projects import write_json
+from scMM.util.intensity import intensity_states
 from tests.support.project import setup_project
 
 
@@ -35,6 +36,7 @@ def test_batch_real_mzml_review_and_stop(tmp_path, strategy):
     assert data.n_obs == 4
     assert data.obs["sample_id"].nunique() == 2
     assert (data.var.mz.between(140, 160)).all()
+    assert intensity_states(data)["X"] == "raw"
     (folder / "stop.requested").touch()
     run_batch(folder / "state.json")
     assert read_batch(folder / "state.json")["status"] == "stopped"
