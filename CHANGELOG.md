@@ -5,6 +5,12 @@
 
 ## Unreleased
 
+### Windows 迁移取消并归档 — 2026-10-18
+
+- 用户取消 Windows 迁移，明确要求将 `dev` 撤回迁移打包前，并将迁移提交保存在独立分支。归档分支为 `archive/windows-migration-20261018`，包含完整迁移提交 `fdd981f8adae0c1cd164bd3af47dda0f9a002588`、工具与原生证据；此前的 Windows 继续执行授权由本次取消取代，归档内容不再是活动任务。
+- `dev` 的恢复目标为迁移前提交 `c8b00a8cb02f9b9b64c2aa70e39c77bfa16b8b7d`，保留脂质相关性注释、分析面板模块化和个人 AI 助手。先推送归档分支，再使用绑定已核对旧远端提交的 force-with-lease 更新 `dev`，不覆盖后来出现的远端提交。工作区初始干净；本地大型交付物及用户数据保留，不运行 clean、不删除 Windows 机器上的种子或报告。
+- 仅恢复开发分支及对应 5007 开发环境，Linux `main` 与 5006 生产服务不在此次操作范围。恢复结果、实际分支提交号及健康状态见本轮任务完成消息；本条仅保存在归档分支，`dev` 保持迁移前代码树。
+
 ### Windows Codex 开发交接 — 2026-10-18
 
 - 用户明确要求整理当前情况、提交并推送，由 Windows 上的 Codex 继续后续任务。本次授权范围为开发分支交接，不是完整 Windows 验收或 Linux 生产部署。交接入口已加入 [Windows 方案文档](docs/windows-distribution.md#windows-codex-交接起点)，包含真实通过范围、私有 UTF-8 种子/独立源码环境命令、Git 外交付物摘要、待完成门槛及 WIN-02/03 → PKG-01/02 顺序；同步索引与 roadmap。

@@ -1,3 +1,7 @@
+> **已取消并归档（2026-10-18）**：用户放弃 Windows 迁移。本文及相关实现/验证仅保存在
+> `archive/windows-migration-20261018`，不是当前开发计划，不再执行后续任务。
+> `dev` 恢复目标为迁移前的 `c8b00a8`；将来恢复须有用户新的明确指令。
+
 # Windows 适配与软件打包方案
 
 [返回文档索引](README.md) · [安装与部署](installation.md) · [开发指南](development.md) · [实施待办](roadmap.md#windows-适配与内部软件发行)
