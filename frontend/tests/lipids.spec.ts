@@ -17,7 +17,8 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
     await response.finished()
     await expect(page.getByRole('button', { name: '保存人工指定', exact: true })).toBeEnabled()
     for (const details of await page.locator('.lipid-panel tbody details').all()) {
-      if ((await details.getAttribute('open')) === null) await details.locator(':scope > summary').click()
+      if ((await details.getAttribute('open')) === null)
+        await details.locator(':scope > summary').click()
     }
   }
   await page.goto('/')

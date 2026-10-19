@@ -275,5 +275,5 @@ test('PCA axes, stable cell clicks, paper exports and complete heatmap data', as
   expect((await download).suggestedFilename()).toBe('heatmap-data.zip')
   await module(page, '差异与 Marker')
   await page.getByRole('button', { name: '计算分类权重 Marker', exact: true }).click()
-  await expect(page.getByRole('columnheader', {name:/符号稳定性/})).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: /符号稳定性/ })).toBeVisible()
 })
