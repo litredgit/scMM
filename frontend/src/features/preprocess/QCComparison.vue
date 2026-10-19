@@ -19,7 +19,7 @@ function format(value: unknown, metric: unknown, signed = false) {
   const text =
     metric === '检出特征数'
       ? value.toLocaleString('en-US', { maximumFractionDigits: 1, useGrouping: false })
-      : value.toExponential(3)
+      : value.toExponential(1)
   return signed && value > 0 ? `+${text}` : text
 }
 function change(before: unknown, after: unknown) {

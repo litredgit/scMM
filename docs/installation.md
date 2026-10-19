@@ -415,3 +415,16 @@ python3 scripts/scmm_env.py release --migrate-auth
 脚本在停止生产后安装匹配启动器，备份旧启动器与 unit 到仓库外 `~/.local/state/scmm/pre-auth-launchers-*`；
 首次迁移失败时自动恢复旧代码、锁定环境、启动器及 unit，再恢复服务。备份保留供核对；不改动实验数据或撤销新建凭据。
 迁移完成后只使用普通 `release`；跨回认证前版本需在维护窗口使用匹配的旧启动器，不能用该入口绕过新协议的未知状态。
+
+## 维护恢复与数据库更新资源
+
+网页 PDF 导出使用锁定的 svglib/ReportLab，附带安全 SVG 检查；无需系统 Cairo。监督维护恢复使用 supervised 可选组中的 skops。
+管理员在账号页暂存资源配置；维护任务通过用户级 systemd 延后执行并健康检查，失败回滚上一配置，代码更新沿用环境脚本的失败回滚。
+批准版本清单位于 `<server-config 所在目录>/<配置名>.recovery/approved.json`（提交 SHA 数组）；只加入已验收或用户明确授权发布的版本。
+默认恢复密钥在同目录 key 文件，须连同恢复包和 AI 私有密钥妥善保管，不放入网页可浏览目录或 Git。
+
+LMSD 官方更新来源为 `https://lipidmaps.org/files/?ext=sdf.zip&file=LMSD`，许可 CC BY 4.0。
+本批采用 2026-10-19 当前官方包，21,924,109 字节，SHA256 `8ef9664dcde17d7d459819953bac9051db08c7d4f0d88399c53067738a2d02ef`。
+源文件 50,586 条，其中有效质量 49,981 条，无效质量 605 条；总组成汇总 21,377 条。
+活动指针 `database_provenance.json` 最后发布；版本目录保存 ZIP、`LMSD_metadata.csv.gz`、`LMSD_collapsed_formula_species.csv.gz` 和每个文件的 SHA256。
+旧版本保留，不改写旧注释结果绑定的数据库身份。

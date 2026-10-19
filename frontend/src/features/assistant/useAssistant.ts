@@ -1,10 +1,10 @@
-import { onUnmounted, ref, watch } from 'vue'
+import { nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { authenticatedFetch, request, sessionVersion, ensureSession } from '../../api/client'
 import { useWorkspace } from '../../stores/workspace'
 import { useAuth } from '../../stores/auth'
 
-type Turn = { role: 'user' | 'assistant'; content: string; note?: string }
+type Turn = { role: 'user' | 'assistant'; content: string; note?: string | null }
 type Configuration = { configured: boolean; model: string; available: boolean }
 export function useAssistant() {
   const store = useWorkspace()
@@ -19,6 +19,86 @@ export function useAssistant() {
   const configured = ref(false)
   let controller: AbortController | undefined
   let epoch = 0
+  let historyKey = '',
+    historyOwner = '',
+    historyReady = false,
+    historyGeneration = 0
+  let historyTimer: ReturnType<typeof setTimeout> | undefined
+  let writes: Promise<unknown> = Promise.resolve()
+  const revisions = new Map<string, number>()
+  const historyStatus = ref('')
+  function snapshot() {
+    return JSON.parse(
+      JSON.stringify({
+        messages: messages.value,
+        draft: input.value,
+        streaming: busy.value,
+        summary: context.value && typeof context.value === 'object' ? context.value : null,
+        model: model.value,
+      }),
+    )
+  }
+  function persist(key = historyKey, owner = historyOwner, payload = snapshot()) {
+    if (!key || !owner || !historyReady) return writes
+    const session = sessionVersion()
+    historyStatus.value = '正在保存聊天'
+    writes = writes
+      .catch(() => {})
+      .then(async () => {
+        if (auth.user?.id !== owner || session !== sessionVersion()) return
+        const value = await request<{ revision: number }>('/ai/history', {
+          method: 'PUT',
+          body: {
+            context: key,
+            revision: revisions.get(key) ?? 0,
+            ...payload,
+          },
+        })
+        revisions.set(key, value.revision)
+        if (key === historyKey) historyStatus.value = '聊天已加密保存'
+      })
+      .catch((cause) => {
+        if (auth.user?.id === owner && key === historyKey)
+          historyStatus.value = `聊天未保存：${String(cause)}`
+        throw cause
+      })
+    return writes
+  }
+  watch(
+    [messages, input, busy, context],
+    () => {
+      if (!historyReady) return
+      if (historyTimer) clearTimeout(historyTimer)
+      historyTimer = setTimeout(() => void persist().catch(() => {}), 250)
+    },
+    { deep: true },
+  )
+  async function restoreHistory(generation: number) {
+    try {
+      await writes.catch(() => {})
+      const value = await request<{
+        revision: number
+        messages: Turn[]
+        draft: string
+        streaming: boolean
+        summary: unknown
+        model?: string
+      }>(`/ai/history?${new URLSearchParams({ context: historyKey })}`)
+      if (generation !== historyGeneration || auth.user?.id !== historyOwner) return
+      revisions.set(historyKey, value.revision)
+      messages.value = value.messages
+      input.value = value.draft
+      context.value = value.summary
+      if (value.model) model.value = value.model
+      if (value.streaming && messages.value.at(-1)?.role === 'assistant')
+        messages.value.at(-1)!.note = '上次生成已中断，已恢复接收内容；未自动重新发送。'
+      await nextTick()
+      historyReady = true
+      historyStatus.value = '聊天已恢复'
+    } catch (cause) {
+      if (generation === historyGeneration) historyStatus.value = `聊天恢复不可用：${String(cause)}`
+    }
+  }
   function stop(note = '已停止生成；已接收部分仅供参考。') {
     epoch++
     controller?.abort()
@@ -29,12 +109,13 @@ export function useAssistant() {
     }
     busy.value = false
   }
-  function clear() {
+  function clear(stored = true) {
     stop()
     messages.value = []
     input.value = ''
     context.value = null
     error.value = ''
+    if (stored) void persist().catch(() => {})
   }
   async function loadConfig() {
     const session = sessionVersion()
@@ -57,8 +138,19 @@ export function useAssistant() {
   watch(
     () => [auth.user?.id, store.current?.workspace_id, store.project?.path],
     () => {
-      clear()
-      if (auth.user && !auth.user.must_change) void loadConfig()
+      if (historyReady && auth.user?.id === historyOwner) void persist().catch(() => {})
+      historyReady = false
+      if (historyTimer) clearTimeout(historyTimer)
+      ++historyGeneration
+      clear(false)
+      historyOwner = auth.user?.id ?? ''
+      historyKey = store.current
+        ? JSON.stringify([store.current.workspace_id, store.project?.path ?? ''])
+        : ''
+      if (auth.user && !auth.user.must_change) {
+        void loadConfig()
+        if (historyKey) void restoreHistory(historyGeneration)
+      }
     },
     { immediate: true, flush: 'sync' },
   )
@@ -71,9 +163,15 @@ export function useAssistant() {
   )
   onUnmounted(() => {
     stop()
+    if (historyTimer) clearTimeout(historyTimer)
+    void persist().catch(() => {})
     window.removeEventListener('scmm-ai-config-changed', configChanged)
   })
   async function send(question = input.value) {
+    if (!historyReady) {
+      error.value = '聊天持久化尚未就绪，请稍后重试或刷新页面。'
+      return
+    }
     if (busy.value || !configured.value || !store.current || !question.trim()) return
     if (question.length > 8000) {
       error.value = '单条问题最多 8000 字符。'
@@ -167,8 +265,27 @@ export function useAssistant() {
       if (token === epoch) {
         busy.value = false
         controller = undefined
+        await persist().catch(() => {})
       }
     }
   }
-  return { messages, input, busy, error, context, model, configured, send, stop, clear }
+  const maintenance = (event: Event) => {
+    stop('服务维护前停止生成；已接收内容已保存。')
+    ;(event as CustomEvent<{ waits: Promise<unknown>[] }>).detail.waits.push(persist())
+  }
+  window.addEventListener('scmm-before-maintenance', maintenance)
+  onUnmounted(() => window.removeEventListener('scmm-before-maintenance', maintenance))
+  return {
+    messages,
+    input,
+    busy,
+    error,
+    context,
+    model,
+    configured,
+    historyStatus,
+    send,
+    stop,
+    clear: () => clear(true),
+  }
 }

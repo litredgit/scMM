@@ -1,6 +1,5 @@
 """Feature comparisons on nonnegative, unscaled abundance matrices."""
 
-import networkx as nx
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -95,6 +94,10 @@ def feature_correlation_network(
         raise ValueError("unknown correlation method")
     if not 0 <= min_abs_correlation <= 1:
         raise ValueError("min_abs_correlation must be between zero and one")
+    try:
+        import networkx as nx
+    except ImportError as exc:
+        raise ImportError("相关网络需要 cluster 或 web 可选依赖中的 networkx。") from exc
     matrix = data.layers[layer] if layer else data.X
     matrix = matrix.toarray() if hasattr(matrix, "toarray") else np.asarray(matrix)
     selected = np.arange(data.n_vars)

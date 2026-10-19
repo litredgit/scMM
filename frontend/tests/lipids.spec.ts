@@ -16,6 +16,9 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
     expect(response.ok()).toBe(true)
     await response.finished()
     await expect(page.getByRole('button', { name: '保存人工指定', exact: true })).toBeEnabled()
+    for (const details of await page.locator('.lipid-panel tbody details').all()) {
+      if ((await details.getAttribute('open')) === null) await details.locator(':scope > summary').click()
+    }
   }
   await page.goto('/')
   await page.getByLabel('项目名称', { exact: true }).fill('脂质标记验收')
@@ -25,17 +28,12 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await page.getByRole('button', { name: /^▤ lipids.h5ad/ }).click()
   await page.getByRole('button', { name: '导入结果', exact: true }).click()
   await expect(page.getByRole('heading', { name: '结果与样本关联' })).toBeVisible()
-  await page.getByRole('link', { name: /预处理/ }).click()
+  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await page.getByRole('button', { name: '注释与同位素', exact: true }).click()
   const panel = page.locator('.lipid-panel')
   await expect(panel.getByRole('heading', { name: '注释与同位素', exact: true })).toBeVisible()
   await expect(panel).not.toHaveAttribute('open', '')
   await expect(panel.getByRole('button', { name: '检查本地数据库' })).not.toBeVisible()
-  expect(
-    await page.getByRole('heading', { name: '历史与恢复' }).evaluate((heading) => {
-      const panel = document.querySelector('.lipid-panel')!
-      return Boolean(heading.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING)
-    }),
-  ).toBe(true)
   await panel.locator(':scope > summary').click()
   await expect(panel.getByRole('button', { name: '检查本地数据库' })).toBeVisible()
   await expect(page.getByLabel('脂质规则预设').locator('option')).toHaveCount(6)
@@ -175,7 +173,8 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
     .getByRole('button', { name: '打开项目 →' })
     .click()
   await expect(page).toHaveURL(/\/samples$/)
-  await page.getByRole('link', { name: /预处理/ }).click()
+  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await page.getByRole('button', { name: '注释与同位素', exact: true }).click()
   await expect(panel).not.toHaveAttribute('open', '')
   await panel.locator(':scope > summary').click()
   await expect(panel.getByText('4 / 4 特征 · 4 条候选 · 4 条关系证据')).toBeVisible()

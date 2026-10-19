@@ -199,7 +199,8 @@ async function applyMapping() {
         <div class="actions">
           <button class="primary" :disabled="store.busy" @click="togglePicker('raw')">
             ＋ 添加原始文件</button
-          ><button :disabled="store.busy" @click="togglePicker('results')">导入已有结果</button
+          ><button class="primary" :disabled="store.busy" @click="togglePicker('results')">
+            导入已有结果</button
           ><button
             class="danger"
             :disabled="store.busy || !selected.length"

@@ -7,6 +7,31 @@ from scMM.file.data import CyESIData
 from scMM.util.intensity import PROVENANCE_KEY, intensity_states, write_intensity_states
 
 
+@pytest.mark.parametrize("operation", ["normalize", "impute", "remove_outlier"])
+def test_python_transforms_invalidate_imported_results_and_preserve_measurements(operation):
+    original = source()
+    original.raw = original.copy()
+    original.layers["measured"] = original.X.copy()
+    original.uns["X_pca_params"] = {"method": "pca"}
+    original.uns["scmm_workbench"] = {"derived_obs": ["cluster"]}
+    original.obs["cluster"] = ["a", "a", "b"]
+    dataset = CyESIData.from_anndata(original)
+    np.testing.assert_array_equal(dataset.to_anndata().obsm["X_pca"], original.obsm["X_pca"])
+    if operation == "normalize":
+        dataset.normalize("total")
+    elif operation == "impute":
+        dataset.impute("mean")
+    else:
+        dataset.remove_outlier(random_state=42, contamination=0.2)
+    result = dataset.to_anndata()
+    assert "X_pca" not in result.obsm and "X_pca_params" not in result.uns
+    assert "cluster" not in result.obs
+    assert result.uns["experiment"] == original.uns["experiment"]
+    retained = original.obs_names.get_indexer(result.obs_names)
+    np.testing.assert_array_equal(result.layers["measured"], original.X[retained])
+    np.testing.assert_array_equal(result.raw.X, original.raw.X[retained])
+
+
 def source():
     data = AnnData(
         X=np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),

@@ -121,13 +121,16 @@ class MonitorStore:
             )
         return {"instance": instance}
 
-    def pages(self):
+    def pages(self, *, include_ids=False):
         with self.connect() as db:
             # Page IDs and lease hashes are deliberately excluded from administration responses.
             return [
                 dict(row)
-                for row in db.execute("""SELECT instance,user_id,seen,route,visibility,workspace_id
-                FROM pages WHERE closed IS NULL ORDER BY seen DESC""")
+                for row in db.execute(
+                    "SELECT "
+                    + ("id," if include_ids else "")
+                    + "instance,user_id,seen,route,visibility,workspace_id FROM pages WHERE closed IS NULL ORDER BY seen DESC"
+                )
             ]
 
     def observed(self, identity, *, closing=False):

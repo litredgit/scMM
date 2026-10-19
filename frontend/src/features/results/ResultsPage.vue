@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayName } from '../../help/labels'
 import { ref, watch, computed, onActivated } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import type { AnalysisInfo, Figure } from '../../api/types'
@@ -194,7 +195,7 @@ async function exportH5ad() {
             v-model="embedding"
             :disabled="store.busy"
           >
-            <option v-for="v in info?.embeddings" :key="v">{{ v }}</option>
+            <option v-for="v in info?.embeddings" :key="v" :value="v">{{ displayName(v) }}</option>
           </select></label
         ><label
           ><FieldLabel name="下载文件名" /><input

@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { useViewState } from '../../api/viewState'
+import { displayName } from '../../help/labels'
 import { ref, computed, watch } from 'vue'
 import { normalizationHelp } from '../../help/fields'
 import { useWorkspace } from '../../stores/workspace'
 import type { QC, AnalysisInfo, DataTable } from '../../api/types'
 import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
-import LipidPanel from './LipidPanel.vue'
 import QCComparison from './QCComparison.vue'
 const store = useWorkspace()
 const qc = ref<QC>(),
@@ -15,7 +16,7 @@ const operation = ref('filter'),
   method = ref('total'),
   imputation = ref('median'),
   minTotal = ref(0),
-  minDetected = ref(0),
+  minDetected = ref(0.2),
   fraction = ref(0),
   contamination = ref(0.05),
   layer = ref('')
@@ -115,6 +116,17 @@ const countTables = computed(() => {
     },
   }
 })
+useViewState('preprocess', {
+  operation,
+  method,
+  imputation,
+  minTotal,
+  minDetected,
+  fraction,
+  contamination,
+  layer,
+  impact,
+})
 </script>
 <template>
   <section v-if="store.project?.dataset">
@@ -158,6 +170,8 @@ const countTables = computed(() => {
               v-model.number="minDetected"
               type="number"
               min="0"
+              max="1"
+              step="0.01"
               :disabled="store.busy" /></label
           ><label
             ><FieldLabel name="min_feature_fraction" /><input
@@ -175,10 +189,11 @@ const countTables = computed(() => {
             :disabled="store.busy"
           >
             <option
+              :value="v"
               v-for="v in ['total', 'max', 'pqn', 'zscore', 'log', 'minmax', 'quantile']"
               :key="v"
             >
-              {{ v }}
+              {{ displayName(v) }}
             </option>
           </select></label
         ><label v-if="operation === 'impute'"
@@ -187,9 +202,9 @@ const countTables = computed(() => {
             v-model="imputation"
             :disabled="store.busy"
           >
-            <option>median</option>
-            <option>mean</option>
-            <option>knn</option>
+            <option value="median">中位数</option>
+            <option value="mean">均值</option>
+            <option value="knn">近邻插补</option>
           </select></label
         ><label v-if="operation === 'remove_outliers'"
           ><FieldLabel name="contamination" /><input
@@ -270,7 +285,7 @@ const countTables = computed(() => {
             v-model="layer"
             :disabled="store.busy"
           >
-            <option v-for="v in info?.layers" :key="v">{{ v }}</option>
+            <option v-for="v in info?.layers" :key="v" :value="v">{{ displayName(v) }}</option>
           </select></label
         >
       </div>
@@ -297,7 +312,6 @@ const countTables = computed(() => {
         </button>
       </div>
     </div>
-    <LipidPanel />
   </section>
   <div v-else class="card empty-state">
     <h1>尚未建立当前数据集</h1>
@@ -321,7 +335,7 @@ const countTables = computed(() => {
 .qc-plots > div {
   min-width: 0;
 }
-@media (min-width: 1200px) {
+@media (min-width: 960px) {
   .qc-plots.comparing {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }

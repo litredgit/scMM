@@ -43,10 +43,10 @@ function formatted(value: unknown, key: string, row: Record<string, unknown>) {
       /强度|intensity/.test(String(row.metric)) &&
       ['mean', 'median', 'std', 'min', 'max'].includes(key)
     )
-      return value.toExponential(3)
+      return value.toExponential(1)
     if (props.qc && row.metric === '检出特征数')
       return value.toLocaleString('en-US', { maximumFractionDigits: 1, useGrouping: false })
-    if (/intensity|mean_abs_shap|mean_a|mean_b/.test(key)) return value.toExponential(3)
+    if (/intensity|mean_a|mean_b/.test(key)) return value.toExponential(1)
     return Number.isInteger(value)
       ? String(value)
       : value.toLocaleString('en-US', { maximumSignificantDigits: 6, useGrouping: false })

@@ -59,9 +59,13 @@ class AIConfigStore:
         self.database = private_file(database)
         if self.database.resolve() == Path(key_file).resolve():
             raise ValueError("AI 数据库与主密钥必须分开保存。")
-        self.cipher = Fernet(private_file(key_file).read_bytes().strip())
+        self.key_file = private_file(key_file)
+        self.cipher = Fernet(self.key_file.read_bytes().strip())
         with self.connect() as db:
             db.execute("SELECT user_id FROM configurations LIMIT 1")
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS conversations (user_id TEXT NOT NULL, context_key TEXT NOT NULL, revision INTEGER NOT NULL, secret BLOB NOT NULL, PRIMARY KEY(user_id,context_key))"
+            )
 
     @contextmanager
     def connect(self):
@@ -116,3 +120,47 @@ class AIConfigStore:
     def delete(self, user_id):
         with self.connect() as db:
             db.execute("DELETE FROM configurations WHERE user_id=?", (user_id,))
+
+    def history(self, user_id, context):
+        import hashlib
+
+        key = hashlib.sha256(context.encode()).hexdigest()
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT revision,secret FROM conversations WHERE user_id=? AND context_key=?",
+                (user_id, key),
+            ).fetchone()
+        if row is None:
+            return {"revision": 0, "messages": [], "draft": "", "streaming": False, "summary": None}
+        try:
+            payload = json.loads(self.cipher.decrypt(row[1]))
+            if payload.pop("owner") != user_id or payload.pop("context_key") != key:
+                raise ValueError("Conversation identity mismatch")
+        except Exception as exc:
+            raise AIError("聊天恢复记录无法验证，请联系管理员。", 409, "history_invalid") from exc
+        return {**payload, "revision": row[0]}
+
+    def save_history(self, user_id, context, revision, payload):
+        import hashlib
+
+        key = hashlib.sha256(context.encode()).hexdigest()
+        plaintext = json.dumps(
+            {**payload, "owner": user_id, "context_key": key}, ensure_ascii=False, allow_nan=False
+        ).encode()
+        if len(plaintext) > 10 * 1024**2:
+            raise AIError("单个会话的聊天记录超过 10 MiB，请先导出或清空。", 413)
+        secret = self.cipher.encrypt(plaintext)
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT revision FROM conversations WHERE user_id=? AND context_key=?",
+                (user_id, key),
+            ).fetchone()
+            if (row[0] if row else 0) != revision:
+                raise AIError("聊天已被其他页面更新，请重新读取后继续。", 409, "history_conflict")
+            next_revision = revision + 1
+            db.execute(
+                "INSERT INTO conversations VALUES(?,?,?,?) ON CONFLICT(user_id,context_key) DO UPDATE SET revision=excluded.revision, secret=excluded.secret",
+                (user_id, key, next_revision, secret),
+            )
+        return {"revision": next_revision}

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useViewState } from '../../api/viewState'
+import PlotView from '../../components/PlotView.vue'
+import type { Figure } from '../../api/types'
 import { computed, reactive, ref, watch } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import { useAuth } from '../../stores/auth'
@@ -12,6 +15,14 @@ const store = useWorkspace()
 const auth = useAuth()
 const info = ref<LipidInfo>()
 const results = ref<LipidResults>()
+const isotopeFigure = ref<Figure>()
+async function viewIsotope(id: string) {
+  const result = await store.command<Figure>('/lipids/isotope-spectrum', {
+    version: version.value,
+    relation_id: id,
+  })
+  if (result) isotopeFigure.value = result
+}
 const rules = ref<LipidRules>({ schema_version: 1, name: '', rules: [] })
 const imported = ref(false)
 const preset = ref('')
@@ -372,6 +383,15 @@ function template() {
 function number(value: unknown) {
   return typeof value === 'number' ? value.toPrecision(6) : '—'
 }
+useViewState('lipids', {
+  version,
+  label,
+  feature,
+  selection,
+  offset,
+  relationOffset,
+  isotopeFigure,
+})
 </script>
 
 <template>
@@ -442,7 +462,7 @@ function number(value: unknown) {
           ><input type="checkbox" :value="name" v-model="options.adducts" />{{ name }}</label
         >
       </div>
-      <button class="secondary" @click="prepare">
+      <button class="secondary save" @click="prepare">
         {{ info?.database.available ? '检查本地数据库' : '准备数据库（缺失时官方下载）' }}
       </button>
     </fieldset>
@@ -481,15 +501,17 @@ function number(value: unknown) {
         /></label>
       </div>
       <div class="actions">
-        <button class="secondary" @click="template">下载空规则模板</button
+        <button class="secondary save" @click="template">下载空规则模板</button
         ><button
           v-if="auth.admin"
-          class="secondary"
+          class="secondary save"
           :disabled="!presetName.trim()"
           @click="savePreset"
         >
           保存为规则预设</button
-        ><button :disabled="!validVersion || !imported" @click="applyRules">应用规则排序</button>
+        ><button class="primary" :disabled="!validVersion || !imported" @click="applyRules">
+          应用规则排序
+        </button>
       </div>
       <details class="lipid-rule-preview">
         <summary>
@@ -581,7 +603,9 @@ function number(value: unknown) {
             step="any"
         /></label>
       </div>
-      <button :disabled="!options.adducts.length" @click="run">运行注释与同位素标记</button>
+      <button :disabled="!options.adducts.length" @click="run" class="primary">
+        运行注释与同位素标记
+      </button>
     </fieldset>
 
     <fieldset :disabled="store.busy">
@@ -607,9 +631,9 @@ function number(value: unknown) {
         >
       </div>
       <div class="actions">
-        <button class="secondary" :disabled="!!version && !validVersion" @click="activate">
+        <button class="secondary preview" :disabled="!!version && !validVersion" @click="activate">
           使用此注释版本</button
-        ><button class="secondary" :disabled="!validVersion" @click="loadResults(true)">
+        ><button class="secondary preview" :disabled="!validVersion" @click="loadResults(true)">
           读取注释结果
         </button>
       </div>
@@ -706,29 +730,25 @@ function number(value: unknown) {
           <label class="lipid-check"
             ><input type="checkbox" v-model="filters.include_unannotated" />保留未注释峰</label
           >
-          <button @click="applyFilters">应用显示筛选</button>
+          <button @click="applyFilters" class="preview">应用显示筛选</button>
         </fieldset>
         <p class="muted">CSV 使用当前筛选条件，包含全部细胞；不会只导出当前页或选中特征。</p>
         <div class="lipid-downloads">
-          <button
-            class="download"
-            :disabled="store.busy || !validVersion"
-            @click="download('matrix')"
-          >
+          <button class="save" :disabled="store.busy || !validVersion" @click="download('matrix')">
             导出筛选矩阵 CSV</button
           ><button
-            class="download"
+            class="save"
             :disabled="store.busy || !validVersion"
             @click="download('candidates')"
           >
             导出候选明细 CSV</button
           ><button
-            class="download"
+            class="save"
             :disabled="store.busy || !validVersion"
             @click="download('isotopes')"
           >
             导出完整同位素关系 CSV</button
-          ><button class="secondary" :disabled="store.busy" @click="download('rules')">
+          ><button class="secondary save" :disabled="store.busy" @click="download('rules')">
             导出版本规则 JSON
           </button>
         </div>
@@ -762,7 +782,7 @@ function number(value: unknown) {
         </div>
         <div class="actions">
           <button
-            class="secondary"
+            class="secondary restore"
             :disabled="store.busy || featureIndex <= 0"
             @click="moveFeature(-1)"
           >
@@ -773,9 +793,10 @@ function number(value: unknown) {
             @click="moveFeature(1)"
           >
             下一特征</button
-          ><button :disabled="store.busy || !feature" @click="saveSelection()">保存人工指定</button
+          ><button class="save" :disabled="store.busy || !feature" @click="saveSelection()">
+            保存人工指定</button
           ><button
-            class="secondary"
+            class="secondary restore"
             :disabled="store.busy || !feature"
             @click="saveSelection(true)"
           >
@@ -810,7 +831,46 @@ function number(value: unknown) {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in results.candidates.rows" :key="String(row.candidate_id)">
+              <template
+                v-for="group in results.candidate_groups || []"
+                :key="group.feature_id + group.label + group.formula + group.adduct"
+                ><tr>
+                  <td colspan="17">
+                    <details>
+                      <summary>
+                        {{ group.feature_id }} · {{ group.label }} · {{ group.adduct }}（{{
+                          group.rows.length
+                        }}
+                        个候选）
+                      </summary>
+                      <p v-for="row in group.rows" :key="String(row.candidate_id)">
+                        <input
+                          v-if="feature"
+                          type="checkbox"
+                          v-model="selection"
+                          :value="String(row.candidate_id)"
+                          :aria-label="`指定 ${row.database_id} ${row.adduct}`"
+                          :disabled="store.busy"
+                        />{{ row.name }} · {{ row.database_id }} · {{ row.formula }} · 误差
+                        {{ number(row.ppm_error) }} ppm
+                      </p>
+                      <details>
+                        <summary>完整匹配与评分字段</summary>
+                        <DataTableView
+                          :table="{
+                            columns: Object.keys(group.rows[0] || {}),
+                            rows: group.rows,
+                            total: group.rows.length,
+                          }"
+                        />
+                      </details>
+                    </details>
+                  </td></tr
+              ></template>
+              <tr
+                v-for="row in results.candidate_groups ? [] : results.candidates.rows"
+                :key="String(row.candidate_id)"
+              >
                 <td v-if="feature">
                   <input
                     type="checkbox"
@@ -864,11 +924,16 @@ function number(value: unknown) {
           >
             候选上一页</button
           ><span
-            >{{ offset + 1 }}–{{ offset + results.candidates.rows.length }} /
-            {{ results.candidates.total }}</span
+            >{{ offset + 1 }}–{{
+              offset + (results.candidate_groups?.length ?? results.candidates.rows.length)
+            }}
+            / {{ results.candidate_group_total ?? results.candidates.total }} 个组成</span
           ><button
             class="secondary"
-            :disabled="store.busy || offset + limit >= results.candidates.total"
+            :disabled="
+              store.busy ||
+              offset + limit >= (results.candidate_group_total ?? results.candidates.total)
+            "
             @click="pageCandidates(1)"
           >
             候选下一页
@@ -900,7 +965,16 @@ function number(value: unknown) {
             </thead>
             <tbody>
               <tr v-for="row in results.isotopes.rows" :key="String(row.relation_id)">
-                <td>{{ row.parent_feature_id }} → {{ row.isotope_feature_id }}</td>
+                <td>
+                  {{ row.parent_feature_id }} → {{ row.isotope_feature_id
+                  }}<button
+                    class="preview"
+                    :disabled="store.busy"
+                    @click="viewIsotope(String(row.relation_id))"
+                  >
+                    查看截谱
+                  </button>
+                </td>
                 <td>{{ Number(row.parent_mz).toPrecision(10) }}</td>
                 <td>
                   {{ Number(row.isotope_mz).toPrecision(10) }} /
@@ -949,6 +1023,7 @@ function number(value: unknown) {
               </tr>
             </tbody>
           </table>
+          <PlotView v-if="isotopeFigure" :figure="isotopeFigure" name="isotope-local-spectrum" />
           <p v-if="!results.isotopes.rows.length" class="muted">暂无质量匹配的同位素关系。</p>
         </div>
         <div class="actions">

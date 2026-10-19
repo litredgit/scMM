@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CellSpectraPanel from './components/CellSpectraPanel.vue'
 import { provide } from 'vue'
 import { useAnalysis } from './composables/useAnalysis'
 import { analysisKey } from './types'
@@ -34,8 +35,11 @@ const { store, tab, legend, saveSettings, reloadAnalysis } = analysis
         >
       </div>
       <button class="primary" :disabled="store.busy" @click="saveSettings">应用视图设置</button>
-      <button :disabled="store.busy" @click="reloadAnalysis">重新读取分析状态</button>
+      <button :disabled="store.busy" @click="reloadAnalysis" class="preview">
+        重新读取分析状态
+      </button>
     </div>
+    <CellSpectraPanel />
     <div class="analysis-layout">
       <nav class="analysis-navigation" aria-label="分析功能">
         <button

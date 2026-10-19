@@ -8,6 +8,7 @@ import fcntl
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -191,6 +192,24 @@ def web_idle(port, token_file=None):
         for k in ("blockers", "unknown")
     ):
         raise RuntimeError("Invalid monitoring reasons")
+    checkpoint = status.get("maintenance_checkpoint")
+    if (
+        isinstance(checkpoint, dict)
+        and checkpoint.get("verified") is True
+        and checkpoint.get("frozen") is True
+        and checkpoint.get("instance") == status.get("instance")
+    ) and (
+        isinstance(checkpoint.get("id"), str)
+        and re.fullmatch(r"[a-f0-9]{32}", checkpoint["id"])
+        and type(checkpoint.get("created")) in {int, float}
+        and 0 <= time.time() - checkpoint["created"] <= 600
+        and not decision["busy_workspaces"]
+        and not decision["active_tasks"]
+        and not decision["unconfirmed_pages"]
+        and not decision["inflight_requests"]
+        and not decision["unknown"]
+    ):
+        return
     if (
         decision.get("state") != "ready"
         or any(decision[k] for k in fields if k != "monitor_pages")
@@ -482,6 +501,10 @@ def main():
     for command in ("serve", "sync", "update"):
         sub = commands.add_parser(command)
         sub.add_argument("name", choices=("dev", "prod"))
+        if command == "update":
+            sub.add_argument(
+                "--approved-version", help="Require this exact remotely approved commit"
+            )
         if command == "serve":
             sub.add_argument(
                 "--debug",
@@ -525,6 +548,17 @@ def main():
             deploy(values, "dev", migrate_auth=args.migrate_auth, config=args.config.resolve())
             # Only publish main after the local service has passed its health check.
             run("git", "-C", values["prod"], "push", "-u", "origin", "main")
+            released = git(values["prod"], "rev-parse", "HEAD")
+            for name in ("dev", "prod"):
+                config_path = Path(values[f"{name}_server_config"])
+                directory = config_path.parent / (config_path.stem + ".recovery")
+                directory.mkdir(mode=0o700, exist_ok=True)
+                target = directory / "approved.json"
+                approved = json.loads(target.read_text()) if target.exists() else []
+                temporary = directory / ".approved.tmp"
+                temporary.write_text(json.dumps(list(dict.fromkeys([*approved, released]))))
+                temporary.chmod(0o600)
+                temporary.replace(target)
         elif args.command == "rollback":
             deploy(values, args.revision, rollback=True)
             print("Local rollback only; remote main unchanged. update prod reapplies remote main.")
@@ -534,8 +568,14 @@ def main():
             if name == "dev":
                 dev_idle()
             run("git", "-C", values[name], "fetch", "origin")
+            target = "origin/main" if name == "prod" else "origin/dev"
+            if (
+                args.approved_version
+                and git(values[name], "rev-parse", target) != args.approved_version
+            ):
+                raise RuntimeError("Remote version changed; refusing an unapproved update")
             if name == "prod":
-                deploy(values, "origin/main")
+                deploy(values, args.approved_version or "origin/main")
             else:
                 git(values[name], "merge", "--ff-only", "origin/dev")
                 sync(values, name)

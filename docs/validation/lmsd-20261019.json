@@ -1,0 +1,30 @@
+{
+  "source_url": "https://lipidmaps.org/files/?ext=sdf.zip&file=LMSD",
+  "source_page": "https://lipidmaps.org/databases/lmsd/download",
+  "retrieved_date": "2026-10-19",
+  "download_bytes": 21924109,
+  "archive_sha256": "8ef9664dcde17d7d459819953bac9051db08c7d4f0d88399c53067738a2d02ef",
+  "sdf_sha256": "95cf79edbb9d93c37ffa79f5a72907efc294eef0759aceb2454c13ce35830ae4",
+  "filename": "LMSD_95cf79edbb9d93c3.sdf",
+  "license": "CC BY 4.0; LIPID MAPS LMSD",
+  "records": 49981,
+  "source_records": 50586,
+  "invalid_mass_records": 605,
+  "collapsed_records": 21377,
+  "version_directory": "versions/8ef9664dcde17d7d-ceae013b28a5-46e227cda901",
+  "files": {
+    "LMSD_collapsed_formula_species.csv.gz": {
+      "sha256": "46e227cda901555077c84d515d52024a9d37d7b79058889cbbc64cbc05ecc5ec",
+      "bytes": 451582
+    },
+    "LMSD_metadata.csv.gz": {
+      "sha256": "ceae013b28a56f34b10300a8c12b64ae0de6975f8b91d49177f1e2179d12a75a",
+      "bytes": 5825250
+    },
+    "LMSD_download_20261019.sdf.zip": {
+      "sha256": "8ef9664dcde17d7d459819953bac9051db08c7d4f0d88399c53067738a2d02ef",
+      "bytes": 21924109
+    }
+  },
+  "scope": "Current official LMSD version explicitly approved by user; no experimental dataset annotations modified."
+}

@@ -28,6 +28,39 @@ class CellDetectionPreview:
     cell_count: int
 
 
+def detection_from_payload(payload):
+    signal = payload["signal"]
+    references = tuple(float(mz) for mz in payload["reference_mz"])
+    traces = pd.DataFrame(
+        {
+            "frame_id": np.arange(len(signal)),
+            "rt_seconds": payload["frame_obs"]["rt"].to_numpy(copy=True),
+            "cell_window": np.asarray(payload["cell_mask"]).copy(),
+            "cell_apex": np.zeros(len(signal), dtype=bool),
+        }
+    )
+    traces.loc[payload["cell_idx"], "cell_apex"] = True
+    baseline = payload.get("reference_baseline")
+    for i, mz in enumerate(references):
+        values = signal[mz].to_numpy(copy=True)
+        traces[f"reference_{i}"] = values
+        if baseline is not None:
+            background = np.asarray(baseline)[:, i]
+            traces[f"baseline_{i}"] = background
+            traces[f"net_{i}"] = values - background
+            threshold = (
+                payload["cell_snr"] * np.maximum(background, np.finfo(float).eps) - background
+            )
+            traces[f"threshold_{i}"] = (
+                np.maximum(threshold, payload["cell_min_signal"])
+                if payload["cell_min_signal"] > 0
+                else threshold
+            )
+    return CellDetectionPreview(
+        traces, references, tuple(payload["window_ranges"]), len(payload["cell_idx"])
+    )
+
+
 @dataclass(frozen=True)
 class RawFileSummary:
     """Compact metadata shown before a processing workflow starts."""
@@ -120,27 +153,8 @@ class RawFilePreview:
         captured = {}
 
         def capture(event, payload):
-            if event != "find_cells":
-                return
-            signal = payload["signal"]
-            references = tuple(float(mz) for mz in payload["reference_mz"])
-            traces = pd.DataFrame(
-                {
-                    "frame_id": np.arange(len(signal)),
-                    "rt_seconds": payload["frame_obs"]["rt"].to_numpy(copy=True),
-                    "cell_window": np.asarray(payload["cell_mask"]).copy(),
-                    "cell_apex": np.zeros(len(signal), dtype=bool),
-                }
-            )
-            traces.loc[payload["cell_idx"], "cell_apex"] = True
-            for i, mz in enumerate(references):
-                traces[f"reference_{i}"] = signal[mz].to_numpy(copy=True)
-            captured.update(
-                traces=traces,
-                reference_mz=references,
-                window_ranges=tuple(payload["window_ranges"]),
-                cell_count=len(payload["cell_idx"]),
-            )
+            if event == "find_cells":
+                captured["detection"] = detection_from_payload(payload)
 
         self.last_targets = np.asarray(state.data.columns, dtype=float)
         self.last_dataset = CyESIData._from_raw_state(
@@ -175,7 +189,8 @@ class RawFilePreview:
         if file_identity(self.path) != self.open_identity:
             self.last_dataset = None
             raise ValueError("Input changed during preview; reopen the file")
-        self.last_detection = CellDetectionPreview(**captured)
+        self.last_detection = captured["detection"]
+        self.last_dataset.file_meta["input_identity"] = self.open_identity
         return self.last_detection
 
     def single_spectrum(self, scan_index: int) -> tuple[pd.DataFrame, dict]:
@@ -300,12 +315,17 @@ class RawFilePreview:
         ms_level: int = 1,
         rt_range: tuple[float, float] | None = None,
         normalize: bool = False,
+        scan_range: tuple[int, int] | None = None,
     ) -> pd.DataFrame:
         """Return a summed or average profile spectrum over selected scans."""
         _validate_ms_level(ms_level)
         with spectrum_iterator(_selected_spectra(self.experiment, ms_level, rt_range)) as scans:
             spectrum = sum_spec(
-                (spectrum for _, spectrum in scans),
+                (
+                    spectrum
+                    for index, spectrum in scans
+                    if scan_range is None or scan_range[0] <= index <= scan_range[1]
+                ),
                 mz_range=mz_range,
                 resolution_200=resolution_200,
                 points_per_fwhm=points_per_fwhm,

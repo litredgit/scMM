@@ -418,7 +418,7 @@ if (has('network')) await loadWithPlot('network', 'network_plot')
 
 | 所属模块 | 自有参数 | 明确共享的依赖 |
 |---|---|---|
-| 降维与聚类 | `reduction`、`usePca`、`cluster`；嵌入/着色选择 | 聚类使用本模块 `reduction.use_rep/n_neighbors/random_state` |
+| 降维 / 聚类独立板块 | `reduction`、`usePca`、`cluster`；嵌入/着色选择 | 聚类使用独立的 `cluster.use_rep/n_neighbors/random_state` |
 | 差异与 Marker | `diff`；`volcano`、`selectedFeatures`、`hideZero` 为显示状态 | Marker 使用 `diff.group_key/method/layer`，不依赖两组选择 |
 | 相关网络 | `network.method/min_abs_correlation/top_features/layer` | 不依赖差异分组或后续 layer 编辑 |
 | 监督与 SHAP | `train`、`validation`、`ldaSolver`、`latentKey`、`shap` | SHAP 使用 `train.random_state` 作为 seed，并依赖当前可执行监督结果 |
@@ -660,7 +660,7 @@ CI 检查本次变更源码和按需构建的产物；历史单独记录，不�
 
 `application/ai_config.py` 管理按用户隔离的 Fernet 配置，`ai_client.py` 管理地址策略、DNS 固定连接与
 Chat Completions SSE 解码，`ai_summary.py` 是自动出站字段的唯一白名单；`api/routers/ai.py` 只处理认证边界、
-请求限额和流式生命周期。前端 `features/assistant/` 独立承载账号设置及常驻面板，聊天仅保存在 Vue 内存中。
+请求限额和流式生命周期。前端 `features/assistant/` 独立承载账号设置及常驻面板，聊天按用户/上下文加密持久化于独立 AI 数据库。
 不把消息、凭据或摘要写进团队项目快照、浏览器持久存储或审计正文。
 
 工作区在已有科学锁内完成事务后发布独立摘要快照，失败保留旧摘要，失效随已提交修订一起发布。
@@ -702,3 +702,11 @@ HTTP `/presence/register` 与 `/presence/heartbeat` 为登录页提供受限租�
 首次认证迁移使用 `release --migrate-auth`，前提及人工维护窗口证据见[安装部署](installation.md#监控初始化与生产只读检查)。
 该路径仅支持旧版、不能覆盖新监控状态；测试覆盖非零/非法旧计数、新协议拒绝及安装/同步/健康失败后旧启动器和代码共同恢复。
 常规发布继续使用新协议和时效检查。恢复备份位于仓库外；配置、认证库和监控库不随代码回滚。
+
+### 维护与作图模块
+
+`application/state_codec.py` 明确编码 AnnData/数组/表/图及受审核模型；`recovery.py` 原子发布并校验恢复包，
+`maintenance.py` 管理页面握手和维护状态，`maintenance_runner.py` 在独立 systemd 任务中执行重启及配置回滚。
+`api/routers/maintenance.py` 只开放认证管理入口。公开维护状态只含收集 nonce/完成标记，完整状态只给管理员。
+`frontend/src/api/viewState.ts` 注册可恢复页面状态，`maintenance.ts` 收集已访问页面的参数/图及控件；密码、文件输入和账号配置不进入通用草稿采集。
+`plot/export.py` 负责全精度 ZIP 与禁止外部资源/活动内容的 SVG→PDF；`plot/explanations.py` 和 `plot/isotopes.py` 提供可追溯解释图。

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
 import PlotView from '../../../../components/PlotView.vue'
 import ResultTable from '../../components/ResultTable.vue'
@@ -33,7 +34,7 @@ const {
             v-model="diff.group_key"
             :disabled="store.busy"
           >
-            <option v-for="v in observed" :key="v">{{ v }}</option>
+            <option v-for="v in observed" :key="v" :value="v">{{ displayName(v) }}</option>
           </select></label
         ><label
           ><FieldLabel name="group_a（fold change 分子）" /><select
@@ -41,7 +42,7 @@ const {
             v-model="diff.group_a"
             :disabled="store.busy"
           >
-            <option v-for="v in groups" :key="v">{{ v }}</option>
+            <option v-for="v in groups" :key="v" :value="v">{{ displayName(v) }}</option>
           </select></label
         ><label
           ><FieldLabel name="group_b" /><select
@@ -49,7 +50,7 @@ const {
             v-model="diff.group_b"
             :disabled="store.busy"
           >
-            <option v-for="v in groups" :key="v">{{ v }}</option>
+            <option v-for="v in groups" :key="v" :value="v">{{ displayName(v) }}</option>
           </select></label
         ><label
           ><FieldLabel name="layer" /><select
@@ -57,8 +58,8 @@ const {
             v-model="diff.layer"
             :disabled="store.busy"
           >
-            <option :value="null">当前 X</option>
-            <option v-for="v in info?.layers" :key="v">{{ v }}</option>
+            <option :value="null">当前矩阵</option>
+            <option v-for="v in info?.layers" :key="v" :value="v">{{ displayName(v) }}</option>
           </select></label
         ><label
           ><FieldLabel name="differential_method" /><select
@@ -77,6 +78,18 @@ const {
     </div>
     <div class="card">
       <h2>全特征差异与 Marker</h2>
+      <button
+        class="primary"
+        :disabled="store.busy || !diff.group_key"
+        @click="
+          execute('markers', { group_key: diff.group_key, method: 'classifier', layer: diff.layer })
+        "
+      >
+        计算分类权重 Marker
+      </button>
+      <p class="muted">
+        逐组对其余组训练正则化逻辑回归；正权重越高越支持本组，交叉验证中标准化只拟合训练折。
+      </p>
       <div class="actions">
         <button
           class="primary"
@@ -151,7 +164,7 @@ const {
             </select></label
           >
         </div>
-        <button class="preview" :disabled="store.busy" @click="draw('volcano')">更新火山图</button
+        <button class="primary" :disabled="store.busy" @click="draw('volcano')">更新火山图</button
         ><PlotView
           v-if="figures.volcano && tab === 'differential'"
           :figure="figures.volcano"
@@ -182,7 +195,7 @@ const {
           /></label>
         </div>
         <button
-          class="preview"
+          class="primary"
           :disabled="store.busy || !selectedFeatures.length"
           @click="draw('violin')"
         >

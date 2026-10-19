@@ -11,7 +11,18 @@ export type AnalysisOperation =
   | 'save_latent'
 export type ResultName = 'differential' | 'markers' | 'network' | 'supervised' | 'shap'
 export type PlotKind =
-  'embedding' | 'volcano' | 'violin' | 'network_plot' | 'roc' | 'pr' | 'calibration' | 'shap_plot'
+  | 'embedding'
+  | 'volcano'
+  | 'violin'
+  | 'network_plot'
+  | 'roc'
+  | 'pr'
+  | 'calibration'
+  | 'shap_plot'
+  | 'confusion'
+  | 'shap_beeswarm'
+  | 'shap_waterfall'
+  | 'shap_dependence'
 export interface AnalysisTransport {
   isCurrent?(): boolean
   read<T>(path: string): Promise<T | undefined>

@@ -1,5 +1,9 @@
 <script setup lang="ts">
+import { reactive } from 'vue'
+import type { Figure } from '../../../../api/types'
+import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
+import ReportView from '../../../../components/ReportView.vue'
 import PlotView from '../../../../components/PlotView.vue'
 import ResultTable from '../../components/ResultTable.vue'
 const {
@@ -23,6 +27,21 @@ const {
   draw,
   loadWithPlot,
 } = useAnalysisContext()
+const shapView = reactive({ class_index: 0, cell_index: 0, feature: '' })
+async function showConfusion(normalize: boolean) {
+  const value = await store.command<Figure>('/analysis/plot', {
+    kind: 'confusion',
+    options: { normalize },
+  })
+  if (value) figures.value.confusion = value
+}
+async function showShap(kind: string) {
+  const value = await store.command<Figure>('/analysis/plot', {
+    kind,
+    options: { ...shapView, feature: shapView.feature || null },
+  })
+  if (value) figures.value[kind] = value
+}
 </script>
 <template>
   <div class="card">
@@ -48,7 +67,7 @@ const {
           v-model="train.label_key"
           :disabled="store.busy"
         >
-          <option v-for="v in observed" :key="v">{{ v }}</option>
+          <option v-for="v in observed" :key="v" :value="v">{{ displayName(v) }}</option>
         </select></label
       ><label
         ><FieldLabel name="验证方式" /><select
@@ -66,7 +85,7 @@ const {
           :disabled="store.busy"
         >
           <option :value="null" disabled>选择独立样本 / 来源列</option>
-          <option v-for="v in observed" :key="v">{{ v }}</option>
+          <option v-for="v in observed" :key="v" :value="v">{{ displayName(v) }}</option>
         </select></label
       ><label
         ><FieldLabel name="layer" /><select
@@ -74,8 +93,8 @@ const {
           v-model="train.layer"
           :disabled="store.busy"
         >
-          <option :value="null">当前 X</option>
-          <option v-for="v in info?.layers" :key="v">{{ v }}</option>
+          <option :value="null">当前矩阵</option>
+          <option v-for="v in info?.layers" :key="v" :value="v">{{ displayName(v) }}</option>
         </select></label
       ><label
         ><FieldLabel name="model" /><select
@@ -83,8 +102,8 @@ const {
           v-model="train.model"
           :disabled="store.busy"
         >
-          <option v-for="v in ['logistic', 'lda', 'plsda', 'random_forest']" :key="v">
-            {{ v }}
+          <option v-for="v in ['logistic', 'lda', 'plsda', 'random_forest']" :key="v" :value="v">
+            {{ displayName(v) }}
           </option>
         </select></label
       ><label
@@ -157,15 +176,36 @@ const {
       </button>
     </div>
     <h3>图表与报告</h3>
-    <pre v-if="modelReport" class="code-block">{{ JSON.stringify(modelReport, null, 2) }}</pre>
-    <template v-for="kind in ['roc', 'pr', 'calibration'] as const" :key="kind"
+    <ReportView v-if="modelReport" :value="modelReport" />
+    <button
+      class="preview"
+      v-if="has('supervised')"
+      :disabled="store.busy"
+      @click="showConfusion(true)"
+    >
+      显示按真实类别归一的混淆矩阵
+    </button>
+    <button
+      class="preview"
+      v-if="has('supervised')"
+      :disabled="store.busy"
+      @click="showConfusion(false)"
+    >
+      显示计数混淆矩阵
+    </button>
+    <template v-for="kind in ['roc', 'pr', 'calibration', 'confusion'] as const" :key="kind"
       ><button
         class="preview"
         v-if="has('supervised') && !figures[kind]"
         :disabled="store.busy"
         @click="draw(kind)"
       >
-        显示 {{ kind }}</button
+        显示
+        {{
+          { roc: 'ROC 曲线', pr: '精确率–召回率', calibration: '校准曲线', confusion: '混淆矩阵' }[
+            kind
+          ]
+        }}</button
       ><PlotView
         v-if="figures[kind] && tab === 'supervised'"
         :figure="figures[kind]!"
@@ -228,11 +268,36 @@ const {
         读取 SHAP
       </button>
     </div>
-    <PlotView
-      v-if="figures.shap_plot && tab === 'supervised'"
-      :figure="figures.shap_plot"
-      :legend="legend"
-      name="shap"
-    /><ResultTable name="shap" />
+    <div class="field-grid">
+      <label
+        >解释类别序号（从 0 开始）<input
+          v-model.number="shapView.class_index"
+          type="number"
+          min="0" /></label
+      ><label
+        >细胞序号（从 0 开始）<input
+          v-model.number="shapView.cell_index"
+          type="number"
+          min="0" /></label
+      ><label>依赖图特征编号<input v-model="shapView.feature" /></label>
+    </div>
+    <template
+      v-for="kind in ['shap_plot', 'shap_beeswarm', 'shap_waterfall', 'shap_dependence'] as const"
+      :key="kind"
+      ><button class="preview" :disabled="store.busy || !has('shap')" @click="showShap(kind)">
+        {{
+          {
+            shap_plot: '全局重要性',
+            shap_beeswarm: '类别蜂群图',
+            shap_waterfall: '单细胞瀑布图',
+            shap_dependence: '特征依赖图',
+          }[kind]
+        }}</button
+      ><PlotView
+        v-if="figures[kind] && tab === 'supervised'"
+        :figure="figures[kind]!"
+        :name="kind"
+        :legend="legend" /></template
+    ><ResultTable name="shap" />
   </div>
 </template>

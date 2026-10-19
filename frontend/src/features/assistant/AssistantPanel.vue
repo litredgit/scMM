@@ -5,8 +5,19 @@ import { useWorkspace } from '../../stores/workspace'
 const open = ref(false)
 const conversation = ref<HTMLElement | null>(null)
 const store = useWorkspace()
-const { messages, input, busy, error, context, model, configured, send, stop, clear } =
-  useAssistant()
+const {
+  messages,
+  input,
+  busy,
+  error,
+  context,
+  model,
+  configured,
+  historyStatus,
+  send,
+  stop,
+  clear,
+} = useAssistant()
 watch(
   () => messages.value.map((m) => m.content + (m.note ?? '')).join(''),
   async () => {
@@ -18,18 +29,19 @@ const questions = ['当前进行到哪一步了？', '当前结果说明什么�
 </script>
 <template>
   <aside class="ai-assistant" :class="{ open }" aria-label="AI 分析助手">
-    <button class="ai-toggle" :aria-expanded="open" @click="open = !open">
+    <button class="ai-toggle primary" :aria-expanded="open" @click="open = !open">
       {{ open ? '收起 AI 助手' : 'AI 分析助手' }}<span v-if="busy"> · 生成中</span>
     </button>
     <section v-show="open" class="ai-body">
       <h2>AI 分析助手</h2>
+      <p role="status">{{ historyStatus }}</p>
       <p>只读解释与建议 · 当前模型：{{ model || '未配置' }}</p>
       <p class="muted">
         自动发送当前步骤、已生效参数和匿名汇总，不发送原始谱、矩阵、样本名或路径。你输入的问题会原样发给所选
         AI，请自行排除敏感信息。
       </p>
       <p class="muted">
-        对话仅在当前页面会话保留，刷新、切换项目或退出后清空；服务商的数据留存规则另行适用。AI
+        对话按用户与工作区加密保存，刷新或服务维护后可恢复；切换项目分别保留。服务商的数据留存规则另行适用。AI
         建议须人工判断。
       </p>
       <p v-if="!configured"><RouterLink to="/account">前往我的账号配置 API</RouterLink></p>
@@ -78,7 +90,7 @@ const questions = ['当前进行到哪一步了？', '当前结果说明什么�
           >
             发送
           </button>
-          <button type="button" :disabled="!busy" @click="stop()">停止生成</button>
+          <button type="button" :disabled="!busy" @click="stop()" class="restore">停止生成</button>
           <button type="button" @click="clear">清空对话</button>
         </div>
       </form>

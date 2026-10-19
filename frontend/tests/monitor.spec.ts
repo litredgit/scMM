@@ -46,9 +46,9 @@ test('monitor opens without creating a workspace and tracks hidden login pages',
   await other.close()
   for (const width of [1440, 700, 390]) {
     await page.setViewportSize({ width, height: 1000 })
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-    ).toBeTruthy()
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+      .toBeTruthy()
     await page.screenshot({ path: `/tmp/scmm-monitor/dashboard-${width}.png`, fullPage: true })
   }
 })

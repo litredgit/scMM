@@ -85,6 +85,7 @@ class MonitorService:
             input=json.dumps(payload),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=3,
             check=True,
         )
@@ -137,6 +138,8 @@ class MonitorService:
             self._active[identity] = {
                 "user_id": principal["id"],
                 "kind": self.operation(path),
+                "business": path.startswith("/api/v1/workspace/")
+                and path != "/api/v1/workspace/maintenance/draft",
                 "started_at": self.clock(),
             }
         return identity

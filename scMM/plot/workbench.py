@@ -37,8 +37,8 @@ def volcano_figure(table, *, fdr=0.05, fold_change=1.0, labels=10, order="fdr"):
         custom_data=["feature_id"],
         hover_name="display_mz",
         hover_data={
-            "mean_a": ":.3e",
-            "mean_b": ":.3e",
+            "mean_a": ":.1e",
+            "mean_b": ":.1e",
             "display_p_value": True,
             "display_fdr": True,
         },
@@ -91,7 +91,7 @@ def violin_figure(data, result, features, *, hide_zero=False, columns=3):
                 row=(column - 1) // columns + 1,
                 col=(column - 1) % columns + 1,
             )
-    figure.update_yaxes(tickformat=".3e", title_text="强度")
+    figure.update_yaxes(tickformat=".1e", title_text="强度")
     figure.update_layout(
         height=340 * rows,
         title="小提琴图（零值仅从显示中隐藏；检验与全局 FDR 不变）"
@@ -101,15 +101,30 @@ def violin_figure(data, result, features, *, hide_zero=False, columns=3):
     return style_figure(figure)
 
 
-def embedding_figure(data, key, color=None):
+def embedding_figure(data, key, color=None, dimensions=None):
+    if key not in data.obsm:
+        raise ValueError("所选坐标不存在，请先运行降维。")
     coordinates = np.asarray(data.obsm[key])
+    dimensions = dimensions or ([1, 2] if coordinates.shape[1] > 1 else [1, 0])
+    if dimensions[0] == 0:
+        raise ValueError("横轴需要有效坐标维度。")
+    if len(dimensions) not in {2, 3} or len(set(dimensions)) != len(dimensions):
+        raise ValueError("请选择两个或三个不同的坐标维度。")
+    if any(
+        d < 1 or d > coordinates.shape[1]
+        for d in dimensions
+        if not (d == 0 and coordinates.shape[1] == 1)
+    ):
+        raise ValueError("所选维度超出已计算的坐标范围。")
     frame = pd.DataFrame(
         {
-            "x": coordinates[:, 0],
-            "y": coordinates[:, 1] if coordinates.shape[1] > 1 else 0.0,
+            "x": coordinates[:, dimensions[0] - 1],
+            "y": coordinates[:, dimensions[1] - 1] if dimensions[1] else 0.0,
             "cell": data.obs_names,
         }
     )
+    if len(dimensions) == 3:
+        frame["z"] = coordinates[:, dimensions[2] - 1]
     color_key = None
     if color and color.startswith("obs:"):
         frame["color"] = data.obs[color[4:]].to_numpy()
@@ -117,17 +132,54 @@ def embedding_figure(data, key, color=None):
     elif color and color.startswith("feature:"):
         frame["color"] = dense(data[:, [color[8:]]].X)[:, 0]
         color_key = "color"
-    figure = px.scatter(
-        frame, x="x", y="y", color=color_key, hover_name="cell", title=key, render_mode="webgl"
+    variance = list(data.uns.get(f"{key}_params", {}).get("explained_variance_ratio", []))
+    labels = {}
+    for axis, dimension in zip(("x", "y", "z"), dimensions, strict=False):
+        labels[axis] = (
+            "常数轴"
+            if dimension == 0
+            else f"PC{dimension} ({variance[dimension - 1]:.2%})"
+            if variance
+            else f"维度 {dimension}"
+        )
+    kwargs = {
+        "x": "x",
+        "y": "y",
+        "color": color_key,
+        "hover_name": "cell",
+        "custom_data": ["cell"],
+        "title": key,
+        "labels": labels,
+    }
+    figure = (
+        px.scatter_3d(frame, z="z", **kwargs)
+        if len(dimensions) == 3
+        else px.scatter(frame, render_mode="webgl", **kwargs)
+    )
+    table = pd.DataFrame(
+        coordinates,
+        index=data.obs_names,
+        columns=[f"component_{i + 1}" for i in range(coordinates.shape[1])],
+    )
+    table.index.name = "cell_id"
+    table = table.join(data.obs, rsuffix="_metadata")
+    figure.update_layout(
+        meta={
+            "point_kind": "cell",
+            "embedding": key,
+            "dimensions": dimensions,
+            "explained_variance_ratio": variance,
+            "export_tables": {"coordinates": table.to_csv()},
+        }
     )
     if color and color.startswith("feature:"):
-        figure.update_coloraxes(colorbar_tickformat=".3e", colorbar_title="强度")
+        figure.update_coloraxes(colorbar_tickformat=".1e", colorbar_title="强度")
         figure.update_traces(
-            hovertemplate="细胞 %{hovertext}<br>x=%{x}<br>y=%{y}<br>强度 %{marker.color:.3e}<extra></extra>"
+            hovertemplate="细胞 %{hovertext}<br>x=%{x}<br>y=%{y}<br>强度 %{marker.color:.1e}<extra></extra>"
         )
     elif color:
         scientific = any(word in color.lower() for word in ("intensity", "abundance", "强度"))
-        figure.update_coloraxes(colorbar_tickformat=".3e" if scientific else ".3~f")
+        figure.update_coloraxes(colorbar_tickformat=".1e" if scientific else ".3~f")
     return style_figure(figure)
 
 
@@ -185,5 +237,19 @@ def network_figure(graph):
             hovertemplate="%{text}<extra></extra>",
         )
     )
-    figure.update_layout(title="特征相关网络（不代表因果或轨迹）", showlegend=True)
+    figure.update_layout(
+        title="特征相关网络（不代表因果或轨迹）",
+        showlegend=True,
+        meta={
+            "layout_seed": 42,
+            "export_tables": {
+                "nodes": pd.DataFrame(
+                    [{"feature_id": n, "x": p[0], "y": p[1]} for n, p in positions.items()]
+                ).to_csv(index=False),
+                "edges": pd.DataFrame(
+                    [{"source": a, "target": b, **attrs} for a, b, attrs in graph.edges(data=True)]
+                ).to_csv(index=False),
+            },
+        },
+    )
     return figure

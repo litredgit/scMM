@@ -316,6 +316,13 @@ def run_batch(path):
             try:
                 check_inputs(None if request["feature_strategy"] == "shared" else sample)
                 params = ProcessingParameters(**sample["parameters"])
+                detection_holder = {}
+
+                def capture(event, payload, holder=detection_holder):
+                    if event == "find_cells":
+                        from .raw_preview import detection_from_payload
+
+                        holder["value"] = detection_from_payload(payload)
 
                 def progress(value, message, name=sample["name"]):
                     report(f"{name}: {value:.0%} {message}")
@@ -325,12 +332,17 @@ def run_batch(path):
                 )
                 if cached is not None:
                     obj = CyESIData.read_h5ad(cached)
+                    from .preview_cache import load_detection
+
+                    detection_holder["value"] = load_detection(cached)
                     row["reused_preview"] = True
                 elif targets is None:
                     obj = CyESIData.load_from_file(
                         sample["path"],
                         params.ref_mz,
                         progress_callback=progress,
+                        debug_hook=capture,
+                        debug_full_baseline=False,
                         **params.load_kwargs(),
                     )
                 else:
@@ -349,11 +361,19 @@ def run_batch(path):
                         kwargs.pop(key)
                     obj = CyESIData._from_raw_state(
                         DatasetState(frame, obs, meta, params.ref_mz),
-                        {**kwargs, "progress_callback": progress},
+                        {
+                            **kwargs,
+                            "progress_callback": progress,
+                            "debug_hook": capture,
+                            "debug_full_baseline": False,
+                        },
                     )
                     del exp, frame, obs
                 check_inputs(None if request["feature_strategy"] == "shared" else sample)
                 obj.file_meta.update(name=sample["name"], source_file=sample["path"])
+                identity = sample.get("input_identity") or file_identity(sample["path"])
+                obj.file_meta["input_identity"] = identity
+                obj.peak_meta["source_identity_json"] = json.dumps(identity, sort_keys=True)
                 for key, value in {
                     "sample_id": sample["id"],
                     "sample": sample["name"],
@@ -367,6 +387,20 @@ def run_batch(path):
                     raise ValueError("No cells or features retained")
                 output = path.parent / f"{sample['id']}.h5ad"
                 obj.save_h5ad(output)
+                detection = detection_holder.get("value")
+                if detection is not None:
+                    folder = path.parent / f"{sample['id']}-detection"
+                    folder.mkdir(exist_ok=True)
+                    detection.traces.to_csv(folder / "traces.csv", index=False)
+                    write_json(
+                        folder / "detection.json",
+                        {
+                            "reference_mz": detection.reference_mz,
+                            "window_ranges": detection.window_ranges,
+                            "cell_count": detection.cell_count,
+                        },
+                    )
+                    row["detection_directory"] = folder.name
                 row.update(
                     status="succeeded",
                     output=output.name,

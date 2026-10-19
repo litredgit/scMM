@@ -33,6 +33,7 @@ supervised = [
     "scikit-learn>=1.7,<1.8",
     "imbalanced-learn>=0.14,<0.15",
     "shap>=0.45,<0.49",
+    "skops>=0.14,<0.17",
 ]
 plot = [
     "matplotlib>=3.8",
@@ -62,6 +63,8 @@ web = [
     "starlette>=0.46,<1",
     "umap-learn>=0.5",
     "uvicorn>=0.30,<1",
+    "svglib==1.5.1",
+    "defusedxml>=0.7,<1",
 ]
 
 [dependency-groups]

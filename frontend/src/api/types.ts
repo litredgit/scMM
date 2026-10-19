@@ -116,6 +116,8 @@ export interface AnalysisInfo {
   token: [string, number]
   layers: string[]
   embeddings: string[]
+  embedding_dimensions: Record<string, number>
+  embedding_variance: Record<string, number[]>
   observations: Record<string, string[]>
   history: Record<string, unknown>[]
   results: string[]

@@ -109,6 +109,8 @@ def reduce_dimension(
     key = store_key or f"X_{method}"
     if not isinstance(key, str) or not key or "/" in key:
         raise ValueError("store_key must be a nonempty H5AD-safe key")
+    if method == "pca" and not np.any(np.var(values, axis=0) > 0):
+        raise ValueError("PCA requires at least one feature with nonzero variance")
     embedding = model.fit_transform(values)
     if not np.isfinite(embedding).all():
         raise ValueError("reduction produced non-finite coordinates")
@@ -120,4 +122,11 @@ def reduce_dimension(
         **preprocessing,
         **params,
     }
+    if method == "pca":
+        data.uns[f"{key}_params"]["explained_variance_ratio"] = (
+            model.explained_variance_ratio_.tolist()
+        )
+        data.uns[f"{key}_params"]["cumulative_variance_ratio"] = np.cumsum(
+            model.explained_variance_ratio_
+        ).tolist()
     return embedding

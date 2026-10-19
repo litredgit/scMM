@@ -21,6 +21,19 @@ async def runtime(request: Request):
         "environment": state["environment"],
         "instance": state["instance"],
         "update_readiness": decision,
+        "maintenance_checkpoint": (
+            {
+                "id": request.app.state.maintenance.completed["id"],
+                "verified": True,
+                "frozen": True,
+                "created": request.app.state.maintenance.completed["created"],
+                "instance": state["instance"],
+            }
+            if request.app.state.maintenance
+            and request.app.state.maintenance.completed
+            and getattr(request.app.state.workspaces, "maintenance_frozen", False)
+            else None
+        ),
     }
 
 

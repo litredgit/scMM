@@ -86,7 +86,7 @@ class Operation(RevisionRequest):
 
 class Filter(Controls):
     min_total: float = Field(default=0.0, ge=0)
-    min_detected: int = Field(default=0, ge=0)
+    min_detected: float = Field(default=0.2, ge=0, le=1)
     min_feature_fraction: float = Field(default=0.0, ge=0, le=1)
 
 
@@ -135,11 +135,12 @@ class Cluster(Controls):
 
 class Markers(Controls):
     group_key: str
-    method: Literal["mannwhitney", "welch"] = "mannwhitney"
+    method: Literal["mannwhitney", "welch", "classifier"] = "mannwhitney"
     layer: str | None = None
 
 
 class Differential(Markers):
+    method: Literal["mannwhitney", "welch"] = "mannwhitney"
     group_a: str
     group_b: str
 
@@ -180,14 +181,72 @@ class Invalidate(RevisionRequest):
 
 class Plot(RevisionRequest):
     kind: Literal[
-        "embedding", "volcano", "violin", "network_plot", "shap_plot", "roc", "pr", "calibration"
+        "embedding",
+        "volcano",
+        "violin",
+        "network_plot",
+        "shap_plot",
+        "roc",
+        "pr",
+        "calibration",
+        "confusion",
+        "heatmap",
+        "shap_beeswarm",
+        "shap_waterfall",
+        "shap_dependence",
     ]
     options: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConfusionPlot(Controls):
+    normalize: bool = False
+
+
+class HeatmapPlot(Controls):
+    features: list[str] = Field(min_length=1, max_length=1000)
+    layer: str | None = None
+    group_key: str | None = None
+    sample_key: str | None = None
+    equal_samples: bool = False
+    zscore: bool = True
+    cluster_rows: bool = True
+    cluster_columns: bool = True
+
+
+class ShapPlot(Controls):
+    class_index: int = Field(default=0, ge=0)
+    cell_index: int = Field(default=0, ge=0)
+    feature: str | None = None
+    top: int = Field(default=20, ge=1, le=100)
 
 
 class EmbeddingPlot(Controls):
     key: str
     color: str | None = None
+    dimensions: list[int] = Field(default_factory=lambda: [1, 2], min_length=2, max_length=3)
+
+
+class CellSpectra(RevisionRequest):
+    cells: list[str] = Field(min_length=1, max_length=2)
+    source: Literal["matrix", "apex", "window"] = "matrix"
+    normalization: Literal["raw", "max", "tic"] = "raw"
+    mirror: bool = False
+    average: bool = False
+
+
+class FigureData(Controls):
+    figure: dict[str, Any]
+
+
+class FigurePDF(Controls):
+    svg: str = Field(max_length=32 * 1024**2)
+    width_mm: float = Field(default=89, ge=20, le=600)
+    height_mm: float = Field(default=65, ge=20, le=600)
+
+
+class BatchSignal(RevisionRequest):
+    path: str
+    sample_id: str
 
 
 class VolcanoPlot(Controls):
@@ -250,7 +309,17 @@ OPERATIONS = {
     "explain_shap": Shap,
     "save_latent": Latent,
 }
-PLOTS = {"embedding": EmbeddingPlot, "volcano": VolcanoPlot, "violin": ViolinPlot}
+PLOTS = {
+    "confusion": ConfusionPlot,
+    "heatmap": HeatmapPlot,
+    "shap_plot": ShapPlot,
+    "shap_beeswarm": ShapPlot,
+    "shap_waterfall": ShapPlot,
+    "shap_dependence": ShapPlot,
+    "embedding": EmbeddingPlot,
+    "volcano": VolcanoPlot,
+    "violin": ViolinPlot,
+}
 
 
 def options_for(model, options):

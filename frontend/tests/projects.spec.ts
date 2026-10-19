@@ -37,7 +37,8 @@ test('project, samples, metadata, save and reopen with no browser errors', async
   await other.close()
 
   await page.reload()
-  await expect(page.getByRole('heading', { name: '先选择一个项目' })).toBeVisible()
+  await expect(page.getByLabel('alpha group', { exact: true })).toHaveValue('对照')
+  await page.getByRole('button', { name: '关闭项目', exact: true }).click()
   await page.getByRole('link', { name: '前往项目首页 →' }).click()
   const row = page.getByRole('row').filter({ hasText: '浏览器全流程' })
   await row.getByRole('button', { name: '打开项目 →' }).click()

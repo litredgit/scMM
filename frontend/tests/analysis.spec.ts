@@ -60,12 +60,12 @@ test('legacy settings, independent parameters, draft and project reset, narrow p
   await page
     .getByLabel('layer', { exact: true })
     .filter({ visible: true })
-    .selectOption({ label: '当前 X' })
+    .selectOption({ label: '当前矩阵' })
   let computations = 0
   page.on('request', (request) => {
     if (request.url().endsWith('/analysis/operation')) computations++
   })
-  await module(page, '降维与聚类')
+  await module(page, '降维')
   await page.getByLabel('random_state', { exact: true }).filter({ visible: true }).fill('12')
   await module(page, '监督与 SHAP')
   await expect(
@@ -96,7 +96,7 @@ test('legacy settings, independent parameters, draft and project reset, narrow p
   await expect(page.getByLabel('latent_key', { exact: true })).toHaveValue('X_old_latent')
   await module(page, '相关网络')
   await expect(page.getByLabel('layer', { exact: true }).filter({ visible: true })).toHaveValue(
-    '当前 X',
+    '当前矩阵',
   )
   for (const width of [700, 390]) {
     await page.setViewportSize({ width, height: 900 })
@@ -223,3 +223,57 @@ for (const staleFailure of [false, true]) {
     await expect(page.getByRole('alert')).toHaveCount(0)
   })
 }
+
+test('PCA axes, stable cell clicks, paper exports and complete heatmap data', async ({ page }) => {
+  test.setTimeout(90000)
+  await importAnalysis(page, '论文图与细胞联动')
+  await page.getByLabel('n_components', { exact: true }).fill('4')
+  await page.getByRole('button', { name: '运行降维', exact: true }).click()
+  await expect(page.getByLabel('查看嵌入', { exact: true })).toHaveValue('X_pca')
+  await page
+    .getByRole('combobox', { name: '显示维度', exact: true })
+    .selectOption({ label: '三维' })
+  const projected = page.waitForResponse(
+    (r) =>
+      r.url().endsWith('/analysis/plot') &&
+      JSON.stringify(r.request().postDataJSON().options.dimensions) === '[1,2,4]',
+  )
+  await page.getByLabel('Z 轴', { exact: true }).fill('4')
+  expect((await projected).ok()).toBe(true)
+  await expect(page.getByRole('cell', { name: 'PC4', exact: true })).toBeVisible()
+  await page
+    .locator('.js-plotly-plot')
+    .first()
+    .evaluate((el) => {
+      const plot = el as HTMLElement & { emit: (name: string, event: unknown) => void }
+      plot.emit('plotly_click', { points: [{ customdata: ['c0'] }] })
+      plot.emit('plotly_click', { points: [{ customdata: ['c33'] }] })
+    })
+  await expect(page.getByRole('heading', { name: '所选细胞质谱' })).toBeVisible()
+  await page.getByRole('button', { name: '查看质谱', exact: true }).click()
+  const spectra = page
+    .locator('.plot-shell')
+    .filter({ has: page.getByLabel('图文件名：cell-spectra', { exact: true }) })
+  await expect(spectra.locator('.js-plotly-plot')).toBeVisible()
+  const pdf = page.waitForEvent('download')
+  await spectra.getByRole('button', { name: '下载 PDF', exact: true }).click()
+  expect((await pdf).suggestedFilename()).toBe('cell-spectra.pdf')
+  await module(page, '热图')
+  await page.getByLabel('特征编号（换行或逗号分隔）', { exact: true }).fill('f0\nf1\nf2')
+  await page.getByRole('combobox', { name: '分组列', exact: true }).selectOption('group')
+  await page.getByRole('combobox', { name: '样本列', exact: true }).selectOption('sample')
+  await page
+    .getByRole('combobox', { name: '均值权重', exact: true })
+    .selectOption({ label: '样本等权' })
+  await page.getByRole('button', { name: '生成热图', exact: true }).click()
+  const heatmap = page
+    .locator('.plot-shell')
+    .filter({ has: page.getByLabel('图文件名：heatmap', { exact: true }) })
+  await expect(heatmap.locator('.js-plotly-plot')).toBeVisible()
+  const download = page.waitForEvent('download')
+  await heatmap.getByRole('button', { name: '下载作图数据', exact: true }).click()
+  expect((await download).suggestedFilename()).toBe('heatmap-data.zip')
+  await module(page, '差异与 Marker')
+  await page.getByRole('button', { name: '计算分类权重 Marker', exact: true }).click()
+  await expect(page.getByRole('columnheader', {name:/符号稳定性/})).toBeVisible()
+})

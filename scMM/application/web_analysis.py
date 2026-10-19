@@ -8,6 +8,7 @@ from pathlib import PureWindowsPath
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 from scMM.plot.presentation import feature_label, qc_file_table, style_figure
 from scMM.plot.workbench import (
@@ -39,8 +40,10 @@ def quality_view(state):
     qc = state.qc()
     files = qc_file_table(qc["file"])
     files.insert(0, "source_path", files.attrs["source_paths"])
+    cell_frame = qc["cell"].copy()
+    cell_frame["cell_id"] = state.require_data().obs_names.astype(str)
     figure = px.scatter(
-        qc["cell"],
+        cell_frame,
         x="total_intensity",
         y="detected_features",
         color="source_file",
@@ -50,7 +53,7 @@ def quality_view(state):
             "detected_features": "检出特征数",
         },
         title="每细胞 QC · 当前矩阵",
-        custom_data=["source_file"],
+        custom_data=["cell_id", "source_file"],
     )
     names = Counter(PureWindowsPath(str(trace.name)).name for trace in figure.data)
     occurrences = Counter()
@@ -59,10 +62,17 @@ def quality_view(state):
         occurrences[name] += 1
         trace.name = name if names[name] == 1 else f"{name}（{occurrences[name]}）"
         trace.hovertemplate = (
-            "文件：%{customdata[0]}<br>当前总强度：%{x:.17g}"
+            "文件：%{customdata[1]}<br>当前总强度：%{x:.1e}"
             "<br>强度 > 0 的特征数：%{y}<extra></extra>"
         )
-    figure.update_layout(legend_title_text="")
+    figure.update_layout(
+        legend_title_text="",
+        meta={
+            "point_kind": "cell",
+            "parameters": {"definition": "current matrix; detected >0"},
+            "export_tables": {"cells": cell_frame.to_csv(), "files": files.to_csv(index=False)},
+        },
+    )
     style_figure(figure)
     detected = qc["cell"]["detected_features"]
     figure.update_yaxes(
@@ -78,11 +88,11 @@ def quality_view(state):
     ):
         figure.update_xaxes(
             range=[-0.05 if np.any(totals == 0) else 0.95, 1.05],
-            tickformat=".2f",
-            hoverformat=".17g",
+            tickformat=".1e",
+            hoverformat=".1e",
         )
         notes.append(
-            "非零细胞总强度约为 1；横轴采用稳定范围，避免浮点求和误差形成假分群。零总和细胞仍显示在 0，悬停可查看实际精度。"
+            "非零细胞总强度约为 1；横轴采用稳定范围，避免浮点求和误差形成假分群。零总和细胞仍显示在 0，下载保留完整数值精度。"
         )
     return {
         "notes": notes,
@@ -173,6 +183,13 @@ class AnalysisWorkflow:
                 "token": list(state.token),
                 "layers": list(data.layers),
                 "embeddings": list(data.obsm),
+                "embedding_dimensions": {
+                    key: int(value.shape[1]) for key, value in data.obsm.items()
+                },
+                "embedding_variance": {
+                    key: list(data.uns.get(f"{key}_params", {}).get("explained_variance_ratio", []))
+                    for key in data.obsm
+                },
                 "observations": values,
                 "history": state.history(),
                 "results": results,
@@ -368,13 +385,57 @@ class AnalysisWorkflow:
                     }
                 else:
                     raise ValueError("请重新计算相关网络。")
-            elif kind == "shap_plot":
-                figure = px.bar(
-                    self.result_value(project, "shap")["table"].head(30).iloc[::-1],
-                    x="mean_abs_shap",
-                    y="feature_id",
-                    orientation="h",
-                    title="平均绝对 SHAP（前 30 项）",
+            elif kind in {"shap_plot", "shap_beeswarm", "shap_waterfall", "shap_dependence"}:
+                from scMM.plot.explanations import shap_figure
+
+                figure = shap_figure(self.result_value(project, "shap"), kind, **options)
+            elif kind == "heatmap":
+                from scMM.analysis.heatmap import heatmap_figure
+
+                figure = heatmap_figure(data, **options)
+            elif kind == "confusion":
+                analyzer = state.result("supervised")
+                values = np.asarray(analyzer.result_["confusion_matrix"])
+                normalized = np.divide(
+                    values,
+                    values.sum(axis=1, keepdims=True),
+                    out=np.zeros_like(values, dtype=float),
+                    where=values.sum(axis=1, keepdims=True) > 0,
+                )
+                display = normalized if options.get("normalize", False) else values
+                figure = go.Figure(
+                    go.Heatmap(
+                        z=display,
+                        x=analyzer.classes_.astype(str),
+                        y=analyzer.classes_.astype(str),
+                        colorscale="Blues",
+                        text=display,
+                        texttemplate="%{text:.2f}"
+                        if options.get("normalize", False)
+                        else "%{text}",
+                    )
+                )
+                figure.update_layout(
+                    title="留出测试集混淆矩阵",
+                    xaxis_title="预测类别",
+                    yaxis_title="真实类别",
+                    meta={
+                        "export_tables": {
+                            "counts.csv": pd.DataFrame(
+                                values, index=analyzer.classes_, columns=analyzer.classes_
+                            ).to_csv(),
+                            "row_normalized.csv": pd.DataFrame(
+                                np.divide(
+                                    values,
+                                    values.sum(axis=1, keepdims=True),
+                                    out=np.zeros_like(values, dtype=float),
+                                    where=values.sum(axis=1, keepdims=True) > 0,
+                                ),
+                                index=analyzer.classes_,
+                                columns=analyzer.classes_,
+                            ).to_csv(),
+                        }
+                    },
                 )
             elif kind in {"roc", "pr", "calibration"}:
                 if "supervised" not in state.results:
@@ -389,6 +450,45 @@ class AnalysisWorkflow:
                 ]
             else:
                 raise ValueError("不支持的图形。")
+            figure.update_layout(
+                meta={
+                    **(figure.layout.meta or {}),
+                    "dataset_token": list(state.token),
+                    "parameters": options,
+                }
+            )
+            export_tables = dict((figure.layout.meta or {}).get("export_tables", {}))
+            if kind == "volcano":
+                export_tables["statistics"] = self.result_value(project, "differential")[
+                    "table"
+                ].to_csv(index=False)
+            elif kind == "violin":
+                result = self.result_value(project, "differential")
+                matrix = data.to_df(layer=result["layer"])[options["features"]]
+                export_tables["source"] = matrix.join(data.obs, rsuffix="_annotation").to_csv()
+                export_tables["statistics"] = result["table"].to_csv(index=False)
+            elif kind == "network_plot" and "network" in state.results:
+                result = state.result("network")
+                export_tables["edges"] = result["table"].to_csv(index=False)
+                export_tables["correlations"] = result["correlation"].to_csv()
+            elif (
+                kind in {"roc", "pr", "calibration", "confusion"} and "supervised" in state.results
+            ):
+                analyzer = state.result("supervised")
+                export_tables["predictions"] = pd.DataFrame(
+                    {
+                        "cell_id": analyzer.test_obs_names_,
+                        "actual": analyzer.y_test_,
+                        "predicted": analyzer.prediction_,
+                        **{
+                            f"probability_{label}": analyzer.probabilities_[:, i]
+                            for i, label in enumerate(analyzer.classes_)
+                        },
+                    }
+                ).to_csv(index=False)
+            figure.update_layout(
+                meta={**(figure.layout.meta or {}), "export_tables": export_tables}
+            )
             payload = figure_view(style_figure(figure))
             project.views.setdefault("figures", {})[kind] = payload
             project.dirty = True

@@ -24,6 +24,7 @@ from .routers import (
     auth,
     extraction,
     lipids,
+    maintenance,
     monitor,
     preferences,
     projects,
@@ -89,6 +90,11 @@ def create_app(
     app.state.ai_client = ChatClient(EndpointPolicy(values.get("ai_private_urls", [])))
     app.state.ai_active = set()
     app.state.monitor = monitoring
+    from scMM.application.maintenance import Maintenance
+
+    app.state.maintenance = (
+        Maintenance(manager, monitoring, server_config) if hasattr(server_config, "path") else None
+    )
     app.state.workspaces = manager
     app.state.auth, app.state.server_config = auth_store, server_config
 
@@ -154,6 +160,29 @@ def create_app(
                         request.headers.get("x-scmm-csrf", "").encode(), principal["csrf"].encode()
                     ):
                         raise AuthError("请求校验已失效，请重新登录。", 403, "csrf_rejected")
+            maintenance_state = getattr(app.state, "maintenance", None)
+            if (
+                maintenance_state
+                and maintenance_state.request
+                and request.method not in {"GET", "HEAD", "OPTIONS"}
+                and path.startswith("/api/")
+                and path
+                not in {
+                    "/api/v1/presence/heartbeat",
+                    "/api/v1/presence/register",
+                    "/api/v1/ai/history",
+                    "/api/v1/workspace/maintenance/draft",
+                    "/api/v1/maintenance/draft",
+                    "/api/v1/workspaces/resume",
+                }
+                and not path.startswith("/api/v1/admin/maintenance/")
+                and not path.startswith("/api/v1/auth/")
+            ):
+                raise WorkspaceError(
+                    "服务正在收集维护暂存，请等待完成或由管理员取消。",
+                    code="maintenance",
+                    status=503,
+                )
             if (
                 principal
                 and path.startswith("/api/v1/")
@@ -196,7 +225,7 @@ def create_app(
 
                 response.body_iterator = monitored_body()
                 operation = None
-        except AuthError as exc:
+        except (AuthError, WorkspaceError) as exc:
             if principal:
                 auth_store.audit(principal["id"], "request_denied", path, exc.status)
             response = JSONResponse(
@@ -279,6 +308,7 @@ def create_app(
     app.include_router(auth.router)
     app.include_router(ai.router)
     app.include_router(monitor.router)
+    app.include_router(maintenance.router)
     app.include_router(samples.router)
     app.include_router(storage.router)
     for router in (

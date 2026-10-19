@@ -577,3 +577,29 @@ def test_initialization_failure_cleans_only_its_private_files(tmp_path, monkeypa
     with pytest.raises(ValueError, match="已存在"):
         AIConfigStore.initialize(database, key)
     assert key.read_text() == "existing material"
+
+
+def test_encrypted_conversation_revision_and_reinitialization(ai):
+    w, app, *_ = ai
+    client = w[0]
+    body = {
+        "context": "workspace-private-context",
+        "revision": 0,
+        "messages": [{"role": "user", "content": "PRIVATE-CONVERSATION-TEST", "note": None}],
+        "draft": "remaining draft",
+        "streaming": False,
+        "summary": None,
+        "model": "synthetic",
+    }
+    response = client.put("/api/v1/ai/history", json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["revision"] == 1
+    assert client.put("/api/v1/ai/history", json=body).status_code == 409
+    stored = client.get("/api/v1/ai/history", params={"context": body["context"]}).json()
+    assert stored["messages"] == body["messages"] and stored["draft"] == body["draft"]
+    store = app.state.ai_config
+    assert b"PRIVATE-CONVERSATION-TEST" not in store.database.read_bytes()
+    another = AIConfigStore(store.database, store.key_file)
+    owner = client.get("/api/v1/auth/me").json()["id"]
+    assert another.history(owner, body["context"])["revision"] == 1
+    assert another.history("another-user", body["context"])["messages"] == []

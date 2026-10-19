@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
 import PlotView from '../../../../components/PlotView.vue'
 import ResultTable from '../../components/ResultTable.vue'
@@ -16,8 +17,8 @@ const { network, legend, store, info, tab, figures, has, execute, loadWithPlot }
           v-model="network.layer"
           :disabled="store.busy"
         >
-          <option :value="null">当前 X</option>
-          <option v-for="v in info?.layers" :key="v">{{ v }}</option>
+          <option :value="null">当前矩阵</option>
+          <option v-for="v in info?.layers" :key="v" :value="v">{{ displayName(v) }}</option>
         </select></label
       >
       <label

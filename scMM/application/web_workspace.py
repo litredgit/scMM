@@ -30,8 +30,8 @@ from .workbench import read_dataset
 RESULT_PLOTS = {
     "differential": ("volcano", "violin"),
     "network": ("network_plot",),
-    "supervised": ("roc", "pr", "calibration"),
-    "shap": ("shap_plot",),
+    "supervised": ("roc", "pr", "calibration", "confusion"),
+    "shap": ("shap_plot", "shap_beeswarm", "shap_waterfall", "shap_dependence"),
 }
 
 
@@ -206,6 +206,8 @@ class WebWorkspaceService(RawWorkflow, AnalysisWorkflow, ResultWorkflow, LipidWo
                 workspace.lock.release()
 
     def create(self):
+        if getattr(self, "maintenance_frozen", False):
+            raise WorkspaceError("维护暂存已冻结，请等待服务恢复。", code="maintenance", status=503)
         with self._lock:
             self._prune()
             if len(self._workspaces) >= self.capacity:

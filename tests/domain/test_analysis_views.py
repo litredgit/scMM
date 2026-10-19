@@ -42,7 +42,7 @@ def test_plot_display_formats_intensity_and_probabilities_without_rounding_data(
     figure = style_figure(
         go.Figure().update_layout(xaxis_title="total_intensity", yaxis_title="detected_features")
     )
-    assert figure.layout.xaxis.tickformat == figure.layout.xaxis.hoverformat == ".3e"
+    assert figure.layout.xaxis.tickformat == figure.layout.xaxis.hoverformat == ".1e"
     assert figure.layout.yaxis.tickformat == figure.layout.yaxis.hoverformat == "d"
     table = pd.DataFrame(
         {
@@ -57,7 +57,7 @@ def test_plot_display_formats_intensity_and_probabilities_without_rounding_data(
     original = table.copy()
     volcano = volcano_figure(table)
     template = volcano.data[0].hovertemplate
-    assert template.count(".3e") == 2
+    assert template.count(".1e") == 2
     assert "1.00e-09" in volcano.data[0].customdata[0]
     assert "1.00e-08" in volcano.data[0].customdata[0]
     assert volcano.layout.yaxis.tickformat == ".3~f"

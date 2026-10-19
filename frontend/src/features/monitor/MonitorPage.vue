@@ -171,7 +171,7 @@ onUnmounted(stop)
         <h1>管理员监控</h1>
         <p class="muted">只读 · 当前状态与最近 24 小时趋势 · 不占用实验工作区</p>
       </div>
-      <button :disabled="loading" @click="refresh">刷新监控</button>
+      <button :disabled="loading" @click="refresh" class="preview">刷新监控</button>
     </div>
     <p v-if="error" class="alert error" role="alert">{{ error }}；保留上次数据，更新判断已失效。</p>
     <p v-if="!state && !error" role="status">等待首次监控采样…</p>

@@ -99,7 +99,12 @@ def style_figure(figure):
     if figure is None or not hasattr(figure, "update_layout"):
         return figure
     figure.update_layout(
-        template="plotly_white", paper_bgcolor="white", plot_bgcolor="white", hovermode="closest"
+        colorway=["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#000000"],
+        font={"family": "Arial, Helvetica, sans-serif", "size": 13, "color": "#111111"},
+        template="plotly_white",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        hovermode="closest",
     )
     figure.update_xaxes(showspikes=False, showgrid=False, zeroline=False, showline=True)
     figure.update_yaxes(showspikes=False, showgrid=False, zeroline=False, showline=True)
@@ -108,7 +113,7 @@ def style_figure(figure):
             axis = figure.layout[axis_name]
             title = (axis.title.text or "").lower()
             if any(word in title for word in ("intensity", "强度", "abundance")):
-                axis.tickformat = axis.hoverformat = ".3e"
+                axis.tickformat = axis.hoverformat = ".1e"
             elif "m/z" in title or title == "mz":
                 axis.tickformat = axis.hoverformat = ".4f"
             elif any(word in title for word in ("features", "cells", "特征数", "细胞数")):

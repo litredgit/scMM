@@ -24,6 +24,15 @@ def plan(*files):
     return select(files, CONFIGURATION)
 
 
+def test_shared_frontend_changes_include_assistant_browser_checks():
+    for path in (
+        "frontend/src/stores/workspace.ts",
+        "frontend/src/components/PlotView.vue",
+        "frontend/src/router/index.ts",
+    ):
+        assert "browser-ai" in plan(path)["selected"]
+
+
 @pytest.mark.parametrize(
     "file,expected",
     [

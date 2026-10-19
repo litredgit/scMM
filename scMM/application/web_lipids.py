@@ -303,11 +303,31 @@ class LipidWorkflow:
             )
             matched = isotope_feature_ids(version)
             counts = pd.Series([r["feature_id"] for r in all_rows]).value_counts().to_dict()
+            from scMM.util.lipid_names import record_species
+
+            grouped = {}
+            for row in candidates:
+                label = row.get("species") or record_species(row)
+                key = (row["feature_id"], label, row["formula"], row["adduct"])
+                grouped.setdefault(key, []).append(row)
+            groups = list(grouped.items())
+            chosen = groups[values["offset"] : values["offset"] + values["limit"]]
+            # Row table remains uncollapsed for downstream exports and compatibility.
             table = table_view(
                 pd.DataFrame(candidates[values["offset"] : values["offset"] + values["limit"]]),
                 limit=values["limit"],
             )
             table["total"] = len(candidates)
+            candidate_groups = [
+                {
+                    "label": key[1],
+                    "feature_id": key[0],
+                    "formula": key[2],
+                    "adduct": key[3],
+                    "rows": rows,
+                }
+                for key, rows in chosen
+            ]
             isotope_table = table_view(
                 pd.DataFrame(
                     relation_labels(
@@ -321,6 +341,8 @@ class LipidWorkflow:
             )
             isotope_table["total"] = len(relations)
             return {
+                "candidate_groups": candidate_groups,
+                "candidate_group_total": len(groups),
                 "version": version["id"],
                 "parameters": version["parameters"],
                 "rules": version["rules"],

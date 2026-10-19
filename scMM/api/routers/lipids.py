@@ -52,6 +52,22 @@ def review(body: s.LipidReview, manager: Service, identity: Identity):
     return manager.lipid_review(identity, body.revision, body.model_dump())
 
 
+@router.post("/isotope-spectrum")
+def spectrum(body: s.IsotopeSpectrum, manager: Service, identity: Identity):
+    from scMM.application.web_lipids import selected_version
+    from scMM.application.web_support import figure_view
+    from scMM.plot.isotopes import isotope_spectrum
+
+    with manager.access(identity) as workspace:
+        workspace.check(body.revision)
+        data = workspace.require_project().workspace.require_data()
+        _, version = selected_version(data, body.version)
+        return {
+            "workspace": manager.view(workspace),
+            "value": figure_view(isotope_spectrum(data, version, body.relation_id)),
+        }
+
+
 @router.post("/query")
 def query(body: s.LipidQuery, manager: Service, identity: Identity):
     return manager.lipid_query(identity, body.revision, body.model_dump())

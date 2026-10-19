@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWorkspace } from './stores/workspace'
 import { useAuth } from './stores/auth'
+import { startMaintenance } from './api/maintenance'
 import { startPresence, updatePresence } from './api/presence'
 import LoginPanel from './components/LoginPanel.vue'
 import AssistantPanel from './features/assistant/AssistantPanel.vue'
@@ -13,6 +14,7 @@ const route = useRoute()
 const router = useRouter()
 const standalone = computed(() => ['/admin/monitor', '/account'].includes(route.path))
 let presence: ReturnType<typeof startPresence> | undefined
+let stopMaintenance: (() => void) | undefined
 let workspaceUser = ''
 async function connect() {
   if (!auth.user || auth.user.must_change) return
@@ -50,12 +52,12 @@ watch(
 )
 onMounted(() => {
   presence = startPresence()
+  stopMaintenance = startMaintenance(router)
   void presence.ready.then(() => auth.refresh())
-  window.addEventListener('pagehide', store.release)
 })
 onUnmounted(() => {
-  window.removeEventListener('pagehide', store.release)
   presence?.stop()
+  stopMaintenance?.()
 })
 const stages = [
   { path: '/raw', name: '原始谱与参数' },
@@ -147,11 +149,20 @@ const nextHelp = computed(() =>
           </button>
         </div>
       </header>
-      <main id="main-content" :aria-busy="!standalone && store.busy">
+      <main
+        :inert="store.maintenancePaused && !standalone"
+        id="main-content"
+        :aria-busy="!standalone && store.busy"
+      >
         <div v-if="store.error" role="alert" class="alert error">
           <span>{{ store.error }}</span>
           <div class="actions">
-            <button v-if="store.current" @click="store.refresh()" :disabled="store.busy">
+            <button
+              v-if="store.current"
+              @click="store.refresh()"
+              :disabled="store.busy"
+              class="preview"
+            >
               刷新状态</button
             ><button @click="store.error = ''" aria-label="清除错误">×</button>
           </div>

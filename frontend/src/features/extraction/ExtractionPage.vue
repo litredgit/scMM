@@ -1,16 +1,27 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useViewState } from '../../api/viewState'
+import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import type { Batch, Figure, DataTable } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
 import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
 const store = useWorkspace()
+const signalSample = ref(''),
+  signalFigure = ref<Figure>()
+async function loadSignal() {
+  const result = await store.command<{ figure: Figure }>('/extraction/signal', {
+    path: path.value,
+    sample_id: signalSample.value,
+  })
+  if (result) signalFigure.value = result.figure
+}
+
 const batchList = ref<Batch[]>([]),
   path = ref(''),
   included = ref<string[]>([]),
   checked = ref<Record<string, unknown>>(),
   figures = ref<Figure[]>([])
-let timer: ReturnType<typeof setInterval> | undefined
+let timer: ReturnType<typeof setTimeout> | undefined
 const selected = computed(() => batchList.value.find((b) => b.path === path.value))
 const active = computed(() => batchList.value.some((b) => ['queued', 'running'].includes(b.status)))
 const table = computed<DataTable>(() => ({
@@ -66,6 +77,8 @@ watch(
   { immediate: true },
 )
 watch(path, () => {
+  signalFigure.value = undefined
+  signalSample.value = ''
   included.value = []
   figures.value = []
 })
@@ -76,8 +89,29 @@ watch(
     figures.value = []
   },
 )
-onMounted(() => (timer = setInterval(() => void refresh(), 2000)))
-onUnmounted(() => clearInterval(timer))
+onMounted(startPolling)
+let pollingActive = false
+async function tick() {
+  try {
+    await refresh()
+  } finally {
+    if (pollingActive) timer = setTimeout(tick, 2000)
+  }
+}
+function startPolling() {
+  if (pollingActive) return
+  pollingActive = true
+  timer = setTimeout(tick, 2000)
+}
+onActivated(startPolling)
+onDeactivated(() => {
+  pollingActive = false
+  clearTimeout(timer)
+})
+onUnmounted(() => {
+  pollingActive = false
+  clearTimeout(timer)
+})
 async function preflight() {
   checked.value = await store.inspect('/extraction/preflight')
 }
@@ -122,6 +156,7 @@ const parameterTable = computed<DataTable>(() => {
     total: rows.length,
   }
 })
+useViewState('extraction', { path, included, checked, figures, signalSample, signalFigure })
 </script>
 <template>
   <section v-if="store.project">
@@ -132,6 +167,21 @@ const parameterTable = computed<DataTable>(() => {
         <p>检查完整参数，启动后台批次；结束后人工选择纳入样本。</p>
       </div>
       <span class="step-badge">03 / 06</span>
+    </div>
+    <div class="card" v-if="selected">
+      <h2>细胞提取信号</h2>
+      <select v-model="signalSample">
+        <option value="">选择已完成样本</option>
+        <option
+          v-for="sample in selected.samples.filter((s) => s.status === 'succeeded')"
+          :key="sample.id"
+          :value="sample.id"
+        >
+          {{ sample.name }}
+        </option></select
+      ><button class="preview" :disabled="store.busy || !signalSample" @click="loadSignal">
+        查看完整信号</button
+      ><PlotView v-if="signalFigure" :figure="signalFigure" name="extraction-signal" />
     </div>
     <div class="card">
       <h2>处理准备</h2>
@@ -174,7 +224,7 @@ const parameterTable = computed<DataTable>(() => {
     <div class="card">
       <div class="section-heading">
         <h2>项目任务</h2>
-        <button @click="refresh" :disabled="store.busy">刷新批次</button>
+        <button @click="refresh" :disabled="store.busy" class="preview">刷新批次</button>
       </div>
       <label class="field"
         ><FieldLabel name="处理批次" /><select

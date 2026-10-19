@@ -100,6 +100,7 @@ function date(value: string) {
           <input v-model="search" aria-label="搜索项目" placeholder="搜索项目名称" /><button
             @click="load"
             :disabled="store.busy || loading"
+            class="preview"
           >
             刷新
           </button>

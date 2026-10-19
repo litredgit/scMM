@@ -81,7 +81,7 @@ async function clear() {
         <h2>已保存内容与回收区</h2>
         <p>先查看删除计划，再直接执行。当前打开项目、任务及被引用产物受到保护。</p>
       </div>
-      <button :disabled="store.busy" @click="refresh">刷新管理列表</button>
+      <button :disabled="store.busy" @click="refresh" class="preview">刷新管理列表</button>
     </div>
     <details>
       <summary>管理已保存项目 / 结果</summary>
@@ -99,7 +99,7 @@ async function clear() {
           </select></label
         >
       </div>
-      <button class="preview" :disabled="store.busy || !selected" @click="makePlan(true)">
+      <button class="danger" :disabled="store.busy || !selected" @click="makePlan(true)">
         查看项目删除计划
       </button>
       <details>
@@ -134,7 +134,7 @@ async function clear() {
             placeholder="仅已识别结果目录或 H5AD"
         /></label>
       </div>
-      <button class="preview" :disabled="store.busy || !path" @click="makePlan()">
+      <button class="danger" :disabled="store.busy || !path" @click="makePlan()">
         查看结果删除计划
       </button>
       <div v-if="plan" class="alert">

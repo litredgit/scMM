@@ -82,6 +82,7 @@ class SupervisedAnalyzer:
         self.y = labels.astype(str).to_numpy()[valid]
         self.obs_names = data.obs_names[valid]
         self.feature_names = data.var_names.astype(str).tolist()
+        self.layer = layer
         self.random_state = int(random_state)
         self.groups = None
         if group_key is not None:
@@ -244,6 +245,19 @@ class SupervisedAnalyzer:
             for i, name in enumerate(classes)
         }
         self.result_ = {
+            "training_parameters": {
+                "model": model,
+                "model_params": model_params or {},
+                "cv_requested": cv,
+                "cv_actual": folds,
+                "test_size": test_size,
+                "random_state": self.random_state,
+                "calibration_bins": calibration_bins,
+                "smote": smote,
+                "grouped": self.groups is not None,
+            },
+            "train_obs": self.train_obs_names_.tolist(),
+            "test_obs": self.test_obs_names_.tolist(),
             "model": model,
             "smote": bool(smote),
             "test_metrics": metrics,
@@ -437,6 +451,16 @@ class SupervisedAnalyzer:
                 seed=seed,
             )
             explanation = explainer(samples)
+        self.shap_output_space_ = (
+            "log_odds" if isinstance(estimator, LogisticRegression) else "probability"
+        )
+        self.shap_background_obs_ = self.train_obs_names_[background_index]
+        self.shap_parameters_ = {
+            "seed": seed,
+            "max_background": max_background,
+            "max_samples": max_samples,
+            "output_space": self.shap_output_space_,
+        }
         self.shap_explanation_ = explanation
         self.shap_obs_names_ = self.test_obs_names_[sample_index]
         return explanation

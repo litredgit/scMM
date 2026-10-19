@@ -17,8 +17,16 @@ export function useAnalysisSettings() {
     learning_rate: 'auto' as string | number,
     max_iter: 1000,
   })
+  const projection = reactive({ x: 1, y: 2, z: 3, threeD: false })
   const usePca = ref(true)
-  const cluster = reactive({ method: 'kmeans', key: 'clusters', n_clusters: 3 })
+  const cluster = reactive({
+    method: 'kmeans',
+    key: 'clusters',
+    n_clusters: 3,
+    use_rep: 'X',
+    n_neighbors: 15,
+    random_state: 42,
+  })
   const diff = reactive({
     group_key: '',
     group_a: '',
@@ -64,6 +72,7 @@ export function useAnalysisSettings() {
   const initial = JSON.parse(JSON.stringify(settingsSnapshot()))
   function settingsSnapshot() {
     return {
+      projection: { ...projection },
       reduction: { ...reduction },
       cluster: { ...cluster },
       diff: { ...diff },
@@ -75,6 +84,7 @@ export function useAnalysisSettings() {
   }
   function resetSettings() {
     for (const [key, target] of Object.entries({
+      projection,
       reduction,
       cluster,
       diff,
@@ -102,6 +112,7 @@ export function useAnalysisSettings() {
     featureOffset.value = 0
   }
   const settings = computed(() => ({
+    projection: { ...projection },
     reduction: { ...reduction },
     usePca: usePca.value,
     cluster: { ...cluster },
@@ -148,6 +159,7 @@ export function useAnalysisSettings() {
     })
     diff.method = String(defaults.differential_method ?? 'mannwhitney')
     for (const [key, target] of Object.entries({
+      projection,
       reduction,
       cluster,
       diff,
@@ -193,6 +205,7 @@ export function useAnalysisSettings() {
       network.layer = diff.layer
   }
   return {
+    projection,
     reduction,
     usePca,
     cluster,

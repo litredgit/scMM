@@ -54,11 +54,14 @@ def norm_quantile(X, params):
     sorted_X = np.sort(X, axis=0)
     mean_quantiles = sorted_X.mean(axis=1)
 
-    ranks = np.argsort(np.argsort(X, axis=0), axis=0)
     Xn = np.zeros_like(X)
-
     for j in range(X.shape[1]):
-        Xn[:, j] = mean_quantiles[ranks[:, j]]
+        order = np.argsort(X[:, j], kind="stable")
+        values = X[order, j]
+        starts = np.r_[0, np.flatnonzero(np.diff(values)) + 1]
+        stops = np.r_[starts[1:], len(values)]
+        for start, stop in zip(starts, stops, strict=True):
+            Xn[order[start:stop], j] = mean_quantiles[start:stop].mean()
 
     return Xn
 
@@ -72,12 +75,12 @@ def norm_pqn(X, params):
 
     reference = params.get("reference", "median")
 
-    if reference == "median":
+    if isinstance(reference, str) and reference == "median":
         ref = np.median(X, axis=0)
-    elif reference == "mean":
+    elif isinstance(reference, str) and reference == "mean":
         ref = np.mean(X, axis=0)
     else:
-        ref = np.asarray(reference, dtype=float)
+        ref = np.array(reference, dtype=float, copy=True)
 
     if ref.shape != (X.shape[1],):
         raise ValueError("PQN reference must have one value per feature")

@@ -104,6 +104,16 @@ def test_supervised_grouped_cv_shap_and_readonly_reload(workflow):
     assert train_groups.isdisjoint(test_groups)
     for kind in ("roc", "pr", "calibration"):
         assert workflow[-1]("/analysis/plot", {"kind": kind}).status_code == 200
+    for normalize in (False, True):
+        response = workflow[-1](
+            "/analysis/plot", {"kind": "confusion", "options": {"normalize": normalize}}
+        )
+        assert response.status_code == 200, response.text
+        figure = response.json()["value"]
+        frame = pd.read_csv(
+            StringIO(figure["layout"]["meta"]["export_tables"]["row_normalized.csv"]), index_col=0
+        )
+        np.testing.assert_allclose(frame.sum(axis=1), 1)
     operation(workflow, "save_latent", {"key": "X_latent"})
     assert "X_latent" in get(workflow, "/analysis").json()["embeddings"]
     operation(workflow, "explain_shap", {"max_background": 4, "max_samples": 2})
@@ -216,7 +226,7 @@ def test_qc_stable_total_axis_preserves_precision_zeros_and_file_identity(workfl
     assert result["figure"]["layout"]["yaxis"]["dtick"] == 1
     traces = result["figure"]["data"]
     assert [t["name"] for t in traces] == ["same.raw（1）", "same.raw（2）"]
-    assert {t["customdata"][0][0] for t in traces} == {"/a/same.raw", "/b/same.raw"}
+    assert {t["customdata"][0][1] for t in traces} == {"/a/same.raw", "/b/same.raw"}
     values = np.array([r["total_intensity"] for r in result["cells"]["rows"]])
     assert values[0] == 0
     np.testing.assert_allclose(values[1:], 1, rtol=0, atol=1e-14)

@@ -1,4 +1,4 @@
-"""Authenticated personal settings and ephemeral, read-only streaming chat."""
+"""Authenticated personal settings and encrypted persistent, read-only streaming chat."""
 
 # ruff: noqa: RUF001
 import asyncio
@@ -6,7 +6,7 @@ import json
 from contextlib import suppress
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
@@ -49,6 +49,24 @@ class Chat(BaseModel):
     messages: list[Message] = Field(min_length=1, max_length=24)
 
 
+class SavedTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=1_000_000)
+    note: str | None = Field(default=None, max_length=8000)
+
+
+class Conversation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    context: str = Field(min_length=1, max_length=4096)
+    revision: int = Field(ge=0)
+    messages: list[SavedTurn] = Field(max_length=10_000)
+    draft: str = Field(default="", max_length=8000)
+    streaming: bool = False
+    summary: dict | None = None
+    model: str = Field(default="", max_length=200)
+
+
 def store(request):
     value = request.app.state.ai_config
     if value is None:
@@ -61,6 +79,19 @@ def configuration(request: Request):
     if request.app.state.ai_config is None:
         return {"available": False, "configured": False, "base_url": "", "model": ""}
     return store(request).public(request.state.principal["id"])
+
+
+@router.get("/history")
+def conversation(request: Request, context: str = Query(min_length=1, max_length=4096)):
+    return store(request).history(request.state.principal["id"], context)
+
+
+@router.put("/history")
+def save_conversation(body: Conversation, request: Request):
+    payload = body.model_dump(exclude={"context", "revision"})
+    return store(request).save_history(
+        request.state.principal["id"], body.context, body.revision, payload
+    )
 
 
 @router.put("/config")

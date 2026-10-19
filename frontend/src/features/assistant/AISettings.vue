@@ -99,11 +99,11 @@ async function testConnection() {
     <p v-if="error" role="alert">{{ error }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>
     <div class="actions">
-      <button class="primary" :disabled="busy || !config?.available">保存 API 配置</button>
+      <button class="save" :disabled="busy || !config?.available">保存 API 配置</button>
       <button type="button" :disabled="busy || !config?.configured" @click="testConnection">
         测试连接
       </button>
-      <button type="button" :disabled="busy || !config?.configured" @click="remove">
+      <button type="button" :disabled="busy || !config?.configured" @click="remove" class="danger">
         删除 API 配置
       </button>
     </div>

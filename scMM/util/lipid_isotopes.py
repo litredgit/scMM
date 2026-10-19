@@ -10,6 +10,7 @@ import numpy as np
 
 ELECTRON = 0.000548579909065
 ADDUCTS = {
+    "[M+H-H2O]+": {"polarity": "pos", "add": "H", "remove": "H2O", "charge": 1},
     "[M+H]+": {"polarity": "pos", "add": "H", "remove": "", "charge": 1},
     "[M+Na]+": {"polarity": "pos", "add": "Na", "remove": "", "charge": 1},
     "[M+K]+": {"polarity": "pos", "add": "K", "remove": "", "charge": 1},

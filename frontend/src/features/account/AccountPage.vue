@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import MaintenancePanel from './MaintenancePanel.vue'
 import AISettings from '../assistant/AISettings.vue'
 import { request } from '../../api/client'
 import { useAuth } from '../../stores/auth'
@@ -86,6 +87,7 @@ onMounted(() => store.run(refresh))
       <p v-if="auth.error" role="alert">{{ auth.error }}</p>
       <button class="primary" :disabled="auth.busy || store.busy">修改密码</button>
     </form>
+    <MaintenancePanel v-if="auth.admin" />
     <AISettings />
     <template v-if="auth.admin">
       <form class="card" @submit.prevent="create">
@@ -105,7 +107,7 @@ onMounted(() => store.run(refresh))
         <h2>一次性登录凭据</h2>
         <p>24 小时内有效，首次登录后设置密码。请通过可信渠道交给对应用户；关闭后不再显示。</p>
         <label>一次性凭据<input :value="credential" readonly autocomplete="off" /></label>
-        <button @click="credential = ''">关闭凭据显示</button>
+        <button @click="credential = ''" class="preview">关闭凭据显示</button>
       </div>
       <div class="card table-scroll">
         <h2>团队账号</h2>
@@ -127,6 +129,7 @@ onMounted(() => store.run(refresh))
                 <button
                   :disabled="store.busy || user.id === auth.user?.id"
                   @click="update(user, true)"
+                  class="restore"
                 >
                   重置密码
                 </button>

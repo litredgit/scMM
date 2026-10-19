@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { pngWithDpi } from '../../components/plotExport'
 import { computed, reactive, ref, watch } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import { authenticatedFetch, ensureSession, sessionVersion, request } from '../../api/client'
@@ -19,6 +20,9 @@ const view = reactive<LipidChartView>({
   category: '',
   focus: '',
 })
+const paperDpi = ref(300),
+  paperWidth = ref(89),
+  paperFont = ref(7)
 const graphSvg = ref<SVGSVGElement>()
 const pieSvg = ref<SVGSVGElement>()
 const node = ref<LipidNode>()
@@ -300,30 +304,62 @@ function saveBlob(blob: Blob, name: string) {
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
-async function image(kind: 'pie' | 'network', format: 'svg' | 'png') {
+async function image(kind: 'pie' | 'network', format: 'svg' | 'png' | 'pdf') {
   const svg = kind === 'pie' ? pieSvg.value : graphSvg.value
   if (!svg) return
   const clone = svg.cloneNode(true) as SVGSVGElement
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  clone.setAttribute('width', `${paperWidth.value}mm`)
+  const heightMm = (paperWidth.value * svg.viewBox.baseVal.height) / svg.viewBox.baseVal.width
+  clone.setAttribute('height', `${heightMm}mm`)
+  const size = (paperFont.value * svg.viewBox.baseVal.width) / ((paperWidth.value * 72) / 25.4)
+  for (const text of clone.querySelectorAll('text')) {
+    text.setAttribute('font-size', String(size))
+    text.setAttribute('font-family', 'Arial, Helvetica, sans-serif')
+  }
   const content = new XMLSerializer().serializeToString(clone)
   const blob = new Blob([content], { type: 'image/svg+xml;charset=utf-8' })
   const name = `lipid-${kind}-${props.results.version}`
   if (format === 'svg') return saveBlob(blob, `${name}.svg`)
+  if (format === 'pdf') {
+    const response = await authenticatedFetch('/api/v1/workspace/figures/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ svg: content, width_mm: paperWidth.value, height_mm: heightMm }),
+    })
+    if (!response.ok) throw new Error('PDF 导出失败')
+    return saveBlob(await response.blob(), `${name}.pdf`)
+  }
   const url = URL.createObjectURL(blob)
   try {
     const img = new Image()
     img.src = url
     await img.decode()
     const canvas = document.createElement('canvas')
-    canvas.width = svg.viewBox.baseVal.width * 2
-    canvas.height = svg.viewBox.baseVal.height * 2
+    if (
+      paperWidth.value < 20 ||
+      paperWidth.value > 600 ||
+      paperDpi.value < 72 ||
+      paperDpi.value > 2400 ||
+      paperFont.value < 4.5 ||
+      paperFont.value > 24
+    )
+      throw new Error('请检查尺寸、字号和 DPI。')
+    if (
+      (((paperWidth.value / 25.4) * paperDpi.value * heightMm) / 25.4) * paperDpi.value >
+      60000000
+    )
+      throw new Error('请减小成图尺寸或 DPI。')
+    canvas.width = Math.round((paperWidth.value / 25.4) * paperDpi.value)
+    canvas.height = Math.round((heightMm / 25.4) * paperDpi.value)
     const ctx = canvas.getContext('2d')!
     ctx.fillStyle = 'white'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-    canvas.toBlob((value) => {
-      if (value) saveBlob(value, `${name}.png`)
-    }, 'image/png')
+    const value = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob((v) => (v ? resolve(v) : reject(new Error('PNG 导出失败'))), 'image/png'),
+    )
+    saveBlob(await pngWithDpi(value, paperDpi.value), `${name}.png`)
   } finally {
     URL.revokeObjectURL(url)
   }
@@ -332,6 +368,19 @@ async function image(kind: 'pie' | 'network', format: 'svg' | 'png') {
 <template>
   <section class="card lipid-network-panel">
     <h3>注释分类与相关网络</h3>
+    <div class="field-grid">
+      <label
+        >导出宽度（毫米）<input
+          v-model.number="paperWidth"
+          type="number"
+          min="20"
+          max="600" /></label
+      ><label
+        >导出字号（pt）<input v-model.number="paperFont" type="number" min="4.5" max="24" /></label
+      ><label
+        >导出分辨率（DPI）<input v-model.number="paperDpi" type="number" min="72" max="2400"
+      /></label>
+    </div>
     <p class="muted">
       仅作 MS1
       候选辅助与共变探索。无支持不扣分；同分子式异构体不能据此区分。跨样本一致性不等于生物重复统计推断。
@@ -404,7 +453,8 @@ async function image(kind: 'pie' | 'network', format: 'svg' | 'png') {
         </div>
       </details>
       <div class="actions">
-        <button @click="applyView">应用图表显示</button><button @click="save">保存图表设置</button>
+        <button @click="applyView" class="preview">应用图表显示</button
+        ><button @click="save" class="save">保存图表设置</button>
       </div>
     </fieldset>
     <template v-if="charts">
@@ -481,9 +531,13 @@ async function image(kind: 'pie' | 'network', format: 'svg' | 'png') {
         </li>
       </ul>
       <div class="actions">
-        <button :disabled="store.busy" @click="image('pie', 'svg')">下载饼图 SVG</button
-        ><button :disabled="store.busy" @click="image('pie', 'png')">下载饼图 PNG</button
-        ><button :disabled="store.busy" @click="download('pie')">导出分类计数 CSV</button>
+        <button :disabled="store.busy" @click="image('pie', 'svg')" class="save">
+          下载饼图 SVG</button
+        ><button class="save" :disabled="store.busy" @click="image('pie', 'png')">
+          下载饼图 PNG</button
+        ><button class="save" :disabled="store.busy" @click="download('pie')">
+          导出分类计数 CSV
+        </button>
       </div>
       <template v-if="graph">
         <h4>{{ title }}</h4>
@@ -581,14 +635,17 @@ async function image(kind: 'pie' | 'network', format: 'svg' | 'png') {
           </text>
         </svg>
         <div class="actions">
-          <button :disabled="store.busy" @click="image('network', 'svg')">下载网络 SVG</button
-          ><button :disabled="store.busy" @click="image('network', 'png')">下载网络 PNG</button
-          ><button :disabled="store.busy" @click="download(`${view.graph}_nodes`)">
+          <button :disabled="store.busy" @click="image('network', 'svg')" class="save">
+            下载网络 SVG</button
+          ><button class="save" :disabled="store.busy" @click="image('network', 'png')">
+            下载网络 PNG</button
+          ><button class="save" :disabled="store.busy" @click="download(`${view.graph}_nodes`)">
             导出网络节点 CSV</button
-          ><button :disabled="store.busy" @click="download(`${view.graph}_edges`)">
+          ><button class="save" :disabled="store.busy" @click="download(`${view.graph}_edges`)">
             导出网络边 CSV</button
-          ><button :disabled="store.busy" @click="download('charts')">导出图表与证据 JSON</button
-          ><button :disabled="store.busy" @click="download('network_evidence')">
+          ><button class="save" :disabled="store.busy" @click="download('charts')">
+            导出图表与证据 JSON</button
+          ><button class="save" :disabled="store.busy" @click="download('network_evidence')">
             导出辅助证据 CSV
           </button>
         </div>
@@ -598,8 +655,8 @@ async function image(kind: 'pie' | 'network', format: 'svg' | 'png') {
             {{ node.review }}
           </p>
           <div class="actions">
-            <button :disabled="store.busy" @click="neighbors">展开邻居</button
-            ><button @click="clearNode">查看全部证据</button>
+            <button :disabled="store.busy" @click="neighbors" class="preview">展开邻居</button
+            ><button class="preview" @click="clearNode">查看全部证据</button>
           </div>
           <div v-if="graph.kind === 'molecule' && node.features" class="actions">
             <label
@@ -609,8 +666,11 @@ async function image(kind: 'pie' | 'network', format: 'svg' | 'png') {
               >
                 <option v-for="f in node.features" :key="f">{{ f }}</option>
               </select></label
-            ><button :disabled="store.busy" @click="setRepresentative()">指定代表离子</button
-            ><button :disabled="store.busy" @click="setRepresentative(true)">恢复自动代表</button>
+            ><button :disabled="store.busy" @click="setRepresentative()" class="restore">
+              指定代表离子</button
+            ><button class="restore" :disabled="store.busy" @click="setRepresentative(true)">
+              恢复自动代表
+            </button>
           </div>
           <p class="muted">候选及人工核对在下方“结果与人工核对”同步显示。</p>
         </div>

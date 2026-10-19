@@ -204,6 +204,15 @@ class RawWorkflow:
                 }[kind],
                 xaxis_title="m/z" if x == "mz" else "RT（秒）",
                 yaxis_title="强度",
+                meta={
+                    "parameters": options,
+                    "sample_id": sample_id,
+                    "detail": detail,
+                    "input_identity": workspace.raw["preview"].open_identity
+                    if "preview" in workspace.raw
+                    else {},
+                    "export_tables": {"source": frame.to_csv(index=False)},
+                },
             )
             return {
                 "figure": figure_view(style_figure(figure)),
@@ -377,6 +386,47 @@ class RawWorkflow:
             stop_after_current(self.batch_path(workspace.project, path))
 
         return self.mutate(identity, revision, action)
+
+    def batch_signal(self, identity, revision, path, sample_id):
+        from .preview_cache import load_detection
+        from .projects import child_path
+
+        with self.access(identity) as workspace:
+            workspace.check(revision)
+            path = self.batch_path(workspace.require_project(), path)
+            result = read_batch(path)
+            row = next(
+                (
+                    row
+                    for row in result["samples"]
+                    if row["id"] == sample_id and row["status"] == "succeeded"
+                ),
+                None,
+            )
+            if row is None or not row.get("detection_directory"):
+                raise ValueError("该提取产物没有完整检测信号，请使用新批次重新提取。")
+            folder = child_path(path.parent, row["detection_directory"])
+            detection = load_detection(folder / "data.h5ad")
+            request = json.loads((path.parent / "request.json").read_text())
+            source = next(item for item in request["samples"] if item["id"] == sample_id)
+            figure = cell_detection_figure(detection)
+            figure.update_layout(
+                meta={
+                    **figure.layout.meta,
+                    "sample_id": sample_id,
+                    "parameters": source["parameters"],
+                    "input_identity": source.get("input_identity"),
+                }
+            )
+            return {
+                "workspace": self.view(workspace),
+                "value": {
+                    "figure": figure_view(figure),
+                    "table": table_view(detection.traces),
+                    "parameters": source["parameters"],
+                    "cell_count": detection.cell_count,
+                },
+            }
 
     def review_extraction(self, identity, revision, path, ids, *, compare=False):
         from .web_workspace import project_candidate, sync_metadata

@@ -1,3 +1,4 @@
+import { useViewState, restoringViews } from '../../../api/viewState'
 import { ref, computed, watch, nextTick, onActivated, onDeactivated } from 'vue'
 import { useWorkspace } from '../../../stores/workspace'
 import type { AnalysisInfo, Figure, DataTable } from '../../../api/types'
@@ -16,6 +17,7 @@ export function useAnalysis() {
     active.value = false
   })
   const {
+    projection,
     reduction,
     usePca,
     cluster,
@@ -196,7 +198,7 @@ export function useAnalysis() {
     })
   }
   function invalidate(names: string[]) {
-    if (hydrating || !info.value) return
+    if (restoringViews || hydrating || !info.value) return
     for (const n of names.filter(has)) {
       pendingInvalidations.add(n)
     }
@@ -287,6 +289,7 @@ export function useAnalysis() {
       store.project?.dataset?.id,
       store.project?.dataset?.revision,
       embedding.value,
+      projection,
       colorSource.value === 'none' ? null : color.value || null,
     ]),
   )
@@ -294,7 +297,7 @@ export function useAnalysis() {
     await nextTick()
     if (
       !active.value ||
-      tab.value !== 'embedding' ||
+      !['embedding', 'clustering'].includes(tab.value) ||
       hydrating ||
       store.busy ||
       !embedding.value ||
@@ -372,7 +375,13 @@ export function useAnalysis() {
     const identity = dataContext()
     const options =
       kind === 'embedding'
-        ? { key: embedding.value, color: colorSource.value === 'none' ? null : color.value || null }
+        ? {
+            key: embedding.value,
+            color: colorSource.value === 'none' ? null : color.value || null,
+            dimensions: projection.threeD
+              ? [projection.x, projection.y, projection.z]
+              : [projection.x, projection.y],
+          }
         : kind === 'volcano'
           ? { ...volcano }
           : kind === 'violin'
@@ -421,7 +430,23 @@ export function useAnalysis() {
     )
   }
 
+  useViewState('analysis', {
+    tab,
+    figures,
+    tables,
+    modelReport,
+    embedding,
+    colorSource,
+    color,
+    search,
+    sort,
+    descending,
+    selectedFeatures,
+    hideZero,
+    legend,
+  })
   return {
+    projection,
     reduction,
     usePca,
     cluster,

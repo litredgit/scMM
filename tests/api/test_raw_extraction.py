@@ -160,6 +160,20 @@ def test_detached_extraction_preflight_review_and_retry_identity(workflow):
     assert workflow[-2]() == before
     assert workflow[-1]("/extraction/review", {"path": path, "ids": ids}).status_code == 200
     assert workflow[-2]()["project"]["dataset"]["cells"] == 4
+    signal = workflow[-1]("/extraction/signal", {"path": path, "sample_id": ids[0]})
+    assert signal.status_code == 200, signal.text
+    assert len(signal.json()["value"]["figure"]["data"]) >= 3
+    project = workflow[2]._workspaces[workflow[1]["X-SCMM-Workspace"]].project
+    cells = project.workspace.data.obs_names[[0, -1]].tolist()
+    for source in ("matrix", "window", "apex"):
+        response = workflow[-1](
+            "/analysis/cell-spectra",
+            {"cells": cells, "source": source, "normalization": "max", "mirror": True},
+        )
+        assert response.status_code == 200, response.text
+        assert len(response.json()["value"]["data"]) == 2
+        tables = response.json()["value"]["layout"]["meta"]["export_tables"]
+        assert "1_source.csv" in tables and "2_display.csv" in tables
     assert get(workflow, "/results/download?kind=batch_log&key=/tmp/not-owned").status_code == 400
     assert get(workflow, f"/results/download?kind=batch_log&key={path}").status_code == 200
 

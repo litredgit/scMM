@@ -84,6 +84,7 @@ def mass_candidates(database, feature_ids, mz, parameters, database_identity):
                         "query_mz": float(query),
                         "database_id": record["record_id"],
                         "name": str(record["COMMON_NAME"]),
+                        "species": str(record.get("species", record["COMMON_NAME"])),
                         "formula": str(record["FORMULA"]),
                         "adduct": adduct,
                         "polarity": spec["polarity"],

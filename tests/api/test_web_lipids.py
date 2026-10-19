@@ -68,6 +68,14 @@ def test_lipid_http_roundtrip_preserves_matrix_snr_analysis_and_all_candidates(
     result = query(workflow, version)
     assert result["candidates"]["total"] == 4
     assert result["isotopes"]["total"] == 8
+    relation = result["isotopes"]["rows"][0]
+    spectrum = workflow[-1](
+        "/lipids/isotope-spectrum", {"version": version, "relation_id": relation["relation_id"]}
+    )
+    assert spectrum.status_code == 200, spectrum.text
+    figure = spectrum.json()["value"]
+    assert "theoretical_peak" in figure["layout"]["meta"]["export_tables"]
+    assert any("理论" in trace.get("name", "") for trace in figure["data"])
     assert result["total_features"] == 4
     assert {r["name"] for r in result["candidates"]["rows"]} == {"Synthetic A", "Synthetic B"}
     assert get(workflow, "/analysis").json()["token"] == token

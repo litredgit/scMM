@@ -30,7 +30,7 @@ def digest_file(path):
 
 def signature(path, parameters):
     params = asdict(parameters) if not isinstance(parameters, dict) else dict(parameters)
-    return {"version": 1, "file": file_identity(path), "parameters": json.loads(json.dumps(params))}
+    return {"version": 2, "file": file_identity(path), "parameters": json.loads(json.dumps(params))}
 
 
 def save_preview(project, sample, preview, parameters, before):

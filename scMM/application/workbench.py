@@ -130,16 +130,9 @@ class AnalysisWorkspace:
 
     @staticmethod
     def _clear_derived(data):
-        metadata = data.uns.setdefault("scmm_workbench", {})
-        for column in metadata.get("derived_obs", []):
-            if column in data.obs:
-                del data.obs[column]
-        metadata["derived_obs"] = []
-        for mapping in (data.obsm, data.obsp, data.varm, data.varp):
-            mapping.clear()
-        for key in list(data.uns):
-            if key.endswith(("_params", "_qc")):
-                del data.uns[key]
+        from scMM.util.lifecycle import invalidate_derived
+
+        invalidate_derived(data)
 
     def _commit(self, candidate, operation, parameters, *, clear_derived=True, save_layer=True):
         self._validate(candidate)
@@ -196,17 +189,17 @@ class AnalysisWorkspace:
         candidate.X = estimator.fit_transform(dense(candidate.X))
         self._commit(candidate, "impute", {"method": method, "missing_values": 0})
 
-    def filter(self, *, min_total=0.0, min_detected=0, min_feature_fraction=0.0):
+    def filter(self, *, min_total=0.0, min_detected=0.2, min_feature_fraction=0.0):
         data = self.require_data()
         if (
             not np.isfinite([min_total, min_detected, min_feature_fraction]).all()
             or min_total < 0
-            or min_detected < 0
+            or not 0 <= min_detected <= 1
             or not 0 <= min_feature_fraction <= 1
         ):
             raise ValueError("invalid QC filter thresholds")
         X = dense(data.X)
-        rows = (X.sum(axis=1) >= min_total) & ((X > 0).sum(axis=1) >= min_detected)
+        rows = (X.sum(axis=1) >= min_total) & ((X > 0).mean(axis=1) >= min_detected)
         if not rows.any():
             raise ValueError("QC filter would remove every observation")
         columns = (X[rows] > 0).mean(axis=0) >= min_feature_fraction
@@ -423,9 +416,14 @@ class AnalysisWorkspace:
         self.results.pop("markers", None)
         token = self.token
         result = {"group_key": group_key, "method": method, "layer": layer}
-        result["table"] = marker_features(
-            self.require_data(), group_key, method=method, layer=layer
-        )
+        if method == "classifier":
+            from scMM.analysis.markers import classifier_markers
+
+            result["table"] = classifier_markers(self.require_data(), group_key, layer=layer)
+        else:
+            result["table"] = marker_features(
+                self.require_data(), group_key, method=method, layer=layer
+            )
         self.put_result("markers", result, token)
         return result
 
@@ -453,8 +451,15 @@ class AnalysisWorkspace:
         table = pd.DataFrame({"feature_id": analyzer.feature_names, "mean_abs_shap": importance})
         result = {
             "table": table.sort_values("mean_abs_shap", ascending=False),
-            "parameters": options,
+            "parameters": {**options, **analyzer.shap_parameters_},
+            "output_space": analyzer.shap_output_space_,
+            "background_obs": analyzer.shap_background_obs_.tolist(),
             "obs_names": analyzer.shap_obs_names_.tolist(),
+            "values": explanation.values,
+            "base_values": explanation.base_values,
+            "data": explanation.data,
+            "feature_names": list(analyzer.feature_names),
+            "classes": analyzer.classes_.tolist(),
         }
         self.put_result("shap", result, token)
         return result

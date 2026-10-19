@@ -154,13 +154,16 @@ def sample_parameters(project, sample):
 
 class ProjectStore:
     def __init__(self, root=PROJECT_ROOT):
+        self.recovered_folders = set()
         self.root = Path(root).expanduser().resolve(strict=True)
         if not self.root.is_dir():
             raise NotADirectoryError(self.root)
 
     def _folder(self, value):
         folder = Path(value).resolve(strict=True)
-        if folder.parent != self.root or folder.is_symlink():
+        if (
+            folder.parent != self.root and folder not in self.recovered_folders
+        ) or folder.is_symlink():
             raise PermissionError("Select a project directly inside the project root")
         return folder
 

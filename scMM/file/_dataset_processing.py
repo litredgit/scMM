@@ -25,6 +25,17 @@ logger = logging.getLogger(__name__)
 class DatasetProcessingMixin:
     """Provide preprocessing, transformation, alignment, and deisotoping."""
 
+    def _invalidate_analyses(self):
+        from ..util.lifecycle import invalidate_derived
+
+        template = getattr(self, "_anndata_template", None)
+        if template is not None:
+            candidate = template.copy()
+            derived = candidate.uns.get("scmm_workbench", {}).get("derived_obs", [])
+            invalidate_derived(candidate)
+            self.peak_meta = self.peak_meta.drop(columns=derived, errors="ignore")
+            self._anndata_template = candidate
+
     def preprocess(
         self,
         baseline_filter=median_filter,
@@ -100,8 +111,12 @@ class DatasetProcessingMixin:
                         "reference_mz_matched", [result.get("ref_mz_matched")]
                     ),
                     "window_ranges": result["window_ranges"],
+                    "reference_baseline": result.get("reference_baseline"),
+                    "cell_snr": cell_snr,
+                    "cell_min_signal": cell_min_signal,
                 },
             )
+        frame_metadata = self.peak_meta
         self.data = result["cell_df"]
         for attribute in ("feature_snr", "_anndata_template"):
             if hasattr(self, attribute):
@@ -111,6 +126,16 @@ class DatasetProcessingMixin:
             self.peak_meta.iloc[frames, :],
             index=self.peak_meta.index[frames],
         )
+        if "rt" in frame_metadata and result["window_ranges"]:
+            windows = np.asarray(result["window_ranges"], dtype=int)
+            scans = frame_metadata.index.to_numpy()
+            times = frame_metadata["rt"].to_numpy()
+            self.peak_meta["cell_apex_scan"] = scans[frames]
+            self.peak_meta["cell_start_scan"] = scans[windows[:, 0]]
+            self.peak_meta["cell_stop_scan"] = scans[windows[:, 1]]
+            self.peak_meta["cell_start_rt"] = times[windows[:, 0]]
+            self.peak_meta["cell_stop_rt"] = times[windows[:, 1]]
+            self.peak_meta["cell_scan_count"] = windows[:, 1] - windows[:, 0] + 1
         if extraction_method == "snr_v1":
             for i, mz in enumerate(result["reference_mz_matched"]):
                 self.peak_meta[f"reference_intensity_{mz:.8g}"] = result["reference_signal"][
@@ -161,12 +186,14 @@ class DatasetProcessingMixin:
             index=self.data.index,
             columns=self.data.columns,
         )
+        self._invalidate_analyses()
         self.data = candidate
         self.file_meta["intensity_state"] = "transformed"
         return self
 
     def remove_outlier(self, **kwargs) -> Self:
         inliers = IsolationForest(**kwargs).fit_predict(self.data) == 1
+        self._invalidate_analyses()
         self.data = self.data.iloc[inliers, :]
         self.peak_meta = self.peak_meta.iloc[inliers, :]
         if hasattr(self, "feature_snr"):
@@ -181,6 +208,7 @@ class DatasetProcessingMixin:
             index=self.data.index,
             columns=self.data.columns,
         )
+        self._invalidate_analyses()
         self.data = candidate
         self.file_meta["intensity_state"] = state
         return self
@@ -246,6 +274,8 @@ class DatasetProcessingMixin:
         return self
 
     def _apply_deisotope_result(self, result: dict, merge_mode: str) -> None:
+        if merge_mode == "sum" or not result["processed_data"].columns.equals(self.data.columns):
+            self._invalidate_analyses()
         self.deisotope_result = result
         self.data = result["processed_data"]
         self.feature_meta = result["feature_meta"]

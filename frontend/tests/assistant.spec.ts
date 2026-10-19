@@ -67,9 +67,10 @@ test('stream, context, cross-page retention, stop, clear, refresh and project sw
   await expect(assistant.locator('details')).toHaveCount(0)
   await assistant.getByRole('button', { name: '下一步建议做什么？' }).click()
   await expect(assistant.getByText('synthetic answer completed', { exact: true })).toBeVisible()
+  await expect(assistant.getByText('聊天已加密保存', { exact: true })).toBeVisible()
   await page.reload()
   await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
-  await expect(assistant.getByLabel('当前对话').locator('article')).toHaveCount(0)
+  await expect(assistant.getByLabel('当前对话').locator('article')).toHaveCount(2)
   await assistant.getByRole('button', { name: '收起 AI 助手', exact: true }).click()
   await page
     .getByRole('link', { name: /项目首页/ })

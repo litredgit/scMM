@@ -3,7 +3,7 @@
 import json
 
 import pandas as pd
-import plotly.io as pio
+from plotly.utils import PlotlyJSONEncoder
 
 
 def table_view(frame, *, limit=200):
@@ -18,7 +18,7 @@ def table_view(frame, *, limit=200):
 
 def figure_view(figure):
     # Plotly's encoder retains float64 values and handles typed numerical arrays.
-    return json.loads(pio.to_json(figure))
+    return json.loads(json.dumps(figure.to_dict(), cls=PlotlyJSONEncoder))
 
 
 def json_view(value):

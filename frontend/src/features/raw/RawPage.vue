@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useViewState } from '../../api/viewState'
+import {
+  ref,
+  computed,
+  watch,
+  onMounted,
+  onUnmounted,
+  onActivated,
+  onDeactivated,
+  nextTick,
+} from 'vue'
 import { request } from '../../api/client'
 import type { Figure, DataTable, Job } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
@@ -40,7 +50,7 @@ const strategy = ref('shared'),
 let parameterGeneration = 0
 let editGeneration = 0,
   jobGeneration = 0,
-  timer: ReturnType<typeof setInterval> | undefined,
+  timer: ReturnType<typeof setTimeout> | undefined,
   loading = false
 const legacyParameters = computed(() => {
   const item = samples.value.find((s) => s.id === sample.value)
@@ -322,9 +332,30 @@ onMounted(async () => {
   preferences.value = await request('/preferences')
   preset.value = String(store.project?.manifest.cell_type ?? preferences.value?.selected ?? '')
   presetText.value = JSON.stringify(preferences.value?.presets, null, 2)
-  timer = setInterval(() => void poll(), 1500)
+  startPolling()
 })
-onUnmounted(() => clearInterval(timer))
+let pollingActive = false
+async function tick() {
+  try {
+    await poll()
+  } finally {
+    if (pollingActive) timer = setTimeout(tick, 1500)
+  }
+}
+function startPolling() {
+  if (pollingActive) return
+  pollingActive = true
+  timer = setTimeout(tick, 1500)
+}
+onActivated(startPolling)
+onDeactivated(() => {
+  pollingActive = false
+  clearTimeout(timer)
+})
+onUnmounted(() => {
+  pollingActive = false
+  clearTimeout(timer)
+})
 function usePreset() {
   const mass = preferences.value?.presets[preset.value]
   if (mass) {
@@ -340,6 +371,27 @@ async function savePresets() {
     })
   }, '全局预设已保存；已有项目参数由明确应用决定。')
 }
+useViewState('raw', {
+  sample,
+  opened,
+  summary,
+  parameters,
+  kind,
+  ms,
+  scan,
+  rtMin,
+  rtMax,
+  mzMin,
+  mzMax,
+  refs,
+  ppm,
+  fast,
+  normalize,
+  bins,
+  plots,
+  jobNote,
+  cellCount,
+})
 </script>
 <template>
   <section v-if="store.project">
@@ -639,7 +691,7 @@ async function savePresets() {
         <div class="actions">
           <button
             v-if="kind !== 'cells'"
-            class="preview"
+            class="primary"
             :disabled="opened !== sample || store.busy"
             @click="plot()"
           >

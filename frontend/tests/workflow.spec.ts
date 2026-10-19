@@ -91,6 +91,7 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
   )
   await page.getByLabel('查看嵌入', { exact: true }).selectOption('X_pca')
   expect((await switchedEmbedding).ok()).toBe(true)
+  await page.getByRole('button', { name: '聚类', exact: true }).click()
   await page.getByRole('button', { name: '运行聚类', exact: true }).click()
   await expect(page.getByLabel('Color', { exact: true })).toHaveValue('obs:clusters')
   await page.getByLabel('Color source', { exact: true }).selectOption('feature')
@@ -183,7 +184,7 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
   expect(invalidation.status()).toBe(200)
   expect(invalidation.request().postDataJSON().names.sort()).toEqual(['differential', 'markers'])
   await analysisModule(page, 'network', '相关网络')
-  await expect(page.getByRole('combobox', { name: 'layer', exact: true })).toHaveValue('当前 X')
+  await expect(page.getByRole('combobox', { name: 'layer', exact: true })).toHaveValue('当前矩阵')
   await expect(page.getByRole('button', { name: '读取相关网络', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /结果与保存/ }).click()
   await expect(
@@ -336,7 +337,7 @@ test('latest result preselection, detailed help, stable QC and readable narrow l
   const helper = page.getByRole('button', { name: 'min_detected说明', exact: true })
   await helper.hover()
   await expect(page.getByRole('tooltip')).toContainText('等于阈值保留')
-  await expect(page.getByRole('tooltip')).toContainText('不会重新进行峰检出')
+  await expect(page.getByRole('tooltip')).toContainText('不重做峰检出')
   await helper.focus()
   await expect(page.getByRole('tooltip')).toBeVisible()
   await helper.press('Escape')
@@ -372,13 +373,13 @@ test('latest result preselection, detailed help, stable QC and readable narrow l
     const download = await wait
     const bytes = await readFile((await download.path())!)
     if (format === 'PNG') {
-      expect(bytes.readUInt32BE(16)).toBeCloseTo(plotSize.width * 2, 0)
-      expect(bytes.readUInt32BE(20)).toBeCloseTo(plotSize.height * 2, 0)
+      expect(bytes.readUInt32BE(16)).toBe(Math.floor((89 / 25.4) * 300))
+      expect(bytes.readUInt32BE(20)).toBe(Math.floor((65 / 25.4) * 300))
     } else {
       const svg = bytes.toString('utf8')
       const width = Number(svg.match(/<svg[^>]* width="([\d.]+)"/)?.[1])
       const height = Number(svg.match(/<svg[^>]* height="([\d.]+)"/)?.[1])
-      expect(width / height).toBeCloseTo(plotSize.width / plotSize.height, 2)
+      expect(width / height).toBeCloseTo(89 / 65, 2)
     }
   }
 

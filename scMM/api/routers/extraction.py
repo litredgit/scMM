@@ -34,3 +34,8 @@ def review_batch(body: s.ReviewBatch, manager: Service, identity: Identity):
     return manager.review_extraction(
         identity, body.revision, body.path, body.ids, compare=body.compare
     )
+
+
+@router.post("/workspace/extraction/signal")
+def batch_signal(body: s.BatchSignal, manager: Service, identity: Identity):
+    return manager.batch_signal(identity, body.revision, body.path, body.sample_id)

@@ -36,7 +36,7 @@ class LipidChartOptions(Controls):
 class LipidOptions(Controls):
     database: str = ""
     polarity: Literal["pos", "neg", "both"] = "pos"
-    adducts: list[str] = Field(min_length=1, max_length=8)
+    adducts: list[str] = Field(min_length=1, max_length=16)
     annotation_ppm: float = Field(default=10.0, ge=0, le=1000)
     isotope_ppm: float = Field(default=10.0, ge=0, le=1000)
     max_isotope_order: int = Field(default=3, ge=1, le=10)
@@ -70,6 +70,10 @@ class LipidPreset(RevisionRequest):
 
 class LipidActivate(RevisionRequest):
     version: str
+
+
+class IsotopeSpectrum(LipidActivate):
+    relation_id: str
 
 
 class LipidReview(LipidActivate):

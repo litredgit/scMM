@@ -14,7 +14,6 @@ from anndata import AnnData
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from types import SimpleNamespace
 
 from scMM.api.app import STATIC_ROOT, create_app
 from scMM.application.auth import AuthStore
@@ -123,13 +122,38 @@ def main():
         auth.change_password(
             principal, "", os.environ.get("SCMM_E2E_PASSWORD", "Synthetic browser passphrase")
         )
+        from scMM.application.monitor_store import MonitorStore
+        from scMM.application.server_config import DEFAULTS, ServerConfig
+
+        MonitorStore.initialize(root / "monitor.sqlite3")
+        for name in ("cache", "temp", "recycle"):
+            (root / name).mkdir()
+        private_config = root / "private/server.json"
+        private_config.parent.mkdir()
+        values = {
+            **DEFAULTS,
+            "cookie_name": "scmm_e2e",
+            "cookie_secure": False,
+            "auth_db": str(root / "auth.sqlite3"),
+            "monitor_db": str(root / "monitor.sqlite3"),
+            "storage": {"Raw": str(raw)},
+            "output": {"Results": str(results)},
+            "project_root": str(projects),
+            "cache_root": str(root / "cache"),
+            "temp_root": str(root / "temp"),
+            "recycle_root": str(root / "recycle"),
+            "preferences": str(root / "preferences.json"),
+            "lipid_database_dir": str(database),
+        }
+        private_config.write_text(json.dumps(values))
+        private_config.chmod(0o600)
         app = create_app(
             [StorageRoot("Raw", raw)],
             [StorageRoot("Results", results)],
             project_root=projects,
             static_root=os.environ.get("SCMM_TEST_STATIC_ROOT") or STATIC_ROOT,
             auth_store=auth,
-            server_config=SimpleNamespace(cookie_name="scmm_e2e", cookie_secure=False, origins=()),
+            server_config=ServerConfig(values, private_config).validate(),
         )
         # AI uses real encrypted settings and HTTP routes, with a synthetic upstream.
         # No user credentials or external model service are needed by browser tests.

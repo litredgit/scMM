@@ -33,6 +33,14 @@ export interface LipidInfo {
   }[]
 }
 export interface LipidResults {
+  candidate_groups?: {
+    label: string
+    feature_id: string
+    formula: string
+    adduct: string
+    rows: Record<string, unknown>[]
+  }[]
+  candidate_group_total?: number
   version: string
   parameters: Record<string, unknown>
   rules: LipidRules

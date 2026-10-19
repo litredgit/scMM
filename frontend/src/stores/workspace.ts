@@ -15,6 +15,7 @@ export const useWorkspace = defineStore('workspace', () => {
   const current = ref<WorkspaceView | null>(null)
   const configuration = ref<Configuration | null>(null)
   const busy = ref(false)
+  const maintenancePaused = ref(false)
   const error = ref('')
   const notice = ref('')
   const analysisDraft = ref<{
@@ -22,8 +23,22 @@ export const useWorkspace = defineStore('workspace', () => {
     analysis: Record<string, unknown>
     legend: string
   } | null>(null)
+  const selectedCells = ref<string[]>([])
+  function selectCell(cell: string) {
+    selectedCells.value = [...selectedCells.value.filter((c) => c !== cell), cell].slice(-2)
+  }
   const task = ref('暂无活动任务')
   const project = computed(() => current.value?.project ?? null)
+  watch(
+    () =>
+      JSON.stringify([
+        project.value?.path,
+        project.value?.dataset?.id,
+        project.value?.dataset?.revision,
+      ]),
+    () => (selectedCells.value = []),
+  )
+
   watch(
     () => project.value?.path,
     () => {
@@ -62,7 +77,21 @@ export const useWorkspace = defineStore('workspace', () => {
   async function start() {
     await run(async () => {
       configuration.value = await request<Configuration>('/configuration')
-      current.value = await request<WorkspaceView>('/workspaces', { method: 'POST' })
+      const previous = sessionStorage.getItem('scmm-workspace')
+      if (previous) {
+        try {
+          current.value = await request<WorkspaceView>('/workspaces/resume', {
+            method: 'POST',
+            body: { workspace_id: previous },
+          })
+        } catch (cause) {
+          if (!(cause instanceof ApiError) || ![403, 404].includes(cause.status)) throw cause
+          current.value = null
+        }
+      }
+      if (!current.value)
+        current.value = await request<WorkspaceView>('/workspaces', { method: 'POST' })
+      sessionStorage.setItem('scmm-workspace', current.value.workspace_id)
       if (heartbeat) clearInterval(heartbeat)
       heartbeat = setInterval(async () => {
         if (busy.value || !current.value) return
@@ -201,12 +230,18 @@ export const useWorkspace = defineStore('workspace', () => {
     method = 'POST',
   ): Promise<T | undefined> {
     if (!current.value) return
+    const snapshot = current.value
     return run(async () => {
       const response = await request<{ workspace: WorkspaceView; value: T }>(`/workspace${path}`, {
         workspace: current.value!.workspace_id,
         method,
         body: { ...body, revision: current.value!.revision },
       })
+      if (
+        current.value?.workspace_id !== snapshot.workspace_id ||
+        current.value?.revision !== snapshot.revision
+      )
+        return
       current.value = response.workspace
       return response.value
     })
@@ -271,6 +306,9 @@ export const useWorkspace = defineStore('workspace', () => {
   }
 
   return {
+    selectedCells,
+    selectCell,
+    maintenancePaused,
     current,
     configuration,
     project,

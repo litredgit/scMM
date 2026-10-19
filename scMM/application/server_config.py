@@ -119,7 +119,8 @@ class ServerConfig:
 
         monitor_path = outside_repository(self.values["monitor_db"])
         auth_path = outside_repository(self.auth_db)
-        private_paths = [auth_path, monitor_path, self.path.resolve()]
+        recovery_root = self.path.resolve().parent / (self.path.stem + ".recovery")
+        private_paths = [auth_path, monitor_path, self.path.resolve(), recovery_root]
         if bool(self.values["ai_db"]) != bool(self.values["ai_key_file"]):
             raise ValueError("AI 数据库与主密钥必须同时配置，请执行 scmm-admin init-ai。")
         if self.values["ai_db"]:
@@ -141,10 +142,16 @@ class ServerConfig:
                 raise PermissionError(f"输出目录不可写：{root.path}")
         # Credentials must never be inside a directory exposed to browser clients.
         for root in [*roots, *outputs, project]:
-            if any(p.is_relative_to(root.path) for p in private_paths):
+            if any(p.is_relative_to(root.path) for p in private_paths) or root.path.is_relative_to(
+                recovery_root
+            ):
                 raise ValueError("认证数据库和服务器配置不能位于网页可浏览目录中。")
         for key in ("cache_root", "temp_root", "recycle_root"):
             root = OutputRoot(key, Path(self.values[key]))
+            if any(p.is_relative_to(root.path) for p in private_paths) or root.path.is_relative_to(
+                recovery_root
+            ):
+                raise ValueError("缓存、临时及回收目录不能包含服务器配置、凭据或维护恢复包。")
             if not os.access(root.path, os.W_OK | os.X_OK):
                 raise PermissionError(f"{key} 目录不可写：{root.path}")
         OutputRoot("preferences", Path(self.values["preferences"]).parent)
