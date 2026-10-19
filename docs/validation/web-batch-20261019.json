@@ -1,0 +1,88 @@
+{
+  "checked_at": "2026-10-19T21:17:30.780786+08:00",
+  "implementation_commit": "fd84a08f507ba0951677329583c96b34d239aa6a",
+  "tests": {
+    "python": {
+      "passed": 576,
+      "warnings": "errors"
+    },
+    "browser": {
+      "passed": 20
+    },
+    "slow_state_late_response_repeat": {
+      "passed": 6
+    },
+    "documentation_and_notebook": {
+      "passed": 16
+    },
+    "ruff": "passed",
+    "frontend_typecheck_build_prettier": "passed",
+    "source_and_artifact_scan": "zero findings",
+    "wheel_and_sdist_build": "passed",
+    "wheel_import_smoke": "passed using existing locked dependencies"
+  },
+  "environments": {
+    "dev": {
+      "port": 5007,
+      "service": "active",
+      "health": "ok",
+      "update_readiness": {
+        "state": "ready",
+        "checked_at": 1792415850.7981997,
+        "sampled_at": 1792415847.0498867,
+        "blockers": [],
+        "unknown": [],
+        "active_pages": 0,
+        "monitor_pages": 0,
+        "unconfirmed_pages": 0,
+        "unsaved_workspaces": 0,
+        "busy_workspaces": 0,
+        "unconfirmed_workspaces": 0,
+        "open_projects": 0,
+        "active_tasks": 0,
+        "inflight_requests": 0
+      },
+      "ai_storage_initialized": true
+    },
+    "prod": {
+      "port": 5006,
+      "service": "active",
+      "health": "ok",
+      "update_readiness": {
+        "state": "ready",
+        "checked_at": 1792415850.8051813,
+        "sampled_at": 1792415846.296688,
+        "blockers": [],
+        "unknown": [],
+        "active_pages": 0,
+        "monitor_pages": 0,
+        "unconfirmed_pages": 0,
+        "unsaved_workspaces": 0,
+        "busy_workspaces": 0,
+        "unconfirmed_workspaces": 0,
+        "open_projects": 0,
+        "active_tasks": 0,
+        "inflight_requests": 0
+      },
+      "ai_storage_initialized": true
+    }
+  },
+  "boundaries": [
+    "Synthetic and simulated-upstream checks; no new real-experiment acceptance claimed",
+    "Personal AI provider credentials configured by user in web UI; external-provider integration not run",
+    "Legacy directory overwrite fault REV-03 and existing large-scale/public-network validation remain outside this batch"
+  ],
+  "database": {
+    "active": "LMSD_95cf79edbb9d93c3.sdf",
+    "provenance_report": "lmsd-20261019.json"
+  },
+  "remote_ci": {
+    "url": "https://github.com/litredgit/scMM/actions/runs/39258758565",
+    "conclusion": "success",
+    "python_versions": [
+      "3.11",
+      "3.12"
+    ],
+    "checks": "success"
+  }
+}
