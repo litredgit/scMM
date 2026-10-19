@@ -76,11 +76,18 @@ def violin_figure(data, result, features, *, hide_zero=False, columns=3):
         for name, color in [(result["group_a"], "#0F766E"), (result["group_b"], "#C2410C")]:
             mask = groups.notna() & (groups.astype(str) == name)
             selected = values[mask.to_numpy(), index]
+            cells = np.asarray(data.obs_names)[mask.to_numpy()]
             if hide_zero:
+                cells = cells[selected != 0]
                 selected = selected[selected != 0]
             figure.add_trace(
                 go.Violin(
                     y=selected,
+                    customdata=cells[:, None],
+                    points="all",
+                    jitter=0.25,
+                    pointpos=0,
+                    hovertemplate="细胞=%{customdata[0]}<br>强度=%{y:.1e}<extra>%{fullData.name}</extra>",
                     name=name,
                     legendgroup=name,
                     showlegend=column == 1,
@@ -93,6 +100,7 @@ def violin_figure(data, result, features, *, hide_zero=False, columns=3):
             )
     figure.update_yaxes(tickformat=".1e", title_text="强度")
     figure.update_layout(
+        meta={"point_kind": "cell"},
         height=340 * rows,
         title="小提琴图（零值仅从显示中隐藏；检验与全局 FDR 不变）"
         if hide_zero

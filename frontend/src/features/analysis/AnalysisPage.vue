@@ -6,7 +6,7 @@ import { analysisKey } from './types'
 import { analysisModules } from './registry'
 const analysis = useAnalysis()
 provide(analysisKey, analysis)
-const { store, tab, legend, saveSettings, reloadAnalysis } = analysis
+const { store, info, tab, legend, saveSettings, reloadAnalysis } = analysis
 </script>
 <template>
   <section v-if="store.project?.dataset">
@@ -40,7 +40,8 @@ const { store, tab, legend, saveSettings, reloadAnalysis } = analysis
       </button>
     </div>
     <CellSpectraPanel />
-    <div class="analysis-layout">
+    <p v-if="!info" role="status">正在读取当前数据的分析状态…</p>
+    <div v-else class="analysis-layout">
       <nav class="analysis-navigation" aria-label="分析功能">
         <button
           v-for="entry in analysisModules"

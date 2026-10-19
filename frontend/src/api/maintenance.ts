@@ -86,6 +86,8 @@ export function startMaintenance(router: Router) {
   )
   document.addEventListener('input', capture)
   document.addEventListener('change', capture)
+  const identity = () =>
+    JSON.stringify([auth.user?.id, store.current?.workspace_id, store.project?.path])
   const unwatch = watch(
     () => router.currentRoute.value.path,
     async () => {
@@ -93,7 +95,12 @@ export function startMaintenance(router: Router) {
       const saved = forms[router.currentRoute.value.path]
       if (restoredForms && saved && !appliedRoutes.has(router.currentRoute.value.path)) {
         appliedRoutes.add(router.currentRoute.value.path)
-        setTimeout(() => restoreControls(saved), 200)
+        const target = identity(),
+          route = router.currentRoute.value.path
+        setTimeout(() => {
+          if (identity() === target && router.currentRoute.value.path === route)
+            restoreControls(saved)
+        }, 200)
       }
     },
   )
@@ -102,6 +109,7 @@ export function startMaintenance(router: Router) {
       if (!auth.user || auth.user.must_change) return
       if (store.current && restored !== store.current.workspace_id) {
         restored = store.current.workspace_id
+        const target = identity()
         const value = await request<{
           project_path?: string
           raw_unavailable?: string
@@ -111,6 +119,7 @@ export function startMaintenance(router: Router) {
           selectedCells?: string[]
           views?: Parameters<typeof restoreViews>[0]
         }>('/workspace/maintenance/draft', { workspace: restored })
+        if (identity() !== target) return
         if (value.raw_unavailable) store.notice = value.raw_unavailable
         if (value.forms && value.project_path === (store.project?.path || '')) {
           restoredForms = true
@@ -120,7 +129,11 @@ export function startMaintenance(router: Router) {
           store.selectedCells = value.selectedCells || []
           if (value.route) await router.replace(value.route)
           await nextTick()
-          setTimeout(() => restoreControls(forms[router.currentRoute.value.path] || []), 500)
+          const route = router.currentRoute.value.path
+          setTimeout(() => {
+            if (identity() === target && router.currentRoute.value.path === route)
+              restoreControls(forms[route] || [])
+          }, 500)
         }
       }
       const status = await request<{ request: { id: string } | null }>('/maintenance/status')

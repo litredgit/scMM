@@ -184,6 +184,11 @@ for (const staleFailure of [false, true]) {
   test(`late feature ${staleFailure ? 'failure' : 'success'} from a closed project is ignored`, async ({
     page,
   }) => {
+    // Slow state reads must finish before the new project's controls accept changes.
+    await page.route('**/workspace/analysis', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      await route.continue()
+    })
     await importAnalysis(page, '迟到响应旧项目')
     let release!: () => void
     const held = new Promise<void>((resolve) => {

@@ -29,7 +29,7 @@ REV-01/REV-06 已验收；本批已修复 REV-02/04/05/07/08/09，剩余事项�
 
 1. 默认开发分支为 `dev`；确认本次里程碑和已有用户修改，集中说明必要待决事项。
 2. 本批已修复 REV-09 检查漏选、REV-04 结果失效及 REV-08 可选依赖隔离；后续继续围绕剩余事项推进；
-   先确定新功能的结果/会话状态契约，并做现有模型恢复的最小验证，不先做完整自动更新入口。各项入口及检查见交接文档。
+   已有结果/会话恢复契约和管理员维护入口作为后续基础；具体边界见数据/安装文档，历史复现依据见交接文档。
    进入 M1 时首先检查 `stores/workspace.ts`、`api/client.ts`、`App.vue`，以及
    `features/raw/RawPage.vue`、`features/extraction/ExtractionPage.vue`、`features/analysis/AnalysisPage.vue`、
    `components/SavedItems.vue`；其中前端路径均相对 `frontend/src/`。

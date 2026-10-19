@@ -161,3 +161,22 @@ def test_pdf_preserves_svg_definition_namespace_and_clipping(caplog):
     svg = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><defs><clipPath id="plotclip"><rect width="10" height="20"/></clipPath></defs><g clip-path="url(#plotclip)"><path d="M0 0L90 30" stroke="black"/></g></svg>'
     assert publication_pdf(svg, 89, 65).startswith(b"%PDF-")
     assert "Unable to find a clipping path" not in caplog.text
+
+
+def test_violin_cell_identity_survives_hidden_zeros():
+    from scMM.plot.workbench import violin_figure
+
+    data = dataset()
+    data.X[0, 0] = 0
+    result = {
+        "group_key": "group",
+        "layer": None,
+        "group_a": "A",
+        "group_b": "B",
+        "table": pd.DataFrame({"feature_id": ["f0"], "mz": [100.0], "fdr": [0.02]}),
+    }
+    figure = violin_figure(data, result, ["f0"], hide_zero=True)
+    assert figure.layout.meta["point_kind"] == "cell"
+    cells = np.asarray(figure.data[0].customdata)[:, 0]
+    assert "c0" not in cells and cells.tolist() == data.obs_names[1:20].tolist()
+    np.testing.assert_array_equal(figure.data[0].y, data[cells, "f0"].X[:, 0])
