@@ -9,6 +9,8 @@ import {
   nextTick,
   computed,
 } from 'vue'
+import LegendOrder from './LegendOrder.vue'
+import { useLegendOrder } from './useLegendOrder'
 import { useViewState } from '../api/viewState'
 import { useWorkspace } from '../stores/workspace'
 import type { Figure } from '../api/types'
@@ -34,6 +36,10 @@ const chartKey = computed(
     props.viewKey ??
     (
       {
+        embedding: 'analysis.embedding_plot',
+        network_plot: 'analysis.network_plot',
+        shap_plot: 'analysis.shap_plot',
+        qc_plot: 'analysis.qc_plot',
         volcano: 'analysis.volcano',
         violin: 'analysis.violin',
         network: 'analysis.network_plot',
@@ -51,6 +57,24 @@ const chartKey = computed(
     )[props.name] ??
     props.name,
 )
+const legendNames = computed(() =>
+  (props.figure.data as { name?: string; showlegend?: boolean }[])
+    .filter((t) => t.showlegend !== false && t.name)
+    .map((t) => t.name!),
+)
+const {
+  items: legendItems,
+  move: moveLegend,
+  reset: resetLegend,
+} = useLegendOrder(chartKey, legendNames, () => !!props.readonly)
+function orderedFigure(): Figure {
+  const copy = JSON.parse(JSON.stringify(props.figure)) as Figure
+  for (const trace of copy.data as Record<string, unknown>[]) {
+    if (typeof trace.name === 'string') trace.legendrank = legendItems.value.indexOf(trace.name)
+  }
+  copy.layout.legend = { ...(copy.layout.legend as object), traceorder: 'normal' }
+  return copy
+}
 const chartWidth = ref(900)
 const chartKind = computed(() =>
   chartKey.value.includes('embedding')
@@ -181,7 +205,7 @@ async function draw() {
   try {
     plotly ??= (await import('plotly.js-dist-min')).default
     if (!active || !element.value || token !== generation) return
-    const copy = JSON.parse(JSON.stringify(props.figure)) as Figure
+    const copy = orderedFigure()
     for (const [key, value] of Object.entries(viewport.value)) {
       const match = /^([xy]axis\d*)\.(range)(?:\[(\d)\])?$/.exec(key)
       if (match) {
@@ -241,6 +265,7 @@ async function draw() {
       showlegend: selectedPosition !== 'hidden',
       legend: {
         ...legend,
+        traceorder: 'normal',
         title: { text: '' },
         font: { size: 14 },
         itemwidth: 30,
@@ -364,7 +389,7 @@ async function draw() {
   }
 }
 watch(
-  () => [props.figure, position.value, props.selectRange, chartHeight.value],
+  () => [props.figure, position.value, props.selectRange, chartHeight.value, legendItems.value],
   () => void draw(),
   { deep: false },
 )
@@ -420,9 +445,9 @@ async function plotData() {
     saveBlob(
       await exportRequest('data', {
         figure: {
-          ...props.figure,
+          ...orderedFigure(),
           layout: {
-            ...props.figure.layout,
+            ...orderedFigure().layout,
             meta: {
               ...(props.figure.layout.meta as object),
               publication: {
@@ -435,6 +460,7 @@ async function plotData() {
                 x_label: exportX.value,
                 y_label: exportY.value,
                 legend: position.value,
+                legend_order: legendItems.value,
                 viewport: viewport.value,
               },
             },
@@ -473,7 +499,7 @@ async function image(format: string) {
       height = (heightMm.value * 96) / 25.4
     if (format === 'png' && width * height * (dpi.value / 96) ** 2 > 60_000_000)
       throw new Error('成图像素过多，请减小尺寸或 DPI。')
-    const copy = JSON.parse(JSON.stringify(props.figure)) as Figure
+    const copy = orderedFigure()
     for (const [key, value] of Object.entries(viewport.value)) {
       const match = /^([xy]axis\d*)\.(range)(?:\[(\d)\])?$/.exec(key)
       if (match) {
@@ -545,6 +571,7 @@ async function image(format: string) {
       right = position.value.endsWith('right'),
       bottom = position.value.startsWith('bottom')
     copy.layout.legend = {
+      traceorder: 'normal',
       font,
       x: inside ? (right ? 0.99 : 0.01) : 1.02,
       y: bottom ? 0.01 : 0.99,
@@ -615,33 +642,6 @@ async function image(format: string) {
       <label
         ><FieldLabel name="图文件名" /><input v-model="filename" :aria-label="`图文件名：${name}`"
       /></label>
-      <label
-        >论文规格<select v-model="preset" @change="paperPreset">
-          <option value="nature-single">Nature 单栏</option>
-          <option value="nature-double">Nature 双栏</option>
-          <option value="acs-single">Analytical Chemistry 单栏</option>
-          <option value="acs-double">Analytical Chemistry 双栏</option>
-        </select></label
-      >
-      <label>宽度（mm）<input v-model.number="widthMm" type="number" min="20" max="600" /></label>
-      <label>高度（mm）<input v-model.number="heightMm" type="number" min="20" max="600" /></label>
-      <label
-        >字号（pt）<input v-model.number="fontPt" type="number" min="4.5" max="24" step="0.5"
-      /></label>
-      <label
-        >位图 DPI<input
-          v-model.number="dpi"
-          type="number"
-          min="72"
-          max="2400"
-          step="1"
-          :list="`${name}-dpi`"
-      /></label>
-      <datalist :id="`${name}-dpi`">
-        <option value="300" />
-        <option value="600" />
-        <option value="1200" />
-      </datalist>
       <button class="save" :disabled="exporting || store.busy || !fresh" @click="image('svg')">
         下载 SVG
       </button>
@@ -655,6 +655,46 @@ async function image(format: string) {
         下载作图数据
       </button>
     </div>
+    <details class="plot-settings">
+      <summary>论文导出设置 · 尺寸、字号与 DPI</summary>
+      <div class="field-grid">
+        <label
+          >论文规格<select v-model="preset" @change="paperPreset">
+            <option value="nature-single">Nature 单栏</option>
+            <option value="nature-double">Nature 双栏</option>
+            <option value="acs-single">Analytical Chemistry 单栏</option>
+            <option value="acs-double">Analytical Chemistry 双栏</option>
+          </select></label
+        >
+        <label>宽度（mm）<input v-model.number="widthMm" type="number" min="20" max="600" /></label>
+        <label
+          >高度（mm）<input v-model.number="heightMm" type="number" min="20" max="600"
+        /></label>
+        <label
+          >字号（pt）<input v-model.number="fontPt" type="number" min="4.5" max="24" step="0.5"
+        /></label>
+        <label
+          >位图 DPI<input
+            v-model.number="dpi"
+            type="number"
+            min="72"
+            max="2400"
+            step="1"
+            :list="`${name}-dpi`"
+        /></label>
+        <datalist :id="`${name}-dpi`">
+          <option value="300" />
+          <option value="600" />
+          <option value="1200" />
+        </datalist>
+      </div>
+    </details>
+    <LegendOrder
+      :items="legendItems"
+      :disabled="store.busy"
+      @move="moveLegend"
+      @reset="resetLegend"
+    />
     <details>
       <summary>导出标题与语言</summary>
       <div class="field-grid">

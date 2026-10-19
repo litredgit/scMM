@@ -83,6 +83,7 @@ class ProjectView(BaseModel):
     unsaved: bool
     dataset: DatasetSummary | None
     presentation: dict[str, str] = Field(default_factory=dict)
+    legend_orders: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class WorkspaceView(BaseModel):

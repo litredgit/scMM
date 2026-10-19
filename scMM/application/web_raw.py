@@ -13,6 +13,7 @@ from scMM.plot.presentation import style_figure
 from scMM.plot.raw import _peak_preserving_downsample, cell_detection_figure
 
 from .cell_preview import initialize_ranges, submit_preview
+from .parameters import automatic_mz_range
 from .preview_cache import file_identity
 from .processing import ProcessingParameters
 from .project_batch import (
@@ -107,15 +108,10 @@ class RawWorkflow:
                 and sample["parameters"] is None
                 and not project.manifest.get("manual_parameters")
             ):
-                import math
-
                 summary = preview.summary
                 if summary.mz_min is not None and summary.mz_max is not None:
                     sample.update(
-                        auto_mz_range=[
-                            math.floor(summary.mz_min / 10) * 10,
-                            math.ceil(summary.mz_max / 10) * 10,
-                        ],
+                        auto_mz_range=automatic_mz_range(summary.mz_min, summary.mz_max),
                         range_initialized=True,
                     )
                     project.dirty = True

@@ -6,6 +6,35 @@ import { useWorkspace } from '../../stores/workspace'
 import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
 const store = useWorkspace()
+const now = ref(Date.now()),
+  reviewPhase = ref('')
+const stages: Record<string, string> = {
+  preparing: '准备特征',
+  shared: '共同特征合谱',
+  reading: '读取原始谱 / 复用预览',
+  aligning: '扫描峰对齐',
+  extracting: '提取细胞特征',
+  saving: '保存产物',
+  sample_completed: '样本处理结束',
+  completed: '完成',
+  review: '等待人工审核',
+}
+const counts = computed(() => {
+  const samples = selected.value?.samples ?? []
+  return {
+    total: samples.length || store.project?.manifest.samples.length || 0,
+    success: samples.filter((s) => s.status === 'succeeded').length,
+    failed: samples.filter((s) => s.status === 'failed').length,
+    waiting: samples.filter((s) => s.status === 'waiting' || s.status === 'queued').length,
+  }
+})
+const elapsed = computed(() => {
+  const batch = selected.value
+  if (!batch?.started_at) return '—'
+  const end = batch.finished_at ? Date.parse(batch.finished_at) : now.value
+  const seconds = Math.max(0, Math.floor((end - Date.parse(batch.started_at)) / 1000))
+  return `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`
+})
 const signalSample = ref(''),
   signalFigure = ref<Figure>()
 async function loadSignal() {
@@ -25,10 +54,12 @@ let timer: ReturnType<typeof setTimeout> | undefined
 const selected = computed(() => batchList.value.find((b) => b.path === path.value))
 const active = computed(() => batchList.value.some((b) => ['queued', 'running'].includes(b.status)))
 const table = computed<DataTable>(() => ({
-  columns: ['name', 'status', 'cells', 'features', '来源', 'error'],
+  columns: ['name', 'status', '阶段', '阶段进度', 'cells', 'features', '来源', 'error'],
   rows: (selected.value?.samples ?? []).map((s) => ({
     ...s,
     status: label(s.status),
+    阶段: stages[s.stage ?? ''] ?? '—',
+    阶段进度: s.progress == null ? '—' : `${Math.round(s.progress * 100)}%`,
     来源: s.reused_preview ? '复用预览' : '本批处理',
   })),
   total: selected.value?.samples.length ?? 0,
@@ -51,6 +82,7 @@ function label(status: string) {
   )
 }
 async function refresh() {
+  now.value = Date.now()
   if (!store.project) return
   const result = await store.read<Batch[]>('/extraction/batches')
   if (result) {
@@ -135,14 +167,21 @@ async function start(retry = false) {
   }
 }
 async function review(compare = false) {
-  const value = await store.command<{ figures: Figure[] } | null>('/extraction/review', {
-    path: path.value,
-    ids: included.value,
-    compare,
-  })
-  if (compare && value) figures.value = value.figures
-  else if (!compare && !store.error)
-    store.notice = '当前数据集已建立，可进入预处理。项目仍需主动保存。'
+  reviewPhase.value = compare
+    ? '正在读取所选样本并生成 QC 对比…'
+    : '正在合并所选样本并建立当前数据集…'
+  try {
+    const value = await store.command<{ figures: Figure[] } | null>('/extraction/review', {
+      path: path.value,
+      ids: included.value,
+      compare,
+    })
+    if (compare && value) figures.value = value.figures
+    else if (!compare && !store.error)
+      store.notice = '当前数据集已建立，可进入预处理。项目仍需主动保存。'
+  } finally {
+    reviewPhase.value = ''
+  }
 }
 const parameterTable = computed<DataTable>(() => {
   const rows = (checked.value?.samples ?? []) as Record<string, unknown>[]
@@ -240,6 +279,52 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
         </select></label
       ><template v-if="selected"
         ><p role="status">{{ label(selected.status) }} · {{ selected.message }}</p>
+        <div class="batch-progress" aria-label="提取进度">
+          <div class="metric-strip">
+            <div>
+              <strong>{{ counts.success + counts.failed }} / {{ counts.total }}</strong
+              ><span>已处理样本</span>
+            </div>
+            <div>
+              <strong>{{ counts.success }}</strong
+              ><span>成功</span>
+            </div>
+            <div>
+              <strong>{{ counts.failed }}</strong
+              ><span>失败</span>
+            </div>
+            <div>
+              <strong>{{ counts.waiting }}</strong
+              ><span>等待</span>
+            </div>
+          </div>
+          <label class="field"
+            >样本处理进度<progress
+              :value="counts.success + counts.failed"
+              :max="Math.max(counts.total, 1)"
+          /></label>
+          <p>
+            当前阶段：{{ stages[selected.stage ?? ''] ?? label(selected.status)
+            }}<span v-if="selected.current_sample"> · {{ selected.current_sample }}</span>
+          </p>
+          <label v-if="selected.status === 'running'" class="field"
+            >{{
+              selected.stage_progress == null
+                ? '当前阶段运行中（无可用百分比）'
+                : `当前阶段 ${Math.round(selected.stage_progress * 100)}%`
+            }}<progress :value="selected.stage_progress ?? undefined" max="1"
+          /></label>
+          <p class="task-note">
+            已耗时 {{ elapsed }} · 最近更新
+            {{
+              selected.updated_at
+                ? new Date(selected.updated_at).toLocaleString('zh-CN', {
+                    timeZone: 'Asia/Shanghai',
+                  })
+                : '暂无阶段信息'
+            }}。阶段进度不代表剩余时间。
+          </p>
+        </div>
         <p class="task-note">批次 ID：{{ selected.path.split('/').at(-2) }}</p>
         <div class="actions">
           <button
@@ -258,6 +343,8 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
         </div>
         <DataTableView :table="table" />
         <h3>审核纳入样本</h3>
+        <p>已选择 {{ included.length }} / {{ counts.success }} 个成功样本</p>
+        <p v-if="reviewPhase" role="status">{{ reviewPhase }}</p>
         <div class="check-list">
           <label v-for="s in selected.samples.filter((s) => s.status === 'succeeded')" :key="s.id"
             ><input

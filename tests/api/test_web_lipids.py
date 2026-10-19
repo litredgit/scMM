@@ -400,3 +400,40 @@ def test_network_condition_changes_stale_download_and_preserve_other_fields(work
     assert not get(workflow, "/lipids").json()["versions"][0]["valid"]
     for kind in ["charts", "feature_edges", "molecule_nodes", "network_evidence"]:
         assert workflow[-1]("/lipids/export", {"version": version, "kind": kind}).status_code == 400
+
+
+def test_display_sorting_is_global_and_does_not_change_recommendations(workflow, monkeypatch):
+    setup_lipids(workflow, monkeypatch)
+    version = run_lipids(workflow)
+    original = query(workflow, version)
+    sorting = {
+        "candidate_sort": "name",
+        "candidate_descending": True,
+        "relation_sort": "valid_cells",
+        "relation_descending": True,
+    }
+    ordered = query(workflow, version, sorting=sorting)
+    names = [r["name"] for r in ordered["candidates"]["rows"]]
+    assert names == sorted(names, reverse=True)
+    expected = sorted(original["isotopes"]["rows"], key=lambda r: r["valid_cells"], reverse=True)
+    pages = [
+        query(workflow, version, sorting=sorting, relation_offset=i, limit=1)["isotopes"]["rows"][0]
+        for i in range(len(expected))
+    ]
+    assert [r["relation_id"] for r in pages] == [r["relation_id"] for r in expected]
+    assert query(workflow, version)["suggested"] == original["suggested"]
+    assert ordered["selected"] == original["selected"]
+    exported = workflow[-1](
+        "/lipids/export", {"version": version, "kind": "candidates", "sorting": sorting}
+    )
+    exported.raise_for_status()
+    assert pd.read_csv(StringIO(exported.text))["name"].tolist() == names
+    assert (
+        workflow[-1](
+            "/lipids/query", {"version": version, "sorting": {"candidate_sort": "unknown"}}
+        ).status_code
+        == 422
+    )
+    features = get(workflow, "/analysis/features?query=Synthetic+B&sort=mz").json()
+    assert features["total"] > 0
+    assert all("Synthetic B" in r["label"] for r in features["rows"])

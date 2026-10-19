@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import FeaturePicker from '../../components/FeaturePicker.vue'
+import { computed } from 'vue'
 import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
 import PlotView from '../../../../components/PlotView.vue'
 import ResultTable from '../../components/ResultTable.vue'
 const {
   diff,
-  featureOptions,
   selectedFeatures,
   hideZero,
   volcano,
@@ -22,6 +23,12 @@ const {
   draw,
   toggleFeature,
 } = useAnalysisContext()
+const violinStale = computed(() => {
+  const meta = figures.value.violin?.layout.meta as { selection_signature?: string } | undefined
+  return (
+    !meta || meta.selection_signature !== JSON.stringify([selectedFeatures.value, hideZero.value])
+  )
+})
 </script>
 <template>
   <div>
@@ -77,56 +84,35 @@ const {
       </p>
     </div>
     <div class="card">
-      <h2>全特征差异与 Marker</h2>
-      <button
-        class="primary"
-        :disabled="store.busy || !diff.group_key"
-        @click="
-          execute('markers', { group_key: diff.group_key, method: 'classifier', layer: diff.layer })
-        "
-      >
-        计算分类权重 Marker
-      </button>
+      <h2>两组差异与火山图</h2>
+      <p class="result-context">
+        比较 {{ displayName(diff.group_a) || '待选 A 组' }} 与
+        {{ displayName(diff.group_b) || '待选 B 组' }}；正 log₂FC 表示前者更高。<br />
+        ① 计算全部特征差异并自动绘制火山图 → ② 选择特征 → ③ 绘制小提琴图。
+      </p>
       <p class="muted">
-        逐组对其余组训练正则化逻辑回归；正权重越高越支持本组，交叉验证中标准化只拟合训练折。
+        当前数据层：{{ diff.layer ? displayName(diff.layer) : '当前矩阵' }}；检验：{{
+          diff.method === 'welch' ? 'Welch t 检验' : 'Mann–Whitney U 检验'
+        }}；对全部特征进行 BH-FDR 校正。
       </p>
       <div class="actions">
         <button
           class="primary"
-          :disabled="store.busy || !diff.group_a || !diff.group_b"
+          :disabled="store.busy || !diff.group_a || !diff.group_b || diff.group_a === diff.group_b"
           @click="execute('differential', { ...diff })"
         >
-          比较全部特征</button
-        ><button
-          class="primary"
-          :disabled="store.busy || !diff.group_key"
-          @click="
-            execute('markers', {
-              group_key: diff.group_key,
-              method: diff.method,
-              layer: diff.layer,
-            })
-          "
-        >
-          计算全部簇 Marker</button
+          计算两组差异并绘制火山图</button
         ><button
           class="preview"
           v-if="has('differential')"
           :disabled="store.busy"
           @click="loadResult('differential')"
         >
-          读取差异报告</button
-        ><button
-          class="preview"
-          v-if="has('markers')"
-          :disabled="store.busy"
-          @click="loadResult('markers')"
-        >
-          读取 Marker 报告
+          读取差异报告
         </button>
       </div>
       <p class="muted">
-        差异检验对全部特征做 BH-FDR。Marker 为每簇对其余已标记细胞，每个比较内做 BH-FDR。
+        计算完成后自动显示火山图。若读取报告或绘图失败，可单独重试，无需重复计算。
       </p>
       <template v-if="has('differential')"
         ><div class="field-grid">
@@ -171,18 +157,9 @@ const {
           :legend="legend"
           name="volcano"
           @select="toggleFeature"
-        /><label class="field"
-          ><FieldLabel name="小提琴特征（最多 12 个；也可点击火山图）" /><select
-            aria-label="小提琴特征（最多 12 个；也可点击火山图）"
-            v-model="selectedFeatures"
-            multiple
-            size="6"
-          >
-            <option v-for="v in featureOptions" :key="v.value" :value="v.value">
-              {{ v.label }}
-            </option>
-          </select></label
-        >
+        />
+        <p class="muted">调整阈值或标签后点击“更新火山图”；仅更新显示，不重新进行检验。</p>
+        <FeaturePicker v-model="selectedFeatures" />
         <div class="check-list">
           <label
             ><input
@@ -199,17 +176,60 @@ const {
           :disabled="store.busy || !selectedFeatures.length"
           @click="draw('violin')"
         >
-          更新小提琴图</button
-        ><PlotView
+          绘制小提琴图
+        </button>
+        <p v-if="violinStale && selectedFeatures.length" role="status">
+          选择或显示设置已变更，点击“绘制小提琴图”更新。
+        </p>
+        <PlotView
           v-if="figures.violin && tab === 'differential'"
           :figure="figures.violin"
           :legend="legend"
           name="violin"
         />
         <p class="muted">特征选择和隐藏零值不重新检验，两图共享同一份全特征 FDR。</p></template
-      ><template v-for="name in ['differential', 'markers'] as const" :key="name"
-        ><ResultTable :name="name" heading
-      /></template>
+      >
+      <ResultTable name="differential" heading />
+    </div>
+    <div class="card">
+      <h2>各组差异 Marker</h2>
+      <p class="muted">
+        每组与其余已标记细胞比较，每次比较对全部特征做 BH-FDR 校正；结果是 Marker 表。
+      </p>
+      <button
+        class="primary"
+        :disabled="store.busy || !diff.group_key"
+        @click="
+          execute('markers', { group_key: diff.group_key, method: diff.method, layer: diff.layer })
+        "
+      >
+        计算全部簇 Marker
+      </button>
+    </div>
+    <div class="card">
+      <h2>分类权重 Marker</h2>
+      <p class="muted">
+        每组对其余组训练正则化逻辑回归，按正权重排序；交叉验证中标准化仅拟合训练折。
+      </p>
+      <button
+        class="primary"
+        :disabled="store.busy || !diff.group_key"
+        @click="
+          execute('markers', { group_key: diff.group_key, method: 'classifier', layer: diff.layer })
+        "
+      >
+        计算分类权重 Marker
+      </button>
+    </div>
+    <div class="card" v-if="has('markers')">
+      <h2>当前 Marker 结果</h2>
+      <p class="muted">
+        上面两种 Marker 共用此结果位置，重新计算会更新当前 Marker 报告；保存项目保留当前结果。
+      </p>
+      <button class="preview" :disabled="store.busy" @click="loadResult('markers')">
+        读取 Marker 报告
+      </button>
+      <ResultTable name="markers" heading />
     </div>
   </div>
 </template>

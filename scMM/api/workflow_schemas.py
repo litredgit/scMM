@@ -333,4 +333,7 @@ def options_for(model, options):
 
 class Presentation(RevisionRequest):
     key: str = Field(min_length=1, max_length=200)
-    position: Literal["right", "top_left", "top_right", "bottom_left", "bottom_right", "hidden"]
+    position: (
+        Literal["right", "top_left", "top_right", "bottom_left", "bottom_right", "hidden"] | None
+    ) = None
+    order: list[str] | None = Field(default=None, max_length=5000)

@@ -103,6 +103,7 @@ def export(body: s.LipidExport, manager: Service, identity: Identity):
         body.filters.model_dump(),
         body.kind,
         body.view.model_dump(),
+        body.sorting.model_dump(),
     )
     extension = "json" if body.kind in {"rules", "charts"} else "csv"
     return Response(

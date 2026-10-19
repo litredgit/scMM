@@ -213,3 +213,13 @@ def load_defaults(path: str | Path | None = None) -> WorkbenchDefaults:
     if set(PROCESSING_HELP) != {field.name for field in fields(ProcessingParameters)}:
         raise RuntimeError("processing parameter help is incomplete")
     return WorkbenchDefaults(parameters, analysis, frozenset(override.get("processing", {})))
+
+
+def automatic_mz_range(mz_min, mz_max):
+    """Round measured bounds to nearest 50 (ties up), expanding collapsed bounds."""
+    if not all(math.isfinite(v) for v in (mz_min, mz_max)) or mz_min >= mz_max:
+        raise ValueError("Invalid measured m/z range")
+    lower, upper = (math.floor(v / 50 + 0.5) * 50 for v in (mz_min, mz_max))
+    if lower == upper:
+        lower, upper = math.floor(mz_min / 50) * 50, math.ceil(mz_max / 50) * 50
+    return [lower, upper]

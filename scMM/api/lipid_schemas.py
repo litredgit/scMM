@@ -96,7 +96,47 @@ class LipidFilters(Controls):
     include_unannotated: bool = True
 
 
+class LipidSorting(Controls):
+    candidate_sort: Literal[
+        "recommended",
+        "feature_id",
+        "query_mz",
+        "theoretical_mz",
+        "name",
+        "MAIN_CLASS",
+        "CATEGORY",
+        "SUB_CLASS",
+        "database_id",
+        "formula",
+        "adduct",
+        "ppm_error",
+        "abs_ppm_error",
+        "ppm_band",
+        "network_level",
+        "class_score",
+        "adduct_score",
+        "rule_score",
+    ] = "recommended"
+    candidate_descending: bool = False
+    relation_sort: Literal[
+        "recommended",
+        "parent_mz",
+        "isotope_mz",
+        "order",
+        "sample",
+        "ppm_error",
+        "abs_ppm_error",
+        "theoretical_ratio",
+        "observed_ratio",
+        "valid_cells",
+        "matched",
+        "review",
+    ] = "recommended"
+    relation_descending: bool = False
+
+
 class LipidQuery(LipidActivate):
+    sorting: LipidSorting = Field(default_factory=LipidSorting)
     filters: LipidFilters = Field(default_factory=LipidFilters)
     feature_id: str = ""
     offset: int = Field(default=0, ge=0)
@@ -115,6 +155,7 @@ class LipidRepresentative(LipidActivate):
 
 
 class LipidExport(LipidCharts):
+    sorting: LipidSorting = Field(default_factory=LipidSorting)
     filters: LipidFilters = Field(default_factory=LipidFilters)
     kind: Literal[
         "matrix",

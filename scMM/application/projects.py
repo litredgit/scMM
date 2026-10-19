@@ -244,7 +244,7 @@ class ProjectStore:
         project.validate_samples()
         ProcessingParameters(**manifest["parameters"])
         artifacts = manifest["artifacts"]
-        if artifacts:
+        if "current" in artifacts:
             data = read_h5ad(child_path(folder, artifacts["current"]))
             baseline = read_h5ad(child_path(folder, artifacts["baseline"]))
             project.workspace.replace(data, source=str(folder))
@@ -254,10 +254,10 @@ class ProjectStore:
             project.saved_reports = json.loads(
                 data.uns.get("scmm_workbench", {}).get("reports_json", "{}")
             )
-            if "views" in artifacts:
-                project.views = json.loads(
-                    child_path(folder, artifacts["views"]).read_text(encoding="utf-8")
-                )
+        if "views" in artifacts:
+            project.views = json.loads(
+                child_path(folder, artifacts["views"]).read_text(encoding="utf-8")
+            )
         project.saved_token = project.workspace.token
         return project
 
@@ -274,12 +274,18 @@ class ProjectStore:
             saved_reports = dict(project.saved_reports)
             saved_at = utc_now()
             revision = disk["revision"] + 1
-            if project.workspace.data is not None:
+            snapshot = None
+            if (
+                project.workspace.data is not None
+                or project.views
+                or candidate["artifacts"].get("views")
+            ):
                 snapshot = child_path(
                     folder,
                     f"snapshots/{beijing_time(saved_at, compact=True)}_r{revision:03d}_{uuid4().hex[:8]}",
                 )
                 snapshot.mkdir()
+            if project.workspace.data is not None:
                 catalog = StorageCatalog((StorageRoot("snapshot", snapshot),))
                 current = project.workspace.save_h5ad(
                     catalog,
@@ -304,9 +310,11 @@ class ProjectStore:
                     "baseline": str((snapshot / "baseline.h5ad").relative_to(folder)),
                     "views": str((snapshot / "views.json").relative_to(folder)),
                 }
-                write_json(snapshot / "views.json", project.views)
                 saved = read_h5ad(current)
                 saved_reports = json.loads(saved.uns["scmm_workbench"]["reports_json"])
+            if snapshot is not None:
+                write_json(snapshot / "views.json", project.views)
+                candidate["artifacts"]["views"] = str((snapshot / "views.json").relative_to(folder))
             candidate.update(revision=revision, saved_at=saved_at)
             write_json(folder / "project.json", candidate)
             project.manifest = candidate

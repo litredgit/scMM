@@ -81,9 +81,9 @@ def test_automatic_ranges_are_candidate_only_and_failures_are_recorded(tmp_path)
     request = preview_request(project, catalog)
     state = project.folder / "processing" / "preview-state.json"
     result = run_preview(request, state)
-    assert result["parameters"]["mz_min"] == 140
-    assert result["parameters"]["mz_max"] == 160
-    assert all(value["auto_mz_range"] == [140, 160] for value in result["ranges"].values())
+    assert result["parameters"]["mz_min"] == 100
+    assert result["parameters"]["mz_max"] == 200
+    assert all(value["auto_mz_range"] == [100, 200] for value in result["ranges"].values())
     assert all("auto_mz_range" not in sample for sample in project.samples)
     with open(project.samples[0]["path"], "ab") as handle:
         handle.write(b"\n")

@@ -1,4 +1,5 @@
 """Persistent sequential project extraction with sample-local failure handling."""
+# ruff: noqa: RUF001
 
 from __future__ import annotations
 
@@ -225,7 +226,9 @@ def run_batch(path):
         "status": "running",
         "pid": os.getpid(),
         "created_at": request["created_at"],
-        "message": "Preparing features",
+        "message": "准备特征",
+        "started_at": utc_now(),
+        "stage": "preparing",
         "samples": [
             {"id": sample["id"], "name": sample["name"], "status": "waiting"}
             for sample in request["samples"]
@@ -244,16 +247,23 @@ def run_batch(path):
     previous = {r["id"]: r for r in request.get("initial_results", [])}
     state["samples"] = [previous.get(row["id"], row) for row in state["samples"]]
 
-    def report(message):
+    def report(message, *, stage=None, progress=None):
         state["message"] = message
+        state["updated_at"] = utc_now()
+        if stage is not None:
+            state["stage"] = stage
+        state["stage_progress"] = progress
+        if state["status"] not in {"queued", "running"}:
+            state["finished_at"] = state["updated_at"]
         write_json(path, state)
 
-    report("Preparing shared features")
+    report("准备共同特征", stage="preparing")
     try:
         check_inputs()
         targets = None
         base = ProcessingParameters(**request["parameters"])
         if request.get("reuse_shared_features"):
+            report("复用已验证共同特征", stage="shared")
             targets = np.load(path.parent / "shared_features.npy", allow_pickle=False)
         elif (
             request["feature_strategy"] == "shared"
@@ -274,6 +284,8 @@ def run_batch(path):
                     report("Stopped before extraction")
                     return
                 try:
+                    state["current_sample"] = sample["name"]
+                    report(f"读取并合谱：{sample['name']}", stage="shared")
                     exp, _ = load_single_file(sample["path"])
                     summed = sum_spec(
                         exp,
@@ -289,7 +301,11 @@ def run_batch(path):
                     del exp, summed
                 except Exception as exc:
                     state["samples"][i].update(status="failed", error=str(exc))
-                report(f"Shared spectrum {i + 1}/{len(request['samples'])}")
+                report(
+                    f"共同特征合谱 {i + 1}/{len(request['samples'])} 个样本",
+                    stage="shared",
+                    progress=(i + 1) / len(request["samples"]),
+                )
             if grid is None:
                 raise ValueError("No valid samples for shared features")
             spectrum = oms.MSSpectrum()
@@ -311,8 +327,9 @@ def run_batch(path):
                 state["status"] = "stopped"
                 report("Stopped; completed samples retained")
                 return
-            row["status"] = "running"
-            report(f"Extracting {sample['name']}")
+            row.update(status="running", started_at=utc_now(), stage="reading", progress=None)
+            state["current_sample"] = sample["name"]
+            report(f"读取样本：{sample['name']}", stage="reading")
             try:
                 check_inputs(None if request["feature_strategy"] == "shared" else sample)
                 params = ProcessingParameters(**sample["parameters"])
@@ -324,13 +341,19 @@ def run_batch(path):
 
                         holder["value"] = detection_from_payload(payload)
 
-                def progress(value, message, name=sample["name"]):
-                    report(f"{name}: {value:.0%} {message}")
+                def progress(value, message, name=sample["name"], row=row):
+                    row.update(stage="extracting", progress=max(0.0, min(1.0, float(value))))
+                    report(
+                        f"{name}：提取细胞特征 {value:.0%}",
+                        stage="extracting",
+                        progress=row["progress"],
+                    )
 
                 cached = reusable_preview(
                     request.get("project_folder", path.parent.parent.parent), sample, targets
                 )
                 if cached is not None:
+                    report(f"复用已验证预览：{sample['name']}", stage="reading")
                     obj = CyESIData.read_h5ad(cached)
                     from .preview_cache import load_detection
 
@@ -347,6 +370,8 @@ def run_batch(path):
                     )
                 else:
                     exp, meta = load_single_file(sample["path"])
+                    row.update(stage="aligning", progress=None)
+                    report(f"扫描峰对齐：{sample['name']}", stage="aligning")
                     frame, obs = align_frame(exp, targets, ppm=params.ppm_tol)
                     _annotate_single_file_frames(obs, meta)
                     meta.update(ref_mz=params.ref_mz, mz_range=[params.mz_min, params.mz_max])
@@ -386,6 +411,8 @@ def run_batch(path):
                 if not len(obj.data) or not len(obj.data.columns):
                     raise ValueError("No cells or features retained")
                 output = path.parent / f"{sample['id']}.h5ad"
+                row.update(stage="saving", progress=None)
+                report(f"保存产物：{sample['name']}", stage="saving")
                 obj.save_h5ad(output)
                 detection = detection_holder.get("value")
                 if detection is not None:
@@ -403,6 +430,9 @@ def run_batch(path):
                     row["detection_directory"] = folder.name
                 row.update(
                     status="succeeded",
+                    finished_at=utc_now(),
+                    stage="completed",
+                    progress=1.0,
                     output=output.name,
                     cells=len(obj.data),
                     features=len(obj.data.columns),
@@ -410,10 +440,11 @@ def run_batch(path):
                 )
             except Exception as exc:
                 traceback.print_exc()
-                row.update(status="failed", error=str(exc))
-            report(f"Finished {i + 1}/{len(request['samples'])}")
+                row.update(status="failed", error=str(exc), finished_at=utc_now(), progress=None)
+            report(f"已处理 {i + 1}/{len(request['samples'])} 个样本", stage="sample_completed")
         state["status"] = "completed"
-        report("Review sample outcomes before building the dataset")
+        state["current_sample"] = ""
+        report("处理结束，请审核样本后建立当前数据集", stage="review")
     except Exception as exc:
         traceback.print_exc()
         state["status"] = "failed"

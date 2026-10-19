@@ -294,6 +294,20 @@ class LipidWorkflow:
                 if not values["feature_id"]
                 or values["feature_id"] in {r["parent_feature_id"], r["isotope_feature_id"]}
             ]
+            from .lipid_sorting import sorted_rows
+
+            sorting = values.get("sorting", {})
+            candidates = sorted_rows(
+                candidates,
+                sorting.get("candidate_sort", "recommended"),
+                sorting.get("candidate_descending", False),
+            )
+            relations = relation_labels(project, relations)
+            relations = sorted_rows(
+                relations,
+                sorting.get("relation_sort", "recommended"),
+                sorting.get("relation_descending", False),
+            )
             feature_mz = dict(
                 zip(
                     data.var_names,
@@ -430,7 +444,7 @@ class LipidWorkflow:
 
         return self.lipid_edit(identity, revision, version_id, action)
 
-    def lipid_export(self, identity, revision, version_id, filters, kind, view=None):
+    def lipid_export(self, identity, revision, version_id, filters, kind, view=None, sorting=None):
         with self.access(identity) as workspace:
             workspace.check(revision)
             project = workspace.require_project()
@@ -547,6 +561,15 @@ class LipidWorkflow:
                 return json.dumps(
                     version["rules"], ensure_ascii=False, indent=2
                 ).encode(), "application/json"
+            from .lipid_sorting import sorted_rows
+
+            sorting = sorting or {}
+            prefix = "candidate" if kind == "candidates" else "relation"
+            rows = sorted_rows(
+                rows,
+                sorting.get(f"{prefix}_sort", "recommended"),
+                sorting.get(f"{prefix}_descending", False),
+            )
             frame = pd.DataFrame(rows)
             if frame.empty:
                 columns = (

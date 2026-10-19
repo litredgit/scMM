@@ -1562,3 +1562,163 @@ button.parameter-toggle {
     font-size: 14px;
   }
 }
+
+/* Shared workflow layout: readable groups, local table scrolling, compact chart tools. */
+.main-shell main > section,
+.main-shell main > div {
+  min-width: 0;
+  max-width: 100%;
+}
+.page-title {
+  align-items: flex-start;
+  gap: 18px;
+}
+.page-title > div {
+  min-width: 0;
+}
+.card {
+  box-shadow: 0 3px 14px #21304a04;
+}
+.card > h2:first-child,
+.card > .section-heading:first-child {
+  margin-bottom: 16px;
+}
+.card > .actions {
+  margin: 14px 0;
+}
+.field-grid {
+  align-items: end;
+}
+.actions > span,
+.actions > label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.table-scroll {
+  min-width: 0;
+  max-width: 100%;
+}
+.table-scroll th {
+  white-space: nowrap;
+}
+.project-list .path,
+.storage-path {
+  overflow-wrap: anywhere;
+}
+.project-list table {
+  table-layout: fixed;
+  min-width: 540px;
+}
+.project-list th:first-child {
+  width: 40%;
+}
+.project-list td {
+  overflow-wrap: anywhere;
+}
+.data-table {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.data-table td {
+  vertical-align: top;
+}
+.data-table details {
+  max-width: min(800px, 75vw);
+  white-space: normal;
+}
+.data-table summary {
+  cursor: pointer;
+  line-height: 1.8;
+}
+.data-table details p {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.plot-shell {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.plot-actions {
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  justify-content: flex-start;
+}
+.plot-actions label {
+  flex: 1 1 150px;
+  max-width: 240px;
+}
+.plot-settings {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.plot-settings summary {
+  cursor: pointer;
+  color: #475569;
+}
+.table-sorting {
+  max-width: 620px;
+}
+.batch-progress {
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 16px 0;
+}
+.batch-progress .metric-strip {
+  background: white;
+  margin-bottom: 16px;
+}
+progress {
+  width: 100%;
+  height: 12px;
+  accent-color: var(--blue);
+}
+.analysis-navigation {
+  position: sticky;
+  top: 18px;
+}
+@media (max-width: 1000px) {
+  .analysis-navigation {
+    position: static;
+  }
+  .section-heading {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 760px) {
+  .card {
+    padding: 16px;
+    border-radius: 10px;
+  }
+  .page-title {
+    gap: 10px;
+  }
+  .page-title .step-badge {
+    flex-shrink: 0;
+  }
+  .field-grid {
+    gap: 12px;
+  }
+  .actions {
+    gap: 8px;
+  }
+  .actions > button {
+    max-width: 100%;
+  }
+  .plot-actions > button {
+    flex: 1 1 115px;
+  }
+  .plot-actions label {
+    max-width: none;
+  }
+  .batch-progress {
+    padding: 12px;
+  }
+  .batch-progress .metric-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

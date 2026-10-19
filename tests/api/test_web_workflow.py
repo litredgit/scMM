@@ -332,3 +332,21 @@ def test_analysis_failed_replacement_retains_complete_precision_export(workflow,
     path = workflow[-2]()["project"]["path"]
     assert workflow[-1]("/project/open", {"path": path}).status_code == 200
     assert get(workflow, f"/results/download?kind={name}").content == payload
+
+
+def test_legend_order_persists_independently_of_position(workflow):
+    workflow[-1](
+        "/presentation", {"key": "example", "position": "hidden"}, "PUT"
+    ).raise_for_status()
+    workflow[-1](
+        "/presentation", {"key": "example", "order": ["B", "A", "B"]}, "PUT"
+    ).raise_for_status()
+    project = workflow[-2]()["project"]
+    assert project["presentation"] == {"example": "hidden"}
+    assert project["legend_orders"] == {"example": ["B", "A"]}
+    workflow[-1]("/project/save").raise_for_status()
+    workflow[-1]("/project/open", {"path": project["path"]}).raise_for_status()
+    assert workflow[-2]()["project"]["legend_orders"] == {"example": ["B", "A"]}
+    workflow[-1]("/presentation", {"key": "example", "order": []}, "PUT").raise_for_status()
+    assert workflow[-2]()["project"]["presentation"]["example"] == "hidden"
+    assert workflow[-2]()["project"]["legend_orders"]["example"] == []

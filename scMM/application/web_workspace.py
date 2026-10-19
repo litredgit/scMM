@@ -377,6 +377,7 @@ class WebWorkspaceService(RawWorkflow, AnalysisWorkflow, ResultWorkflow, LipidWo
                 "manifest": deepcopy(project.manifest),
                 "unsaved": project.unsaved,
                 "presentation": deepcopy(project.views.get("legend_positions", {})),
+                "legend_orders": deepcopy(project.views.get("legend_orders", {})),
                 "dataset": None
                 if data is None
                 else {

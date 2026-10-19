@@ -33,9 +33,6 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await page.getByRole('button', { name: '注释与同位素', exact: true }).click()
   const panel = page.locator('.lipid-panel')
   await expect(panel.getByRole('heading', { name: '注释与同位素', exact: true })).toBeVisible()
-  await expect(panel).not.toHaveAttribute('open', '')
-  await expect(panel.getByRole('button', { name: '检查本地数据库' })).not.toBeVisible()
-  await panel.locator(':scope > summary').click()
   await expect(panel.getByRole('button', { name: '检查本地数据库' })).toBeVisible()
   await expect(page.getByLabel('脂质规则预设').locator('option')).toHaveCount(6)
   await page
@@ -177,7 +174,7 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await page.getByRole('button', { name: '注释与同位素', exact: true }).click()
   await expect(panel).not.toHaveAttribute('open', '')
-  await panel.locator(':scope > summary').click()
+  await expect(panel.getByRole('heading', { name: '注释与同位素', exact: true })).toBeVisible()
   await expect(panel.getByText('4 / 4 特征 · 4 条候选 · 4 条关系证据')).toBeVisible()
   await expect(network.getByLabel('网络 graph', { exact: true })).toHaveValue('molecule')
   await selectFeature('f_h')

@@ -34,6 +34,7 @@ export interface ProjectView {
     [key: string]: unknown
   }
   presentation: Record<string, string>
+  legend_orders: Record<string, string[]>
   unsaved: boolean
   dataset: DatasetSummary | null
 }
@@ -128,6 +129,12 @@ export interface AnalysisInfo {
   figures: string[]
 }
 export interface Batch {
+  stage?: string
+  stage_progress?: number | null
+  started_at?: string
+  updated_at?: string
+  finished_at?: string
+  current_sample?: string
   path: string
   status: string
   created_at: string
@@ -139,6 +146,8 @@ export interface Batch {
     cells?: number
     features?: number
     error?: string
+    stage?: string
+    progress?: number | null
     reused_preview?: boolean
   }[]
 }

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import math
 import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor
@@ -12,6 +11,7 @@ from dataclasses import asdict
 from pathlib import Path
 from uuid import uuid4
 
+from .parameters import automatic_mz_range
 from .preview_cache import (
     file_identity,
     load_detection,
@@ -41,10 +41,7 @@ def initialize_ranges(project, service):
             continue
         summary = service.open(sample["storage"], sample["path"]).summary
         if summary.mz_min is not None and summary.mz_max is not None:
-            sample["auto_mz_range"] = [
-                math.floor(summary.mz_min / 10) * 10,
-                math.ceil(summary.mz_max / 10) * 10,
-            ]
+            sample["auto_mz_range"] = automatic_mz_range(summary.mz_min, summary.mz_max)
             sample["range_initialized"] = True
             project.dirty = True
 

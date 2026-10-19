@@ -31,7 +31,10 @@ def test_batch_real_mzml_review_and_stop(tmp_path, strategy):
     run_batch(folder / "state.json")
     state = read_batch(folder / "state.json")
     assert state["status"] == "completed", state
+    assert state["stage"] == "review"
+    assert state["started_at"] <= state["updated_at"] == state["finished_at"]
     assert [r["status"] for r in state["samples"]] == ["succeeded", "succeeded"], state
+    assert all(r["progress"] == 1 and r["stage"] == "completed" for r in state["samples"])
     data = reviewed_dataset(folder / "state.json", [s["id"] for s in project.samples])
     assert data.n_obs == 4
     assert data.obs["sample_id"].nunique() == 2

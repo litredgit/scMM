@@ -398,15 +398,23 @@ export function useAnalysis() {
       value &&
       identity === dataContext() &&
       (kind !== 'embedding' || signature === embeddingSignature.value)
-    )
+    ) {
+      if (kind === 'violin')
+        value.layout.meta = {
+          ...(value.layout.meta as object),
+          selection_signature: JSON.stringify([
+            (options as { features: string[] }).features,
+            (options as { hide_zero: boolean }).hide_zero,
+          ]),
+        }
       figures.value[kind] = value
+    }
   }
   function toggleFeature(id: string) {
     const current = [...selectedFeatures.value]
     if (current.includes(id)) selectedFeatures.value = current.filter((x) => x !== id)
     else if (current.length < 12) selectedFeatures.value = [...current, id]
     else store.error = '最多选择 12 个特征。'
-    if (has('differential')) void draw('violin')
   }
   function pageFeatures(delta: number) {
     featureOffset.value += delta

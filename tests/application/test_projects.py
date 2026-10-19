@@ -101,3 +101,28 @@ def test_automatic_ranges_do_not_freeze_project_defaults(tmp_path):
     project.manifest["manual_parameters"] = True
     project.manifest["parameters"]["mz_min"] = 120.0
     assert sample_parameters(project, project.samples[0])["mz_min"] == 120.0
+
+
+def test_view_only_snapshot_failure_keeps_previous_manifest(tmp_path, monkeypatch):
+    from scMM.application import projects
+
+    store = ProjectStore(tmp_path)
+    project = store.create("raw views")
+    project.views = {"legend_orders": {"raw.tic_pane": ["b", "a"]}}
+    store.save(project)
+    before = (project.folder / "project.json").read_bytes()
+    project.views["legend_orders"]["raw.tic_pane"] = ["a", "b"]
+    write = projects.write_json
+
+    def fail_views(path, value):
+        if path.name == "views.json":
+            raise OSError("view snapshot failed")
+        write(path, value)
+
+    monkeypatch.setattr(projects, "write_json", fail_views)
+    with pytest.raises(OSError, match="view snapshot"):
+        store.save(project)
+    assert (project.folder / "project.json").read_bytes() == before
+    reopened = store.open(project.folder)
+    assert reopened.workspace.data is None
+    assert reopened.views["legend_orders"]["raw.tic_pane"] == ["b", "a"]

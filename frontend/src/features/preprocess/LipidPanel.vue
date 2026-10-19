@@ -34,6 +34,52 @@ const selection = ref<string[]>([])
 const offset = ref(0)
 const relationOffset = ref(0)
 const ruleOffset = ref(0)
+const candidateSort = ref('recommended'),
+  candidateDescending = ref(false)
+const relationSort = ref('recommended'),
+  relationDescending = ref(false)
+const candidateSortOptions = {
+  recommended: '规则推荐顺序',
+  query_mz: '实测 m/z',
+  theoretical_mz: '理论 m/z',
+  name: '物质名',
+  CATEGORY: '类别',
+  MAIN_CLASS: '主类',
+  SUB_CLASS: '子类',
+  database_id: '数据库 ID',
+  adduct: '加合物',
+  abs_ppm_error: '绝对 ppm 误差',
+  ppm_error: '带符号 ppm 误差',
+  ppm_band: 'ppm 档',
+  network_level: '网络支持',
+  class_score: '类别分',
+  adduct_score: '加合物分',
+  rule_score: '规则分',
+}
+const relationSortOptions = {
+  recommended: '原始证据顺序',
+  parent_mz: '母峰 m/z',
+  isotope_mz: '子峰 m/z',
+  order: '同位素阶数',
+  sample: '样本',
+  abs_ppm_error: '绝对 ppm 误差',
+  ppm_error: '带符号 ppm 误差',
+  theoretical_ratio: '理论比例',
+  observed_ratio: '实测比例',
+  valid_cells: '有效细胞数',
+  matched: '自动命中',
+  review: '人工状态',
+}
+const sorting = computed(() => ({
+  candidate_sort: candidateSort.value,
+  candidate_descending: candidateDescending.value,
+  relation_sort: relationSort.value,
+  relation_descending: relationDescending.value,
+}))
+watch(
+  [candidateSort, candidateDescending, relationSort, relationDescending],
+  () => void loadResults(true),
+)
 const limit = 50
 watch(rules, () => (ruleOffset.value = 0))
 const options = reactive({
@@ -182,6 +228,7 @@ async function loadResults(reset = false): Promise<boolean> {
     feature_id: feature.value,
     offset: offset.value,
     relation_offset: relationOffset.value,
+    sorting: sorting.value,
     limit,
   })
   if (
@@ -352,6 +399,7 @@ async function download(kind: string) {
           adducts: filters.adduct_mode === 'specified' ? filters.adducts : [],
         },
         kind,
+        sorting: sorting.value,
       }),
     })
     if (!response.ok) {
@@ -391,15 +439,19 @@ useViewState('lipids', {
   offset,
   relationOffset,
   isotopeFigure,
+  candidateSort,
+  candidateDescending,
+  relationSort,
+  relationDescending,
 })
 </script>
 
 <template>
-  <details class="card lipid-panel" aria-labelledby="lipid-title">
-    <summary>
+  <section class="card lipid-panel" aria-labelledby="lipid-title">
+    <div class="section-heading">
       <h2 id="lipid-title">注释与同位素</h2>
-      <span class="muted">可选 · 点击展开，在筛选细胞与特征后按需注释</span>
-    </summary>
+      <span class="muted">在筛选细胞与特征后进行候选注释与核对</span>
+    </div>
     <p class="muted">
       一级精确质量候选注释。评分只用于排序，同位素命中只作标记；所有特征、强度和候选均保留。
     </p>
@@ -756,6 +808,30 @@ useViewState('lipids', {
 
       <div class="lipid-tables">
         <h3>结果与人工核对</h3>
+        <div class="field-grid table-sorting">
+          <label
+            >排序条件<select
+              v-model="candidateSort"
+              aria-label="候选排序条件"
+              :disabled="store.busy"
+            >
+              <option v-for="(title, key) in candidateSortOptions" :key="key" :value="key">
+                {{ title }}
+              </option>
+            </select></label
+          >
+          <label
+            >排序方向<select
+              v-model="candidateDescending"
+              aria-label="候选排序方向"
+              :disabled="store.busy"
+            >
+              <option :value="false">升序</option>
+              <option :value="true">降序</option>
+            </select></label
+          >
+        </div>
+        <p class="muted">全部结果排序后分页，缺失值置后；不改变规则推荐和人工核对。</p>
         <p>
           {{ results.features.length }} / {{ results.total_features }} 特征 ·
           {{ results.candidates.total }} 条候选 · {{ results.isotopes.total }} 条关系证据
@@ -841,7 +917,15 @@ useViewState('lipids', {
                         {{ group.feature_id }} · {{ group.label }} · {{ group.adduct }}（{{
                           group.rows.length
                         }}
-                        个候选）
+                        个候选） · m/z {{ Number(group.rows[0]?.query_mz).toPrecision(10) }} · |ppm|
+                        {{ number(Math.abs(Number(group.rows[0]?.ppm_error))) }} · 规则分
+                        {{ group.rows[0]?.scored ? group.rows[0]?.rule_score : '未评分' }} ·
+                        网络支持
+                        {{
+                          ['无可用支持', '单样本支持', '同条件重复支持'][
+                            Number(group.rows[0]?.network_level ?? 0)
+                          ]
+                        }}
                       </summary>
                       <p v-for="row in group.rows" :key="String(row.candidate_id)">
                         <input
@@ -941,6 +1025,30 @@ useViewState('lipids', {
         </div>
 
         <h3>天然同位素关系</h3>
+        <div class="field-grid table-sorting">
+          <label
+            >排序条件<select
+              v-model="relationSort"
+              aria-label="同位素关系排序条件"
+              :disabled="store.busy"
+            >
+              <option v-for="(title, key) in relationSortOptions" :key="key" :value="key">
+                {{ title }}
+              </option>
+            </select></label
+          >
+          <label
+            >排序方向<select
+              v-model="relationDescending"
+              aria-label="同位素关系排序方向"
+              :disabled="store.busy"
+            >
+              <option :value="false">升序</option>
+              <option :value="true">降序</option>
+            </select></label
+          >
+        </div>
+        <p class="muted">全部结果排序后分页，缺失值置后；不改变规则推荐和人工核对。</p>
         <p class="muted">
           同一特征可有多个来源解释；每个样本分别记录。命中表示质量和双侧比例条件通过，不证明该峰只有同位素贡献。
         </p>
@@ -1058,23 +1166,12 @@ useViewState('lipids', {
         </details>
       </div>
     </div>
-  </details>
+  </section>
 </template>
 
 <style scoped>
 .lipid-panel {
   min-width: 0;
-}
-.lipid-panel > summary {
-  cursor: pointer;
-}
-.lipid-panel > summary h2 {
-  display: inline;
-  margin-right: 1rem;
-}
-.lipid-panel > summary span {
-  display: inline-block;
-  margin-top: 0.4rem;
 }
 fieldset {
   border: 1px solid var(--border, #dce4e9);

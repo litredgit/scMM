@@ -110,7 +110,8 @@
         "tests/application/test_workbench_parameters.py",
         "tests/application/test_preview_cache.py",
         "tests/application/test_quality_application.py",
-        "tests/application/test_cli.py"
+        "tests/application/test_cli.py",
+        "tests/application/test_display_controls.py"
       ],
       "sources": [
         "scMM/application/raw_preview.py",
@@ -123,7 +124,8 @@
         "scMM/application/parameters.py",
         "scMM/application/preferences.py",
         "scMM/application/quality.py",
-        "scMM/cli.py"
+        "scMM/cli.py",
+        "scMM/application/lipid_sorting.py"
       ],
       "downstream": ["api-raw", "api", "tooling"],
       "extras": ["web"]
@@ -291,7 +293,8 @@
       "kind": "browser",
       "tests": [
         "frontend/tests/workflow.spec.ts",
-        "frontend/tests/analysis.spec.ts"
+        "frontend/tests/analysis.spec.ts",
+        "frontend/tests/interface.spec.ts"
       ],
       "sources": [
         "frontend/src/features/raw/*",

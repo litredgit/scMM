@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import LegendOrder from '../../components/LegendOrder.vue'
+import { useLegendOrder } from '../../components/useLegendOrder'
 import { pngWithDpi } from '../../components/plotExport'
 import { computed, reactive, ref, watch } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
@@ -98,6 +100,17 @@ const filterLines = computed(() => {
       : '')
   return text.match(/.{1,100}/g) ?? ['']
 })
+const {
+  items: pieLegend,
+  move: movePieLegend,
+  reset: resetPieLegend,
+} = useLegendOrder(
+  computed(() => 'lipids.classification-pie'),
+  computed(() => (charts.value?.pie.counts ?? []).map((p) => p.classification)),
+)
+const orderedCounts = computed(() =>
+  pieLegend.value.map((name) => charts.value!.pie.counts.find((p) => p.classification === name)!),
+)
 const pieBodyHeight = computed(() =>
   Math.max(310, ((charts.value?.pie.counts.length ?? 0) + 3) * 23),
 )
@@ -477,6 +490,7 @@ async function image(kind: 'pie' | 'network', format: 'svg' | 'png' | 'pdf') {
               version: results.version,
               filters: charts.pie.filters,
               view: charts.options,
+              legend_order: pieLegend,
               layer: graph?.layer,
             })
           }}
@@ -494,7 +508,7 @@ async function image(kind: 'pie' | 'network', format: 'svg' | 'png' | 'pdf') {
         >
           <title>{{ part.classification }}: {{ part.count }}</title>
         </path>
-        <g v-for="(part, i) in charts.pie.counts" :key="part.classification">
+        <g v-for="(part, i) in orderedCounts" :key="part.classification">
           <rect
             x="300"
             :y="45 + i * 23"
@@ -525,8 +539,14 @@ async function image(kind: 'pie' | 'network', format: 'svg' | 'png' | 'pdf') {
           {{ line }}
         </text>
       </svg>
+      <LegendOrder
+        :items="pieLegend"
+        :disabled="store.busy"
+        @move="movePieLegend"
+        @reset="resetPieLegend"
+      />
       <ul class="chart-legend">
-        <li v-for="part in charts.pie.counts" :key="part.classification">
+        <li v-for="part in orderedCounts" :key="part.classification">
           {{ part.classification }}：{{ part.count }}
         </li>
       </ul>

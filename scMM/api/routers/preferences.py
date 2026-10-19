@@ -51,7 +51,12 @@ def update_preferences(body: s.Preferences):
 @router.put("/workspace/presentation")
 def presentation(body: s.Presentation, manager: Service, identity: Identity):
     def action(workspace):
-        workspace.project.views.setdefault("legend_positions", {})[body.key] = body.position
+        if body.position is not None:
+            workspace.project.views.setdefault("legend_positions", {})[body.key] = body.position
+        if body.order is not None:
+            workspace.project.views.setdefault("legend_orders", {})[body.key] = list(
+                dict.fromkeys(body.order)
+            )
         workspace.project.dirty = True
 
     return manager.mutate(identity, body.revision, action)
