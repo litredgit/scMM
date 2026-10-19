@@ -76,16 +76,25 @@ async function testConnection() {
     <label
       >Base URL<input
         v-model="baseURL"
+        :disabled="busy || !config?.available"
         type="url"
         placeholder="https://api.openai.com/v1"
         required
         maxlength="2048"
         autocomplete="off"
     /></label>
-    <label>Model<input v-model="model" required maxlength="200" autocomplete="off" /></label>
+    <label
+      >Model<input
+        v-model="model"
+        :disabled="busy || !config?.available"
+        required
+        maxlength="200"
+        autocomplete="off"
+    /></label>
     <label
       >API Key<input
         v-model="key"
+        :disabled="busy || !config?.available"
         type="password"
         required
         maxlength="4096"

@@ -11,12 +11,13 @@ async function configure(page: Page) {
   await expect(form.getByLabel('API Key')).toHaveValue('')
   return form
 }
+const projectName = () => `AI synthetic project ${test.info().repeatEachIndex}`
 async function create(page: Page) {
   await page
     .getByRole('link', { name: /项目首页/ })
     .first()
     .click()
-  await page.getByLabel('项目名称', { exact: true }).fill('AI synthetic project')
+  await page.getByLabel('项目名称', { exact: true }).fill(projectName())
   await page.getByRole('button', { name: '创建并添加样本' }).click()
   await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
 }
@@ -78,9 +79,10 @@ test('stream, context, cross-page retention, stop, clear, refresh and project sw
     .click()
   await page
     .getByRole('row')
-    .filter({ hasText: 'AI synthetic project' })
+    .filter({ hasText: projectName() })
     .getByRole('button', { name: '打开项目 →' })
     .click()
+  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
   await assistant.getByLabel('问题', { exact: true }).fill('慢回答')
   await assistant.getByRole('button', { name: '发送', exact: true }).click()
@@ -107,4 +109,37 @@ test('logout cancels pending answer and clears conversation', async ({ page }) =
   await page.getByRole('button', { name: '退出登录', exact: true }).click()
   await expect(assistant).toHaveCount(0)
   await expect(page.getByRole('button', { name: '登录', exact: true })).toBeVisible()
+})
+
+test('slow initial configuration cannot overwrite editable credentials', async ({ page }) => {
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route('**/api/v1/ai/config', async (route) => {
+    if (route.request().method() === 'GET') await gate
+    await route.continue()
+  })
+  try {
+    await page.goto('/account')
+    const form = page.getByRole('form', { name: '个人 AI API 配置' })
+    await expect(form.getByLabel('Base URL')).toBeDisabled()
+    await expect(form.getByLabel('Model', { exact: true })).toBeDisabled()
+    await expect(form.getByLabel('API Key')).toBeDisabled()
+    release()
+    await form.getByLabel('Base URL').fill('https://synthetic.example/v1')
+    await form.getByLabel('Model', { exact: true }).fill('synthetic-model')
+    const syntheticKey = 'synthetic-secret-browser'
+    await form.getByLabel('API Key').fill(syntheticKey)
+    const saved = page.waitForRequest((r) => r.url().endsWith('/ai/config') && r.method() === 'PUT')
+    await form.getByRole('button', { name: '保存 API 配置' }).click()
+    expect((await saved).postDataJSON()).toEqual({
+      base_url: 'https://synthetic.example/v1',
+      model: 'synthetic-model',
+      api_key: syntheticKey,
+    })
+    await expect(form.getByText('个人 API 配置已保存。')).toBeVisible()
+  } finally {
+    release()
+  }
 })
