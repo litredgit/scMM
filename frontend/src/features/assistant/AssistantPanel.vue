@@ -14,6 +14,7 @@ const {
   model,
   configured,
   historyStatus,
+  historyReady,
   send,
   stop,
   clear,
@@ -49,7 +50,7 @@ const questions = ['当前进行到哪一步了？', '当前结果说明什么�
         <button
           v-for="question in questions"
           :key="question"
-          :disabled="busy || !configured || !store.current"
+          :disabled="busy || !historyReady || !configured || !store.current"
           @click="send(question)"
         >
           {{ question }}
@@ -80,18 +81,18 @@ const questions = ['当前进行到哪一步了？', '当前结果说明什么�
           v-model="input"
           rows="3"
           maxlength="8000"
-          :disabled="busy"
+          :disabled="busy || !historyReady"
           placeholder="询问步骤、结果含义或下一步建议"
         />
         <div class="actions">
           <button
             class="primary"
-            :disabled="busy || !configured || !store.current || !input.trim()"
+            :disabled="busy || !historyReady || !configured || !store.current || !input.trim()"
           >
             发送
           </button>
           <button type="button" :disabled="!busy" @click="stop()" class="restore">停止生成</button>
-          <button type="button" @click="clear">清空对话</button>
+          <button type="button" :disabled="!historyReady" @click="clear">清空对话</button>
         </div>
       </form>
     </section>

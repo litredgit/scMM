@@ -1,7 +1,7 @@
 import { test, expect, type Page } from './fixtures'
 
-async function configure(page: Page) {
-  await page.goto('/account')
+async function configure(page: Page, navigate = true) {
+  if (navigate) await page.goto('/account')
   const form = page.getByRole('form', { name: '个人 AI API 配置' })
   await form.getByLabel('Base URL').fill('https://synthetic.example/v1')
   await form.getByLabel('Model', { exact: true }).fill('synthetic-model')
@@ -139,6 +139,78 @@ test('slow initial configuration cannot overwrite editable credentials', async (
       api_key: syntheticKey,
     })
     await expect(form.getByText('个人 API 配置已保存。')).toBeVisible()
+  } finally {
+    release()
+  }
+})
+
+test('slow history restore protects the question draft until recovery completes', async ({
+  page,
+}) => {
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route('**/api/v1/ai/history?**', async (route) => {
+    if (route.request().method() === 'GET') await gate
+    await route.continue()
+  })
+  try {
+    await configure(page)
+    await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
+    await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+    const panel = page.getByRole('complementary', { name: 'AI 分析助手' })
+    await expect(panel.getByLabel('问题', { exact: true })).toBeDisabled()
+    await expect(
+      panel.getByRole('button', { name: '当前进行到哪一步了？', exact: true }),
+    ).toBeDisabled()
+    release()
+    await panel.getByLabel('问题', { exact: true }).fill('恢复后保留的问题')
+    const sent = page.waitForRequest((r) => r.url().endsWith('/ai/chat'))
+    await panel.getByRole('button', { name: '发送', exact: true }).click()
+    expect((await sent).postDataJSON().messages.at(-1).content).toBe('恢复后保留的问题')
+    await expect(panel.getByText('synthetic answer completed', { exact: true })).toBeVisible()
+  } finally {
+    release()
+  }
+})
+
+test('late initial assistant configuration cannot undo a newly saved configuration', async ({
+  page,
+}) => {
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let held = false
+  await page.route('**/api/v1/ai/config', async (route) => {
+    if (!held && route.request().method() === 'GET') {
+      held = true
+      await gate
+      await route.fulfill({ json: { available: true, configured: false, model: '', base_url: '' } })
+    } else await route.continue()
+  })
+  try {
+    await page.goto('/')
+    await page.getByRole('link', { name: '账号与管理', exact: true }).click()
+    await configure(page, false)
+    // The saved configuration has triggered a newer assistant read.
+    await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+    const panel = page.getByRole('complementary', { name: 'AI 分析助手' })
+    await expect(panel.getByText('只读解释与建议 · 当前模型：synthetic-model')).toBeVisible()
+    const late = page.waitForResponse(
+      async (response) =>
+        response.url().endsWith('/ai/config') &&
+        response.request().method() === 'GET' &&
+        !(await response.json()).configured,
+    )
+    release()
+    await (await late).finished()
+    await expect(panel.getByText('只读解释与建议 · 当前模型：synthetic-model')).toBeVisible()
+    await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
+    await panel.getByLabel('问题', { exact: true }).fill('配置读取顺序检查')
+    await panel.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(panel.getByText('synthetic answer completed', { exact: true })).toBeVisible()
   } finally {
     release()
   }

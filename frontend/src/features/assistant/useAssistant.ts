@@ -19,10 +19,11 @@ export function useAssistant() {
   const configured = ref(false)
   let controller: AbortController | undefined
   let epoch = 0
+  let configGeneration = 0
   let historyKey = '',
     historyOwner = '',
-    historyReady = false,
     historyGeneration = 0
+  const historyReady = ref(false)
   let historyTimer: ReturnType<typeof setTimeout> | undefined
   let writes: Promise<unknown> = Promise.resolve()
   const revisions = new Map<string, number>()
@@ -39,7 +40,7 @@ export function useAssistant() {
     )
   }
   function persist(key = historyKey, owner = historyOwner, payload = snapshot()) {
-    if (!key || !owner || !historyReady) return writes
+    if (!key || !owner || !historyReady.value) return writes
     const session = sessionVersion()
     historyStatus.value = '正在保存聊天'
     writes = writes
@@ -67,15 +68,21 @@ export function useAssistant() {
   watch(
     [messages, input, busy, context],
     () => {
-      if (!historyReady) return
+      if (!historyReady.value) return
       if (historyTimer) clearTimeout(historyTimer)
       historyTimer = setTimeout(() => void persist().catch(() => {}), 250)
     },
     { deep: true },
   )
   async function restoreHistory(generation: number) {
+    const key = historyKey,
+      owner = historyOwner
+    const current = () => generation === historyGeneration && auth.user?.id === owner
     try {
       await writes.catch(() => {})
+      if (!current()) return
+      const session = sessionVersion()
+      const currentSession = () => current() && session === sessionVersion()
       const value = await request<{
         revision: number
         messages: Turn[]
@@ -83,9 +90,9 @@ export function useAssistant() {
         streaming: boolean
         summary: unknown
         model?: string
-      }>(`/ai/history?${new URLSearchParams({ context: historyKey })}`)
-      if (generation !== historyGeneration || auth.user?.id !== historyOwner) return
-      revisions.set(historyKey, value.revision)
+      }>(`/ai/history?${new URLSearchParams({ context: key })}`)
+      if (!currentSession()) return
+      revisions.set(key, value.revision)
       messages.value = value.messages
       input.value = value.draft
       context.value = value.summary
@@ -93,7 +100,8 @@ export function useAssistant() {
       if (value.streaming && messages.value.at(-1)?.role === 'assistant')
         messages.value.at(-1)!.note = '上次生成已中断，已恢复接收内容；未自动重新发送。'
       await nextTick()
-      historyReady = true
+      if (!currentSession()) return
+      historyReady.value = true
       historyStatus.value = '聊天已恢复'
     } catch (cause) {
       if (generation === historyGeneration) historyStatus.value = `聊天恢复不可用：${String(cause)}`
@@ -118,14 +126,16 @@ export function useAssistant() {
     if (stored) void persist().catch(() => {})
   }
   async function loadConfig() {
-    const session = sessionVersion()
+    const session = sessionVersion(),
+      generation = ++configGeneration
     try {
       const value = await request<Configuration>('/ai/config')
       ensureSession(session)
+      if (generation !== configGeneration) return
       configured.value = value.configured
       model.value = value.model
     } catch {
-      if (session !== sessionVersion()) return
+      if (session !== sessionVersion() || generation !== configGeneration) return
       configured.value = false
       model.value = ''
     }
@@ -138,8 +148,9 @@ export function useAssistant() {
   watch(
     () => [auth.user?.id, store.current?.workspace_id, store.project?.path],
     () => {
-      if (historyReady && auth.user?.id === historyOwner) void persist().catch(() => {})
-      historyReady = false
+      if (historyReady.value && auth.user?.id === historyOwner) void persist().catch(() => {})
+      historyReady.value = false
+      historyStatus.value = store.current ? '正在恢复聊天…' : '进入项目首页后可开始对话'
       if (historyTimer) clearTimeout(historyTimer)
       ++historyGeneration
       clear(false)
@@ -168,7 +179,7 @@ export function useAssistant() {
     window.removeEventListener('scmm-ai-config-changed', configChanged)
   })
   async function send(question = input.value) {
-    if (!historyReady) {
+    if (!historyReady.value) {
       error.value = '聊天持久化尚未就绪，请稍后重试或刷新页面。'
       return
     }
@@ -284,6 +295,7 @@ export function useAssistant() {
     model,
     configured,
     historyStatus,
+    historyReady,
     send,
     stop,
     clear: () => clear(true),
