@@ -52,7 +52,13 @@ class _RawLoadConfig:
 
 def load_processed_dataset(result_dir: str | Path) -> DatasetState:
     """Read a processed dataset, preferring pickle frames over CSV."""
-    result_path = Path(result_dir).expanduser()
+    from ._dataset_persistence import dataset_directory
+
+    with dataset_directory(Path(result_dir).expanduser().resolve(), read_only=True) as result_path:
+        return _load_processed_dataset(result_path)
+
+
+def _load_processed_dataset(result_path: Path) -> DatasetState:
     with (result_path / ".meta").open(encoding="utf-8") as handle:
         file_meta = json.load(handle)
     data, peak_meta, feature_meta = _read_processed_frames(result_path)

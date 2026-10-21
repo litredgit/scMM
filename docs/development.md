@@ -54,7 +54,8 @@ scMM/
 │   ├── data.py            # CyESIData 稳定门面与构造入口
 │   ├── _dataset_loading.py # 已处理/原始数据装载与组合
 │   ├── _dataset_processing.py # 预处理、变换与数据集合并
-│   ├── _dataset_interop.py # 保存、访问、注释与 AnnData 转换
+│   ├── _dataset_interop.py # 保存门面、访问、注释与 AnnData 转换
+│   ├── _dataset_persistence.py # 旧目录候选写入/校验、读写锁、发布回滚与中断恢复
 │   ├── _deisotope.py      # 去同位素的纯计算、分配与元数据构建
 │   └── batch.py           # 独立批处理与结果合并
 ├── analysis/              # QC、统计、统一降维、监督模型与诊断

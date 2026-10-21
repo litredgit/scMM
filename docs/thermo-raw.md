@@ -133,4 +133,4 @@ uv run --locked --with psutil==7.2.2 python tools/validate_thermo_pipeline.py \
 - RAW：`f604eeb601b3db97e947bc398ebeb2e0ad258d2322a873b0e9d5e95f1a38bff5`
 - mzML：`fd2f7a7250b7c90b52c2aa9c51af9bb7f07e995a4f42de994d569373a267fa6f`
 
-验证不作生产自动放行依据；跨仪器、批量负载及环境待办见[路线与验收](roadmap.md)。
+验证不作生产自动放行依据，也不扩大为跨仪器、批量负载或环境支持结论；真实验证类待办已取消，见[当前规划](roadmap.md#已取消的真实验证事项)。

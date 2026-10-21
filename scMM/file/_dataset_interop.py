@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Literal
 
@@ -13,8 +12,6 @@ from anndata import AnnData
 
 from ..util.annotation import SDFMzSearcher
 from ..util.intensity import dataset_intensity_state, intensity_states, write_intensity_states
-
-logger = logging.getLogger(__name__)
 
 
 class DatasetInteropMixin:
@@ -46,18 +43,11 @@ class DatasetInteropMixin:
     def save(self, root_path: str | Path, *, overwrite: bool = False) -> Path:
         """Save the dataset below ``root_path`` and return its directory."""
         _validate_metadata_dimensions(self)
-        result_path = _create_result_directory(root_path, self.get_name(), overwrite)
-        logger.info("Saving processed data to %s", result_path)
-        with (result_path / ".meta").open("w", encoding="utf-8") as handle:
-            json.dump(self.file_meta, handle, ensure_ascii=False, indent=2)
-        for name, frame in _dataset_frames(self):
-            frame.to_pickle(result_path / f"{name}.pkl")
-            frame.to_csv(result_path / f"{name}.csv")
-        if not hasattr(self, "feature_snr"):
-            # Remove only stale optional artifacts when explicitly overwriting this dataset.
-            for name in ("feature_snr.pkl", "feature_snr.csv"):
-                (result_path / name).unlink(missing_ok=True)
-        return result_path
+        from ._dataset_persistence import save_directory
+
+        return save_directory(
+            root_path, self.get_name(), self.file_meta, _dataset_frames(self), overwrite=overwrite
+        )
 
     def to_anndata(self) -> AnnData:
         """Return an AnnData copy with stable cell and feature identifiers."""
@@ -204,17 +194,6 @@ class DatasetInteropMixin:
             mode=search_mode,
             **kwargs,
         )
-
-
-def _create_result_directory(root_path, dataset_name: str, overwrite: bool) -> Path:
-    root = Path(root_path).expanduser()
-    root.mkdir(parents=True, exist_ok=True)
-    safe_name = Path(dataset_name).name
-    if safe_name in {"", ".", ".."}:
-        raise ValueError(f"Invalid dataset name: {safe_name!r}")
-    result_path = root / safe_name
-    result_path.mkdir(exist_ok=overwrite)
-    return result_path
 
 
 def _dataset_frames(dataset):

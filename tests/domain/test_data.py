@@ -295,3 +295,260 @@ def test_alignwith_matches_each_right_feature_at_most_once() -> None:
     right_row = left.data.iloc[1].to_numpy()
     assert np.count_nonzero(right_row) == 1
     assert right_row.sum() == pytest.approx(10.0)
+
+
+@pytest.mark.parametrize("overwrite", [False, True])
+@pytest.mark.parametrize(
+    "artifact",
+    [
+        ".meta",
+        "data.pkl",
+        "data.csv",
+        "peak_meta.pkl",
+        "peak_meta.csv",
+        "feature_meta.pkl",
+        "feature_meta.csv",
+        "feature_snr.pkl",
+        "feature_snr.csv",
+    ],
+)
+def test_legacy_save_write_failure_preserves_complete_version(
+    tmp_path, monkeypatch, artifact, overwrite
+):
+    from scMM.file import _dataset_persistence as persistence
+
+    old = make_dataset("sample", [[1.0, 2.0]], [100.0, 200.0])
+    old.feature_snr = old.data + 10
+    target = tmp_path / "sample"
+    if overwrite:
+        old.save(tmp_path)
+    updated = make_dataset("sample", [[3.0, 4.0]], [100.0, 200.0], labels=["new"])
+    updated.feature_snr = updated.data + 20
+    original_open = Path.open
+
+    def fail_open(path, *args, **kwargs):
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if path.name == artifact and ("w" in mode or "a" in mode):
+            raise OSError("injected write failure")
+        return original_open(path, *args, **kwargs)
+
+    # pandas opens pickle/CSV via builtin open, while JSON uses Path.open.
+    import builtins
+
+    original_builtin = builtins.open
+
+    def fail_builtin(path, *args, **kwargs):
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if isinstance(path, (str, Path)) and Path(path).name == artifact and "w" in mode:
+            raise OSError("injected write failure")
+        return original_builtin(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "open", fail_open)
+        patch.setattr(builtins, "open", fail_builtin)
+        with pytest.raises(OSError, match="injected write failure"):
+            updated.save(tmp_path, overwrite=overwrite)
+    if overwrite:
+        restored = CyESIData.load_from_processed(target)
+        pd.testing.assert_frame_equal(restored.data, old.data)
+        pd.testing.assert_frame_equal(restored.peak_meta, old.peak_meta)
+        pd.testing.assert_frame_equal(restored.feature_snr, old.feature_snr)
+    else:
+        assert not target.exists()
+    assert not list(tmp_path.glob(".scmm-dataset-stage-*"))
+    assert not persistence._paths(target)[2].exists()
+
+
+@pytest.mark.parametrize("phase", ["backup", "publish", "rollback", "cleanup"])
+def test_legacy_save_publish_recovery(tmp_path, monkeypatch, phase):
+    from scMM.file import _dataset_persistence as persistence
+
+    old = make_dataset("sample", [[1.0]], [100.0])
+    target = old.save(tmp_path)
+    old.feature_snr = old.data + 10
+    old.save(tmp_path, overwrite=True)
+    (target / "report.txt").write_text("caller report", encoding="utf-8")
+    updated = make_dataset("sample", [[3.0]], [100.0], labels=["new"])
+    original_rename = Path.rename
+    original_remove = persistence._remove_backup
+    backup = persistence._paths(target)[2]
+
+    def rename(path, destination):
+        if (
+            (phase == "backup" and path == target)
+            or (phase in {"publish", "rollback"} and path.name == "dataset")
+            or (phase == "rollback" and path == backup)
+        ):
+            raise OSError("injected rename failure")
+        return original_rename(path, destination)
+
+    def remove(path):
+        if phase == "cleanup" and path.exists():
+            raise OSError("injected cleanup failure")
+        original_remove(path)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "rename", rename)
+        patch.setattr(persistence, "_remove_backup", remove)
+        if phase == "cleanup":
+            assert updated.save(tmp_path, overwrite=True) == target
+        else:
+            with pytest.raises(OSError, match="injected rename failure"):
+                updated.save(tmp_path, overwrite=True)
+    # Even failed rollback is recoverable on the next normal read.
+    restored = CyESIData.load_from_processed(target)
+    expected = updated if phase == "cleanup" else old
+    pd.testing.assert_frame_equal(restored.data, expected.data)
+    pd.testing.assert_frame_equal(restored.peak_meta, expected.peak_meta)
+    assert hasattr(restored, "feature_snr") == (phase != "cleanup")
+    assert (target / "report.txt").read_text(encoding="utf-8") == "caller report"
+    updated.save(tmp_path, overwrite=True)
+    assert not backup.exists()
+    assert not (target / "feature_snr.pkl").exists()
+    assert not (target / "feature_snr.csv").exists()
+
+
+@pytest.mark.parametrize("committed", [False, True])
+def test_legacy_save_process_crash_recovers_whole_version(tmp_path, committed):
+    import subprocess
+    import sys
+
+    old = make_dataset("sample", [[1.0]], [100.0])
+    target = old.save(tmp_path)
+    script = """
+import os
+import sys
+from pathlib import Path
+from scMM.file.data import CyESIData
+folder = Path(sys.argv[1])
+dataset = CyESIData.load_from_processed(folder)
+dataset.data.iloc[:, :] = 9.0
+dataset.peak_meta["label"] = "new"
+rename = Path.rename
+def crash(path, destination):
+    result = rename(path, destination)
+    if (sys.argv[2] == "True" and path.name == "dataset") or (sys.argv[2] == "False" and path == folder):
+        os._exit(91)
+    return result
+Path.rename = crash
+dataset.save(folder.parent, overwrite=True)
+"""
+    result = subprocess.run([sys.executable, "-c", script, str(target), str(committed)], timeout=30)
+    assert result.returncode == 91
+    restored = CyESIData.load_from_processed(target)
+    assert restored.data.iloc[0, 0] == (9.0 if committed else 1.0)
+    assert restored.peak_meta["label"].iloc[0] == ("new" if committed else "sample")
+    # An interrupted staging directory is never used as a dataset or silently removed.
+    assert list(tmp_path.glob(".scmm-dataset-stage-*"))
+
+
+@pytest.mark.parametrize("second_overwrite", [False, True])
+def test_legacy_concurrent_save_and_read_never_mix_versions(
+    tmp_path, monkeypatch, second_overwrite
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    old = make_dataset("sample", [[1.0]], [100.0])
+    target = old.save(tmp_path)
+    updated = make_dataset("sample", [[9.0]], [100.0], labels=["new"])
+    interrupted, release, reader_started, writer_started = (Event() for _ in range(4))
+    rename = Path.rename
+
+    def pause(path, destination):
+        result = rename(path, destination)
+        if path == target:
+            interrupted.set()
+            assert release.wait(10)
+        return result
+
+    def read():
+        reader_started.set()
+        return CyESIData.load_from_processed(target)
+
+    def write():
+        writer_started.set()
+        return old.save(tmp_path, overwrite=second_overwrite)
+
+    monkeypatch.setattr(Path, "rename", pause)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        saving = pool.submit(updated.save, tmp_path, overwrite=True)
+        try:
+            assert interrupted.wait(10)
+            reading = pool.submit(read)
+            writing = pool.submit(write)
+            assert reader_started.wait(10) and writer_started.wait(10)
+            assert not reading.done() and not writing.done()
+        finally:
+            release.set()
+        assert saving.result(timeout=10) == target
+        restored = reading.result(timeout=10)
+        if second_overwrite:
+            assert writing.result(timeout=10) == target
+        else:
+            with pytest.raises(FileExistsError):
+                writing.result(timeout=10)
+    assert (restored.data.iloc[0, 0], restored.peak_meta["label"].iloc[0]) in (
+        {(1.0, "sample"), (9.0, "new")} if second_overwrite else {(9.0, "new")}
+    )
+
+
+@pytest.mark.parametrize("replaced", [False, True])
+def test_legacy_readonly_directory_checks_replacement(tmp_path, monkeypatch, replaced):
+    from scMM.file import _dataset_loading as loading
+
+    old = make_dataset("sample", [[1.0]], [100.0])
+    target = old.save(tmp_path)
+    path_open, load = Path.open, loading._load_processed_dataset
+
+    def no_lock_write(path, mode="r", *args, **kwargs):
+        if path.suffix == ".lock":
+            raise PermissionError("read-only medium")
+        return path_open(path, mode, *args, **kwargs)
+
+    def load_and_replace(path):
+        state = load(path)
+        if replaced:
+            path.rename(path.with_name("previous"))
+            path.mkdir()
+        return state
+
+    monkeypatch.setattr(Path, "open", no_lock_write)
+    monkeypatch.setattr(loading, "_load_processed_dataset", load_and_replace)
+    if replaced:
+        with pytest.raises(OSError, match="changed during read"):
+            CyESIData.load_from_processed(target)
+    else:
+        pd.testing.assert_frame_equal(CyESIData.load_from_processed(target).data, old.data)
+
+
+def test_legacy_load_directory_symlink_and_relative_save(tmp_path, monkeypatch):
+    dataset = make_dataset("sample", [[1.0]], [100.0])
+    monkeypatch.chdir(tmp_path)
+    target = dataset.save("results")
+    assert target == Path("results/sample")
+    link = tmp_path / "alias"
+    link.symlink_to(target.resolve(), target_is_directory=True)
+    pd.testing.assert_frame_equal(CyESIData.load_from_processed(link).data, dataset.data)
+    with pytest.raises(ValueError, match="symbolic links"):
+        dataset.file_meta["name"] = "alias"
+        dataset.save(tmp_path, overwrite=True)
+
+
+def test_legacy_candidate_verification_failure_keeps_old_version(tmp_path, monkeypatch):
+    old = make_dataset("sample", [[1.0]], [100.0])
+    target = old.save(tmp_path)
+    updated = make_dataset("sample", [[9.0]], [100.0], labels=["new"])
+    read = pd.read_pickle
+
+    def corrupt(path, *args, **kwargs):
+        frame = read(path, *args, **kwargs)
+        if Path(path).name == "data.pkl":
+            frame.iloc[0, 0] = 99.0
+        return frame
+
+    with monkeypatch.context() as patch:
+        patch.setattr(pd, "read_pickle", corrupt)
+        with pytest.raises(AssertionError):
+            updated.save(tmp_path, overwrite=True)
+    pd.testing.assert_frame_equal(CyESIData.load_from_processed(target).data, old.data)

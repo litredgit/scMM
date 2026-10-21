@@ -255,8 +255,8 @@ scMM 本身仍使用 `.venv` 中的 Python 3.12。
 `dev_server_config` / `prod_server_config` 分别指向初始化后的资源配置，默认位于 `~/.config/scmm/dev.json` / `prod.json`。
 开发和生产均通过 `scmm-web` 启动 Vue；用户级服务名称继续为 `scmm-dev.service` / `scmm-ui.service`。
 已有配置中的 `dev_frontend: "vue"`、`prod_frontend: "vue"` 和 `origins` 可读取但不再参与启动，
-可从配置中移除；指定其他前端会明确报错。网页实际监听地址由资源配置决定，部署布局中的旧 `address` 不再覆盖它。网络范围仍见
-[NET-01](roadmap.md#工程改进待设计与实现)。
+可从配置中移除；指定其他前端会明确报错。网页实际监听地址由资源配置决定，部署布局中的旧 `address` 不再覆盖它。公网开放已由用户确认完成，状态见
+[公网完成记录](roadmap.md#公网完成状态与历史后续)；实际访问范围以服务器配置为准。
 稳定启动器更新后仅支持含 `scmm-web` 的 Vue 版本；如需回滚更早的网页入口，须同时恢复其匹配的启动器。
 `/runtime` 要求管理员会话或专用运维令牌；发布脚本从生产资源配置旁的 `.operations-token` 文件读取令牌。
 凭据缺失、运行状态不可读、响应格式错误均拒绝重启，不把认证失败视为空闲。配置与运行数据不提交到 Git。不同用户/机器先创建对应 worktree，再安装服务：
