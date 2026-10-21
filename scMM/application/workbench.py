@@ -222,6 +222,37 @@ class AnalysisWorkspace:
             },
         )
 
+    def subset(self, *, cell_ids=None, feature_ids=None):
+        data = self.require_data()
+        if cell_ids is None and feature_ids is None:
+            raise ValueError("select stable cell IDs or feature IDs explicitly")
+
+        def selected(values, index, name):
+            if values is None:
+                return list(index)
+            if not isinstance(values, (list, tuple)) or not values:
+                raise ValueError(f"{name} must be a non-empty list of stable IDs")
+            if any(not isinstance(v, str) for v in values) or len(set(values)) != len(values):
+                raise ValueError(f"{name} must contain unique string IDs")
+            missing = set(values) - set(index)
+            if missing:
+                raise ValueError(f"{name} contains unknown IDs")
+            return list(values)
+
+        rows = selected(cell_ids, data.obs_names, "cell_ids")
+        columns = selected(feature_ids, data.var_names, "feature_ids")
+        candidate = data[rows, columns].copy()
+        self._commit(
+            candidate,
+            "subset",
+            {
+                "cell_ids": cell_ids,
+                "feature_ids": feature_ids,
+                "cells": len(rows),
+                "features": len(columns),
+            },
+        )
+
     def remove_outliers(
         self,
         contamination=0.05,

@@ -458,3 +458,22 @@ test('advanced preprocessing controls stay manual and record applied options', a
   await expect(page.locator('.history-panel')).toContainText('effective_parameters')
   await noError(page)
 })
+
+test('explicit ID subset previews, applies and restores full preprocessing origin', async ({
+  page,
+}) => {
+  await importData(page, '稳定ID子集')
+  await page.getByRole('link', { name: /预处理/ }).click()
+  await page.getByLabel('下一项操作', { exact: true }).selectOption('subset')
+  await page.getByLabel('子集特征ID', { exact: true }).fill('f3,f0')
+  await page.getByRole('button', { name: '检查影响', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: '候选数据（尚未应用）', exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
+  await expect(page.locator('.page-title').getByText(/64 细胞 × 2 特征/)).toBeVisible()
+  await page.getByRole('button', { name: '历史与恢复', exact: true }).click()
+  await page.getByRole('button', { name: '恢复到预处理起点', exact: true }).click()
+  await expect(page.locator('.page-title').getByText(/64 细胞 × 8 特征/)).toBeVisible()
+  await noError(page)
+})

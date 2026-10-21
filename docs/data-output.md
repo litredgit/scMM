@@ -231,6 +231,8 @@ SNR 始终不作为强度。层的可用性由共享来源规则判断，不靠�
 记录级预处理提示和解释边界；与监督 JSON 下载一致。旧报告无该字段时仍可读取，不补造历史或来源计数。
 新聚类步骤的历史参数含 `effective_parameters`，记录所用算法实际生效的白名单参数；
 旧步骤缺少该字段时不补造，标签照常读取，项目设置中的新字段使用各自兼容默认值。
+显式子集同步裁剪/重排当前 X、obs、var 和全部 layers，清除过期嵌入/分析；保留稳定 ID、强度来源及历史中的精确所选 ID。
+完整预处理起点不被子集替换，保存重开后 reset 仍恢复原始完整轴；单层 restore 只恢复当前子集轴上的历史强度。
 新增归一化、插补和异常检测步骤在历史 `parameters.effective_parameters` 中记录方法实际使用的白名单配置，随快照/H5AD 保留。
 特征距离嵌入存于 `views.figures.feature_embedding`，草稿在分析设置 `featureEmbedding`；元数据保留输入/有效参数及完整 `features.csv`/`distances.csv`，矩阵变换使其失效，重开后可读取/下载只读图，无需重算 UMAP。
 双特征散点存于 `views.figures.feature_scatter`，输入草稿存于分析设置的 `scatter`。

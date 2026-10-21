@@ -392,3 +392,53 @@ def test_advanced_imputation_donors_and_outlier_reproducibility():
     params = first.history()[-1]["parameters"]["effective_parameters"]
     assert params["max_features"] == 1.0 and isinstance(params["max_features"], float)
     assert params["max_samples"] == 0.5 and params["n_estimators"] == 13
+
+
+def test_explicit_subset_axes_layers_results_and_full_reset(tmp_path):
+    state = workspace()
+    state.data.layers["other"] = 3 * state.data.X
+    initial = state.data.copy()
+    state.reduce("pca", store_key="X_pca")
+    state.differential("condition", "a", "b")
+    state.subset(cell_ids=["cell5", "cell1", "cell3"], feature_ids=["104", "100"])
+    assert state.data.obs_names.tolist() == ["cell5", "cell1", "cell3"]
+    assert state.data.var_names.tolist() == ["104", "100"]
+    from scMM.util.intensity import intensity_states
+
+    assert intensity_states(state.data)["X"] == "raw"
+    np.testing.assert_array_equal(
+        state.data.X, initial[["cell5", "cell1", "cell3"], ["104", "100"]].X
+    )
+    assert state.data.obs.condition.tolist() == ["b", "b", "b"]
+    assert not state.results and not state.data.obsm
+    for matrix in state.data.layers.values():
+        assert matrix.shape == (3, 2)
+    for key in initial.layers:
+        np.testing.assert_array_equal(
+            state.data.layers[key], initial[["cell5", "cell1", "cell3"], ["104", "100"]].layers[key]
+        )
+    state.reset()
+    np.testing.assert_array_equal(state.data.X, initial.X)
+    assert state.data.obs_names.equals(initial.obs_names)
+    assert state.data.var_names.equals(initial.var_names)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {},
+        {"cell_ids": []},
+        {"feature_ids": []},
+        {"cell_ids": ["cell1", "cell1"]},
+        {"cell_ids": ["missing"]},
+        {"feature_ids": ["100.0001"]},
+        {"cell_ids": [1]},
+    ],
+)
+def test_subset_invalid_ids_preserve_every_state(options):
+    state = workspace()
+    token, matrix = state.token, state.data.X.copy()
+    with pytest.raises(ValueError):
+        state.subset(**options)
+    assert state.token == token and state.history() == []
+    np.testing.assert_array_equal(state.data.X, matrix)

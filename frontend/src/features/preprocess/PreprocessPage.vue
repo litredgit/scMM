@@ -40,6 +40,15 @@ const advanced = ref({
   max_features: '1.0',
   bootstrap: false,
 })
+const subsetCells = ref(''),
+  subsetFeatures = ref('')
+function ids(value: string) {
+  const result = value
+    .split(/[\n,;]+/)
+    .map((v) => v.trim())
+    .filter(Boolean)
+  return result.length ? result : null
+}
 const signature = computed(() =>
   JSON.stringify([
     operation.value,
@@ -51,6 +60,8 @@ const signature = computed(() =>
     contamination.value,
     layer.value,
     advanced.value,
+    subsetCells.value,
+    subsetFeatures.value,
   ]),
 )
 watch(signature, () => (impact.value = undefined))
@@ -80,6 +91,8 @@ watch(
   { immediate: true },
 )
 function options() {
+  if (operation.value === 'subset')
+    return { cell_ids: ids(subsetCells.value), feature_ids: ids(subsetFeatures.value) }
   return operation.value === 'filter'
     ? {
         min_total: minTotal.value,
@@ -165,6 +178,8 @@ useViewState('preprocess', {
   layer,
   impact,
   advanced,
+  subsetCells,
+  subsetFeatures,
 })
 </script>
 <template>
@@ -192,6 +207,7 @@ useViewState('preprocess', {
             v-model="operation"
             :disabled="store.busy"
           >
+            <option value="subset">按稳定 ID 取子集</option>
             <option value="filter">筛选细胞与特征</option>
             <option value="normalize">归一化 / 数值变换</option>
             <option value="impute">零值插补</option>
@@ -260,7 +276,29 @@ useViewState('preprocess', {
             :disabled="store.busy"
         /></label>
       </div>
-      <details v-if="operation !== 'filter'" class="preprocessing-advanced">
+      <div v-if="operation === 'subset'" class="field-grid">
+        <label
+          >保留细胞 ID（空白保留全部）<textarea
+            aria-label="子集细胞ID"
+            v-model="subsetCells"
+            rows="4"
+            :disabled="store.busy"
+          />
+        </label>
+        <label
+          >保留特征 ID（空白保留全部）<textarea
+            aria-label="子集特征ID"
+            v-model="subsetFeatures"
+            rows="4"
+            :disabled="store.busy"
+          />
+        </label>
+        <p class="muted">
+          换行或逗号分隔，至少填写一类；按所列稳定 ID 及顺序构造子集，不使用显示行号或最近
+          m/z。应用会使下游分析失效，完整预处理起点仍可恢复。
+        </p>
+      </div>
+      <details v-if="!['filter', 'subset'].includes(operation)" class="preprocessing-advanced">
         <summary>预处理高级参数</summary>
         <p class="muted">
           仅当前方法使用的字段生效；编辑草稿不计算，生效参数记录在历史中。子采样填整数为数量，带小数点为比例。

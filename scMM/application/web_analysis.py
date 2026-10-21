@@ -22,7 +22,7 @@ from scMM.plot.workbench import (
 from .web_support import figure_view, json_view, table_view
 from .workbench import dense
 
-PREPROCESS = {"filter", "normalize", "impute", "remove_outliers", "restore", "reset"}
+PREPROCESS = {"subset", "filter", "normalize", "impute", "remove_outliers", "restore", "reset"}
 ANALYSES = {
     "reduce",
     "cluster",

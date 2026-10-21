@@ -340,3 +340,9 @@ reconstructed, noise_sigma = peak_recon(
   `data.data`，除非已经确认维度和语义保持一致。
 
 下一步：[下游分析](analysis.md) 和 [数据输出](data-output.md)。
+
+### 工作台显式子集
+
+`AnalysisWorkspace.subset(cell_ids=[...], feature_ids=[...])` 按稳定 ID 裁剪/重排当前数据，
+至少显式选择一类，另一类可省略；不使用 `CyESIData.__getitem__` 的最近 m/z 读取规则。
+未知、重复或空列表拒绝并保留状态。成功同步矩阵/元数据/层，失效下游结果；`reset()` 仍恢复完整起点。

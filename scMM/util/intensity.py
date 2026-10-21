@@ -14,7 +14,7 @@ def transformed_state(state, operation, parameters=None):
         if (parameters or {}).get("method") not in {"total", "max", "pqn"}:
             return "transformed"
         return "normalized" if state in {"raw", "normalized"} else state
-    if operation in {"filter", "outliers", "reduce", "cluster", "latent"}:
+    if operation in {"filter", "subset", "outliers", "reduce", "cluster", "latent"}:
         return state
     return "unknown"
 

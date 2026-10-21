@@ -105,7 +105,7 @@ scMM/
 | 特征距离嵌入 | `PlotEngine.feature_network()`；网页 `analysis/feature_embedding.py` | 独立特征距离 UMAP、层/ID/名称/类别、完整表及只读重载 | PLOT-02 待统一验收；Pearson 绝对相关/Euclidean 与相关阈值网络区分，常量/缺失及资源门限有明确规则 |
 | 双特征散点/回归 | `PlotEngine.plot_feature_scatter()`；网页 `analysis/feature_scatter.py` | 独立面板、精确 ID/层/着色、全体细胞回归、完整导出及只读图重载 | PLOT-01 待用户统一验收；网页不采用 Notebook 的最近质量匹配，不将细胞级回归解释为生物重复验证 |
 | 已处理结果合并 | `CyESIData.alignwith()`、`file.batch.concat()` | 当前已有原始样本提取审核合并；导入独立结果会替换当前数据 | MERGE-01；concat 当前读取旧结果目录，不是任意 H5AD 合并服务，须适配来源/特征/起点 |
-| 显式数据子集 | AnnData 支持 obs/var 切片 | Vue 有条件筛选，无任意细胞/特征 ID 子集应用 | SUBSET-01；CyESIData 的 `data[mz]` 是最近 m/z 的强度向量读取，不是细胞切片 |
+| 显式数据子集 | `AnalysisWorkspace.subset()` | 稳定细胞/特征 ID、数量预览、手动应用和完整起点恢复 | SUBSET-01 待统一验收；不是 `CyESIData.__getitem__` 的最近 m/z 强度读取，失败原子性及保存重开受检查 |
 | 采集稳定性 QC | `scMM_workflow.ipynb` 的稳定性段 | 基础样本/细胞 QC 已有，无完整采集稳定性视图 | QC-01，先抽取应用层计算，再接时间/来源图和下载 |
 | QC PDF | `analysis.quality.render_quality_report()` | 当前有 QC 表/图，未接 PDF 生成/下载 | REPORT-01 先 QC PDF，再设计完整实验报告；两种报告范围不同 |
 | 峰重建与秩一分解 | `util.denoise.peak_recon()` / `r1_decomposition()` | 无应用/HTTP/Vue 工作流 | TOOL-01，工具级输入/科学定义/验证先于界面，不能替换现有提取算法 |

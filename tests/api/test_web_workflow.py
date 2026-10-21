@@ -552,3 +552,35 @@ def test_feature_embedding_exact_features_saved_export_and_matrix_staleness(work
         .status_code
         != 200
     )
+
+
+def test_subset_preview_apply_save_reopen_and_reset(workflow):
+    data = import_data(workflow)
+    ids = list(data.obs_names[[4, 1, 0]])
+    options = {"cell_ids": ids, "feature_ids": ["f3", "f0"]}
+    before = workflow[-2]()
+    preview = operation(workflow, "subset", options, preview=True)
+    assert preview["value"]["impact"][:2] == [
+        {"object": "细胞", "before": 64, "after": 3},
+        {"object": "特征", "before": 8, "after": 2},
+    ]
+    assert workflow[-2]() == before
+    for invalid in ({"feature_ids": ["missing"]}, {"cell_ids": [ids[0], ids[0]]}, {}):
+        assert (
+            workflow[-1](
+                "/analysis/operation", {"operation": "subset", "options": invalid}
+            ).status_code
+            == 400
+        )
+        assert workflow[-2]() == before
+    operation(workflow, "subset", options)
+    frame = pd.read_csv(StringIO(get(workflow, "/results/download?kind=matrix").text), index_col=0)
+    assert frame.index.tolist() == ids and frame.columns.tolist() == ["f3", "f0"]
+    np.testing.assert_array_equal(frame.to_numpy(), data[ids, ["f3", "f0"]].X)
+    assert workflow[-1]("/project/save").status_code == 200
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    assert workflow[-2]()["project"]["dataset"]["cells"] == 3
+    operation(workflow, "reset")
+    assert workflow[-2]()["project"]["dataset"]["cells"] == 64
+    assert workflow[-2]()["project"]["dataset"]["features"] == 8

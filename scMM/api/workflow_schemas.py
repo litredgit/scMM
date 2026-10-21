@@ -65,6 +65,7 @@ class ReviewBatch(BatchRequest):
 
 class Operation(RevisionRequest):
     operation: Literal[
+        "subset",
         "filter",
         "normalize",
         "impute",
@@ -88,6 +89,11 @@ class Filter(Controls):
     min_total: float = Field(default=0.0, ge=0)
     min_detected: float = Field(default=0.2, ge=0, le=1)
     min_feature_fraction: float = Field(default=0.0, ge=0, le=1)
+
+
+class Subset(Controls):
+    cell_ids: list[str] | None = Field(default=None, min_length=1)
+    feature_ids: list[str] | None = Field(default=None, min_length=1)
 
 
 class Normalize(Controls):
@@ -344,6 +350,7 @@ class Preferences(Controls):
 
 
 OPERATIONS = {
+    "subset": Subset,
     "filter": Filter,
     "normalize": Normalize,
     "impute": Impute,
