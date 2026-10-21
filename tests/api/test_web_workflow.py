@@ -722,3 +722,24 @@ def test_current_quality_pdf_and_report_archive_are_read_only_and_revision_bound
         == 400
     )
     assert workflow[-2]() == before
+
+
+@pytest.mark.parametrize(
+    "params",
+    [{"solver": "lbfgs", "penalty": "l1"}, {"C": 0}, {"fit_intercept": 1}, {"unknown": "value"}],
+)
+def test_invalid_model_parameters_preserve_fitted_result(workflow, params):
+    import_data(workflow)
+    operation(workflow, "train", {"label_key": "group", "model": "lda", "cv": 2})
+    before = workflow[-2]()
+    report = get(workflow, "/analysis/results/supervised").json()
+    response = workflow[-1](
+        "/analysis/operation",
+        {
+            "operation": "train",
+            "options": {"label_key": "group", "model": "logistic", "model_params": params},
+        },
+    )
+    assert response.status_code == 422
+    assert workflow[-2]() == before
+    assert get(workflow, "/analysis/results/supervised").json() == report

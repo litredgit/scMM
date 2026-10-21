@@ -107,26 +107,21 @@ class SupervisedAnalyzer:
             raise ValueError("supervised analysis requires at least two classes")
 
     def _estimator(self, model, params):
-        params = dict(params)
+        from .model_parameters import model_parameters
+
+        params = model_parameters(model, params)
         if model == "lda":
             return LinearDiscriminantAnalysis(**params), True
         if model in {"logistic", "lr"}:
-            params.setdefault("max_iter", 5000)
-            params.setdefault("class_weight", "balanced")
             params.setdefault("random_state", self.random_state)
             return LogisticRegression(**params), True
         if model in {"plsda", "pls-da"}:
             return PLSDAClassifier(**params), True
-        if model in {"random_forest", "rf"}:
-            params.setdefault("n_estimators", 500)
-            params.setdefault("class_weight", "balanced")
-            params.setdefault("random_state", self.random_state)
-            params.setdefault("n_jobs", -1)
-            return RandomForestClassifier(**params), False
-        raise ValueError("model must be lda, plsda, logistic or random_forest")
+        params.setdefault("random_state", self.random_state)
+        return RandomForestClassifier(**params), False
 
     def build_pipeline(self, model="logistic", *, smote=False, model_params=None):
-        estimator, needs_scale = self._estimator(model, model_params or {})
+        estimator, needs_scale = self._estimator(model, model_params)
         steps = []
         if needs_scale or smote:
             steps.append(("scale", StandardScaler()))
@@ -216,6 +211,21 @@ class SupervisedAnalyzer:
                 raise ValueError(
                     "SMOTE needs at least six observations per class in each training fold"
                 )
+        from .model_parameters import model_parameters
+
+        fit_sizes = [
+            len(fit)
+            if not smote
+            else int(pd.Series(y_train[fit]).value_counts().max()) * len(expected_classes)
+            for fit, _ in splits
+        ]
+        model_parameters(
+            model,
+            model_params,
+            n_features=X_train.shape[1],
+            n_classes=len(expected_classes),
+            min_fit_cells=min(fit_sizes),
+        )
         scoring = {
             "accuracy": "accuracy",
             "balanced_accuracy": "balanced_accuracy",
@@ -282,6 +292,7 @@ class SupervisedAnalyzer:
             "training_parameters": {
                 "model": model,
                 "model_params": model_params or {},
+                "effective_model_params": pipeline.named_steps["model"].get_params(deep=False),
                 "cv_requested": cv,
                 "cv_actual": folds,
                 "test_size": test_size,
@@ -320,6 +331,16 @@ class SupervisedAnalyzer:
                 zero_division=0,
             ),
         }
+        estimator = pipeline.named_steps["model"]
+        if isinstance(estimator, PLSDAClassifier):
+            self.result_["training_parameters"]["pls_components_effective"] = {
+                "final": int(estimator.model_.n_components),
+                "cv": [
+                    max(1, min(estimator.n_components, X_train.shape[1], size - 1))
+                    for size in fit_sizes
+                ],
+                "definition": "Existing PLS wrapper clips requested components to input features and fitted cells minus one; SMOTE fits use resampled size.",
+            }
         return self.result_
 
     def _source_support(self, indices):

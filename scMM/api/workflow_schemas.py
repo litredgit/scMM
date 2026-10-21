@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import ConfigDict, Field, ValidationError, field_validator
+from pydantic import ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from .schemas import RequestModel, RevisionRequest
 
@@ -198,6 +198,13 @@ class Train(Controls):
     smote: bool = False
     model_params: dict[str, Any] = Field(default_factory=dict)
     random_state: int = Field(default=42, ge=0, le=2147483647)
+
+    @model_validator(mode="after")
+    def valid_model_parameters(self):
+        from scMM.analysis.model_parameters import model_parameters
+
+        model_parameters(self.model, self.model_params)
+        return self
 
 
 class Shap(Controls):

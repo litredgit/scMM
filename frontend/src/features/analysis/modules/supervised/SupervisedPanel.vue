@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed } from 'vue'
 import type { Figure } from '../../../../api/types'
 import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
 import ReportView from '../../../../components/ReportView.vue'
 import PlotView from '../../../../components/PlotView.vue'
+import ModelParameters from './ModelParameters.vue'
 import ResultTable from '../../components/ResultTable.vue'
 const {
   train,
+  shapView,
   ldaSolver,
   validation,
   latentKey,
@@ -27,7 +29,6 @@ const {
   draw,
   loadWithPlot,
 } = useAnalysisContext()
-const shapView = reactive({ class_index: 0, cell_index: 0, feature: '' })
 const validationWarnings = computed(() => {
   const audit = modelReport.value?.validation_audit as { warnings?: string[] } | undefined
   return audit?.warnings ?? []
@@ -151,6 +152,7 @@ async function showShap(kind: string) {
             :disabled="store.busy"
         /></label>
       </div>
+      <ModelParameters />
       <div class="check-list">
         <label
           ><input
@@ -238,8 +240,7 @@ async function showShap(kind: string) {
     <p class="muted">lsqr 可做分类但不支持潜变量。项目重载仅保留只读报告，不保存可执行模型。</p>
     <h3>SHAP 特征解释</h3>
     <p class="muted">
-      训练集背景解释测试集；绝对贡献跨样本和类别取平均，不表示效应方向或因果。图显示前 30
-      项，下载包含全部。
+      训练集背景解释测试集；绝对贡献跨样本和类别取平均，不表示效应方向或因果。图按显示特征数截取，下载包含全部。
     </p>
     <div class="field-grid">
       <label
@@ -280,14 +281,25 @@ async function showShap(kind: string) {
       <label
         >解释类别序号（从 0 开始）<input
           v-model.number="shapView.class_index"
+          :disabled="store.busy"
           type="number"
           min="0" /></label
       ><label
         >细胞序号（从 0 开始）<input
           v-model.number="shapView.cell_index"
+          :disabled="store.busy"
           type="number"
           min="0" /></label
-      ><label>依赖图特征编号<input v-model="shapView.feature" /></label>
+      ><label>依赖图特征编号<input v-model="shapView.feature" :disabled="store.busy" /></label>
+      <label
+        >显示特征数<input
+          v-model.number="shapView.top"
+          aria-label="SHAP 显示特征数"
+          type="number"
+          min="1"
+          max="100"
+          :disabled="store.busy"
+      /></label>
     </div>
     <template
       v-for="kind in ['shap_plot', 'shap_beeswarm', 'shap_waterfall', 'shap_dependence'] as const"

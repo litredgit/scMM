@@ -59,6 +59,7 @@
       "kind": "python",
       "tests": [
         "tests/domain/test_analysis.py",
+        "tests/domain/test_model_parameters.py",
         "tests/domain/test_probability_diagnostics.py",
         "tests/domain/test_unified_embedding.py",
         "tests/domain/test_extended_analysis.py"

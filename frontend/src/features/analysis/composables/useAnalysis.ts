@@ -27,6 +27,11 @@ export function useAnalysis() {
     featureEmbedding,
     stability,
     train,
+    logistic,
+    lda,
+    plsda,
+    forest,
+    shapView,
     ldaSolver,
     validation,
     latentKey,
@@ -244,7 +249,7 @@ export function useAnalysis() {
     },
   )
   watch(
-    () => JSON.stringify([train, validation.value, ldaSolver.value]),
+    () => JSON.stringify([train, logistic, lda, plsda, forest, validation.value, ldaSolver.value]),
     () => {
       if (!hydrating) void invalidate(['supervised', 'shap'])
     },
@@ -355,7 +360,29 @@ export function useAnalysis() {
     void execute('train', {
       ...train,
       group_key: validation.value === 'grouped' ? train.group_key : null,
-      model_params: train.model === 'lda' ? { solver: ldaSolver.value } : {},
+      model_params:
+        train.model === 'lda'
+          ? {
+              ...lda,
+              solver: ldaSolver.value,
+              shrinkage:
+                lda.shrinkage === ''
+                  ? null
+                  : lda.shrinkage === 'auto'
+                    ? 'auto'
+                    : Number.isFinite(Number(lda.shrinkage))
+                      ? Number(lda.shrinkage)
+                      : lda.shrinkage,
+            }
+          : train.model === 'logistic'
+            ? { ...logistic }
+            : train.model === 'plsda'
+              ? { ...plsda }
+              : {
+                  ...forest,
+                  max_features: forest.max_features === '' ? null : forest.max_features,
+                  max_samples: forest.max_samples === '' ? null : forest.max_samples,
+                },
       random_state: train.random_state,
     })
   }
@@ -467,6 +494,11 @@ export function useAnalysis() {
     featureEmbedding,
     stability,
     train,
+    logistic,
+    lda,
+    plsda,
+    forest,
+    shapView,
     ldaSolver,
     validation,
     latentKey,

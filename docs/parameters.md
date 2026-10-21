@@ -491,3 +491,24 @@ PCA 保存每个主成分和累计解释率；图中可选择已计算坐标的�
 热图行标准分用列间总体标准差（ddof=0），常数行显示 0；聚类用欧氏距离、平均连接和最优叶序，
 不改变矩阵或下游分析。热图最多 1000 个特征、200 万色块；超过 5000 项的轴需关闭聚类或先分组聚合。
 正离子注释新增可选 `[M+H-H2O]+`，使用一致的离子组成计算质量与天然同位素分布。
+
+### 监督模型高级参数
+
+网页“监督高级参数”按模型展示白名单字段；整数个数与小数比例严格区分，不能传入任意对象或代码。
+
+| 模型 | 默认参数 | 组合约束 |
+|---|---|---|
+| 逻辑回归 | C=1、tol=0.0001、max_iter=5000、solver=lbfgs、penalty=l2、class_weight=balanced、fit_intercept=true、l1_ratio=null | C/tol 为正；L1 仅 liblinear/saga；elasticnet 仅 saga 且须设置 0–1 的 l1_ratio；liblinear 仅二分类；不正则化时 C 保持 1 |
+| LDA | solver=svd、shrinkage=null、n_components=null、tol=0.0001、store_covariance=false | shrinkage 留空、auto 或 0–1；svd 不支持收缩；潜变量数不超过特征数和类别数减一，lsqr 仍不支持导出潜变量 |
+| PLS-DA | n_components=2、max_iter=500 | 正整数；既有包装按各训练折实际细胞数减一和特征数限制潜变量数，报告另存实际值 |
+| 随机森林 | n_estimators=500、max_depth=null、min_samples_split=2、min_samples_leaf=1、max_features=sqrt、bootstrap=true、class_weight=balanced、criterion=gini、max_samples=null | 树数 1–10000；树深留空或正整数；分裂/叶节点可用整数或小数比例，叶比例小于 1；候选特征支持 sqrt/log2/全部/个数/比例；max_samples 仅 bootstrap 启用时可用，须适用于最小训练折 |
+
+随机森林的 `2` 表示两个细胞，`0.2` 表示训练细胞的 20%；`max_features` 的 `1` 表示一个特征，
+`1.0` 表示全部特征。后端 Python/HTTP 还支持 LR/RF 的 `random_state`、RF 的 `n_jobs`；
+网页种子来自监督训练字段，线程数沿用后端默认 -1，不混入实验控件。
+新训练报告记录请求参数、展开默认值后的模型参数及 PLS 各折实际维数；历史只读报告不会补算这些字段。
+
+SHAP 图的类别/细胞序号从 0 开始，特征使用精确内部 ID；显示特征数默认 20，范围 1–100。
+显示设置与模型参数随项目保存；调整显示不重算解释、不失效模型，背景/解释数量改变仍会失效已有解释。
+细胞降维已有控件覆盖 API 的现有显式字段：PCA whiten、UMAP 的内部 PCA/邻居/min_dist/metric、
+t-SNE perplexity/learning_rate/max_iter，以及公共维数/缩放/seed；不开放任意底层构造参数。

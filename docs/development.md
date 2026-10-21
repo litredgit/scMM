@@ -96,9 +96,9 @@ scMM/
 | 基础预处理/QC | `analysis/quality.py`、`analysis/preprocessing.py`、`util/normalize.py`、`file/_dataset_processing.py` | 筛选、七种归一化、四种插补、异常检测高级参数、稳定 ID 子集和层/完整起点恢复 | PARAM-01 / SUBSET-01 / QC-01 已接待统一验收；各入口默认值分别保持，失败候选不提交 |
 | 天然同位素 | 原 `CyESIData.deisotope()`、`file/_deisotope.py`；网页 `util/lipid_isotopes.py` | 网页按数据库分子式/加合物计算天然分布，保留所有峰，只标记、审阅与筛选导出 | ISO-01～03 与 ANN 联合；网页不使用旧 API 的删峰/求和及平方矩阵 |
 | SDF 精确质量注释 | 原 `get_annotation()`；网页 `util/lipid_annotation.py` / `lipid_rules.py` | LMSD 本地准备、质量索引、完整候选、规则/预设、人工指定、独立版本及 CSV 已接入 | ANN-01～03；保留用户验收，背景任务迁移仍归 M2；Python/Notebook 旧默认值保持 |
-| 细胞降维/聚类 | `analysis/embedding.py`、`analysis/clustering.py`、`PlotEngine`、`plot/embedding.py` | 五种降维、五种聚类、聚类参数白名单及着色已有；工作台保留候选提交，领域辅助函数负责参数校验/计算 | PARAM-03 补其余降维参数；三套 Python 入口的默认值/返回值不混用，Matplotlib 包装不重复造按钮 |
+| 细胞降维/聚类 | `analysis/embedding.py`、`analysis/clustering.py`、`PlotEngine`、`plot/embedding.py` | 五种降维、五种聚类、聚类参数白名单及着色已有；工作台保留候选提交，领域辅助函数负责参数校验/计算 | PARAM-03 已核对现有显式降维字段均有控件；三套 Python 入口的默认值/返回值不混用，Matplotlib 包装不重复造按钮 |
 | 差异/Marker/相关网络 | `analysis/statistics.py`、`plot/_engine_statistics.py` | 检验、全局 FDR、筛选/分页、图形与导出已有 | 保持 STAT-01 解释和结果生命周期；不是待重新移植的功能 |
-| 监督诊断/潜变量/SHAP | `analysis/supervised.py` | 分组验证、四模型、ROC/PR/校准、潜变量及 SHAP 已有 | PARAM-03 补模型超参数、SHAP 类别/显示设置；不序列化可执行模型 |
+| 监督诊断/潜变量/SHAP | `analysis/supervised.py` | 分组验证、四模型、ROC/PR/校准、潜变量及 SHAP 已有 | PARAM-03 已接入 model_parameters.py 白名单/组合/训练折校验、四模型控件及 SHAP 显示设置；不序列化可执行模型 |
 | Palantir 与窗口轨迹 | `PlotEngine.run_palantir()` / `compute_trajectory()` | 无应用/HTTP/Vue 分析入口 | TIME-01；现有 Python 方法和暂缓的上游启发式方法分别管理 |
 | 代谢速度 | `PlotEngine.metabolic_velocity()` | 无对应入口 | TIME-02，沿现有参数化坐标的窗口变化速度，不能解释为示踪通量 |
 | 代谢物趋势/趋势聚类 | `plot_metabolite_trends()` / `plot_trend_clusters()` | 无对应入口 | TIME-03/04，输入时间、窗口、统计量和趋势距离可追溯 |

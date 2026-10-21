@@ -176,15 +176,17 @@ def test_latent_scores_align_and_roundtrip(tmp_path, model, params):
     )
 
 
-def test_lsqr_is_valid_classifier_without_latent_and_failed_training_clears_result():
+def test_lsqr_is_valid_classifier_without_latent_and_failed_training_preserves_result():
     state = workspace()
     model = state.train("condition", model="lda", cv=3, model_params={"solver": "lsqr"})
     assert not model.supports_latent_scores
+    state.put_result("shap", {"retained": True}, state.token)
     with pytest.raises(ValueError, match="lsqr"):
         state.save_latent("latent")
     with pytest.raises(ValueError):
         state.train("condition", model="unknown")
-    assert "supervised" not in state.results
+    assert state.results["supervised"][1] is model
+    assert state.result("shap") == {"retained": True}
 
 
 def test_legacy_requires_trust_and_rejects_child_symlink(tmp_path):

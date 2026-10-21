@@ -463,8 +463,6 @@ class AnalysisWorkspace:
         return result
 
     def train(self, label_key, *, group_key=None, layer=None, model="logistic", **options):
-        self.results.pop("supervised", None)
-        self.results.pop("shap", None)
         token = self.token
         analyzer = SupervisedAnalyzer(
             self.require_data(),
@@ -476,6 +474,7 @@ class AnalysisWorkspace:
         analyzer.label_key = label_key
         analyzer.group_key = group_key
         analyzer.evaluate(model, **options)
+        self.results.pop("shap", None)
         self.put_result("supervised", analyzer, token)
         return analyzer
 
