@@ -1,3 +1,4 @@
+import StabilityPanel from './modules/StabilityPanel.vue'
 import FeatureEmbeddingPanel from './modules/FeatureEmbeddingPanel.vue'
 import FeatureScatterPanel from './modules/FeatureScatterPanel.vue'
 import HeatmapPanel from './modules/HeatmapPanel.vue'
@@ -28,6 +29,13 @@ export const analysisModules: readonly AnalysisModule[] = [
     name: '特征距离嵌入',
     group: '探索',
     component: FeatureEmbeddingPanel,
+    requires: ['matrix'],
+  },
+  {
+    id: 'stability',
+    name: '采集稳定性 QC',
+    group: '探索',
+    component: StabilityPanel,
     requires: ['matrix'],
   },
   { id: 'heatmap', name: '热图', group: '探索', component: HeatmapPanel, requires: ['matrix'] },

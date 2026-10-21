@@ -584,3 +584,42 @@ def test_subset_preview_apply_save_reopen_and_reset(workflow):
     operation(workflow, "reset")
     assert workflow[-2]()["project"]["dataset"]["cells"] == 64
     assert workflow[-2]()["project"]["dataset"]["features"] == 8
+
+
+def test_stability_plot_saved_full_tables_and_metadata_dependency(workflow):
+    import_data(workflow)
+    options = {"source_key": "sample", "feature": "f0", "time_kind": "stored_order", "bins": 4}
+    response = workflow[-1]("/analysis/plot", {"kind": "stability", "options": options})
+    assert response.status_code == 200, response.text
+    figure = response.json()["value"]
+    assert figure["layout"]["yaxis"]["tickformat"] == ".1e"
+    assert figure["layout"]["yaxis2"]["tickformat"] == "d"
+    cells = pd.read_csv(StringIO(figure["layout"]["meta"]["export_tables"]["cells.csv"]))
+    assert len(cells) == 64 and cells.included.all()
+    assert workflow[-1]("/project/save").status_code == 200
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    saved = get(workflow, "/analysis/figures/stability").json()
+    assert saved["layout"]["meta"]["export_tables"] == figure["layout"]["meta"]["export_tables"]
+    assert (
+        workflow[0]
+        .post("/api/v1/workspace/figures/data", headers=workflow[1], json={"figure": saved})
+        .status_code
+        == 200
+    )
+    samples = workflow[-2]()["project"]["manifest"]["samples"]
+    edits = [
+        {key: sample[key] for key in ("id", "name", "group", "subject", "batch")}
+        for sample in samples
+    ]
+    edits[0]["batch"] = "unrelated-qc"
+    assert workflow[-1]("/samples", {"samples": edits}, "PATCH").status_code == 200
+    assert get(workflow, "/analysis/figures/stability").status_code == 200
+    edits[0]["name"] = "renamed-source"
+    assert workflow[-1]("/samples", {"samples": edits}, "PATCH").status_code == 200
+    assert get(workflow, "/analysis/figures/stability").status_code == 400
+    assert (
+        workflow[-1]("/analysis/plot", {"kind": "stability", "options": options}).status_code == 200
+    )
+    operation(workflow, "normalize", {"method": "total"})
+    assert "stability" not in get(workflow, "/analysis").json()["figures"]

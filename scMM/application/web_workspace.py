@@ -123,7 +123,7 @@ def sync_metadata(project):
     for name in stale:
         for figure in RESULT_PLOTS.get(name, ()):
             project.views.get("figures", {}).pop(figure, None)
-    for key in ("feature_scatter", "feature_embedding"):
+    for key in ("feature_scatter", "feature_embedding", "stability"):
         figure = project.views.get("figures", {}).get(key)
         if figure:
             metadata = figure["layout"]["meta"]

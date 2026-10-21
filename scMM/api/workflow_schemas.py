@@ -228,6 +228,7 @@ class Plot(RevisionRequest):
         "heatmap",
         "feature_scatter",
         "feature_embedding",
+        "stability",
         "shap_beeswarm",
         "shap_waterfall",
         "shap_dependence",
@@ -237,6 +238,15 @@ class Plot(RevisionRequest):
 
 class ConfusionPlot(Controls):
     normalize: bool = False
+
+
+class StabilityPlot(Controls):
+    source_key: str = Field(min_length=1)
+    feature: str = Field(min_length=1)
+    time_kind: Literal["acquisition_seconds", "normalized_time", "pseudotime", "stored_order"]
+    time_key: str | None = None
+    bins: int = Field(default=10, ge=2, le=100)
+    layer: str | None = None
 
 
 class FeatureEmbeddingPlot(Controls):
@@ -371,6 +381,7 @@ PLOTS = {
     "heatmap": HeatmapPlot,
     "feature_scatter": FeatureScatterPlot,
     "feature_embedding": FeatureEmbeddingPlot,
+    "stability": StabilityPlot,
     "shap_plot": ShapPlot,
     "shap_beeswarm": ShapPlot,
     "shap_waterfall": ShapPlot,

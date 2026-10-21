@@ -234,6 +234,7 @@ SNR 始终不作为强度。层的可用性由共享来源规则判断，不靠�
 显式子集同步裁剪/重排当前 X、obs、var 和全部 layers，清除过期嵌入/分析；保留稳定 ID、强度来源及历史中的精确所选 ID。
 完整预处理起点不被子集替换，保存重开后 reset 仍恢复原始完整轴；单层 restore 只恢复当前子集轴上的历史强度。
 新增归一化、插补和异常检测步骤在历史 `parameters.effective_parameters` 中记录方法实际使用的白名单配置，随快照/H5AD 保留。
+采集稳定性 QC 存于 `views.figures.stability`，分析草稿为 `stability`；完整 `cells.csv`/`windows.csv`/`profiles.csv`/`correlation.csv` 及时间含义/来源/层/参考特征随只读图保存，非有限/未定义项保留缺失标记。
 特征距离嵌入存于 `views.figures.feature_embedding`，草稿在分析设置 `featureEmbedding`；元数据保留输入/有效参数及完整 `features.csv`/`distances.csv`，矩阵变换使其失效，重开后可读取/下载只读图，无需重算 UMAP。
 双特征散点存于 `views.figures.feature_scatter`，输入草稿存于分析设置的 `scatter`。
 图元数据保留精确特征 ID、层、着色列、回归定义/系数及解释；作图 ZIP 的 `cells.csv` 保留全部细胞和 `included`，

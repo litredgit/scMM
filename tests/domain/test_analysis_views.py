@@ -277,3 +277,124 @@ def test_feature_embedding_rejects_all_zero_distances_and_allocation_before_fit(
     ):
         with pytest.raises(ValueError, match=match):
             feature_embedding_figure(data, metric="euclidean")
+
+
+def test_stability_qc_keeps_source_order_empty_windows_and_exact_full_values():
+    from io import StringIO
+
+    from scMM.analysis.stability import stability_figure, stability_tables
+
+    data = AnnData(
+        np.array(
+            [
+                [0.0, 2.0, 4.0],
+                [2.0, 4.0, 6.0],
+                [4.0, 6.0, 8.0],
+                [6.0, 8.0, 10.0],
+                [100.0, 100.0, 100.0],
+            ]
+        ),
+        obs=pd.DataFrame(
+            {"source": ["a", "a", "b", "b", "c"], "rt": [0.0, 1.0, 5.0, 6.0, np.nan]},
+            index=["c0", "c1", "c2", "c3", "c4"],
+        ),
+        var=pd.DataFrame(index=["f0", "f1", "f2"]),
+    )
+    options = dict(
+        source_key="source", feature="f0", time_key="rt", time_kind="acquisition_seconds", bins=4
+    )
+    result = stability_tables(data, **options)
+    assert result["cells"].cell_id.tolist() == data.obs_names.tolist()
+    assert result["cells"].included.tolist() == [True, True, True, True, False]
+    assert result["cells"].time_bin.tolist() == [1, 1, 4, 4, 0]
+    assert result["windows"].cell_count.tolist() == [2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0]
+    assert result["windows"].median_reference.iloc[0] == 1.0
+    assert np.isnan(result["windows"].median_reference.iloc[1])
+    np.testing.assert_array_equal(result["profiles"].loc["a"], [1, 3, 5])
+    assert result["correlation"].loc["a", "b"] == 1.0
+    assert result["correlation"].loc["c"].isna().all()
+    assert result["dependencies"] == ["source", "rt"]
+    figure = stability_figure(data, **options)
+    exported = pd.read_csv(StringIO(figure.layout.meta["export_tables"]["cells.csv"]))
+    np.testing.assert_array_equal(exported.reference_intensity, [0, 2, 4, 6, 100])
+    assert len(exported) == 5 and len(result["windows"]) == 12
+    data.layers["alternate"] = data.X * 2
+    doubled = stability_tables(data, **{**options, "layer": "alternate"})
+    assert doubled["windows"].median_reference.iloc[0] == 2
+    assert not data.uns and not data.obsm
+
+
+def test_stability_stored_order_missing_labels_and_nonfinite_intensity():
+    from scMM.analysis.stability import stability_tables
+
+    data = AnnData(
+        np.array([[0.0, 1.0], [2.0, 3.0], [4.0, 5.0]]),
+        obs=pd.DataFrame({"sample": [None, "（缺失来源）", " "]}, index=["a", "b", "c"]),  # noqa: RUF001
+        var=pd.DataFrame(index=["f0", "f1"]),
+    )
+    data.layers["bad"] = np.array([[np.nan, np.inf], [2.0, 2.0], [4.0, 4.0]])
+    result = stability_tables(
+        data, source_key="sample", feature="f0", time_kind="stored_order", bins=2, layer="bad"
+    )
+    assert result["cells"].coordinate.tolist() == [0, 1, 2]
+    assert result["cells"].source.nunique() == 2
+    assert result["correlation"].isna().all().all()
+    assert result["dependencies"] == ["sample"]
+    assert result["windows"].cell_count.sum() == 3
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"feature": "100.0001"},
+        {"source_key": "missing"},
+        {"time_kind": "unknown"},
+        {"time_kind": "normalized_time"},
+        {"bins": True},
+        {"bins": 1},
+        {"layer": "missing"},
+        {"time_key": "source"},
+        {"time_kind": "stored_order", "time_key": "rt"},
+    ],
+)
+def test_stability_invalid_options_preserve_data(options):
+    from scMM.analysis.stability import stability_tables
+
+    data = AnnData(
+        np.array([[1.0, 2.0], [3.0, 4.0]]),
+        obs=pd.DataFrame({"source": ["a", "b"], "rt": [0.0, 2.0]}, index=["a", "b"]),
+        var=pd.DataFrame(index=["f0", "f1"]),
+    )
+    before = data.X.copy()
+    with pytest.raises(ValueError):
+        stability_tables(
+            data,
+            **{
+                "source_key": "source",
+                "feature": "f0",
+                "time_kind": "acquisition_seconds",
+                "time_key": "rt",
+                **options,
+            },
+        )
+    np.testing.assert_array_equal(data.X, before)
+
+
+def test_stability_rejects_constant_or_unrepresentable_time_bins():
+    from scMM.analysis.stability import stability_tables
+
+    for times in ([1.0, 1.0], [1e16, 1e16 + 2]):
+        data = AnnData(
+            np.ones((2, 2)),
+            obs=pd.DataFrame({"source": ["a", "b"], "rt": times}, index=["a", "b"]),
+            var=pd.DataFrame(index=["f0", "f1"]),
+        )
+        with pytest.raises(ValueError):
+            stability_tables(
+                data,
+                source_key="source",
+                feature="f0",
+                time_key="rt",
+                time_kind="acquisition_seconds",
+                bins=10,
+            )

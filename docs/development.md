@@ -106,7 +106,7 @@ scMM/
 | 双特征散点/回归 | `PlotEngine.plot_feature_scatter()`；网页 `analysis/feature_scatter.py` | 独立面板、精确 ID/层/着色、全体细胞回归、完整导出及只读图重载 | PLOT-01 待用户统一验收；网页不采用 Notebook 的最近质量匹配，不将细胞级回归解释为生物重复验证 |
 | 已处理结果合并 | `CyESIData.alignwith()`、`file.batch.concat()` | 当前已有原始样本提取审核合并；导入独立结果会替换当前数据 | MERGE-01；concat 当前读取旧结果目录，不是任意 H5AD 合并服务，须适配来源/特征/起点 |
 | 显式数据子集 | `AnalysisWorkspace.subset()` | 稳定细胞/特征 ID、数量预览、手动应用和完整起点恢复 | SUBSET-01 待统一验收；不是 `CyESIData.__getitem__` 的最近 m/z 强度读取，失败原子性及保存重开受检查 |
-| 采集稳定性 QC | `scMM_workflow.ipynb` 的稳定性段 | 基础样本/细胞 QC 已有，无完整采集稳定性视图 | QC-01，先抽取应用层计算，再接时间/来源图和下载 |
+| 采集稳定性 QC | Notebook 稳定性段；网页 `analysis/stability.py` | 显式坐标/来源/参考特征、箱图/窗口数量/来源中位谱相关和完整表、只读图重载 | QC-01 待统一验收；存储顺序不当采集时间，不把细胞级 QC 当生物重复验证 |
 | QC PDF | `analysis.quality.render_quality_report()` | 当前有 QC 表/图，未接 PDF 生成/下载 | REPORT-01 先 QC PDF，再设计完整实验报告；两种报告范围不同 |
 | 峰重建与秩一分解 | `util.denoise.peak_recon()` / `r1_decomposition()` | 无应用/HTTP/Vue 工作流 | TOOL-01，工具级输入/科学定义/验证先于界面，不能替换现有提取算法 |
 | 互操作/元数据/绘图辅助 | AnnData/H5AD、assign_source_metadata、EIC/质谱 Matplotlib、configure_plotting | Vue 已有保存重载、稳定样本元数据、Plotly 原始谱及导出 | 保留 Python 专用辅助接口，功能等价覆盖不要求逐函数建立控件；恢复原始输入和方法默认值分别管理 |

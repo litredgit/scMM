@@ -209,7 +209,7 @@ class AnalysisWorkflow:
             if key not in figures:
                 raise ValueError("图形不存在或已失效。")
             value = stored_figure(figures[key])
-            if key in {"feature_scatter", "feature_embedding"}:
+            if key in {"feature_scatter", "feature_embedding", "stability"}:
                 value["layout"]["meta"]["dataset_token"] = list(project.workspace.token)
             return value
 
@@ -297,7 +297,7 @@ class AnalysisWorkflow:
                 candidate.saved_reports = {}
                 candidate.views.pop("figures", None)
             elif operation in {"reduce", "cluster", "save_latent"}:
-                for key in ("feature_scatter", "feature_embedding"):
+                for key in ("feature_scatter", "feature_embedding", "stability"):
                     figure = candidate.views.get("figures", {}).get(key)
                     if figure:
                         figure["layout"]["meta"]["dataset_token"] = list(state.token)
@@ -417,6 +417,10 @@ class AnalysisWorkflow:
                 from scMM.analysis.heatmap import heatmap_figure
 
                 figure = heatmap_figure(data, **options)
+            elif kind == "stability":
+                from scMM.analysis.stability import stability_figure
+
+                figure = stability_figure(data, **options)
             elif kind == "feature_embedding":
                 from scMM.analysis.feature_embedding import feature_embedding_figure
 

@@ -365,6 +365,12 @@ DBSCAN 与层次聚类的距离白名单为 euclidean/manhattan/cosine，不开�
 聚类仍共享降维面板的 `use_rep`、`n_neighbors` 和 `random_state`。旧项目缺独立字段时保留原先借用值，
 恢复/保存操作见[分析流程](workflow.md#分析显示与导出)，开发兼容规则见[接入指南](development.md#参数草稿与恢复)。
 
+采集稳定性 QC 的 `source_key`、`feature`、`time_kind` 必须显式选择；`time_key` 在非 stored_order 时必须为可转数值的观测列，
+不自动推断时间或参考离子。`time_kind` 可为 acquisition_seconds/normalized_time/pseudotime/stored_order；
+normalized_time 的有限值须在 [0,1]，stored_order 使用当前行顺序且不接受 time_key。至少两个有限且不同的坐标。
+`bins=10`，范围 2–100；`layer=null` 用 X，参考 ID 必须存在，最多 100 来源及 200 万输入数值。
+缺失来源单列，不合并同名原标签；窗口及来源谱定义见[统计解释](analysis.md#统计解释与网页分析)。
+
 特征距离嵌入 `features=[]` 使用全部稳定 ID，显式列表不允许重复/缺失 ID；最多 500 项及 200 万输入数值。
 `layer=null` 使用 X，`metric=pearson` 可选 euclidean，`name_key`/`class_key=null` 默认用 ID/统一颜色；指定时须为现有 var 列。
 `n_neighbors=null` 使用 min(15, 特征数−1)，显式值为 2 至特征数−1；`min_dist=0.1` 范围 [0,1]，`random_state=42`。
