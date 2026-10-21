@@ -68,21 +68,26 @@ export function startMaintenance(router: Router) {
     formRevision = 0
   const forms: Record<string, Control[]> = {}
   const capture = () => {
-    if (router.currentRoute.value.path !== '/account') {
+    if (auth.user && store.current && router.currentRoute.value.path !== '/account') {
       forms[router.currentRoute.value.path] = controls()
       formRevision++
     }
   }
   const stopOwner = watch(
-    () => auth.user?.id,
-    () => {
+    () => JSON.stringify([auth.user?.id, store.current?.workspace_id, store.project?.path]),
+    (value, previous) => {
+      const scope = JSON.parse(value),
+        before = previous ? JSON.parse(previous) : []
+      if (scope[0] !== before[0] || scope[1] !== before[1]) restored = ''
       clearPendingViews()
       for (const key of Object.keys(forms)) delete forms[key]
       restoredForms = false
       appliedRoutes.clear()
-      restored = ''
+      if (value !== previous) savedRevision = -1
+      formRevision++
       nonce = ''
     },
+    { flush: 'sync' },
   )
   document.addEventListener('input', capture)
   document.addEventListener('change', capture)
@@ -96,9 +101,14 @@ export function startMaintenance(router: Router) {
       if (restoredForms && saved && !appliedRoutes.has(router.currentRoute.value.path)) {
         appliedRoutes.add(router.currentRoute.value.path)
         const target = identity(),
-          route = router.currentRoute.value.path
+          route = router.currentRoute.value.path,
+          edits = formRevision
         setTimeout(() => {
-          if (identity() === target && router.currentRoute.value.path === route)
+          if (
+            identity() === target &&
+            router.currentRoute.value.path === route &&
+            edits === formRevision
+          )
             restoreControls(saved)
         }, 200)
       }
@@ -109,7 +119,13 @@ export function startMaintenance(router: Router) {
       if (!auth.user || auth.user.must_change) return
       if (store.current && restored !== store.current.workspace_id) {
         restored = store.current.workspace_id
-        const target = identity()
+        const target = identity(),
+          edits = formRevision,
+          workspaceRevision = store.current.revision
+        const current = () =>
+          identity() === target &&
+          formRevision === edits &&
+          store.current?.revision === workspaceRevision
         const value = await request<{
           project_path?: string
           raw_unavailable?: string
@@ -119,19 +135,26 @@ export function startMaintenance(router: Router) {
           selectedCells?: string[]
           views?: Parameters<typeof restoreViews>[0]
         }>('/workspace/maintenance/draft', { workspace: restored })
-        if (identity() !== target) return
+        if (!current()) return
         if (value.raw_unavailable) store.notice = value.raw_unavailable
         if (value.forms && value.project_path === (store.project?.path || '')) {
           restoredForms = true
-          if (value.views) await restoreViews(value.views)
+          if (value.views) await restoreViews(value.views, current)
+          if (!current()) return
           Object.assign(forms, value.forms)
           store.analysisDraft = value.analysisDraft || null
           store.selectedCells = value.selectedCells || []
           if (value.route) await router.replace(value.route)
           await nextTick()
+          if (!current()) return
           const route = router.currentRoute.value.path
+          const restoredEdits = formRevision
           setTimeout(() => {
-            if (identity() === target && router.currentRoute.value.path === route)
+            if (
+              identity() === target &&
+              router.currentRoute.value.path === route &&
+              formRevision === restoredEdits
+            )
               restoreControls(forms[route] || [])
           }, 500)
         }
@@ -172,7 +195,8 @@ export function startMaintenance(router: Router) {
         const revision = viewRevision() + formRevision
         if (store.current && !store.busy && revision !== savedRevision) {
           const owner = auth.user.id,
-            workspace = store.current
+            workspace = store.current,
+            target = identity()
           await request('/workspace/draft', {
             method: 'PUT',
             workspace: workspace.workspace_id,
@@ -188,7 +212,7 @@ export function startMaintenance(router: Router) {
               },
             },
           })
-          if (auth.user?.id === owner) savedRevision = revision
+          if (auth.user?.id === owner && identity() === target) savedRevision = revision
         }
       }
     } catch (cause) {

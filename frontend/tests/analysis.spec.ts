@@ -282,3 +282,73 @@ test('PCA axes, stable cell clicks, paper exports and complete heatmap data', as
   await page.getByRole('button', { name: '计算分类权重 Marker', exact: true }).click()
   await expect(page.getByRole('columnheader', { name: /符号稳定性/ })).toBeVisible()
 })
+
+for (const editTiming of ['before-response', 'after-response', 'no-edit'] as const) {
+  test(`maintenance draft cannot overwrite a newer edit ${editTiming}`, async ({ page }) => {
+    await importAnalysis(page, `草稿恢复输入保护 ${editTiming}`)
+    const workspace = await page.evaluate(() => sessionStorage.getItem('scmm-workspace')!)
+    const state = await (
+      await page.request.get('/api/v1/workspace', {
+        headers: { 'X-SCMM-Workspace': workspace },
+      })
+    ).json()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let received = false
+    await page.route('**/workspace/maintenance/draft', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue()
+      received = true
+      await gate
+      await route.fulfill({
+        json: {
+          project_path: state.project.path,
+          route: '/analysis',
+          forms: { '/analysis': [{ key: 'random_state#0', value: '17', checked: false }] },
+        },
+      })
+    })
+    await page.reload()
+    await expect.poll(() => received).toBe(true)
+    const seed = page.getByLabel('random_state', { exact: true }).filter({ visible: true })
+    await expect(seed).toBeVisible()
+    const response = page.waitForResponse(
+      (value) =>
+        value.url().endsWith('/workspace/maintenance/draft') && value.request().method() === 'GET',
+    )
+    if (editTiming === 'before-response') await seed.fill('91')
+    release()
+    await response
+    if (editTiming === 'after-response') await seed.fill('91')
+    // The deferred DOM restoration is scheduled for 500 ms after hydration.
+    await page.waitForTimeout(750)
+    await expect(seed).toHaveValue(editTiming === 'no-edit' ? '17' : '91')
+  })
+}
+
+test('draft capture drops forms from the preceding project', async ({ page }) => {
+  const drafts: { project_path: string; forms: Record<string, unknown> }[] = []
+  page.on('request', (request) => {
+    if (request.url().endsWith('/workspace/draft') && request.method() === 'PUT')
+      drafts.push(request.postDataJSON().state)
+  })
+  await importAnalysis(page, '前一个项目草稿')
+  await page.getByLabel('store_key', { exact: true }).fill('X_only_previous_project')
+  await expect.poll(() => drafts.some((value) => Boolean(value.forms['/analysis']))).toBe(true)
+  const previous = drafts.at(-1)!.project_path
+  await page.getByRole('button', { name: '关闭项目', exact: true }).click()
+  await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
+  await page.getByLabel('项目名称', { exact: true }).fill('后一个项目草稿')
+  await page.getByRole('button', { name: '创建并添加样本' }).click()
+  await expect
+    .poll(() =>
+      drafts.some((value) => Boolean(value.project_path) && value.project_path !== previous),
+    )
+    .toBe(true)
+  const current = drafts.find(
+    (value) => Boolean(value.project_path) && value.project_path !== previous,
+  )!
+  expect(current.forms['/analysis']).toBeUndefined()
+  expect(JSON.stringify(current)).not.toContain('X_only_previous_project')
+})

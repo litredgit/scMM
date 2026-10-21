@@ -2,12 +2,15 @@ import { watch, isRef, onUnmounted, nextTick, type Ref } from 'vue'
 const entries = new Map<string, Record<string, Ref<unknown>>>()
 let pending: Record<string, Record<string, unknown>> = {}
 let revision = 0
+let generation = 0
 export function viewRevision() {
   return revision
 }
 export let restoringViews = false
 export function clearPendingViews() {
+  generation++
   pending = {}
+  restoringViews = false
 }
 export function captureViews() {
   const result = { ...pending }
@@ -17,17 +20,25 @@ export function captureViews() {
     )
   return JSON.parse(JSON.stringify(result)) as typeof pending
 }
-export async function restoreViews(value: typeof pending) {
+export async function restoreViews(value: typeof pending, isCurrent = () => true) {
+  if (!isCurrent()) return
+  const token = ++generation
   pending = value
   restoringViews = true
+  const current = () => token === generation && isCurrent()
   try {
+    if (!current()) return
     for (const [key, refs] of entries) apply(key, refs)
     await nextTick()
+    if (!current()) return
     // Dependent watchers can clear plots; restore their recorded values after hydration.
     for (const [key, refs] of entries) apply(key, refs)
     await nextTick()
   } finally {
-    restoringViews = false
+    if (token === generation) {
+      if (!isCurrent()) pending = {}
+      restoringViews = false
+    }
   }
 }
 function apply(key: string, refs: Record<string, Ref<unknown>>) {
@@ -39,7 +50,11 @@ function apply(key: string, refs: Record<string, Ref<unknown>>) {
 export function useViewState(key: string, refs: Record<string, Ref<unknown>>) {
   const unwatch = watch(Object.values(refs), () => revision++, { deep: true })
   entries.set(key, refs)
-  if (pending[key]) void nextTick(() => apply(key, refs))
+  const token = generation
+  if (pending[key])
+    void nextTick(() => {
+      if (token === generation && entries.get(key) === refs) apply(key, refs)
+    })
   onUnmounted(() => {
     unwatch()
     entries.delete(key)
