@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# ruff: noqa: RUF001
 from pathlib import Path
 
 import numpy as np
@@ -83,6 +84,10 @@ class SupervisedAnalyzer:
         self.obs_names = data.obs_names[valid]
         self.feature_names = data.var_names.astype(str).tolist()
         self.layer = layer
+        from ._validation import preprocessing_audit
+
+        self.validation_audit = preprocessing_audit(data, layer)
+        self.validation_audit["excluded_unlabelled_cells"] = int((~valid).sum())
         self.random_state = int(random_state)
         self.groups = None
         if group_key is not None:
@@ -90,6 +95,12 @@ class SupervisedAnalyzer:
             if groups.isna().any():
                 raise ValueError("group labels must not be missing")
             self.groups = groups.astype(str).to_numpy()
+            if any(not value.strip() for value in self.groups):
+                raise ValueError("来源组标签不能为空白，请核实所选分组列。")
+        else:
+            self.validation_audit["warnings"].append(
+                "当前为细胞级探索，同一来源的细胞可能同时进入训练和测试，不能解释为独立来源验证。"
+            )
         if not np.isfinite(self.X).all() or self.X.shape[1] == 0:
             raise ValueError("analysis requires finite values and at least one feature")
         if len(np.unique(self.y)) < 2:
@@ -153,6 +164,14 @@ class SupervisedAnalyzer:
         if counts.min() < 2:
             raise ValueError("every class needs at least two observations")
         indices = np.arange(len(self.y))
+        source_support = self._source_support(indices)
+        if self.groups is not None and any(
+            value["source_groups"] < 3 for value in source_support.values()
+        ):
+            raise ValueError(
+                "分组留出及至少两折 CV 要求每类至少有 3 个来源组；"
+                "细胞数量不能替代来源组数量。请核实独立来源或选择细胞级探索。"
+            )
         if self.groups is None:
             train, test = train_test_split(
                 indices, test_size=test_size, random_state=self.random_state, stratify=self.y
@@ -245,6 +264,21 @@ class SupervisedAnalyzer:
             for i, name in enumerate(classes)
         }
         self.result_ = {
+            "validation_audit": {
+                **self.validation_audit,
+                "validation_mode": "grouped" if self.groups is not None else "cell_exploration",
+                "all_source_support": source_support,
+                "train_source_support": self._source_support(train),
+                "test_source_support": self._source_support(test),
+                "cv_source_support": [
+                    {
+                        "fold": number + 1,
+                        "fit": self._source_support(train[fit]),
+                        "validation": self._source_support(train[validation]),
+                    }
+                    for number, (fit, validation) in enumerate(splits)
+                ],
+            },
             "training_parameters": {
                 "model": model,
                 "model_params": model_params or {},
@@ -287,6 +321,17 @@ class SupervisedAnalyzer:
             ),
         }
         return self.result_
+
+    def _source_support(self, indices):
+        return {
+            label: {
+                "cells": int(np.count_nonzero(self.y[indices] == label)),
+                "source_groups": len(np.unique(self.groups[indices][self.y[indices] == label]))
+                if self.groups is not None
+                else None,
+            }
+            for label in np.unique(self.y)
+        }
 
     def _test_targets(self):
         self._require_fitted()

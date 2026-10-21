@@ -99,6 +99,21 @@ def test_supervised_grouped_cv_shap_and_readonly_reload(workflow):
         },
     )
     result = get(workflow, "/analysis/results/supervised").json()
+    audit = result["diagnostics"]["validation_audit"]
+    assert audit["validation_mode"] == "grouped"
+    assert audit["all_source_support"]["a"] == {"cells": 32, "source_groups": 4}
+    before_revision = workflow[-2]()["revision"]
+    rejected = workflow[-1](
+        "/analysis/operation",
+        {"operation": "train", "options": {"label_key": "group", "group_key": "group", "cv": 2}},
+    )
+    assert rejected.status_code == 400
+    assert "每类至少有 3 个来源组" in rejected.json()["error"]["message"]
+    assert workflow[-2]()["revision"] == before_revision
+    assert (
+        get(workflow, "/analysis/results/supervised").json()["diagnostics"]["validation_audit"]
+        == audit
+    )
     assert set(result["train_obs"]).isdisjoint(result["test_obs"])
     train_groups = {int(name[1:]) // 8 for name in result["train_obs"]}
     test_groups = {int(name[1:]) // 8 for name in result["test_obs"]}
@@ -128,6 +143,10 @@ def test_supervised_grouped_cv_shap_and_readonly_reload(workflow):
     failure = workflow[-1]("/analysis/operation", {"operation": "explain_shap"})
     assert failure.status_code == 400
     assert get(workflow, "/results/download?kind=supervised").status_code == 200
+    reloaded = get(workflow, "/analysis/results/supervised").json()
+    assert reloaded["diagnostics"]["validation_audit"] == audit
+    downloaded = get(workflow, "/results/download?kind=supervised").json()
+    assert downloaded["diagnostics"]["validation_audit"] == audit
 
 
 def test_export_snapshot_and_shared_recycle_protections(workflow):

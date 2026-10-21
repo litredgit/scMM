@@ -128,6 +128,9 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
   await page.getByLabel('cv', { exact: true }).fill('2')
   await page.getByLabel('test_size', { exact: true }).fill('0.5')
   await page.getByRole('button', { name: '训练并验证', exact: true }).click()
+  const validationNotes = page.getByRole('complementary', { name: '监督验证解释', exact: true })
+  await expect(validationNotes).toContainText('细胞数不等于生物重复')
+  await expect(validationNotes).toContainText('不再是独立测试')
   await expect(
     page.getByRole('button', { name: '保存潜变量和 train/test 标识', exact: true }),
   ).toBeEnabled()
@@ -173,6 +176,7 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
   ).toBeDisabled()
   await expect(page.getByRole('combobox', { name: '图例', exact: true })).toHaveValue('hidden')
   await page.getByRole('button', { name: '读取监督诊断', exact: true }).click()
+  await expect(validationNotes).toContainText('细胞数不等于生物重复')
   await noError(page)
   await analysisModule(page, 'differential', '差异与 Marker')
   const invalidated = page.waitForResponse((response) =>

@@ -343,6 +343,8 @@ CLI、Python API 和 Notebook 的默认提取方法仍为 legacy；两种提取�
 
 分析页网络的 `layer` 独立于差异比较，默认 `null`（当前 X）；监督训练的 `random_state`
 独立于降维，初始来自分析配置的 `random_state`（通用默认 42），SHAP 使用该监督 seed。
+监督 `group_key` 按用户所选字段计数来源组，拒绝空白标签；分组留出及 CV 的每类来源数量要求
+与解释边界见[统计解释](analysis.md#统计解释与网页分析)，不会因数量不足自动改 seed 或切换验证方式。
 聚类仍共享降维面板的 `use_rep`、`n_neighbors` 和 `random_state`。旧项目缺独立字段时保留原先借用值，
 恢复/保存操作见[分析流程](workflow.md#分析显示与导出)，开发兼容规则见[接入指南](development.md#参数草稿与恢复)。
 

@@ -59,7 +59,7 @@ scMM/
 │   ├── _dataset_persistence.py # 旧目录候选写入/校验、读写锁、发布回滚与中断恢复
 │   ├── _deisotope.py      # 去同位素的纯计算、分配与元数据构建
 │   └── batch.py           # 独立批处理与结果合并
-├── analysis/              # QC、统计、统一降维、监督模型与诊断
+├── analysis/              # QC、统计、统一降维、监督模型；_validation.py 解释历史与验证边界
 ├── util/
 │   ├── peak.py            # 局部谱统计与细胞事件窗口归约
 │   ├── normalize.py       # 归一化注册表和内置方法

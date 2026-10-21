@@ -76,3 +76,98 @@ def test_optional_smote_and_shap(model):
     explanation = analyzer.explain_shap(max_background=8, max_samples=4)
     assert explanation.values.shape[:2] == (4, 5)
     assert np.isfinite(explanation.values).all()
+
+
+def test_group_support_gate_uses_sources_instead_of_cell_count():
+    data = example()
+    data.obs["sample"] = [f"{label}-{i // 40}" for i, label in enumerate(data.obs.label)]
+    # Four groups globally, but only two groups per class despite forty cells each.
+    before = data.copy()
+    analyzer = SupervisedAnalyzer(data, "label", group_key="sample")
+    with pytest.raises(ValueError, match="每类至少有 3 个来源组"):
+        analyzer.evaluate(cv=2, test_size=0.5)
+    assert not hasattr(analyzer, "model_")
+    np.testing.assert_array_equal(data.X, before.X)
+    pd.testing.assert_frame_equal(data.obs, before.obs)
+    exploratory = SupervisedAnalyzer(data, "label")
+    report = exploratory.evaluate(cv=2)
+    audit = report["validation_audit"]
+    assert audit["validation_mode"] == "cell_exploration"
+    assert audit["all_source_support"]["a"] == {"cells": 40, "source_groups": None}
+    assert any("细胞级探索" in message for message in audit["warnings"])
+
+
+def test_group_support_is_recorded_for_holdout_and_each_cv_fold():
+    analyzer = SupervisedAnalyzer(example(), "label", group_key="sample")
+    audit = analyzer.evaluate(cv=3)["validation_audit"]
+    assert audit["validation_mode"] == "grouped"
+    for label in ("a", "b"):
+        assert audit["all_source_support"][label] == {"cells": 40, "source_groups": 20}
+        assert audit["train_source_support"][label] == {"cells": 32, "source_groups": 16}
+        assert audit["test_source_support"][label] == {"cells": 8, "source_groups": 4}
+        assert len(audit["cv_source_support"]) == 3
+        for fold in audit["cv_source_support"]:
+            assert fold["fit"][label]["source_groups"] >= 2
+            assert fold["validation"][label]["source_groups"] >= 1
+            assert fold["fit"][label]["cells"] + fold["validation"][label]["cells"] == 32
+    assert any("不再是独立测试" in message for message in audit["warnings"])
+    assert any("不能证明生物学独立" in message for message in audit["warnings"])
+
+
+def test_history_caveats_do_not_change_training_or_claim_layer_lineage():
+    import json
+
+    plain = example()
+    annotated = plain.copy()
+    annotated.layers["before_imputation"] = annotated.X.copy()
+    history = [
+        {"operation": "impute", "layer": "imputed", "parameters": {"method": "knn"}},
+        {"operation": "filter", "layer": "filtered", "parameters": {"min_feature_fraction": 0.2}},
+        {"operation": "restore", "layer": "restored", "parameters": {"layer": "before_imputation"}},
+    ]
+    annotated.uns["scmm_workbench"] = {"history_json": json.dumps(history)}
+    original = SupervisedAnalyzer(plain, "label", group_key="sample")
+    restored = SupervisedAnalyzer(annotated, "label", group_key="sample", layer="before_imputation")
+    original.evaluate(cv=3)
+    audit = restored.evaluate(cv=3)["validation_audit"]
+    np.testing.assert_array_equal(original.probabilities_, restored.probabilities_)
+    assert audit["recorded_risk_operations"] == ["filter", "impute"]
+    assert audit["input_layer"] == "before_imputation"
+    assert any("其他层或已恢复步骤" in message for message in audit["warnings"])
+    assert "不执行折内重预处理" in audit["history_scope"]
+    assert annotated.uns["scmm_workbench"]["history_json"] == json.dumps(history)
+
+
+@pytest.mark.parametrize("history", [None, "broken", "{}", '["bad step"]'])
+def test_unknown_preprocessing_history_is_reported_without_inventing_safety(history):
+    data = example()
+    data.uns["scmm_workbench"] = {"history_json": history}
+    analyzer = SupervisedAnalyzer(data, "label", group_key="sample")
+    audit = analyzer.evaluate(cv=2)["validation_audit"]
+    assert not audit["recorded_steps"]
+    assert audit["input_intensity_state"] == "unknown"
+    assert any("无法解析" in message for message in audit["warnings"])
+
+
+def test_unlabelled_cells_are_excluded_and_blank_groups_are_rejected():
+    data = example()
+    data.obs.loc[data.obs_names[0], "label"] = None
+    analyzer = SupervisedAnalyzer(data, "label", group_key="sample")
+    audit = analyzer.evaluate(cv=2)["validation_audit"]
+    assert audit["excluded_unlabelled_cells"] == 1
+    assert sum(value["cells"] for value in audit["all_source_support"].values()) == 79
+    data.obs.loc[data.obs_names[1], "sample"] = "  "
+    with pytest.raises(ValueError, match="不能为空白"):
+        SupervisedAnalyzer(data, "label", group_key="sample")
+
+
+def test_three_source_groups_per_class_can_support_holdout_and_two_cv_folds():
+    data = example()[:72].copy()
+    data.obs["sample"] = np.repeat(["source-a", "source-b", "source-c"], 24)
+    analyzer = SupervisedAnalyzer(data, "label", group_key="sample")
+    audit = analyzer.evaluate(cv=2, test_size=1 / 3)["validation_audit"]
+    assert set(analyzer.train_groups_).isdisjoint(analyzer.test_groups_)
+    for label in ("a", "b"):
+        assert audit["all_source_support"][label]["source_groups"] == 3
+        assert audit["train_source_support"][label]["source_groups"] == 2
+        assert audit["test_source_support"][label]["source_groups"] == 1

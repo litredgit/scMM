@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { computed, reactive } from 'vue'
 import type { Figure } from '../../../../api/types'
 import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
@@ -28,6 +28,10 @@ const {
   loadWithPlot,
 } = useAnalysisContext()
 const shapView = reactive({ class_index: 0, cell_index: 0, feature: '' })
+const validationWarnings = computed(() => {
+  const audit = modelReport.value?.validation_audit as { warnings?: string[] } | undefined
+  return audit?.warnings ?? []
+})
 async function showConfusion(normalize: boolean) {
   const value = await store.command<Figure>('/analysis/plot', {
     kind: 'confusion',
@@ -50,7 +54,8 @@ async function showShap(kind: string) {
     <p class="page-note">
       训练、测试及 CV
       折均须包含全部类别。分组划分不能补救提前在全数据上插补或选特征造成的泄漏；反复调参后的 holdout
-      不再是独立测试。
+      不再是独立测试。 分组留出加至少两折 CV 要求每类至少有 3
+      个来源组；这是划分所需的下限，不代表生物重复充足。
     </p>
     <div class="field-grid">
       <label
@@ -176,6 +181,9 @@ async function showShap(kind: string) {
       </button>
     </div>
     <h3>图表与报告</h3>
+    <aside v-if="validationWarnings.length" aria-label="监督验证解释" class="page-note">
+      <p v-for="warning in validationWarnings" :key="warning">{{ warning }}</p>
+    </aside>
     <ReportView v-if="modelReport" :value="modelReport" />
     <button
       class="preview"
