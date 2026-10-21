@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from copy import deepcopy
 from typing import Any, Literal, Self
 
 import numpy as np
@@ -15,7 +16,8 @@ from sklearn.impute import KNNImputer, SimpleImputer
 from ..util.intensity import dataset_intensity_state, merged_intensity_state, transformed_state
 from ..util.normalize import normalize
 from ..util.peak import find_cell_peaks
-from ._dataset_loading import DatasetState
+from ._dataset_candidates import commit_candidate, prepare_candidate
+from ._dataset_loading import DatasetState, make_feature_metadata
 from ._deisotope import DeisotopeParams, analyze_isotopes, zero_is_missing
 
 DebugHook = Callable[[str, dict[str, Any]], None]
@@ -26,15 +28,8 @@ class DatasetProcessingMixin:
     """Provide preprocessing, transformation, alignment, and deisotoping."""
 
     def _invalidate_analyses(self):
-        from ..util.lifecycle import invalidate_derived
-
-        template = getattr(self, "_anndata_template", None)
-        if template is not None:
-            candidate = template.copy()
-            derived = candidate.uns.get("scmm_workbench", {}).get("derived_obs", [])
-            invalidate_derived(candidate)
-            self.peak_meta = self.peak_meta.drop(columns=derived, errors="ignore")
-            self._anndata_template = candidate
+        candidate = prepare_candidate(self, data=self.data)
+        commit_candidate(self, candidate)
 
     def preprocess(
         self,
@@ -57,6 +52,8 @@ class DatasetProcessingMixin:
         **kwargs,
     ) -> Self:
         input_state = dataset_intensity_state(self)
+        signal = self.data.copy()
+        frame_metadata = self.peak_meta.copy()
         if self.ref_mz is None or not np.isfinite(self.ref_mz) or self.ref_mz <= 0:
             raise ValueError("A positive finite ref_mz is required for preprocessing")
         if extraction_method not in {"legacy", "snr_v1"}:
@@ -67,7 +64,7 @@ class DatasetProcessingMixin:
             from ..util._cell_snr import find_cell_peaks_snr
 
             result = find_cell_peaks_snr(
-                self.data,
+                signal,
                 self.ref_mz if reference_mz is None else reference_mz,
                 reference_mode=reference_mode,
                 reference_ppm_tol=reference_ppm_tol,
@@ -85,7 +82,7 @@ class DatasetProcessingMixin:
             )
         else:
             result = find_cell_peaks(
-                self.data,
+                signal,
                 self.ref_mz,
                 baseline_filter=baseline_filter,
                 baseline_filter_size=baseline_filter_size,
@@ -99,53 +96,54 @@ class DatasetProcessingMixin:
                 **kwargs,
             )
         if debug_hook is not None:
+            debug_metadata = frame_metadata.copy()
+            for column in debug_metadata.select_dtypes(include="object"):
+                debug_metadata[column] = debug_metadata[column].map(deepcopy)
             debug_hook(
                 "find_cells",
-                {
-                    "signal": self.data,
-                    "baseline": result["baseline"],
-                    "cell_mask": result["cell_mask"],
-                    "cell_idx": result["peak_frames"],
-                    "frame_obs": self.peak_meta,
-                    "reference_mz": result.get(
-                        "reference_mz_matched", [result.get("ref_mz_matched")]
-                    ),
-                    "window_ranges": result["window_ranges"],
-                    "reference_baseline": result.get("reference_baseline"),
-                    "cell_snr": cell_snr,
-                    "cell_min_signal": cell_min_signal,
-                },
+                deepcopy(
+                    {
+                        "signal": signal,
+                        "baseline": result["baseline"],
+                        "cell_mask": result["cell_mask"],
+                        "cell_idx": result["peak_frames"],
+                        "frame_obs": debug_metadata,
+                        "reference_mz": result.get(
+                            "reference_mz_matched", [result.get("ref_mz_matched")]
+                        ),
+                        "window_ranges": result["window_ranges"],
+                        "reference_baseline": result.get("reference_baseline"),
+                        "cell_snr": cell_snr,
+                        "cell_min_signal": cell_min_signal,
+                    }
+                ),
             )
-        frame_metadata = self.peak_meta
-        self.data = result["cell_df"]
-        for attribute in ("feature_snr", "_anndata_template"):
-            if hasattr(self, attribute):
-                delattr(self, attribute)
+        data = result["cell_df"]
+        snr = None
+        metadata = deepcopy(self.file_meta)
         frames = result["peak_frames"]
-        self.peak_meta = pd.DataFrame(
-            self.peak_meta.iloc[frames, :],
-            index=self.peak_meta.index[frames],
+        observations = pd.DataFrame(
+            frame_metadata.iloc[frames, :],
+            index=frame_metadata.index[frames],
         )
         if "rt" in frame_metadata and result["window_ranges"]:
             windows = np.asarray(result["window_ranges"], dtype=int)
             scans = frame_metadata.index.to_numpy()
             times = frame_metadata["rt"].to_numpy()
-            self.peak_meta["cell_apex_scan"] = scans[frames]
-            self.peak_meta["cell_start_scan"] = scans[windows[:, 0]]
-            self.peak_meta["cell_stop_scan"] = scans[windows[:, 1]]
-            self.peak_meta["cell_start_rt"] = times[windows[:, 0]]
-            self.peak_meta["cell_stop_rt"] = times[windows[:, 1]]
-            self.peak_meta["cell_scan_count"] = windows[:, 1] - windows[:, 0] + 1
+            observations["cell_apex_scan"] = scans[frames]
+            observations["cell_start_scan"] = scans[windows[:, 0]]
+            observations["cell_stop_scan"] = scans[windows[:, 1]]
+            observations["cell_start_rt"] = times[windows[:, 0]]
+            observations["cell_stop_rt"] = times[windows[:, 1]]
+            observations["cell_scan_count"] = windows[:, 1] - windows[:, 0] + 1
         if extraction_method == "snr_v1":
             for i, mz in enumerate(result["reference_mz_matched"]):
-                self.peak_meta[f"reference_intensity_{mz:.8g}"] = result["reference_signal"][
+                observations[f"reference_intensity_{mz:.8g}"] = result["reference_signal"][
                     frames, i
                 ]
-                self.peak_meta[f"reference_ratio_{mz:.8g}"] = result["reference_ratio"][frames, i]
-            self.feature_snr = pd.DataFrame(
-                result["feature_snr"], index=self.data.index, columns=self.data.columns
-            )
-        self.file_meta["processing"] = {
+                observations[f"reference_ratio_{mz:.8g}"] = result["reference_ratio"][frames, i]
+            snr = pd.DataFrame(result["feature_snr"], index=data.index, columns=data.columns)
+        metadata["processing"] = {
             "extraction_method": extraction_method,
             "baseline_filter_size": baseline_filter_size,
             "cell_snr": cell_snr,
@@ -154,7 +152,7 @@ class DatasetProcessingMixin:
             "max_zero_frac": max_zero_frac,
         }
         if extraction_method == "snr_v1":
-            self.file_meta["processing"].update(
+            metadata["processing"].update(
                 reference_mz=np.atleast_1d(
                     self.ref_mz if reference_mz is None else reference_mz
                 ).tolist(),
@@ -163,10 +161,24 @@ class DatasetProcessingMixin:
                 feature_snr_threshold=feature_snr_threshold,
                 noise_window=noise_window,
             )
-        self.file_meta["length"] = self.data.shape[0]
-        self.file_meta["intensity_state"] = (
-            "transformed" if input_state == "normalized" else input_state
+        metadata["length"] = data.shape[0]
+        metadata["intensity_state"] = "transformed" if input_state == "normalized" else input_state
+        variables = (
+            self.feature_meta.reindex(data.columns)
+            if hasattr(self, "feature_meta")
+            else make_feature_metadata(data)
         )
+        candidate = prepare_candidate(
+            self,
+            data=data,
+            peak_meta=observations,
+            feature_meta=variables,
+            file_meta=metadata,
+            feature_snr=snr,
+            drop_template=True,
+            finite=True,
+        )
+        commit_candidate(self, candidate)
         return self
 
     def impute(self, method: str = "knn", missing_values=0, **kwargs) -> Self:
@@ -186,31 +198,64 @@ class DatasetProcessingMixin:
             index=self.data.index,
             columns=self.data.columns,
         )
-        self._invalidate_analyses()
-        self.data = candidate
-        self.file_meta["intensity_state"] = "transformed"
+        attributes = prepare_candidate(
+            self,
+            data=candidate,
+            file_meta={**self.file_meta, "intensity_state": "transformed"},
+            finite=True,
+        )
+        commit_candidate(self, attributes)
         return self
 
     def remove_outlier(self, **kwargs) -> Self:
-        inliers = IsolationForest(**kwargs).fit_predict(self.data) == 1
-        self._invalidate_analyses()
-        self.data = self.data.iloc[inliers, :]
-        self.peak_meta = self.peak_meta.iloc[inliers, :]
-        if hasattr(self, "feature_snr"):
-            self.feature_snr = self.feature_snr.iloc[inliers, :]
+        random_state = kwargs.get("random_state")
+        if isinstance(random_state, np.random.RandomState):
+            algorithm, keys, position, has_gauss, cached = random_state.get_state()
+            seed_record = {
+                "kind": "numpy.RandomState",
+                "algorithm": algorithm,
+                "keys": keys.tolist(),
+                "position": position,
+                "has_gauss": has_gauss,
+                "cached_gaussian": cached,
+            }
+        else:
+            seed_record = int(random_state) if isinstance(random_state, (int, np.integer)) else None
+        inliers = IsolationForest(**kwargs).fit_predict(self.data.copy()) == 1
+        metadata = deepcopy(self.file_meta)
+        metadata["outlier"] = {
+            "method": "IsolationForest",
+            "random_state": seed_record,
+            "input_cells": len(self.data),
+            "retained_cells": int(inliers.sum()),
+        }
+        snr = self.feature_snr.iloc[inliers, :] if hasattr(self, "feature_snr") else None
+        candidate = prepare_candidate(
+            self,
+            data=self.data.iloc[inliers, :].copy(),
+            peak_meta=self.peak_meta.iloc[inliers, :],
+            file_meta=metadata,
+            feature_snr=snr,
+            finite=True,
+        )
+        commit_candidate(self, candidate)
         return self
 
     def normalize(self, method: str = "total", **norm_kwargs) -> Self:
         logger.info("Normalizing %s with method %s", self.get_name(), method)
         state = transformed_state(dataset_intensity_state(self), "normalize", {"method": method})
         candidate = pd.DataFrame(
-            normalize(self.data.values, method, norm_kwargs),
+            normalize(self.data.to_numpy(copy=True), method, norm_kwargs),
             index=self.data.index,
             columns=self.data.columns,
         )
-        self._invalidate_analyses()
-        self.data = candidate
-        self.file_meta["intensity_state"] = state
+        attributes = prepare_candidate(
+            self,
+            data=candidate,
+            file_meta={**self.file_meta, "intensity_state": state},
+            finite=True,
+        )
+        commit_candidate(self, attributes)
         return self
 
     def alignwith(
@@ -221,19 +266,25 @@ class DatasetProcessingMixin:
     ) -> Self:
         """Append another dataset after aligning its features by m/z."""
         state = merge_dataset_states(self, other, ppm_tol, mz_merge_options)
-        self.data = state.data
-        self.peak_meta = state.peak_meta
-        self.feature_meta = state.feature_meta
-        self.file_meta = state.file_meta
-        self.ref_mz = state.ref_mz
-        invalidated = []
-        for attribute in ("feature_snr", "_anndata_template"):
-            if hasattr(self, attribute) or hasattr(other, attribute):
-                invalidated.append(attribute)
-                if hasattr(self, attribute):
-                    delattr(self, attribute)
+        invalidated = [
+            attribute
+            for attribute in ("feature_snr", "_anndata_template")
+            if hasattr(self, attribute) or hasattr(other, attribute)
+        ]
         if invalidated:
-            self.file_meta["invalidated_by_alignment"] = invalidated
+            state.file_meta["invalidated_by_alignment"] = invalidated
+        candidate = prepare_candidate(
+            self,
+            data=state.data,
+            peak_meta=state.peak_meta,
+            feature_meta=state.feature_meta,
+            file_meta=state.file_meta,
+            feature_snr=None,
+            drop_template=True,
+            ref_mz=state.ref_mz,
+            finite=True,
+        )
+        commit_candidate(self, candidate)
         return self
 
     def deisotope(
@@ -263,8 +314,8 @@ class DatasetProcessingMixin:
             remove=remove,
         )
         result = analyze_isotopes(
-            self.data,
-            getattr(self, "feature_meta", None),
+            self.data.copy(),
+            getattr(self, "feature_meta", None).copy() if hasattr(self, "feature_meta") else None,
             params,
             missing_func,
         )
@@ -274,28 +325,34 @@ class DatasetProcessingMixin:
         return self
 
     def _apply_deisotope_result(self, result: dict, merge_mode: str) -> None:
-        if merge_mode == "sum" or not result["processed_data"].columns.equals(self.data.columns):
-            self._invalidate_analyses()
-        self.deisotope_result = result
-        self.data = result["processed_data"]
-        self.feature_meta = result["feature_meta"]
+        data = result["processed_data"]
+        changed = merge_mode == "sum" or not data.columns.equals(self.data.columns)
+        snr = None
+        metadata = deepcopy(getattr(self, "file_meta", None) or {})
         if hasattr(self, "feature_snr"):
             if merge_mode == "sum":
-                del self.feature_snr
-                self.file_meta["feature_snr_invalidated"] = "isotope intensity summation"
+                metadata["feature_snr_invalidated"] = "isotope intensity summation"
             else:
-                self.feature_snr = self.feature_snr.loc[:, self.data.columns]
-        if not hasattr(self, "file_meta") or self.file_meta is None:
-            self.file_meta = {}
+                snr = self.feature_snr.loc[:, data.columns]
         if merge_mode == "sum":
-            self.file_meta["intensity_state"] = "transformed"
-        self.file_meta["deisotope"] = {
+            metadata["intensity_state"] = "transformed"
+        metadata["deisotope"] = {
             "params": result["params"],
             "n_candidate_pairs": len(result["candidate_table"]),
             "n_final_isotope_pairs": len(result["final_table"]),
             "n_removed_features": len(result["isotope_features"]),
             "merge_mode": merge_mode,
         }
+        candidate = prepare_candidate(
+            self,
+            data=data,
+            feature_meta=result["feature_meta"],
+            file_meta=metadata,
+            feature_snr=snr,
+            invalidate=changed,
+            deisotope_result=result,
+        )
+        commit_candidate(self, candidate)
 
 
 def merge_dataset_states(left, right, ppm_tol: float, merge_mode: str) -> DatasetState:

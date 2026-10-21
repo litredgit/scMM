@@ -193,3 +193,82 @@ def test_annotation_collision_and_subset_artifacts():
     exported = dataset.to_anndata()
     np.testing.assert_array_equal(exported.obsm["X_pca"], source().obsm["X_pca"][[0, 2]])
     assert exported.layers["feature_snr"].shape == (2, 1)
+
+
+@pytest.mark.parametrize("operation", ["normalize", "impute", "remove_outlier"])
+def test_invalid_snr_candidate_keeps_template_results_and_source(operation):
+    dataset = CyESIData.from_anndata(source())
+    dataset.feature_snr = dataset.feature_snr.iloc[:, ::-1]
+    original = dataset.__dict__
+    data = dataset.data.copy()
+    template = dataset._anndata_template
+    embedding = template.obsm["X_pca"].copy()
+    with pytest.raises(ValueError, match="feature_snr axes"):
+        getattr(dataset, operation)()
+    assert dataset.__dict__ is original
+    assert dataset._anndata_template is template
+    np.testing.assert_array_equal(template.obsm["X_pca"], embedding)
+    pd.testing.assert_frame_equal(dataset.data, data)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        [],
+        None,
+        {"file_meta_json": "null"},
+        {"file_meta_json": "{}invalid"},
+        {"file_meta_json": {}},
+        {"schema_version": 2},
+    ],
+)
+def test_anndata_import_rejects_malformed_metadata_without_editing_source(payload):
+    from copy import deepcopy
+
+    data = source()
+    data.uns["scmm"] = deepcopy(payload)
+    original = data.X.copy()
+    with pytest.raises(ValueError):
+        CyESIData.from_anndata(data)
+    np.testing.assert_array_equal(data.X, original)
+    assert data.uns["scmm"] == payload
+    assert "mz" in data.var
+
+
+def test_anndata_import_rejects_duplicate_feature_ids_before_copy_warning():
+    data = source()
+    data.var_names = ["duplicate", "duplicate"]
+    with pytest.raises(ValueError, match="feature names must be unique"):
+        CyESIData.from_anndata(data)
+
+
+def test_legacy_scan_labels_remain_positional_and_export_source_index():
+    dataset = CyESIData.from_anndata(source())
+    del dataset._anndata_template
+    dataset.peak_meta.index = [10, 20, 30]
+    exported = dataset.to_anndata()
+    np.testing.assert_array_equal(exported.X, dataset.data)
+    assert exported.obs["source_index"].tolist() == ["10", "20", "30"]
+    assert exported.obs["source_file"].tolist() == ["a", "a", "b"]
+
+
+@pytest.mark.parametrize("operation", ["normalize", "impute", "remove_outlier"])
+def test_transform_clears_imported_serialized_reports(operation):
+    original = source()
+    original.uns["scmm_workbench"] = {
+        "reports_json": '{"differential":{"group_key":"source_file","table":[]}}'
+    }
+    dataset = CyESIData.from_anndata(original)
+    getattr(dataset, operation)()
+    exported = dataset.to_anndata()
+    assert exported.uns["scmm_workbench"]["reports_json"] == "{}"
+    assert original.uns["scmm_workbench"]["reports_json"] != "{}"
+
+
+def test_imported_observation_identity_mismatch_is_rejected_on_export():
+    dataset = CyESIData.from_anndata(source())
+    dataset.peak_meta = dataset.peak_meta.iloc[::-1]
+    original = dataset.__dict__
+    with pytest.raises(ValueError, match="peak_meta index"):
+        dataset.to_anndata()
+    assert dataset.__dict__ is original

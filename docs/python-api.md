@@ -217,7 +217,7 @@ adata = data.to_anndata()
 ```
 
 `adata.raw` 是转换时的矩阵快照，不保证为仪器原始强度。完整映射及层/嵌入的保存含义见
-[AnnData 映射](data-output.md#anndata-映射)。细胞 ID 会重建为稳定唯一名称，原索引保存在 `obs["source_index"]`。
+[AnnData 映射](data-output.md#anndata-映射)。从旧格式转换时重建唯一细胞名称并保留 `obs["source_index"]`；从 AnnData 导入的往返保留原细胞/特征 ID。
 
 ## 目录处理与批处理模式
 
@@ -346,3 +346,8 @@ reconstructed, noise_sigma = peak_recon(
 `AnalysisWorkspace.subset(cell_ids=[...], feature_ids=[...])` 按稳定 ID 裁剪/重排当前数据，
 至少显式选择一类，另一类可省略；不使用 `CyESIData.__getitem__` 的最近 m/z 读取规则。
 未知、重复或空列表拒绝并保留状态。成功同步矩阵/元数据/层，失效下游结果；`reset()` 仍恢复完整起点。
+
+
+数值变换、提取和对齐在完整候选通过校验后才更新对象；插件归一化、缺失判定、调试钩子和估计器不会获得当前矩阵的可写视图。
+回调失败或返回非法矩阵/元数据时保留原状态；不要依赖调试钩子写入计算输入。矩阵变换失效旧分析及其序列化报告，测量层/raw 的保留规则见[AnnData 映射](data-output.md#anndata-映射)。
+离群筛选仍接受 sklearn kwargs，建议显式传 `random_state`；file_meta.outlier 记录种子/随机状态和筛选数量，完整参数由调用方保存。

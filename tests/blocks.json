@@ -38,6 +38,8 @@
         "scMM/file/data.py",
         "scMM/file/_dataset_processing.py",
         "scMM/file/_dataset_interop.py",
+        "scMM/file/_anndata_interop.py",
+        "scMM/file/_dataset_candidates.py",
         "scMM/file/_dataset_persistence.py",
         "scMM/file/_deisotope.py",
         "scMM/file/batch.py",

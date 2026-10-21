@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Literal
 
@@ -11,7 +10,6 @@ import pandas as pd
 from anndata import AnnData
 
 from ..util.annotation import SDFMzSearcher
-from ..util.intensity import dataset_intensity_state, intensity_states, write_intensity_states
 
 
 class DatasetInteropMixin:
@@ -51,80 +49,19 @@ class DatasetInteropMixin:
 
     def to_anndata(self) -> AnnData:
         """Return an AnnData copy with stable cell and feature identifiers."""
-        _validate_metadata_dimensions(self)
-        observations = self.peak_meta.copy()
-        if "source_index" not in observations:
-            observations.insert(0, "source_index", self.peak_meta.index.astype(str))
-        observations.index = pd.Index(
-            [f"cell_{index}" for index in range(len(observations))],
-            name="cell_id",
-        )
-        variables = self.feature_meta.reindex(self.data.columns).copy()
-        variables.index = pd.Index(self.data.columns.astype(str), name="feature_id")
-        template = getattr(self, "_anndata_template", None)
-        if template is None:
-            adata = AnnData(X=self.data.values.copy(), obs=observations, var=variables)
-            adata.raw = adata.copy()
-        else:
-            # Retain imported embeddings, layers, graphs and raw across axis subsetting.
-            rows = template.obs_names.get_indexer(self.data.index.astype(str))
-            masses = pd.Index(template.var["mz"].to_numpy(dtype=float))
-            columns = masses.get_indexer(self.data.columns.astype(float))
-            if (rows < 0).any() or (columns < 0).any():
-                raise ValueError("imported AnnData axes no longer match dataset")
-            adata = template[rows, columns].copy()
-            adata.X = self.data.to_numpy(copy=True)
-            observations.index = template.obs_names[rows]
-            variables.index = template.var_names[columns]
-            adata.obs, adata.var = observations, variables
-        adata.uns["scmm"] = {
-            "schema_version": 1,
-            "file_meta_json": json.dumps(self.file_meta, ensure_ascii=False),
-        }
-        if hasattr(self, "feature_snr"):
-            adata.layers["feature_snr"] = self.feature_snr.to_numpy(copy=True)
-        states = intensity_states(adata) if template is not None else {}
-        states["X"] = dataset_intensity_state(self)
-        write_intensity_states(adata, states)
-        return adata
+        from ._anndata_interop import to_anndata
+
+        return to_anndata(self)
 
     @classmethod
     def from_anndata(cls, adata: AnnData, *, name="dataset", ref_mz=None):
         """Import processed data, retaining AnnData analysis artifacts for H5AD export."""
-        from ._dataset_loading import DatasetState
+        from ._anndata_interop import anndata_state
 
-        data = adata.copy()
-        if not data.obs_names.is_unique:
-            raise ValueError("AnnData observation names must be unique")
-        masses = np.asarray(data.var.get("mz", data.var_names), dtype=float)
-        if (
-            not np.isfinite(masses).all()
-            or (masses <= 0).any()
-            or len(np.unique(masses)) != len(masses)
-        ):
-            raise ValueError("AnnData requires unique positive finite feature m/z values")
-        data.var["mz"] = masses
-        frame = data.to_df()
-        frame.columns = masses
-        var = data.var.copy()
-        var.index = pd.Index(masses, name="feature_id")
-        payload = data.uns.get("scmm", {})
-        if payload.get("schema_version", 1) != 1:
-            raise ValueError("unsupported scMM H5AD schema version")
-        metadata = json.loads(payload.get("file_meta_json", "{}"))
-        metadata["intensity_state"] = intensity_states(data)["X"]
-        metadata.setdefault("name", name)
-        if ref_mz is not None:
-            metadata["ref_mz"] = ref_mz
-        snr = data.layers.get("feature_snr")
-        if snr is not None:
-            snr = snr.toarray() if hasattr(snr, "toarray") else np.asarray(snr)
-            snr = pd.DataFrame(snr, index=frame.index, columns=frame.columns)
+        state, template = anndata_state(adata, name=name, ref_mz=ref_mz)
         obj = object.__new__(cls)
-        obj._apply_state(
-            DatasetState(frame, data.obs.copy(), metadata, metadata.get("ref_mz"), var, snr)
-        )
-        obj._anndata_template = data
+        obj._apply_state(state)
+        obj._anndata_template = template
         return obj
 
     @classmethod
@@ -208,13 +145,12 @@ def _dataset_frames(dataset):
 
 
 def _validate_metadata_dimensions(dataset) -> None:
-    if len(dataset.peak_meta) != len(dataset.data):
-        raise ValueError("peak_meta row count must match data row count")
-    if len(dataset.feature_meta) != dataset.data.shape[1]:
-        raise ValueError("feature_meta row count must match data column count")
-    if hasattr(dataset, "feature_snr") and (
-        dataset.feature_snr.shape != dataset.data.shape
-        or not dataset.feature_snr.columns.equals(dataset.data.columns)
-        or not dataset.feature_snr.index.equals(dataset.data.index)
-    ):
-        raise ValueError("feature_snr axes must match data axes")
+    from ._dataset_candidates import validate_axes
+
+    validate_axes(
+        dataset.data,
+        dataset.peak_meta,
+        dataset.feature_meta,
+        getattr(dataset, "feature_snr", None),
+        aligned_observations=hasattr(dataset, "_anndata_template"),
+    )

@@ -552,3 +552,105 @@ def test_legacy_candidate_verification_failure_keeps_old_version(tmp_path, monke
         with pytest.raises(AssertionError):
             updated.save(tmp_path, overwrite=True)
     pd.testing.assert_frame_equal(CyESIData.load_from_processed(target).data, old.data)
+
+
+@pytest.mark.parametrize("failure", ["exception", "shape", "nonfinite"])
+def test_normalization_plugin_failure_preserves_complete_state(monkeypatch, failure):
+    from scMM.util.normalize import NORM_REGISTRY
+
+    dataset = make_dataset("sample", [[1.0, 2.0], [3.0, 4.0]], [100.0, 200.0])
+    dataset.feature_snr = dataset.data + 10
+    dataset.deisotope_result = {"original": True}
+    original = dataset.__dict__
+    before = dataset.data.copy()
+    metadata = json.loads(json.dumps(dataset.file_meta))
+
+    def plugin(values, parameters):
+        values[0, 0] = 999
+        if failure == "exception":
+            raise ValueError("plugin failed")
+        return np.ones((1, 1)) if failure == "shape" else np.full(values.shape, np.inf)
+
+    monkeypatch.setitem(NORM_REGISTRY, "plugin_failure", plugin)
+    with pytest.raises(ValueError):
+        dataset.normalize("plugin_failure")
+    assert dataset.__dict__ is original
+    pd.testing.assert_frame_equal(dataset.data, before)
+    assert dataset.file_meta == metadata
+    assert dataset.deisotope_result == {"original": True}
+
+
+@pytest.mark.parametrize("stage", ["debug", "metadata"])
+def test_preprocess_failed_callback_or_metadata_keeps_all_state(monkeypatch, stage):
+    from scMM.file import _dataset_processing
+
+    dataset = make_dataset("sample", [[1.0, 2.0], [3.0, 4.0], [1.0, 2.0]], [100.0, 200.0])
+    dataset.feature_snr = dataset.data + 10
+    dataset.peak_meta["tags"] = [["original"] for _ in range(3)]
+    original = dataset.__dict__
+    before = dataset.data.copy()
+    observations = dataset.peak_meta.copy()
+
+    def extract(frame, *args, **kwargs):
+        frame.iloc[0, 0] = 999
+        return {
+            "cell_df": pd.DataFrame([[3.0, 4.0]], columns=frame.columns),
+            "peak_frames": np.array([1 if stage == "debug" else 999]),
+            "window_ranges": [(0, 2)],
+            "baseline": np.zeros(frame.shape),
+            "cell_mask": np.array([False, True, False]),
+            "ref_mz_matched": 100.0,
+        }
+
+    def debug(name, payload):
+        payload["signal"].iloc[0, 0] = 888
+        payload["frame_obs"].iloc[0, 0] = "changed"
+        payload["frame_obs"]["tags"].iloc[0].append("changed")
+        raise ValueError("debug failed")
+
+    monkeypatch.setattr(_dataset_processing, "find_cell_peaks", extract)
+    with pytest.raises((ValueError, IndexError)):
+        dataset.preprocess(debug_hook=debug if stage == "debug" else None)
+    assert dataset.__dict__ is original
+    pd.testing.assert_frame_equal(dataset.data, before)
+    pd.testing.assert_frame_equal(dataset.peak_meta, observations)
+    assert dataset.peak_meta["tags"].iloc[0] == ["original"]
+    assert dataset.feature_snr is original["feature_snr"]
+
+
+def test_deisotope_failing_missing_detector_cannot_change_input():
+    dataset = make_dataset("sample", [[2.0, 3.0], [4.0, 6.0]], [100.0, 101.003355])
+    original = dataset.__dict__
+    before = dataset.data.copy()
+
+    def missing(values):
+        values[:] = 999
+        raise ValueError("missing detector failed")
+
+    with pytest.raises(ValueError):
+        dataset.deisotope(missing_func=missing)
+    assert dataset.__dict__ is original
+    pd.testing.assert_frame_equal(dataset.data, before)
+
+
+def test_outlier_rng_record_and_current_length_survive_legacy_json():
+    values = [[1.0, 2.0], [2.0, 3.0], [3.0, 4.0], [100.0, 150.0]]
+    left = make_dataset("sample", values, [100.0, 200.0])
+    right = make_dataset("sample", values, [100.0, 200.0])
+    left.file_meta["length"] = len(values)
+    left.remove_outlier(random_state=np.random.RandomState(17), n_estimators=5)
+    record = json.loads(json.dumps(left.file_meta))["outlier"]["random_state"]
+    recovered = np.random.RandomState()
+    recovered.set_state(
+        (
+            record["algorithm"],
+            np.array(record["keys"], dtype=np.uint32),
+            record["position"],
+            record["has_gauss"],
+            record["cached_gaussian"],
+        )
+    )
+    right.remove_outlier(random_state=recovered, n_estimators=5)
+    pd.testing.assert_frame_equal(left.data, right.data)
+    assert left.file_meta["length"] == len(left.data)
+    assert left.file_meta["outlier"]["input_cells"] == 4

@@ -60,7 +60,9 @@ scMM/
 │   ├── data.py            # CyESIData 稳定门面与构造入口
 │   ├── _dataset_loading.py # 已处理/原始数据装载与组合
 │   ├── _dataset_processing.py # 预处理、变换与数据集合并
-│   ├── _dataset_interop.py # 保存门面、访问、注释与 AnnData 转换
+│   ├── _dataset_interop.py # 保存/转换门面、访问和注释
+│   ├── _anndata_interop.py # AnnData 导入/导出与保留策略
+│   ├── _dataset_candidates.py # 变换候选、轴校验与一次提交
 │   ├── _dataset_persistence.py # 旧目录候选写入/校验、读写锁、发布回滚与中断恢复
 │   ├── _deisotope.py      # 去同位素的纯计算、分配与元数据构建
 │   └── batch.py           # 独立批处理与结果合并
@@ -721,3 +723,8 @@ HTTP `/presence/register` 与 `/presence/heartbeat` 为登录页提供受限租�
 `plot/export.py` 负责全精度 ZIP 与禁止外部资源/活动内容的 SVG→PDF；`plot/explanations.py` 和 `plot/isotopes.py` 提供可追溯解释图。
 
 原始独立诊断由 `application/raw_diagnostics.py` 有界冻结扫描、`analysis/signal_diagnostics.py` 运行既有秩一/峰工具和构造完整对照图；HTTP 仅校验契约与前后输入身份，Vue 独立组件保存表单/图，不持矩阵或修改提取参数。
+
+
+数据门面的归一化、插补、离群筛选、提取、对齐和去同位素先准备独立候选，由 `_dataset_candidates.py` 校验后一次替换实例状态。
+需要调用用户函数/估计器的计算使用输入副本；失败不提前删除已有模板或更新部分帧。AnnData 转换策略由 `_anndata_interop.py` 管理，
+目录发布仍由已验收的 `_dataset_persistence.py` 管理；不改变 CyESIData 的公开方法链或各入口默认算法。

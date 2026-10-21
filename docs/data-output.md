@@ -161,7 +161,7 @@ AnnData
 ├── X      ← 细胞 × 特征强度
 ├── obs    ← peak_meta + source_index
 ├── var    ← feature_meta
-├── raw    ← 转换时的 X/obs/var 快照
+├── raw    ← 首次转换的 X/var；导入模板时保留已有 raw
 ├── obsm
 │   ├── X_pca
 │   ├── X_umap
@@ -175,8 +175,15 @@ AnnData
     └── metabolite_trends
 ```
 
-`adata.raw` 是调用 `to_anndata()` 时的数据快照，不一定是原始仪器强度：如果先对 `CyESIData`
-归一化或去同位素，raw 同样反映变换后的数据。
+首次从旧数据格式创建的 `adata.raw` 是当前转换矩阵的快照，不一定是原始仪器强度；先归一化再首次转换时 raw 同样反映已变换数据。
+从 AnnData 导入往返时保留已有 raw，并按细胞轴裁剪；其特征轴可保留比当前 X 更多的测量特征，不用 raw 名称推断强度来源。
+
+CyESIData 旧格式的 peak_meta 按行位置对应矩阵，索引可保留扫描标识；feature_meta 须按质量轴同序，feature_snr 的两轴须与矩阵一致。
+导入的 AnnData 另要求稳定且唯一的细胞/特征 ID，并检查细胞索引对应；不按近似质量推断轴。
+变换先构造并校验完整候选，失败保留数据、元数据、SNR 和分析模板。矩阵变换清除导入的嵌入/图和序列化只读报告，保留测量层和 raw；
+重新提取/旧式对齐依既有策略丢弃 AnnData 模板，不能把它们当完整项目/层的合并接口。去同位素求和使 SNR 失效，注释审核不冒充已应用变换。
+成功变换清除旧的内存去同位素审计对象；file_meta 的处理溯源继续保留，已有 length 字段随实际行数同步。
+Python 离群筛选另记录传入种子（未指定为 null）或 NumPy RandomState 的拟合前状态及筛选数量；未指定种子不宣称可复现。
 
 ## 强度溯源
 

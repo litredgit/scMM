@@ -7,6 +7,8 @@ def invalidate_derived(data):
         if column in data.obs:
             del data.obs[column]
     metadata["derived_obs"] = []
+    if "reports_json" in metadata:
+        metadata["reports_json"] = "{}"
     for mapping in (data.obsm, data.obsp, data.varm, data.varp):
         mapping.clear()
     for key in list(data.uns):
