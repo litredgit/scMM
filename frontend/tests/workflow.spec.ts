@@ -477,3 +477,24 @@ test('explicit ID subset previews, applies and restores full preprocessing origi
   await expect(page.locator('.page-title').getByText(/64 细胞 × 8 特征/)).toBeVisible()
   await noError(page)
 })
+
+test('current report downloads contain a PDF and portable numeric attachments', async ({
+  page,
+}) => {
+  await importData(page, '当前报告导出')
+  await page.getByRole('link', { name: /结果与保存/ }).click()
+  await page.getByLabel('下载内容', { exact: true }).selectOption('quality_pdf')
+  await expect(page.getByLabel('下载文件名', { exact: true })).toHaveValue('current_qc.pdf')
+  const pdfDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: '下载完整结果', exact: true }).click()
+  const pdf = await pdfDownload
+  expect(pdf.suggestedFilename()).toBe('current_qc.pdf')
+  expect((await readFile((await pdf.path())!)).subarray(0, 5).toString()).toBe('%PDF-')
+  await page.getByLabel('下载内容', { exact: true }).selectOption('report_zip')
+  const zipDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: '下载完整结果', exact: true }).click()
+  const zip = await zipDownload
+  expect(zip.suggestedFilename()).toBe('current_analysis_report.zip')
+  expect((await readFile((await zip.path())!)).subarray(0, 2).toString()).toBe('PK')
+  await noError(page)
+})

@@ -422,6 +422,10 @@ python3 scripts/scmm_env.py release --migrate-auth
 ## 维护恢复与数据库更新资源
 
 网页 PDF 导出使用锁定的 svglib/ReportLab，附带安全 SVG 检查；无需系统 Cairo。监督维护恢复使用 supervised 可选组中的 skops。
+
+网页 QC/分析 PDF 使用 `web` extra 的 ReportLab（锁定依赖），中文以 STSong-Light CID 字体声明，
+不需要服务端浏览器或额外训练模型；已有 Matplotlib Python QC 报告接口继续保留。报告范围与资源边界见[分析说明](analysis.md#统计解释与网页分析)。
+
 管理员在账号页暂存资源配置；维护任务通过用户级 systemd 延后执行并健康检查，失败回滚上一配置，代码更新沿用环境脚本的失败回滚。
 批准版本清单位于 `<server-config 所在目录>/<配置名>.recovery/approved.json`（提交 SHA 数组）；只加入已验收或用户明确授权发布的版本。
 默认恢复密钥在同目录 key 文件，须连同恢复包和 AI 私有密钥妥善保管，不放入网页可浏览目录或 Git。

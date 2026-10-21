@@ -176,6 +176,7 @@
       ],
       "sources": [
         "scMM/api/cli.py",
+        "scMM/application/reporting.py",
         "scMM/api/routers/samples.py",
         "scMM/api/routers/storage.py",
         "scMM/api/routers/preferences.py",

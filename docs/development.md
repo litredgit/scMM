@@ -93,7 +93,7 @@ scMM/
 | 能力 | Python / Notebook 入口 | 当前应用/HTTP/Vue | 规划或保留边界 |
 |---|---|---|---|
 | 原始谱与提取 | `CyESIData.load_from_file()` / `load_from_directory()`、`file/readers/` | Vue 有 TIC/多 EIC/合谱/单扫描、SNR 预览、批次与人工审核 | PERF-01/TASK-01～03/VAL-05 改执行与资源，不改现有数值；legacy 仅保留 Python/CLI/旧产物兼容，不恢复 Vue 方法选择器 |
-| 基础预处理/QC | `analysis/quality.py`、`util/normalize.py`、`file/_dataset_processing.py` | 筛选、七种归一化、三种插补、离群、层恢复/完整起点已有 | PARAM-01 补其余已支持参数及 most_frequent；QC-01 补采集稳定性，不重复基础 QC |
+| 基础预处理/QC | `analysis/quality.py`、`analysis/preprocessing.py`、`util/normalize.py`、`file/_dataset_processing.py` | 筛选、七种归一化、四种插补、异常检测高级参数、稳定 ID 子集和层/完整起点恢复 | PARAM-01 / SUBSET-01 / QC-01 已接待统一验收；各入口默认值分别保持，失败候选不提交 |
 | 天然同位素 | 原 `CyESIData.deisotope()`、`file/_deisotope.py`；网页 `util/lipid_isotopes.py` | 网页按数据库分子式/加合物计算天然分布，保留所有峰，只标记、审阅与筛选导出 | ISO-01～03 与 ANN 联合；网页不使用旧 API 的删峰/求和及平方矩阵 |
 | SDF 精确质量注释 | 原 `get_annotation()`；网页 `util/lipid_annotation.py` / `lipid_rules.py` | LMSD 本地准备、质量索引、完整候选、规则/预设、人工指定、独立版本及 CSV 已接入 | ANN-01～03；保留用户验收，背景任务迁移仍归 M2；Python/Notebook 旧默认值保持 |
 | 细胞降维/聚类 | `analysis/embedding.py`、`analysis/clustering.py`、`PlotEngine`、`plot/embedding.py` | 五种降维、五种聚类、聚类参数白名单及着色已有；工作台保留候选提交，领域辅助函数负责参数校验/计算 | PARAM-03 补其余降维参数；三套 Python 入口的默认值/返回值不混用，Matplotlib 包装不重复造按钮 |
@@ -107,7 +107,7 @@ scMM/
 | 已处理结果合并 | `CyESIData.alignwith()`、`file.batch.concat()` | 当前已有原始样本提取审核合并；导入独立结果会替换当前数据 | MERGE-01；concat 当前读取旧结果目录，不是任意 H5AD 合并服务，须适配来源/特征/起点 |
 | 显式数据子集 | `AnalysisWorkspace.subset()` | 稳定细胞/特征 ID、数量预览、手动应用和完整起点恢复 | SUBSET-01 待统一验收；不是 `CyESIData.__getitem__` 的最近 m/z 强度读取，失败原子性及保存重开受检查 |
 | 采集稳定性 QC | Notebook 稳定性段；网页 `analysis/stability.py` | 显式坐标/来源/参考特征、箱图/窗口数量/来源中位谱相关和完整表、只读图重载 | QC-01 待统一验收；存储顺序不当采集时间，不把细胞级 QC 当生物重复验证 |
-| QC PDF | `analysis.quality.render_quality_report()` | 当前有 QC 表/图，未接 PDF 生成/下载 | REPORT-01 先 QC PDF，再设计完整实验报告；两种报告范围不同 |
+| QC / 当前分析报告 | Python `analysis.quality.render_quality_report()`；网页 `analysis/quality_pdf.py`、`application/reporting.py` | 当前矩阵 QC PDF、分页分析摘要及完整数值/参数/图形附件 ZIP | REPORT-01 待统一验收；请求数据修订检查，不自动分析或保存项目，旧图身份不可核实则明确列为省略 |
 | 峰重建与秩一分解 | `util.denoise.peak_recon()` / `r1_decomposition()` | 无应用/HTTP/Vue 工作流 | TOOL-01，工具级输入/科学定义/验证先于界面，不能替换现有提取算法 |
 | 互操作/元数据/绘图辅助 | AnnData/H5AD、assign_source_metadata、EIC/质谱 Matplotlib、configure_plotting | Vue 已有保存重载、稳定样本元数据、Plotly 原始谱及导出 | 保留 Python 专用辅助接口，功能等价覆盖不要求逐函数建立控件；恢复原始输入和方法默认值分别管理 |
 

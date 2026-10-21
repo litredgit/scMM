@@ -28,6 +28,8 @@ const defaults: Record<string, string> = {
   matrix: 'matrix.csv',
   embedding: 'embedding.csv',
   qc: 'cell_qc.csv',
+  quality_pdf: 'current_qc.pdf',
+  report_zip: 'current_analysis_report.zip',
   history: 'history.csv',
   ...resultDownloads,
   snapshot: 'snapshot.h5ad',
@@ -37,6 +39,8 @@ const available = computed(() => [
   { value: 'embedding', label: '嵌入坐标 CSV' },
   { value: 'qc', label: '细胞 QC CSV' },
   { value: 'history', label: '处理记录 CSV' },
+  { value: 'quality_pdf', label: '当前数据 QC PDF' },
+  { value: 'report_zip', label: '当前分析报告 ZIP（含 PDF / 完整表）' },
   ...(info.value?.results ?? [])
     .filter((n) => n in defaults)
     .map((n) => ({ value: n, label: `${n} ${n === 'supervised' ? 'JSON' : 'CSV'}` })),
@@ -161,11 +165,29 @@ async function exportH5ad() {
           </div>
           <button
             class="save"
-            :disabled="store.busy || (kind === 'embedding' && !embedding)"
-            @click="store.download(kind, downloadName, kind === 'embedding' ? embedding : '')"
+            :disabled="
+              store.busy ||
+              (kind === 'embedding' && !embedding) ||
+              (['quality_pdf', 'report_zip'].includes(kind) && !info?.token)
+            "
+            @click="
+              store.download(
+                kind,
+                downloadName,
+                kind === 'embedding'
+                  ? embedding
+                  : ['quality_pdf', 'report_zip'].includes(kind)
+                    ? JSON.stringify(info?.token)
+                    : '',
+              )
+            "
           >
             下载完整结果
           </button>
+          <p v-if="['quality_pdf', 'report_zip'].includes(kind)" class="muted">
+            报告注明当前矩阵修订和未保存状态，不代替保存项目，不自动分析。 PDF 是分页摘要；ZIP
+            保留完整 QC、历史/参数和已有有效分析表，图形使用各图的论文导出入口。
+          </p>
           <p class="muted">
             显示格式不降低 CSV
             精度。失效结果不可下载。重载的监督报告只读，SHAP/潜变量需重新训练模型。

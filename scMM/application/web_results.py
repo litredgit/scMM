@@ -37,6 +37,10 @@ class ResultWorkflow:
         with self.access(identity) as workspace:
             project = workspace.require_project()
             state = project.workspace
+            if kind in {"quality_pdf", "report_zip"}:
+                from .reporting import report_artifact
+
+                return report_artifact(project, self.result_value, kind, key)
             if kind in {"differential", "markers", "network", "shap"}:
                 return self.result_value(project, kind)["table"].to_csv(index=False).encode(
                     "utf-8"

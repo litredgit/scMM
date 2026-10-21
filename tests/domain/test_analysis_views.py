@@ -398,3 +398,96 @@ def test_stability_rejects_constant_or_unrepresentable_time_bins():
                 time_kind="acquisition_seconds",
                 bins=10,
             )
+
+
+def test_quality_pdf_chinese_pagination_and_complete_report_bundle():
+    import io
+    import json
+    import zipfile
+
+    from scMM.analysis.quality_pdf import quality_report_bytes, report_bundle
+
+    names = ["中文来源 <b> & " + str(i) for i in range(75)]
+    names[0] += "超长目录" * 500
+    data = AnnData(
+        np.random.default_rng(2).uniform(0, 1, (75, 3)),
+        obs=pd.DataFrame(
+            {
+                "source_file": names,
+                "cell_id": ["original"] * 75,
+                "reference_intensity_100": [1.234567891234] * 75,
+                "reference_intensity_missing": [None] * 75,
+            },
+            index=[f"c{i}" for i in range(75)],
+        ),
+    )
+    metadata = {
+        "project": "中文 & <script>",
+        "dataset_id": "synthetic",
+        "dataset_revision": 2,
+        "unsaved": True,
+        "history": [{"operation": "normalize", "parameters": {"scale": 100.123456789}}],
+    }
+    data.obsm["X_pca"] = np.arange(150.0).reshape(75, 2)
+    before = data.copy()
+    pdf = quality_report_bytes(data, metadata)
+    assert pdf.startswith(b"%PDF-") and b"STSong-Light" in pdf
+    assert pdf.count(b"/Type /Page\n") >= 3
+    result = pd.DataFrame(
+        {"feature_id": ["0", "1", "2"], "p_value": [1e-8, 0.123456789123, np.nan]}
+    )
+    bundle = report_bundle(
+        data,
+        metadata,
+        {"differential": {"summary": {"defined": np.nan, "seed": np.int64(42)}, "table": result}},
+    )
+    with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
+        assert set(archive.namelist()) == {
+            "report.pdf",
+            "metadata.json",
+            "history.json",
+            "cell_qc.csv",
+            "source_qc.csv",
+            "results.json",
+            "results/differential.csv",
+            "embeddings/embedding_001.csv",
+        }
+        assert json.loads(archive.read("metadata.json"))["unsaved"] is True
+        assert json.loads(archive.read("results.json"))["differential"]["defined"] is None
+        exported = pd.read_csv(io.BytesIO(archive.read("cell_qc.csv")))
+        assert exported.cell_id.tolist() == data.obs_names.tolist()
+        assert exported.obs_cell_id.tolist() == ["original"] * 75
+        values = pd.read_csv(io.BytesIO(archive.read("results/differential.csv")))
+        np.testing.assert_allclose(values.p_value[:2], result.p_value[:2], rtol=1e-15)
+        assert json.loads(archive.read("history.json")) == metadata["history"]
+    np.testing.assert_array_equal(data.X, before.X)
+    pd.testing.assert_frame_equal(data.obs, before.obs)
+    np.testing.assert_array_equal(data.obsm["X_pca"], before.obsm["X_pca"])
+
+
+def test_quality_report_limits_invalid_metadata_and_failure_are_explicit(monkeypatch):
+    from scipy import sparse
+
+    from scMM.analysis.quality_pdf import quality_report_bytes, report_bundle, report_tables
+
+    with pytest.raises(ValueError, match="100000"):
+        report_tables(AnnData(sparse.csr_matrix((100001, 1))))
+    data = AnnData(
+        np.ones((2, 2)),
+        obs=pd.DataFrame({"reference_intensity_1": ["not numeric", "2"]}, index=["a", "b"]),
+    )
+    with pytest.raises(ValueError, match="numeric"):
+        quality_report_bytes(data, {})
+    data.obs = pd.DataFrame(index=data.obs_names)
+    with pytest.raises(ValueError, match="identifiers"):
+        report_bundle(data, {}, {"../escape": {}})
+    from reportlab.platypus import SimpleDocTemplate
+
+    def fail(*_args, **_kwargs):
+        raise OSError("synthetic PDF failure")
+
+    monkeypatch.setattr(SimpleDocTemplate, "build", fail)
+    with pytest.raises(OSError, match="synthetic PDF"):
+        quality_report_bytes(data, {})
+    assert not data.uns and not data.obsm
+    np.testing.assert_array_equal(data.X, np.ones((2, 2)))

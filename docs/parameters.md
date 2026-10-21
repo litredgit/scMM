@@ -365,6 +365,11 @@ DBSCAN 与层次聚类的距离白名单为 euclidean/manhattan/cosine，不开�
 聚类仍共享降维面板的 `use_rep`、`n_neighbors` 和 `random_state`。旧项目缺独立字段时保留原先借用值，
 恢复/保存操作见[分析流程](workflow.md#分析显示与导出)，开发兼容规则见[接入指南](development.md#参数草稿与恢复)。
 
+报告下载只读取当前 X，不另选强度层或执行分析；下载请求 `key` 必须是当前 `/analysis` 返回的 token 的 JSON，缺失/过期拒绝。
+工程边界：最多 10 万细胞、500 万当前矩阵数值、累计 500 万嵌入数值和 64 MiB 作图表文本；超限明确提示逐项导出，不自动抽样。
+PDF 使用 40 箱直方图，最多列前 500 个来源、200 个参考列及最后 200 步历史，长条目/结果摘要显式截断；ZIP 保留完整数值和历史。
+这些是报告/显示资源边界，不能解释为实验筛选阈值或科学质量合格条件。
+
 采集稳定性 QC 的 `source_key`、`feature`、`time_kind` 必须显式选择；`time_key` 在非 stored_order 时必须为可转数值的观测列，
 不自动推断时间或参考离子。`time_kind` 可为 acquisition_seconds/normalized_time/pseudotime/stored_order；
 normalized_time 的有限值须在 [0,1]，stored_order 使用当前行顺序且不接受 time_key。至少两个有限且不同的坐标。

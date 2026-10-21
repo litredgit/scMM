@@ -69,6 +69,11 @@ def test_source_dependencies_expand_but_tests_and_fixtures_do_not():
         "api-lipids",
         "browser-workflow",
     } <= set(data["selected"])
+    reporting = plan("scMM/application/reporting.py")
+    assert {"api", "browser-workflow"} <= set(reporting["selected"])
+    assert not any(
+        "UNMAPPED" in reason for reasons in reporting["reasons"].values() for reason in reasons
+    )
     assert "auth" not in data["selected"]
     assert "browser-auth" not in data["selected"]
     assert plan("tests/application/test_projects.py")["extras"] == []

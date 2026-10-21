@@ -623,3 +623,102 @@ def test_stability_plot_saved_full_tables_and_metadata_dependency(workflow):
     )
     operation(workflow, "normalize", {"method": "total"})
     assert "stability" not in get(workflow, "/analysis").json()["figures"]
+
+
+def test_current_quality_pdf_and_report_archive_are_read_only_and_revision_bound(
+    workflow, monkeypatch
+):
+    import io
+    import zipfile
+
+    def request(path, **params):
+        return workflow[0].get(f"/api/v1/workspace{path}", headers=workflow[1], params=params)
+
+    data = import_data(workflow)
+    token = request("/analysis").json()["token"]
+    before = workflow[-2]()
+    response = request(
+        "/results/download",
+        kind="quality_pdf",
+        key=json.dumps(token),
+        filename="中文QC.pdf",
+    )
+    assert response.status_code == 200, response.text[:100] if response.status_code != 200 else ""
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF-")
+    assert workflow[-2]() == before
+    assert request("/results/download", kind="quality_pdf", key="").status_code == 400
+    assert (
+        request(
+            "/results/download", kind="quality_pdf", key=json.dumps([token[0], True])
+        ).status_code
+        == 400
+    )
+    operation(workflow, "reduce", {"method": "pca", "store_key": "X_pca", "n_components": 3})
+    operation(workflow, "differential", {"group_key": "group", "group_a": "a", "group_b": "b"})
+    operation(workflow, "network", {"min_abs_correlation": 0.0, "top_features": 8})
+    assert (
+        workflow[-1](
+            "/analysis/plot",
+            {"kind": "feature_scatter", "options": {"feature_a": "f0", "feature_b": "f1"}},
+        ).status_code
+        == 200
+    )
+    token = request("/analysis").json()["token"]
+    before = workflow[-2]()
+    bundle = request(
+        "/results/download", kind="report_zip", key=json.dumps(token), filename="报告.zip"
+    )
+    assert bundle.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(bundle.content)) as archive:
+        meta = json.loads(archive.read("metadata.json"))
+        assert meta["dataset_id"] == token[0] and meta["dataset_revision"] == token[1]
+        assert meta["unsaved"] is True and meta["matrix"] == "current X"
+        assert meta["available_results"] == ["differential", "network"]
+        assert "results/network_correlation.csv" in archive.namelist()
+        assert len(json.loads(archive.read("results.json"))["network"]["nodes"]) == 8
+        figure_files = meta["figures"]["feature_scatter"]
+        graph_cells = pd.read_csv(io.BytesIO(archive.read(figure_files["tables"]["cells.csv"])))
+        assert len(graph_cells) == 64
+        assert archive.read(figure_files["file"]).startswith(b"{")
+        embedding = pd.read_csv(
+            io.BytesIO(archive.read(meta["embeddings"]["X_pca"]["file"])), index_col=0
+        )
+        assert embedding.shape == (64, 3) and embedding.index.tolist() == data.obs_names.tolist()
+        table = pd.read_csv(io.BytesIO(archive.read("results/differential.csv")))
+        assert len(table) == 8
+        assert not any(
+            name.endswith((".pkl", ".pickle", ".skops", ".h5ad")) for name in archive.namelist()
+        )
+    assert workflow[-2]() == before
+    assert workflow[-1]("/project/save").status_code == 200
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    assert request("/results/download", kind="report_zip", key=json.dumps(token)).status_code == 400
+    new_token = request("/analysis").json()["token"]
+    reopened = request("/results/download", kind="report_zip", key=json.dumps(new_token))
+    with zipfile.ZipFile(io.BytesIO(reopened.content)) as archive:
+        assert json.loads(archive.read("metadata.json"))["unsaved"] is False
+        assert "results/differential.csv" in archive.namelist()
+    operation(workflow, "normalize", {"method": "total"})
+    assert (
+        request("/results/download", kind="report_zip", key=json.dumps(new_token)).status_code
+        == 400
+    )
+    final_token = request("/analysis").json()["token"]
+    clean = request("/results/download", kind="report_zip", key=json.dumps(final_token))
+    with zipfile.ZipFile(io.BytesIO(clean.content)) as archive:
+        assert json.loads(archive.read("results.json")) == {}
+        assert json.loads(archive.read("metadata.json"))["embeddings"] == {}
+    from scMM.application import reporting
+
+    def fail(*_args, **_kwargs):
+        raise ValueError("synthetic report export failure")
+
+    monkeypatch.setattr(reporting, "quality_report_bytes", fail)
+    before = workflow[-2]()
+    assert (
+        request("/results/download", kind="quality_pdf", key=json.dumps(final_token)).status_code
+        == 400
+    )
+    assert workflow[-2]() == before

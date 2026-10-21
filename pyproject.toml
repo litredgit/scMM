@@ -64,6 +64,7 @@ web = [
     "umap-learn>=0.5",
     "uvicorn>=0.30,<1",
     "svglib==1.5.1",
+    "reportlab>=4,<6",
     "defusedxml>=0.7,<1",
 ]
 
