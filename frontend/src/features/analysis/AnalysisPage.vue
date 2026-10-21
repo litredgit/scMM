@@ -21,8 +21,8 @@ const { store, info, tab, legend, saveSettings, reloadAnalysis } = analysis
       </div>
       <span class="step-badge">05 / 06</span>
     </div>
-    <div class="card">
-      <div class="section-heading">
+    <div class="analysis-toolbar actions" aria-label="分析视图工具">
+      <div>
         <label class="field"
           ><FieldLabel name="图例" /><select aria-label="图例" v-model="legend">
             <option value="right">图右侧</option>
@@ -39,7 +39,6 @@ const { store, info, tab, legend, saveSettings, reloadAnalysis } = analysis
         重新读取分析状态
       </button>
     </div>
-    <CellSpectraPanel />
     <p v-if="!info" role="status">正在读取当前数据的分析状态…</p>
     <div v-else class="analysis-layout">
       <nav class="analysis-navigation" aria-label="分析功能">
@@ -70,6 +69,7 @@ const { store, info, tab, legend, saveSettings, reloadAnalysis } = analysis
         />
       </div>
     </div>
+    <CellSpectraPanel />
   </section>
   <div v-else class="card empty-state">
     <h1>尚未建立当前数据集</h1>
@@ -79,7 +79,7 @@ const { store, info, tab, legend, saveSettings, reloadAnalysis } = analysis
 <style scoped>
 .analysis-layout {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: 170px minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
 }
@@ -87,10 +87,13 @@ const { store, info, tab, legend, saveSettings, reloadAnalysis } = analysis
   display: grid;
   gap: 0.5rem;
   position: sticky;
-  top: 1rem;
+  top: 7rem;
 }
 .analysis-navigation button {
   text-align: left;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 .analysis-navigation .selected {
   color: var(--blue);

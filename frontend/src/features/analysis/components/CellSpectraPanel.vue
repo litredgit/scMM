@@ -30,8 +30,11 @@ async function draw() {
 useViewState('cell-spectra', { source, normalization, mirror, average, figure })
 </script>
 <template>
-  <div v-if="store.selectedCells.length" class="card">
-    <h2>所选细胞质谱</h2>
+  <div v-if="store.selectedCells.length" class="card selected-cell-spectra">
+    <div class="section-heading">
+      <h2>所选细胞质谱</h2>
+      <button @click="store.selectedCells = []">清除所选细胞</button>
+    </div>
     <p>点击分析图中的细胞点选择，最多保留两个细胞，可跨样本比较。</p>
     <div class="actions">
       <button

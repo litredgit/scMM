@@ -24,7 +24,8 @@ const {
 } = useAnalysisContext()
 </script>
 <template>
-  <div>
+  <div class="embedding-view">
+    <h3>图形与显示</h3>
     <div class="field-grid">
       <label
         >显示维度<select v-model="projection.threeD">
@@ -40,28 +41,7 @@ const {
           :max="info?.embedding_dimensions?.[embedding] || 2"
       /></label>
     </div>
-    <table v-if="info?.embedding_variance?.[embedding]?.length">
-      <thead>
-        <tr>
-          <th>主成分</th>
-          <th>解释率</th>
-          <th>累计解释率</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(value, i) in info.embedding_variance[embedding]" :key="i">
-          <td>PC{{ i + 1 }}</td>
-          <td>{{ (value * 100).toFixed(2) }}%</td>
-          <td>
-            {{
-              (
-                info.embedding_variance[embedding]!.slice(0, i + 1).reduce((a, b) => a + b, 0) * 100
-              ).toFixed(2)
-            }}%
-          </td>
-        </tr>
-      </tbody>
-    </table>
+
     <div class="field-grid">
       <label
         ><FieldLabel name="查看嵌入" /><select
@@ -123,7 +103,9 @@ const {
         更新嵌入图
       </button>
     </div>
-    <h3>图表与报告</h3>
+    <p v-if="!embedding" class="empty-state">
+      先运行降维，再选择嵌入查看图形；显示设置不会重新计算降维。
+    </p>
     <PlotView
       v-if="figures.embedding && tab === panel"
       :figure="figures.embedding"
@@ -131,5 +113,30 @@ const {
       :name="embedding"
       view-key="analysis.embedding_plot"
     />
+    <div class="embedding-variance">
+      <table v-if="info?.embedding_variance?.[embedding]?.length">
+        <thead>
+          <tr>
+            <th>主成分</th>
+            <th>解释率</th>
+            <th>累计解释率</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(value, i) in info.embedding_variance[embedding]" :key="i">
+            <td>PC{{ i + 1 }}</td>
+            <td>{{ (value * 100).toFixed(2) }}%</td>
+            <td>
+              {{
+                (
+                  info.embedding_variance[embedding]!.slice(0, i + 1).reduce((a, b) => a + b, 0) *
+                  100
+                ).toFixed(2)
+              }}%
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>

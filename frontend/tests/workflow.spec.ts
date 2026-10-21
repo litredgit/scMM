@@ -42,7 +42,7 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
   await page.getByRole('button', { name: '检查影响', exact: true }).click()
   await expect(page.getByRole('heading', { name: '候选数据（尚未应用）' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '数据规模', exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: '各样本细胞数', exact: true })).toBeVisible()
+  await expect(page.getByText('各样本细胞数', { exact: true })).toBeVisible()
   const comparison = page.getByRole('table', { name: '操作前后 QC 对比' })
   await expect(comparison.getByRole('columnheader')).toHaveText([
     '来源文件',
@@ -74,6 +74,7 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
   await noError(page)
   await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
   await expect(page.getByRole('status')).toHaveText('预处理已应用，下游分析结果已失效。')
+  await page.getByRole('button', { name: '历史与恢复', exact: true }).click()
   await page.getByRole('button', { name: '恢复到预处理起点', exact: true }).click()
   await expect(page.getByRole('status')).toHaveText('已恢复完整预处理起点。')
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
@@ -156,7 +157,7 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
   await page.getByRole('button', { name: '下载完整结果', exact: true }).click()
   expect((await downloaded).suggestedFilename()).toBe('differential.csv')
   await page.getByRole('button', { name: '保存项目', exact: true }).last().click()
-  await expect(page.getByText('已保存', { exact: true })).toBeVisible()
+  await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
   await page.reload()
   await page.getByRole('link', { name: 'scMM 项目首页' }).click()
   await page
@@ -261,7 +262,7 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   await expect(page.getByLabel('resolution', { exact: true })).toHaveValue('5000')
   await page.screenshot({ path: test.info().outputPath('raw-expanded-1440.png'), fullPage: true })
   await page.getByRole('button', { name: '收起扩展参数', exact: true }).click()
-  await page.getByRole('button', { name: '应用为项目默认', exact: true }).click()
+  await page.getByRole('button', { name: '应用参数', exact: true }).click()
   await noError(page)
   await page.getByRole('button', { name: '单扫描', exact: true }).click()
   await page.getByRole('button', { name: '下一帧', exact: true }).click()
@@ -276,7 +277,7 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
     timeout: 30000,
   })
   await page.getByLabel('cell_min_signal', { exact: true }).fill('0')
-  await page.getByRole('button', { name: '应用为项目默认', exact: true }).click()
+  await page.getByRole('button', { name: '应用参数', exact: true }).click()
   await page.getByRole('button', { name: '预览细胞窗口', exact: true }).click()
   await expect(page.getByText('检出 2 个细胞；预览不会直接建立当前数据。')).toBeVisible({
     timeout: 30000,

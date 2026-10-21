@@ -60,62 +60,71 @@ async function draw() {
 useViewState('heatmap', { features, group, sample, equal, zscore, rows, columns, layer, figure })
 </script>
 <template>
-  <div class="card">
-    <h2>特征热图</h2>
-    <p>每行一个特征；标准分只用于展示。分组均值可选择细胞等权或样本等权。</p>
-    <label>特征编号（换行或逗号分隔）<textarea v-model="features" rows="5" /></label>
-    <div class="actions">
-      <button @click="features = selectedFeatures.join('\n')">使用已选特征</button
-      ><button class="preview" :disabled="store.busy" @click="useMarkers">
-        使用前 50 个正向 Marker</button
-      ><button class="preview" :disabled="store.busy" @click="useAnnotated">使用已注释特征</button>
-    </div>
-    <div class="field-grid">
-      <label
-        >强度层<select v-model="layer">
-          <option :value="null">当前矩阵</option>
-          <option v-for="key in info?.layers" :key="key" :value="key">
-            {{ displayName(key) }}
-          </option>
-        </select></label
-      ><label
-        >分组列<select v-model="group">
-          <option value="">逐细胞</option>
-          <option v-for="(_, key) in info?.observations" :key="key" :value="key">
-            {{ displayName(key) }}
-          </option>
-        </select></label
-      ><label
-        >样本列<select v-model="sample">
-          <option value="">未选择</option>
-          <option v-for="(_, key) in info?.observations" :key="key" :value="key">
-            {{ displayName(key) }}
-          </option>
-        </select></label
-      ><label
-        >均值权重<select v-model="equal">
-          <option :value="false">细胞等权</option>
-          <option :value="true">样本等权</option>
-        </select></label
-      ><label
-        >行标准分<select v-model="zscore">
-          <option :value="true">启用</option>
-          <option :value="false">关闭</option>
-        </select></label
-      ><label
-        >特征聚类<select v-model="rows">
-          <option :value="true">启用</option>
-          <option :value="false">关闭</option>
-        </select></label
-      ><label
-        >细胞或分组聚类<select v-model="columns">
-          <option :value="true">启用</option>
-          <option :value="false">关闭</option>
-        </select></label
-      >
-    </div>
-    <button class="primary" :disabled="store.busy || !features.trim()" @click="draw">
-      生成热图</button
-    ><PlotView v-if="figure" :figure="figure" name="heatmap" />
+  <div class="card analysis-module-split">
+    <section class="analysis-calculation">
+      <h2>特征热图</h2>
+      <p>每行一个特征；标准分只用于展示。分组均值可选择细胞等权或样本等权。</p>
+      <label>特征编号（换行或逗号分隔）<textarea v-model="features" rows="5" /></label>
+      <div class="actions">
+        <button @click="features = selectedFeatures.join('\n')">使用已选特征</button
+        ><button class="preview" :disabled="store.busy" @click="useMarkers">
+          使用前 50 个正向 Marker</button
+        ><button class="preview" :disabled="store.busy" @click="useAnnotated">
+          使用已注释特征
+        </button>
+      </div>
+      <div class="field-grid">
+        <label
+          >强度层<select v-model="layer">
+            <option :value="null">当前矩阵</option>
+            <option v-for="key in info?.layers" :key="key" :value="key">
+              {{ displayName(key) }}
+            </option>
+          </select></label
+        ><label
+          >分组列<select v-model="group">
+            <option value="">逐细胞</option>
+            <option v-for="(_, key) in info?.observations" :key="key" :value="key">
+              {{ displayName(key) }}
+            </option>
+          </select></label
+        ><label
+          >样本列<select v-model="sample">
+            <option value="">未选择</option>
+            <option v-for="(_, key) in info?.observations" :key="key" :value="key">
+              {{ displayName(key) }}
+            </option>
+          </select></label
+        ><label
+          >均值权重<select v-model="equal">
+            <option :value="false">细胞等权</option>
+            <option :value="true">样本等权</option>
+          </select></label
+        ><label
+          >行标准分<select v-model="zscore">
+            <option :value="true">启用</option>
+            <option :value="false">关闭</option>
+          </select></label
+        ><label
+          >特征聚类<select v-model="rows">
+            <option :value="true">启用</option>
+            <option :value="false">关闭</option>
+          </select></label
+        ><label
+          >细胞或分组聚类<select v-model="columns">
+            <option :value="true">启用</option>
+            <option :value="false">关闭</option>
+          </select></label
+        >
+      </div>
+      <button class="primary" :disabled="store.busy || !features.trim()" @click="draw">
+        生成热图
+      </button>
+    </section>
+    <section class="analysis-visualization">
+      <h3>图形</h3>
+      <PlotView v-if="figure" :figure="figure" name="heatmap" />
+      <p v-else class="empty-state">选择特征与显示设置，生成热图。</p>
+    </section>
   </div>
 </template>

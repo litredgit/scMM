@@ -78,7 +78,7 @@ test('legacy settings, independent parameters, draft and project reset, narrow p
   ).toHaveValue('91')
   expect(computations).toBe(0)
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
-  await expect(page.getByText('已保存', { exact: true })).toBeVisible()
+  await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
   legacy = false
   await page.getByRole('button', { name: '关闭项目', exact: true }).click()
   await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()

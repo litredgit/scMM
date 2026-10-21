@@ -28,7 +28,7 @@ test('project, samples, metadata, save and reopen with no browser errors', async
   await expect(page.getByRole('status')).toHaveText('样本信息已更新。')
   await expect(page.getByText('有未保存修改', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
-  await expect(page.getByText('已保存', { exact: true })).toBeVisible()
+  await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
 
   // A second tab starts with an independent workspace, even in the same context.
   const other = await context.newPage()
@@ -44,7 +44,7 @@ test('project, samples, metadata, save and reopen with no browser errors', async
   await row.getByRole('button', { name: '打开项目 →' }).click()
   await expect(page.getByLabel('alpha group', { exact: true })).toHaveValue('对照')
   await expect(page.getByLabel('alpha subject', { exact: true })).toHaveValue('animal-1')
-  await expect(page.getByText('已保存', { exact: true })).toBeVisible()
+  await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
 
   await page.screenshot({ path: test.info().outputPath('samples-desktop.png'), fullPage: true })
   await page.setViewportSize({ width: 700, height: 1050 })
@@ -71,9 +71,12 @@ test('dataset import, mapping, CSV and snapshot reload', async ({ page }) => {
   })
   await expect(page.getByLabel('alpha subject', { exact: true })).toHaveValue('animal-1')
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
-  await expect(page.getByText('已保存', { exact: true })).toBeVisible()
+  await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
   await page.getByRole('link', { name: /结果与保存/ }).click()
-  await expect(page.getByText('6 细胞 × 4 特征', { exact: true })).toBeVisible()
+  await page.getByText('项目快照详情', { exact: true }).click()
+  await expect(
+    page.locator('#main-content').getByText('6 细胞 × 4 特征', { exact: true }),
+  ).toBeVisible()
   await expect(page.getByText(/baseline.h5ad/)).toBeVisible()
   await page.getByRole('link', { name: /参数参考/ }).click()
   await expect(page.getByRole('cell', { name: 'snr', exact: true })).toHaveCount(2)

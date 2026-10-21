@@ -23,6 +23,30 @@ const sample = ref(''),
   opened = ref(''),
   summary = ref<Record<string, unknown>>()
 const parameters = ref<Record<string, unknown>>({})
+const effectiveParameters = ref<Record<string, unknown>>({})
+const applicationScope = ref('project')
+function parameterSignature(value: Record<string, unknown>) {
+  return JSON.stringify(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, value[key]]),
+  )
+}
+const differsFromCurrent = computed(
+  () => parameterSignature(valueParams()) !== parameterSignature(effectiveParameters.value),
+)
+const unapplied = computed(() => {
+  const target =
+    applicationScope.value === 'sample'
+      ? effectiveParameters.value
+      : (store.project?.manifest.parameters ?? {})
+  return (
+    parameterSignature(valueParams()) !== parameterSignature(target) ||
+    strategy.value !== store.project?.manifest.feature_strategy ||
+    mergePpm.value !== Number(store.project?.manifest.feature_merge_ppm ?? 10) ||
+    autoRanges.value !== Boolean(store.project?.manifest.auto_ranges ?? true)
+  )
+})
 const kind = ref('tic'),
   ms = ref(1),
   scan = ref(0),
@@ -161,6 +185,7 @@ function valueParams() {
   return result
 }
 function assignParams(value: Record<string, unknown>) {
+  effectiveParameters.value = { ...value }
   parameters.value = {
     ...value,
     extraction_method: 'snr_v1',
@@ -263,12 +288,12 @@ watch(scan, () => {
   if (pos >= 0) scanTime.value = scanCatalog.value.times[pos]!
   if (opened.value && kind.value === 'single') void plot('single')
 })
-async function apply(exception: boolean) {
-  await store.mutate(
+async function apply() {
+  const result = await store.mutate(
     '/parameters',
     {
       parameters: valueParams(),
-      sample_id: exception ? sample.value : null,
+      sample_id: applicationScope.value === 'sample' ? sample.value : null,
       strategy: strategy.value,
       merge_ppm: mergePpm.value,
       auto_ranges: autoRanges.value,
@@ -277,7 +302,13 @@ async function apply(exception: boolean) {
     'PUT',
     '提取参数已应用；旧提取结果不会自动更新。',
   )
-  edited()
+  if (result) {
+    const current = await store.read<Record<string, unknown>>(
+      `/parameters${sample.value ? `?sample_id=${sample.value}` : ''}`,
+    )
+    if (current) effectiveParameters.value = current
+    edited()
+  }
 }
 async function startPreview() {
   const value = await store.command<Job>('/raw/preview', {
@@ -391,6 +422,12 @@ useViewState('raw', {
   plots,
   jobNote,
   cellCount,
+  effectiveParameters,
+  applicationScope,
+  strategy,
+  mergePpm,
+  autoRanges,
+  preset,
 })
 </script>
 <template>
@@ -403,7 +440,7 @@ useViewState('raw', {
       </div>
       <span class="step-badge">02 / 06</span>
     </div>
-    <div class="card">
+    <div class="card raw-sample-toolbar">
       <div class="field-grid">
         <label
           ><FieldLabel name="当前样本" /><select
@@ -416,40 +453,36 @@ useViewState('raw', {
               {{ s.name }}{{ s.parameters ? ' · 样本例外' : '' }}
             </option>
           </select></label
-        ><label
-          ><FieldLabel name="Cell type" /><select
-            aria-label="Cell type"
-            v-model="preset"
-            :disabled="store.busy"
-          >
-            <option v-for="(mass, name) in preferences?.presets" :key="name" :value="name">
-              {{ name }} · {{ mass }}
-            </option>
-          </select></label
         >
       </div>
       <div class="actions">
-        <button class="primary" :disabled="!sample || store.busy" @click="open">打开原始文件</button
-        ><button :disabled="store.busy" @click="usePreset">使用所选参考离子</button>
+        <button class="primary" :disabled="!sample || store.busy" @click="open">
+          打开原始文件
+        </button>
       </div>
-      <dl v-if="summary" class="detail-list">
-        <div>
-          <dt>原始文件</dt>
-          <dd>{{ summary.path }}</dd>
-        </div>
-        <div>
-          <dt>扫描 / 仪器</dt>
-          <dd>{{ summary.scan_count }} / {{ summary.instrument || '—' }}</dd>
-        </div>
-        <div>
-          <dt>RT / m/z</dt>
-          <dd>
-            {{ summary.rt_min_seconds }}–{{ summary.rt_max_seconds }} 秒 / {{ summary.mz_min }}–{{
-              summary.mz_max
-            }}
-          </dd>
-        </div>
-      </dl>
+      <details v-if="summary" class="raw-file-details">
+        <summary>
+          原始文件详情 · {{ summary.scan_count }} 扫描 · {{ summary.instrument || '仪器未标注' }}
+        </summary>
+        <dl class="detail-list">
+          <div>
+            <dt>原始文件</dt>
+            <dd>{{ summary.path }}</dd>
+          </div>
+          <div>
+            <dt>扫描 / 仪器</dt>
+            <dd>{{ summary.scan_count }} / {{ summary.instrument || '—' }}</dd>
+          </div>
+          <div>
+            <dt>RT / m/z</dt>
+            <dd>
+              {{ summary.rt_min_seconds }}–{{ summary.rt_max_seconds }} 秒 / {{ summary.mz_min }}–{{
+                summary.mz_max
+              }}
+            </dd>
+          </div>
+        </dl>
+      </details>
     </div>
     <div class="workflow-columns raw-workflow">
       <div class="card raw-parameter-panel">
@@ -465,6 +498,21 @@ useViewState('raw', {
           此项目或样本仍保存 legacy 参数。当前表单已切换为
           snr，请检查并应用参数后启动新提取；旧产物保留原算法记录。
         </p>
+        <div class="reference-preset">
+          <label
+            ><FieldLabel name="Cell type" /><select
+              aria-label="Cell type"
+              v-model="preset"
+              :disabled="store.busy"
+            >
+              <option v-for="(mass, name) in preferences?.presets" :key="name" :value="name">
+                {{ name }} · {{ mass }}
+              </option>
+            </select></label
+          >
+
+          <button :disabled="store.busy" @click="usePreset">使用所选参考离子</button>
+        </div>
         <ProcessingFields
           v-model="parameters"
           :fields="basic"
@@ -566,11 +614,39 @@ useViewState('raw', {
             </template>
           </div>
         </section>
-        <div class="actions">
-          <button class="primary" :disabled="store.busy" @click="apply(false)">
-            应用为项目默认</button
-          ><button class="primary" :disabled="!sample || store.busy" @click="apply(true)">
-            仅应用到当前样本</button
+        <div class="parameter-state" :class="{ pending: unapplied }" aria-label="参数生效状态">
+          <strong>{{ unapplied ? '与所选范围的生效配置不同' : '与所选范围的生效配置一致' }}</strong>
+          <p>
+            当前样本使用{{
+              samples.find((s) => s.id === sample)?.parameters ? '样本例外' : '项目默认及自动范围'
+            }}。{{
+              differsFromCurrent
+                ? '表单与当前样本正式提取参数不同；预览使用表单参数。'
+                : '表单与当前样本正式提取参数一致。'
+            }}
+          </p>
+          <p v-if="applicationScope === 'sample'">
+            样本合并策略、合并容差及自动范围仍为项目级设置。
+          </p>
+          <p>应用后仍需保存项目；已完成的提取结果保持原参数记录。</p>
+        </div>
+        <div class="actions parameter-apply-actions">
+          <label class="application-scope"
+            >应用范围<select
+              aria-label="参数应用范围"
+              v-model="applicationScope"
+              :disabled="store.busy"
+            >
+              <option value="project">项目默认（保留样本例外）</option>
+              <option value="sample">仅当前样本</option>
+            </select></label
+          >
+          <button
+            class="primary"
+            :disabled="store.busy || (applicationScope === 'sample' && !sample)"
+            @click="apply"
+          >
+            应用参数</button
           ><button
             class="restore"
             :disabled="!sample || store.busy"

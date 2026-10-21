@@ -84,7 +84,7 @@ function label(status: string) {
 async function refresh() {
   now.value = Date.now()
   if (!store.project) return
-  const result = await store.read<Batch[]>('/extraction/batches')
+  const result = await store.refreshBatches()
   if (result) {
     batchList.value = result
     const running = result.find((b) => ['queued', 'running'].includes(b.status))
@@ -198,7 +198,7 @@ const parameterTable = computed<DataTable>(() => {
 useViewState('extraction', { path, included, checked, figures, signalSample, signalFigure })
 </script>
 <template>
-  <section v-if="store.project">
+  <section v-if="store.project" class="extraction-workspace" :class="{ 'has-batch': selected }">
     <div class="page-title">
       <div>
         <p class="eyebrow">STEP 03 / 提取</p>
@@ -206,59 +206,6 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
         <p>检查完整参数，启动后台批次；结束后人工选择纳入样本。</p>
       </div>
       <span class="step-badge">03 / 06</span>
-    </div>
-    <div class="card" v-if="selected">
-      <h2>细胞提取信号</h2>
-      <select v-model="signalSample">
-        <option value="">选择已完成样本</option>
-        <option
-          v-for="sample in selected.samples.filter((s) => s.status === 'succeeded')"
-          :key="sample.id"
-          :value="sample.id"
-        >
-          {{ sample.name }}
-        </option></select
-      ><button class="preview" :disabled="store.busy || !signalSample" @click="loadSignal">
-        查看完整信号</button
-      ><PlotView v-if="signalFigure" :figure="signalFigure" name="extraction-signal" />
-    </div>
-    <div class="card">
-      <h2>处理准备</h2>
-      <p>
-        {{ store.project.manifest.samples.length }} 个样本 ·
-        {{
-          store.project.manifest.feature_strategy === 'shared' ? '全项目共同特征' : '独立特征合并'
-        }}
-      </p>
-      <div class="actions">
-        <button
-          class="preview"
-          :disabled="store.busy || !store.project.manifest.samples.length"
-          @click="preflight"
-        >
-          检查参数与输入</button
-        ><button
-          class="primary"
-          :disabled="store.busy || active || !store.project.manifest.samples.length"
-          @click="start()"
-        >
-          开始提取</button
-        ><button class="primary" :disabled="store.busy || active || !path" @click="start(true)">
-          重试失败批次
-        </button>
-      </div>
-      <p class="page-note">
-        开始或重试自动预检并保存输入配置。停止仅阻止后续样本，保留当前样本及已完成产物。
-      </p>
-      <template v-if="checked"
-        ><h3>逐样本完整参数</h3>
-        <DataTableView :table="parameterTable" />
-        <button class="save" @click="downloadPreflight">下载预检 JSON</button>
-        <details>
-          <summary>预检 JSON</summary>
-          <pre class="code-block">{{ JSON.stringify(checked, null, 2) }}</pre>
-        </details></template
-      >
     </div>
     <div class="card">
       <div class="section-heading">
@@ -342,48 +289,109 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
           </button>
         </div>
         <DataTableView :table="table" />
-        <h3>审核纳入样本</h3>
-        <p>已选择 {{ included.length }} / {{ counts.success }} 个成功样本</p>
-        <p v-if="reviewPhase" role="status">{{ reviewPhase }}</p>
-        <div class="check-list">
-          <label v-for="s in selected.samples.filter((s) => s.status === 'succeeded')" :key="s.id"
-            ><input
-              v-model="included"
-              :aria-label="`${s.name} · ${s.cells} 细胞`"
-              type="checkbox"
-              :value="s.id"
-              :disabled="store.busy || ['queued', 'running'].includes(selected.status)" />{{
-              s.name
-            }}
-            · {{ s.cells }} 细胞
-            <HelpTip
-              label="审核纳入"
-              text="只选择经人工审核可纳入的成功样本。比较 QC 不建立当前数据；点击建立当前数据集后才合并所选样本。"
-          /></label>
-        </div>
-        <div class="actions">
-          <button
-            class="preview"
-            :disabled="
-              store.busy || !included.length || ['queued', 'running'].includes(selected.status)
-            "
-            @click="review(true)"
-          >
-            比较所选成功样本的 QC</button
-          ><button
-            class="primary"
-            :disabled="
-              store.busy || !included.length || ['queued', 'running'].includes(selected.status)
-            "
-            @click="review()"
-          >
-            建立当前数据集
-          </button>
-        </div>
-        <PlotView v-for="(figure, i) in figures" :key="i" :figure="figure" :name="`batch-qc-${i}`"
-      /></template>
+        <section class="batch-review" aria-label="样本审核">
+          <h3>审核纳入样本</h3>
+          <p class="page-note">先查看信号与 QC，再选择样本建立当前数据集。提取成功不等于已纳入。</p>
+          <div class="review-signal" v-if="counts.success">
+            <h3>细胞提取信号</h3>
+            <select aria-label="审核信号样本" v-model="signalSample" :disabled="store.busy">
+              <option value="">选择已完成样本</option>
+              <option
+                v-for="sample in selected.samples.filter((s) => s.status === 'succeeded')"
+                :key="sample.id"
+                :value="sample.id"
+              >
+                {{ sample.name }}
+              </option></select
+            ><button class="preview" :disabled="store.busy || !signalSample" @click="loadSignal">
+              查看完整信号</button
+            ><PlotView v-if="signalFigure" :figure="signalFigure" name="extraction-signal" />
+          </div>
+
+          <p>已选择 {{ included.length }} / {{ counts.success }} 个成功样本</p>
+          <p v-if="reviewPhase" role="status">{{ reviewPhase }}</p>
+          <div class="check-list">
+            <label v-for="s in selected.samples.filter((s) => s.status === 'succeeded')" :key="s.id"
+              ><input
+                v-model="included"
+                :aria-label="`${s.name} · ${s.cells} 细胞`"
+                type="checkbox"
+                :value="s.id"
+                :disabled="store.busy || ['queued', 'running'].includes(selected.status)" />{{
+                s.name
+              }}
+              · {{ s.cells }} 细胞
+              <HelpTip
+                label="审核纳入"
+                text="只选择经人工审核可纳入的成功样本。比较 QC 不建立当前数据；点击建立当前数据集后才合并所选样本。"
+            /></label>
+          </div>
+          <div class="actions">
+            <button
+              class="preview"
+              :disabled="
+                store.busy || !included.length || ['queued', 'running'].includes(selected.status)
+              "
+              @click="review(true)"
+            >
+              比较所选成功样本的 QC</button
+            ><button
+              class="primary"
+              :disabled="
+                store.busy || !included.length || ['queued', 'running'].includes(selected.status)
+              "
+              @click="review()"
+            >
+              建立当前数据集
+            </button>
+          </div>
+          <PlotView
+            v-for="(figure, i) in figures"
+            :key="i"
+            :figure="figure"
+            :name="`batch-qc-${i}`"
+          /></section
+      ></template>
       <p v-else class="muted">尚无处理批次。可先前往原始谱页面检查信号与参数。</p>
     </div>
+    <details class="card extraction-preparation" :open="!selected">
+      <summary>处理准备 · 新建或重试批次</summary>
+      <p>
+        {{ store.project.manifest.samples.length }} 个样本 ·
+        {{
+          store.project.manifest.feature_strategy === 'shared' ? '全项目共同特征' : '独立特征合并'
+        }}
+      </p>
+      <div class="actions">
+        <button
+          class="preview"
+          :disabled="store.busy || !store.project.manifest.samples.length"
+          @click="preflight"
+        >
+          检查参数与输入</button
+        ><button
+          class="primary"
+          :disabled="store.busy || active || !store.project.manifest.samples.length"
+          @click="start()"
+        >
+          开始提取</button
+        ><button class="primary" :disabled="store.busy || active || !path" @click="start(true)">
+          重试失败批次
+        </button>
+      </div>
+      <p class="page-note">
+        开始或重试自动预检并保存输入配置。停止仅阻止后续样本，保留当前样本及已完成产物。
+      </p>
+      <template v-if="checked"
+        ><h3>逐样本完整参数</h3>
+        <DataTableView :table="parameterTable" />
+        <button class="save" @click="downloadPreflight">下载预检 JSON</button>
+        <details>
+          <summary>预检 JSON</summary>
+          <pre class="code-block">{{ JSON.stringify(checked, null, 2) }}</pre>
+        </details></template
+      >
+    </details>
   </section>
   <div v-else class="card empty-state">
     <h1>请先打开项目</h1>

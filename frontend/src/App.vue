@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWorkspace } from './stores/workspace'
 import { useAuth } from './stores/auth'
@@ -12,6 +12,8 @@ const store = useWorkspace()
 const auth = useAuth()
 const route = useRoute()
 const router = useRouter()
+const navigationOpen = ref(false)
+const assistantOpen = ref(false)
 const standalone = computed(() => ['/admin/monitor', '/account'].includes(route.path))
 let presence: ReturnType<typeof startPresence> | undefined
 let stopMaintenance: (() => void) | undefined
@@ -54,8 +56,11 @@ onMounted(() => {
   presence = startPresence()
   stopMaintenance = startMaintenance(router)
   void presence.ready.then(() => auth.refresh())
+  void pollWorkflow()
 })
 onUnmounted(() => {
+  workflowPolling = false
+  clearTimeout(workflowTimer)
   presence?.stop()
   stopMaintenance?.()
 })
@@ -70,6 +75,45 @@ const workflow = [
   ...stages,
   { path: '/results', name: '结果与保存' },
 ]
+let workflowPolling = true
+let workflowTimer: ReturnType<typeof setTimeout> | undefined
+async function pollWorkflow() {
+  try {
+    if (!standalone.value && !store.busy && route.path !== '/extraction')
+      await store.refreshBatches()
+  } finally {
+    if (workflowPolling) workflowTimer = setTimeout(pollWorkflow, 5000)
+  }
+}
+watch(
+  () => route.path,
+  () => {
+    navigationOpen.value = false
+  },
+)
+watch(
+  () => store.project?.path,
+  () => {
+    if (!standalone.value) void store.refreshBatches()
+  },
+)
+const extractionStatus = computed(() => {
+  if (!store.project) return ''
+  if (!store.batches) return '状态待刷新'
+  if (store.batches.some((b) => ['queued', 'running'].includes(b.status))) return '运行中'
+  if (store.project.dataset) return '已有数据'
+  if (store.batches.some((b) => b.samples.some((s) => s.status === 'succeeded'))) return '待审核'
+  return store.batches.length ? '查看批次' : '未开始'
+})
+function stageStatus(path: string) {
+  if (!store.project) return ''
+  if (path === '/samples') return `${store.project.manifest.samples.length} 个样本`
+  if (path === '/extraction') return extractionStatus.value
+  if (['/preprocess', '/analysis'].includes(path))
+    return store.project.dataset ? '可使用' : '待建集'
+  if (path === '/results') return store.project.unsaved ? '待保存' : '已保存'
+  return ''
+}
 const stepIndex = computed(() => workflow.findIndex((step) => step.path === route.path))
 const previousStep = computed(() =>
   stepIndex.value === 0 ? { path: '/projects', name: '项目首页' } : workflow[stepIndex.value - 1],
@@ -93,19 +137,38 @@ const nextHelp = computed(() =>
   <main v-if="!auth.ready" class="card">正在检查登录状态…</main>
   <LoginPanel v-else-if="!auth.user || auth.user.must_change" />
   <div v-else class="workbench" :key="auth.user.id">
-    <aside class="sidebar">
+    <aside class="sidebar" :class="{ 'navigation-open': navigationOpen }">
       <RouterLink to="/projects" class="brand" aria-label="scMM 项目首页">
         <span class="brand-mark">s</span><span>scMM<small>单细胞质谱工作台</small></span>
       </RouterLink>
+      <button
+        class="mobile-nav-toggle"
+        :aria-expanded="navigationOpen"
+        aria-controls="workflow-menu"
+        @click="navigationOpen = !navigationOpen"
+      >
+        {{ navigationOpen ? '收起导航' : '流程与账号' }}
+      </button>
       <p class="nav-caption">实验工作流</p>
-      <nav aria-label="工作流程">
+      <nav id="workflow-menu" aria-label="工作流程">
         <RouterLink to="/projects"><span class="nav-number">⌂</span>项目首页</RouterLink>
-        <RouterLink to="/samples"><span class="nav-number">1</span>项目与样本</RouterLink>
-        <RouterLink v-for="(stage, i) in stages" :key="stage.path" :to="stage.path"
-          ><span class="nav-number">{{ i + 2 }}</span
-          >{{ stage.name }}</RouterLink
+        <RouterLink
+          v-for="(step, i) in workflow"
+          :key="step.path"
+          :to="step.path"
+          :aria-label="`${i + 1} ${step.name}`"
+          :aria-describedby="stageStatus(step.path) ? `workflow-state-${i}` : undefined"
+          ><span class="nav-number">{{ i + 1 }}</span
+          ><span class="nav-step-label"
+            >{{ step.name
+            }}<small
+              v-if="stageStatus(step.path)"
+              class="nav-step-state"
+              :id="`workflow-state-${i}`"
+              >{{ stageStatus(step.path) }}</small
+            ></span
+          ></RouterLink
         >
-        <RouterLink to="/results"><span class="nav-number">6</span>结果与保存</RouterLink>
       </nav>
       <div class="sidebar-bottom">
         <RouterLink v-if="auth.admin" to="/admin/monitor">管理员监控</RouterLink>
@@ -116,19 +179,27 @@ const nextHelp = computed(() =>
           >{{ store.current ? '工作区已连接' : '工作区未连接' }}
         </div>
         <p class="task-note">{{ store.busy ? '正在执行操作…' : store.task }}</p>
-        <p>Vue / FastAPI 工作台<br />六步实验流程</p>
       </div>
     </aside>
 
-    <div class="main-shell">
+    <div class="main-shell" :class="{ 'assistant-expanded': assistantOpen }">
       <header class="topbar">
         <div class="project-heading">
           <span class="eyebrow">当前项目</span
           ><strong>{{ store.project?.manifest.name ?? '尚未打开项目' }}</strong>
+          <small v-if="store.project?.dataset" class="muted"
+            >{{ store.project.dataset.cells.toLocaleString() }} 细胞 ×
+            {{ store.project.dataset.features.toLocaleString() }} 特征</small
+          >
         </div>
         <div class="topbar-actions">
-          <span>{{ auth.user.username }}</span>
-          <button :disabled="store.busy" @click="logout">退出登录</button>
+          <details class="account-menu">
+            <summary>{{ auth.user.username }} · 账号</summary>
+            <div class="account-menu-body">
+              <RouterLink to="/account">我的账号</RouterLink
+              ><button :disabled="store.busy" @click="logout">退出登录</button>
+            </div>
+          </details>
           <span v-if="store.project" class="save-state" :class="{ dirty: store.project.unsaved }">{{
             store.project.unsaved ? '有未保存修改' : '已保存'
           }}</span>
@@ -154,7 +225,7 @@ const nextHelp = computed(() =>
         id="main-content"
         :aria-busy="!standalone && store.busy"
       >
-        <div v-if="store.error" role="alert" class="alert error">
+        <div v-if="store.error" role="alert" class="alert error workspace-feedback">
           <span>{{ store.error }}</span>
           <div class="actions">
             <button
@@ -167,7 +238,9 @@ const nextHelp = computed(() =>
             ><button @click="store.error = ''" aria-label="清除错误">×</button>
           </div>
         </div>
-        <div v-if="store.notice" role="status" class="alert success">{{ store.notice }}</div>
+        <div v-if="store.notice" role="status" class="alert success workspace-feedback">
+          {{ store.notice }}
+        </div>
         <div v-if="!store.current && !standalone" class="card empty-state">
           <h1>连接实验工作区</h1>
           <p>服务重启或页面刷新后，请重新打开已保存的项目。</p>
@@ -203,7 +276,10 @@ const nextHelp = computed(() =>
           </nav>
         </template>
       </main>
-      <AssistantPanel v-if="route.path !== '/admin/monitor'" />
+      <AssistantPanel
+        v-if="route.path !== '/admin/monitor'"
+        @update:open="assistantOpen = $event"
+      />
       <footer>scMM · CyESI 单细胞质谱分析<span>离开或刷新前请主动保存项目</span></footer>
     </div>
   </div>

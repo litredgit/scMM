@@ -9,7 +9,7 @@ import {
   ensureSession,
 } from '../api/client'
 import type { AnalysisTransport } from '../features/analysis/types'
-import type { Configuration, WorkspaceView } from '../api/types'
+import type { Batch, Configuration, WorkspaceView } from '../api/types'
 
 export const useWorkspace = defineStore('workspace', () => {
   const current = ref<WorkspaceView | null>(null)
@@ -28,6 +28,27 @@ export const useWorkspace = defineStore('workspace', () => {
     selectedCells.value = [...selectedCells.value.filter((c) => c !== cell), cell].slice(-2)
   }
   const task = ref('暂无活动任务')
+  const batches = ref<Batch[] | null>(null)
+  let batchesRequest: { key: string; promise: Promise<Batch[] | undefined> } | undefined
+  async function refreshBatches() {
+    if (!current.value || !project.value) return
+    const key = JSON.stringify([
+      current.value.workspace_id,
+      project.value.path,
+      current.value.revision,
+    ])
+    if (batchesRequest?.key === key) return batchesRequest.promise
+    const promise = read<Batch[]>('/extraction/batches').then((value) => {
+      if (value) batches.value = value
+      return value
+    })
+    batchesRequest = { key, promise }
+    try {
+      return await promise
+    } finally {
+      if (batchesRequest?.promise === promise) batchesRequest = undefined
+    }
+  }
   const project = computed(() => current.value?.project ?? null)
   watch(
     () =>
@@ -43,6 +64,7 @@ export const useWorkspace = defineStore('workspace', () => {
     () => project.value?.path,
     () => {
       analysisDraft.value = null
+      batches.value = null
       task.value = '暂无活动任务'
     },
     { flush: 'sync' },
@@ -300,6 +322,7 @@ export const useWorkspace = defineStore('workspace', () => {
     current.value = null
     configuration.value = null
     analysisDraft.value = null
+    batches.value = null
     error.value = ''
     notice.value = ''
     task.value = '暂无活动任务'
@@ -328,5 +351,7 @@ export const useWorkspace = defineStore('workspace', () => {
     analysisDraft,
     analysisTransaction,
     task,
+    batches,
+    refreshBatches,
   }
 })

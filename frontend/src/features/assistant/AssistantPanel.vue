@@ -3,6 +3,8 @@ import { nextTick, ref, watch } from 'vue'
 import { useAssistant } from './useAssistant'
 import { useWorkspace } from '../../stores/workspace'
 const open = ref(false)
+const emit = defineEmits<{ 'update:open': [value: boolean] }>()
+watch(open, (value) => emit('update:open', value), { immediate: true })
 const conversation = ref<HTMLElement | null>(null)
 const store = useWorkspace()
 const {
@@ -122,6 +124,44 @@ const questions = ['当前进行到哪一步了？', '当前结果说明什么�
   border: 1px solid #d2dfdc;
   border-radius: 14px;
   box-shadow: 0 8px 35px #0002;
+}
+@media (min-width: 1200px) {
+  .ai-assistant.open {
+    top: 1rem;
+    width: 430px;
+    display: flex;
+    flex-direction: column;
+  }
+  .open .ai-toggle {
+    align-self: flex-end;
+    margin-bottom: 0.5rem;
+  }
+  .open .ai-body {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+}
+@media (max-width: 760px) {
+  .ai-assistant.open {
+    inset: 0;
+    max-width: none;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    padding: 0.75rem;
+  }
+  .open .ai-toggle {
+    align-self: flex-end;
+  }
+  .open .ai-body {
+    margin-top: 0.5rem;
+    flex: 1;
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    min-height: 0;
+  }
 }
 .ai-body h2 {
   margin-top: 0;

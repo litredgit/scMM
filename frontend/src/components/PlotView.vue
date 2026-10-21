@@ -623,6 +623,12 @@ async function image(format: string) {
 </script>
 <template>
   <div class="plot-shell">
+    <div
+      ref="element"
+      class="plot"
+      :style="{ height: `${chartHeight}px` }"
+      aria-label="交互图表"
+    ></div>
     <div class="plot-actions">
       <label class="field"
         ><FieldLabel name="图例位置" /><select
@@ -710,12 +716,6 @@ async function image(format: string) {
     </details>
     <p v-if="!fresh" role="status">该图对应的数据已改变，请重新绘图后下载或选择细胞。</p>
     <p v-if="failure" role="alert">{{ failure }}</p>
-    <div
-      ref="element"
-      class="plot"
-      :style="{ height: `${chartHeight}px` }"
-      aria-label="交互图表"
-    ></div>
   </div>
 </template>
 

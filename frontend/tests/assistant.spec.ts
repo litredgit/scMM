@@ -106,6 +106,7 @@ test('logout cancels pending answer and clears conversation', async ({ page }) =
   await assistant.getByLabel('问题', { exact: true }).fill('慢回答')
   await assistant.getByRole('button', { name: '发送', exact: true }).click()
   await expect(assistant.getByText('synthetic answer', { exact: true })).toBeVisible()
+  await page.locator('.account-menu > summary').click()
   await page.getByRole('button', { name: '退出登录', exact: true }).click()
   await expect(assistant).toHaveCount(0)
   await expect(page.getByRole('button', { name: '登录', exact: true })).toBeVisible()

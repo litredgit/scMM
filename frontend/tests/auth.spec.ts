@@ -44,6 +44,7 @@ test('login, private workspace, account management, reset and logout', async ({
     (await other.request.get(page.url().replace('/account', '/api/v1/admin/monitor'))).status(),
   ).toBe(403)
   expect(state.role).toBe('admin')
+  await member.locator('.account-menu > summary').click()
   await member.getByRole('button', { name: '退出登录' }).click()
   await expect(member.getByRole('button', { name: '登录', exact: true })).toBeVisible()
   expect(

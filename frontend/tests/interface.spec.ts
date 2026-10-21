@@ -105,3 +105,164 @@ test('legend reorder persists, selection is manual and six steps fit narrow scre
   }
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
+
+test('parameter scope, unapplied drafts and saved project state stay distinct', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByLabel('项目名称', { exact: true }).fill('参数范围状态检查')
+  await page.getByRole('button', { name: '创建并添加样本' }).click()
+  await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
+  await page.getByRole('button', { name: /extract.mzML/ }).click()
+  await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
+  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  const reference = page.getByLabel('ref_mz', { exact: true })
+  await expect(reference).not.toHaveValue('')
+  const original = await reference.inputValue()
+  await reference.fill('150')
+  await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置不同')
+  await page.getByRole('button', { name: '保存项目', exact: true }).click()
+  await expect(page.locator('.save-state')).toHaveText('已保存')
+  await expect(page.getByLabel('参数生效状态')).toContainText('表单与当前样本正式提取参数不同')
+  await page.getByLabel('参数应用范围').selectOption('sample')
+  const applySample = page.waitForRequest(
+    (r) => r.url().endsWith('/parameters') && r.method() === 'PUT',
+  )
+  await page.getByRole('button', { name: '应用参数', exact: true }).click()
+  expect((await applySample).postDataJSON().sample_id).toBeTruthy()
+  await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置一致')
+  await expect(page.getByLabel('参数生效状态')).toContainText('当前样本使用样本例外')
+  await reference.fill('151')
+  await page.getByLabel('参数应用范围').selectOption('project')
+  const applyProject = page.waitForRequest(
+    (r) => r.url().endsWith('/parameters') && r.method() === 'PUT',
+  )
+  await page.getByRole('button', { name: '应用参数', exact: true }).click()
+  expect((await applyProject).postDataJSON().sample_id).toBeNull()
+  await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置一致')
+  await expect(page.getByLabel('参数生效状态')).toContainText('表单与当前样本正式提取参数不同')
+  await page.getByLabel('参数应用范围').selectOption('sample')
+  await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置不同')
+  await page.route('**/workspace/parameters', async (route) => {
+    if (route.request().method() !== 'PUT') return route.continue()
+    await route.fulfill({
+      status: 422,
+      json: { error: { code: 'synthetic', message: '合成参数应用失败' } },
+    })
+  })
+  await page.getByRole('button', { name: '应用参数', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('合成参数应用失败')
+  await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置不同')
+  await page.unroute('**/workspace/parameters')
+  await page.getByRole('button', { name: '清除样本例外', exact: true }).click()
+  await expect(reference).toHaveValue('151')
+  await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置一致')
+  expect(original).not.toBe('151')
+})
+
+test('desktop figures, direct exports, assistant space and compact mobile navigation', async ({
+  page,
+}) => {
+  test.setTimeout(60000)
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await openAnalysis(page)
+  await page.getByRole('button', { name: '运行降维', exact: true }).click()
+  await expect(page.locator('.analysis-visualization .js-plotly-plot')).toBeVisible()
+  const inputBox = await page.locator('.analysis-calculation').first().boundingBox()
+  const figureBox = await page.locator('.analysis-visualization').first().boundingBox()
+  expect(figureBox!.x).toBeGreaterThan(inputBox!.x + inputBox!.width)
+  expect(figureBox!.width).toBeGreaterThan(inputBox!.width)
+  await page.screenshot({
+    path: test.info().outputPath('layout-analysis-1920.png'),
+    fullPage: true,
+  })
+  await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+  const assistant = await page.locator('.ai-assistant').boundingBox()
+  const content = await page.locator('.analysis-content').boundingBox()
+  expect(content!.x + content!.width).toBeLessThanOrEqual(assistant!.x)
+  await page.getByRole('button', { name: '收起 AI 助手', exact: true }).click()
+  await page.getByRole('link', { name: /结果与保存/ }).click()
+  const download = await page
+    .getByRole('button', { name: '下载完整结果', exact: true })
+    .boundingBox()
+  expect(download!.y).toBeLessThan(1080)
+  await page.screenshot({ path: test.info().outputPath('layout-results-1920.png'), fullPage: true })
+  for (const width of [2560, 1440, 700, 390]) {
+    await page.setViewportSize({ width, height: 1080 })
+    for (const route of [
+      '/samples',
+      '/raw',
+      '/extraction',
+      '/preprocess',
+      '/analysis',
+      '/results',
+    ]) {
+      await page.locator(`.sidebar nav a[href='${route}']`).click()
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+        .toBe(true)
+      if (width === 390) {
+        await page.evaluate(() => window.scrollTo(0, 0))
+        const title = await page.getByRole('heading', { level: 1 }).boundingBox()
+        expect(title!.y).toBeLessThan(350)
+      }
+    }
+  }
+  await page.screenshot({ path: test.info().outputPath('layout-mobile-390.png'), fullPage: true })
+  await page.getByRole('button', { name: '流程与账号', exact: true }).click()
+  await expect(page.getByRole('link', { name: '账号与管理', exact: true })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('a delayed batch summary cannot label the next project as awaiting review', async ({
+  page,
+}) => {
+  let release: () => void = () => {}
+  let captured: () => void = () => {}
+  const received = new Promise<void>((resolve) => {
+    captured = resolve
+  })
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let first = true
+  await page.route('**/workspace/extraction/batches', async (route) => {
+    if (!first) return route.continue()
+    first = false
+    const response = await route.fetch()
+    captured()
+    await waiting
+    await route.fulfill({
+      response,
+      json: [
+        { path: 'old-batch', status: 'completed', samples: [{ id: 'old', status: 'succeeded' }] },
+      ],
+    })
+  })
+  await page.goto('/')
+  await page.getByLabel('项目名称', { exact: true }).fill('迟到批次来源项目')
+  await page.getByRole('button', { name: '创建并添加样本' }).click()
+  await received
+  try {
+    await page.getByRole('button', { name: '关闭项目', exact: true }).click()
+    await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
+    await page.getByLabel('项目名称', { exact: true }).fill('迟到批次目标项目')
+    await page.getByRole('button', { name: '创建并添加样本' }).click()
+    const status = page.locator('.sidebar a[href="/extraction"] .nav-step-state')
+    await expect(status).toHaveText('未开始')
+    const lateResponse = page.waitForResponse(
+      async (response) =>
+        response.url().endsWith('/extraction/batches') &&
+        (await response.json())[0]?.path === 'old-batch',
+    )
+    release()
+    await lateResponse
+    await expect(status).toHaveText('未开始')
+    await expect(page.locator('.project-heading')).toContainText('迟到批次目标项目')
+    await expect(page.getByRole('alert')).toHaveCount(0)
+  } finally {
+    release()
+  }
+})

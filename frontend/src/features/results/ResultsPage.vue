@@ -124,6 +124,122 @@ async function exportH5ad() {
           保存项目
         </button>
       </div>
+      <p class="muted">保存项目用于继续完整工作；下载到本机与服务器独立导出不替代保存。</p>
+    </div>
+    <div v-if="store.project.dataset" class="card">
+      <h2>下载与独立导出</h2>
+      <div class="result-export-grid">
+        <section aria-label="下载到本机">
+          <h3>下载到本机</h3>
+          <div class="field-grid">
+            <label
+              ><FieldLabel name="下载内容" /><select
+                aria-label="下载内容"
+                v-model="kind"
+                :disabled="store.busy"
+              >
+                <option v-for="v in available" :key="v.value" :value="v.value">
+                  {{ v.label }}
+                </option>
+              </select></label
+            ><label v-if="kind === 'embedding'"
+              ><FieldLabel name="嵌入键" /><select
+                aria-label="嵌入键"
+                v-model="embedding"
+                :disabled="store.busy"
+              >
+                <option v-for="v in info?.embeddings" :key="v" :value="v">
+                  {{ displayName(v) }}
+                </option>
+              </select></label
+            ><label
+              ><FieldLabel name="下载文件名" /><input
+                aria-label="下载文件名"
+                v-model="downloadName"
+                :disabled="store.busy"
+            /></label>
+          </div>
+          <button
+            class="save"
+            :disabled="store.busy || (kind === 'embedding' && !embedding)"
+            @click="store.download(kind, downloadName, kind === 'embedding' ? embedding : '')"
+          >
+            下载完整结果
+          </button>
+          <p class="muted">
+            显示格式不降低 CSV
+            精度。失效结果不可下载。重载的监督报告只读，SHAP/潜变量需重新训练模型。
+          </p>
+        </section>
+        <section aria-label="导出到服务器">
+          <h3>单独导出当前 H5AD</h3>
+          <div class="field-grid">
+            <label
+              ><FieldLabel name="保存存储" /><select
+                aria-label="保存存储"
+                v-model="root"
+                :disabled="store.busy"
+              >
+                <option v-for="r in store.configuration?.results" :key="r.label">
+                  {{ r.label }}
+                </option>
+              </select></label
+            ><label
+              ><FieldLabel name="保存目录" /><input
+                aria-label="保存目录"
+                v-model="directory"
+                :disabled="store.busy" /></label
+            ><label
+              ><FieldLabel name="H5AD 文件名" /><input
+                aria-label="H5AD 文件名"
+                v-model="filename"
+                :disabled="store.busy"
+            /></label>
+          </div>
+          <p class="path">
+            目标：{{ store.configuration?.results.find((r) => r.label === root)?.path }} /
+            {{ directory }} / {{ filename }}
+          </p>
+          <button class="save" :disabled="store.busy || !filename" @click="exportH5ad">
+            导出当前 H5AD（不覆盖）
+          </button>
+          <p v-if="exported" role="status">已导出：{{ exported }}</p>
+          <p class="page-note">
+            独立 H5AD
+            保留当前轴上的历史层、嵌入和报告；完整恢复起点由项目快照保存。导出不替代保存项目。
+          </p>
+        </section>
+      </div>
+      <template v-if="info?.figures.length">
+        <h3>项目图形</h3>
+        <div class="field-grid">
+          <label
+            ><FieldLabel name="已保存图形" /><select
+              aria-label="已保存图形"
+              v-model="figureKey"
+              :disabled="store.busy"
+              @change="figure = undefined"
+            >
+              <option v-for="key in info.figures" :key="key">{{ key }}</option>
+            </select></label
+          >
+        </div>
+        <div class="actions">
+          <button class="preview" :disabled="store.busy || !figureKey" @click="showFigure">
+            查看图形</button
+          ><button
+            class="save"
+            :disabled="store.busy || !figureKey"
+            @click="store.download('figure', `${figureKey}.json`, figureKey)"
+          >
+            下载图形 JSON
+          </button>
+        </div>
+        <PlotView v-if="figure" :figure="figure" :name="figureKey" />
+      </template>
+    </div>
+    <details class="card">
+      <summary>项目快照详情</summary>
       <dl class="detail-list">
         <div>
           <dt>项目目录</dt>
@@ -166,9 +282,9 @@ async function exportH5ad() {
       <p class="page-note">
         快照包含当前数据、完整预处理起点及只读报告和图形。原始文件只引用；可执行模型不序列化。
       </p>
-    </div>
-    <div class="card">
-      <h2>H5AD 保留与管理</h2>
+    </details>
+    <details class="card">
+      <summary>H5AD 保留与管理</summary>
       <p>
         保存项目会写入当前数据和完整恢复起点；重复保存保留旧快照。提取和细胞预览也会产生
         H5AD，独立导出则产生一份单独矩阵。
@@ -177,104 +293,7 @@ async function exportH5ad() {
         完整继续分析请打开项目；导入 H5AD
         只读取所选矩阵。内部文件默认收起，当前引用和活动任务产物受保护；旧快照按删除计划手动移入回收区，回收区清空后才释放空间。
       </p>
-    </div>
-    <div v-if="store.project.dataset" class="card">
-      <h2>下载与独立导出</h2>
-      <div class="field-grid">
-        <label
-          ><FieldLabel name="下载内容" /><select
-            aria-label="下载内容"
-            v-model="kind"
-            :disabled="store.busy"
-          >
-            <option v-for="v in available" :key="v.value" :value="v.value">{{ v.label }}</option>
-          </select></label
-        ><label v-if="kind === 'embedding'"
-          ><FieldLabel name="嵌入键" /><select
-            aria-label="嵌入键"
-            v-model="embedding"
-            :disabled="store.busy"
-          >
-            <option v-for="v in info?.embeddings" :key="v" :value="v">{{ displayName(v) }}</option>
-          </select></label
-        ><label
-          ><FieldLabel name="下载文件名" /><input
-            aria-label="下载文件名"
-            v-model="downloadName"
-            :disabled="store.busy"
-        /></label>
-      </div>
-      <button
-        class="save"
-        :disabled="store.busy || (kind === 'embedding' && !embedding)"
-        @click="store.download(kind, downloadName, kind === 'embedding' ? embedding : '')"
-      >
-        下载完整结果
-      </button>
-      <p class="muted">
-        显示格式不降低 CSV 精度。失效结果不可下载。重载的监督报告只读，SHAP/潜变量需重新训练模型。
-      </p>
-      <template v-if="info?.figures.length">
-        <h3>项目图形</h3>
-        <div class="field-grid">
-          <label
-            ><FieldLabel name="已保存图形" /><select
-              aria-label="已保存图形"
-              v-model="figureKey"
-              :disabled="store.busy"
-              @change="figure = undefined"
-            >
-              <option v-for="key in info.figures" :key="key">{{ key }}</option>
-            </select></label
-          >
-        </div>
-        <div class="actions">
-          <button class="preview" :disabled="store.busy || !figureKey" @click="showFigure">
-            查看图形</button
-          ><button
-            class="save"
-            :disabled="store.busy || !figureKey"
-            @click="store.download('figure', `${figureKey}.json`, figureKey)"
-          >
-            下载图形 JSON
-          </button>
-        </div>
-        <PlotView v-if="figure" :figure="figure" :name="figureKey" />
-      </template>
-      <h3>单独导出当前 H5AD</h3>
-      <div class="field-grid">
-        <label
-          ><FieldLabel name="保存存储" /><select
-            aria-label="保存存储"
-            v-model="root"
-            :disabled="store.busy"
-          >
-            <option v-for="r in store.configuration?.results" :key="r.label">{{ r.label }}</option>
-          </select></label
-        ><label
-          ><FieldLabel name="保存目录" /><input
-            aria-label="保存目录"
-            v-model="directory"
-            :disabled="store.busy" /></label
-        ><label
-          ><FieldLabel name="H5AD 文件名" /><input
-            aria-label="H5AD 文件名"
-            v-model="filename"
-            :disabled="store.busy"
-        /></label>
-      </div>
-      <p class="path">
-        目标：{{ store.configuration?.results.find((r) => r.label === root)?.path }} /
-        {{ directory }} / {{ filename }}
-      </p>
-      <button class="save" :disabled="store.busy || !filename" @click="exportH5ad">
-        导出当前 H5AD（不覆盖）
-      </button>
-      <p v-if="exported" role="status">已导出：{{ exported }}</p>
-      <p class="page-note">
-        独立 H5AD 保留当前轴上的历史层、嵌入和报告；完整恢复起点由项目快照保存。导出不替代保存项目。
-      </p>
-    </div>
+    </details>
   </section>
   <div v-else class="card empty-state">
     <h1>还没有打开项目</h1>

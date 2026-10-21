@@ -1722,3 +1722,333 @@ progress {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Desktop work areas keep the current visual language and prioritize the figures. */
+.main-shell main {
+  max-width: 1800px;
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+}
+.page-title {
+  margin-bottom: 20px;
+}
+.nav-step-label {
+  min-width: 0;
+}
+.nav-step-state {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.sidebar nav a {
+  min-height: 52px;
+}
+.mobile-nav-toggle {
+  display: none;
+}
+.account-menu {
+  position: relative;
+  font-size: 14px;
+}
+.account-menu > summary {
+  cursor: pointer;
+}
+.account-menu-body {
+  position: absolute;
+  right: 0;
+  top: 2rem;
+  min-width: 150px;
+  padding: 12px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 5px 20px #21304a18;
+  display: grid;
+  gap: 12px;
+  z-index: 30;
+}
+.workspace-feedback {
+  position: sticky;
+  top: 100px;
+  z-index: 24;
+  box-shadow: 0 3px 14px #21304a12;
+}
+.raw-sample-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px 20px;
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+.raw-sample-toolbar .field-grid {
+  flex: 1 1 320px;
+  margin-bottom: 0;
+}
+.raw-sample-toolbar .detail-list {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 14px;
+}
+.reference-preset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.reference-preset label {
+  flex: 1 1 170px;
+}
+.parameter-state {
+  border-left: 3px solid #2a9276;
+  padding: 10px 12px;
+  background: #f2faf6;
+  font-size: 14px;
+}
+.parameter-state.pending {
+  border-color: #c18a20;
+  background: #fff9ed;
+}
+.parameter-state p {
+  margin: 4px 0 0;
+}
+.application-scope {
+  flex-basis: 100%;
+  max-width: 340px;
+  font-size: 14px;
+}
+.raw-workflow {
+  grid-template-columns: minmax(350px, 0.8fr) minmax(0, 1.6fr);
+  align-items: start;
+}
+.raw-parameter-panel .parameter-field {
+  flex: 1 1 130px;
+}
+.extraction-workspace {
+  display: flex;
+  flex-direction: column;
+}
+.extraction-workspace .page-title {
+  order: -2;
+}
+.extraction-workspace:not(.has-batch) .extraction-preparation {
+  order: -1;
+}
+.extraction-preparation > summary,
+.history-panel > summary,
+.card > summary {
+  font-size: 20px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.card[open] > summary {
+  margin-bottom: 16px;
+}
+.batch-review {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.review-signal {
+  padding: 16px;
+  margin: 16px 0;
+  background: #f7f9fd;
+  border-radius: 8px;
+}
+.review-signal > select {
+  max-width: 360px;
+  margin-right: 10px;
+}
+.qc-details {
+  margin: 16px 0;
+}
+.qc-details > summary {
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+.history-panel {
+  scroll-margin-top: 110px;
+}
+.analysis-toolbar {
+  margin-bottom: 20px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: white;
+  align-items: end;
+}
+.analysis-toolbar label {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.analysis-toolbar select {
+  width: auto;
+}
+.analysis-toolbar button {
+  font-size: 14px;
+}
+.analysis-calculation,
+.analysis-visualization {
+  min-width: 0;
+}
+.analysis-visualization {
+  margin-top: 20px;
+}
+.analysis-content .card {
+  margin-bottom: 0;
+}
+.selected-cell-spectra {
+  margin-top: 24px;
+}
+.result-export-grid {
+  display: grid;
+  gap: 24px;
+}
+.result-export-grid > section {
+  min-width: 0;
+}
+@media (min-width: 1200px) {
+  .assistant-expanded {
+    padding-right: 460px;
+  }
+}
+@media (min-width: 1600px) {
+  .analysis-module-split {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.7fr) minmax(0, 1.7fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .analysis-calculation {
+    padding-right: 20px;
+    border-right: 1px solid var(--border);
+  }
+  .analysis-calculation .field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .analysis-visualization {
+    margin-top: 0;
+  }
+  .assistant-expanded .analysis-module-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .assistant-expanded .analysis-calculation {
+    border-right: 0;
+    padding-right: 0;
+  }
+  .result-export-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+@media (max-width: 1200px) {
+  .raw-workflow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .sidebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 10px 15px;
+    gap: 8px;
+  }
+  .sidebar .brand {
+    padding: 0;
+    font-size: 20px;
+  }
+  .sidebar .brand small {
+    display: none;
+  }
+  .mobile-nav-toggle {
+    display: inline-flex;
+    font-size: 14px;
+    min-height: 34px;
+  }
+  .sidebar nav {
+    grid-column: 1 / -1;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    min-width: 0;
+  }
+  .sidebar nav a {
+    flex-shrink: 0;
+    min-height: 34px;
+    white-space: nowrap;
+  }
+  .nav-step-state {
+    display: none;
+  }
+  .sidebar .sidebar-bottom {
+    display: none;
+  }
+  .sidebar.navigation-open .sidebar-bottom {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 0;
+  }
+  .topbar {
+    gap: 6px;
+    padding: 10px 15px;
+  }
+  .project-heading {
+    width: 100%;
+  }
+  .project-heading .eyebrow,
+  .project-heading > small {
+    display: none;
+  }
+  .topbar-actions {
+    width: 100%;
+    gap: 8px;
+  }
+  .topbar-actions .save-state {
+    margin-right: auto;
+  }
+  .topbar-actions button {
+    padding: 6px 9px;
+    min-height: 32px;
+  }
+  .account-menu {
+    margin-right: 4px;
+  }
+  .account-menu-body {
+    right: auto;
+    left: 0;
+  }
+  .workspace-feedback {
+    top: 108px;
+  }
+  .raw-sample-toolbar .field-grid {
+    flex-basis: 100%;
+  }
+  .analysis-toolbar {
+    padding: 12px;
+    gap: 8px;
+  }
+  .analysis-toolbar label {
+    flex-wrap: wrap;
+  }
+}
+.raw-file-details {
+  flex-basis: 100%;
+  font-size: 14px;
+}
+.raw-file-details > summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.embedding-variance {
+  margin-top: 20px;
+  overflow: auto;
+}
+.plot-shell > .plot {
+  margin-bottom: 12px;
+}

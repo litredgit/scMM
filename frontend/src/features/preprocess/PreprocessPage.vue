@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useViewState } from '../../api/viewState'
 import { displayName } from '../../help/labels'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { normalizationHelp } from '../../help/fields'
 import { useWorkspace } from '../../stores/workspace'
 import type { QC, AnalysisInfo, DataTable } from '../../api/types'
@@ -9,6 +9,13 @@ import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
 import QCComparison from './QCComparison.vue'
 const store = useWorkspace()
+const historyOpen = ref(false)
+const historyPanel = ref<HTMLElement>()
+async function showHistory() {
+  historyOpen.value = true
+  await nextTick()
+  historyPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 const qc = ref<QC>(),
   info = ref<AnalysisInfo>(),
   impact = ref<{ impact: { object: string; before: number; after: number }[]; qc: QC }>()
@@ -139,7 +146,10 @@ useViewState('preprocess', {
           每步成功后保留历史层。
         </p>
       </div>
-      <span class="step-badge">04 / 06</span>
+      <div class="actions">
+        <button class="restore" @click="showHistory">历史与恢复</button
+        ><span class="step-badge">04 / 06</span>
+      </div>
     </div>
     <div class="card">
       <h2>处理当前矩阵</h2>
@@ -249,18 +259,23 @@ useViewState('preprocess', {
         <p class="muted">操作前为当前矩阵，候选后为本次参数的检查结果；变化 = 候选后 − 操作前。</p>
         <h3>数据规模</h3>
         <DataTableView :table="countTables.totals" />
-        <template v-if="countTables.samples.rows.length">
-          <h3>各样本细胞数</h3>
+        <details v-if="countTables.samples.rows.length" class="qc-details">
+          <summary>各样本细胞数</summary>
           <DataTableView :table="countTables.samples" />
-        </template>
-        <h3>来源文件 QC 指标</h3>
-        <QCComparison v-if="qc" :before="qc.files" :after="impact.qc.files" />
+        </details>
+        <details class="qc-details" open>
+          <summary>来源文件 QC 指标</summary>
+          <QCComparison v-if="qc" :before="qc.files" :after="impact.qc.files" />
+        </details>
       </template>
       <template v-else>
         <p class="muted">
           设置上方参数并点击“检查影响”，在此对比操作前与候选后的数量、QC 指标和分布。
         </p>
-        <DataTableView v-if="qc" :table="qc.files" qc />
+        <details class="qc-details">
+          <summary>当前来源文件 QC 明细</summary>
+          <DataTableView v-if="qc" :table="qc.files" qc />
+        </details>
       </template>
       <div class="qc-plots" :class="{ comparing: impact }">
         <div v-if="qc">
@@ -275,8 +290,13 @@ useViewState('preprocess', {
         </div>
       </div>
     </div>
-    <div class="card">
-      <h2>历史与恢复</h2>
+    <details
+      ref="historyPanel"
+      class="card history-panel"
+      :open="historyOpen"
+      @toggle="historyOpen = ($event.target as HTMLDetailsElement).open"
+    >
+      <summary>历史与恢复</summary>
       <DataTableView :table="history" />
       <div class="field-grid">
         <label
@@ -311,7 +331,7 @@ useViewState('preprocess', {
           恢复到预处理起点
         </button>
       </div>
-    </div>
+    </details>
   </section>
   <div v-else class="card empty-state">
     <h1>尚未建立当前数据集</h1>
