@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import ConfigDict, Field, ValidationError
+from pydantic import ConfigDict, Field, ValidationError, field_validator
 
 from .schemas import RequestModel, RevisionRequest
 
@@ -92,15 +92,33 @@ class Filter(Controls):
 
 class Normalize(Controls):
     method: Literal["total", "max", "pqn", "zscore", "log", "minmax", "quantile"]
+    scale: float = Field(default=1.0, gt=0)
+    axis: Literal[0, 1] | None = None
+    reference: Literal["median", "mean"] = "median"
+    pseudo: float = Field(default=1e-6, ge=0)
+
+    @field_validator("axis", mode="before")
+    @classmethod
+    def strict_axis(cls, value):
+        if value is not None and type(value) is not int:
+            raise ValueError("axis must be an integer 0 or 1")
+        return value
 
 
 class Impute(Controls):
-    method: Literal["mean", "median", "knn"] = "median"
+    method: Literal["mean", "median", "most_frequent", "knn"] = "median"
+    n_neighbors: int = Field(default=5, ge=1)
+    weights: Literal["uniform", "distance"] = "uniform"
 
 
 class Outliers(Controls):
     contamination: float = Field(default=0.05, gt=0, le=0.5)
     random_state: int = Field(default=42, ge=0, le=2147483647)
+
+    n_estimators: int = Field(default=100, ge=1, le=10000)
+    max_samples: str | int | float = "auto"
+    max_features: str | int | float = 1.0
+    bootstrap: bool = False
 
 
 class Restore(Controls):

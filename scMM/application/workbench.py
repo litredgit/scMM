@@ -13,7 +13,6 @@ import numpy as np
 import pandas as pd
 from anndata import read_h5ad
 from sklearn.ensemble import IsolationForest
-from sklearn.impute import KNNImputer, SimpleImputer
 
 from scMM.analysis import SupervisedAnalyzer, differential_features
 from scMM.analysis.embedding import reduce_dimension
@@ -172,22 +171,31 @@ class AnalysisWorkspace:
             # Additive embeddings/annotations do not alter existing analysis inputs.
             self.results = {key: (self.token, value) for key, (_, value) in self.results.items()}
 
-    def normalize(self, method):
-        candidate = self.require_data().copy()
-        candidate.X = normalize(dense(candidate.X), method=method)
-        self._commit(candidate, "normalize", {"method": method})
+    def normalize(self, method, *, scale=1.0, axis=None, reference="median", pseudo=1e-6):
+        from scMM.analysis.preprocessing import normalization_options
 
-    def impute(self, method="median"):
-        candidate = self.require_data().copy()
-        if method not in {"median", "mean", "knn"}:
-            raise ValueError("imputation must be median, mean or knn")
-        estimator = (
-            KNNImputer(missing_values=0, keep_empty_features=True)
-            if method == "knn"
-            else SimpleImputer(strategy=method, missing_values=0, keep_empty_features=True)
+        params = normalization_options(
+            method, scale=scale, axis=axis, reference=reference, pseudo=pseudo
         )
+        candidate = self.require_data().copy()
+        try:
+            with np.errstate(over="raise", invalid="raise", divide="raise"):
+                candidate.X = normalize(dense(candidate.X), method=method, norm_kwargs=params)
+        except FloatingPointError as exc:
+            raise ValueError("normalization is undefined for these values and parameters") from exc
+        self._commit(candidate, "normalize", {"method": method, "effective_parameters": params})
+
+    def impute(self, method="median", *, n_neighbors=5, weights="uniform"):
+        from scMM.analysis.preprocessing import imputation_estimator
+
+        candidate = self.require_data().copy()
+        estimator, params = imputation_estimator(method, candidate.n_obs, n_neighbors, weights)
         candidate.X = estimator.fit_transform(dense(candidate.X))
-        self._commit(candidate, "impute", {"method": method, "missing_values": 0})
+        self._commit(
+            candidate,
+            "impute",
+            {"method": method, "missing_values": 0, "effective_parameters": params},
+        )
 
     def filter(self, *, min_total=0.0, min_detected=0.2, min_feature_fraction=0.0):
         data = self.require_data()
@@ -214,21 +222,30 @@ class AnalysisWorkspace:
             },
         )
 
-    def remove_outliers(self, contamination=0.05, random_state=42):
+    def remove_outliers(
+        self,
+        contamination=0.05,
+        random_state=42,
+        *,
+        n_estimators=100,
+        max_samples="auto",
+        max_features=1.0,
+        bootstrap=False,
+    ):
+        from scMM.analysis.preprocessing import outlier_options
+
         data = self.require_data()
-        if not 0 < contamination <= 0.5:
-            raise ValueError("contamination must be within (0, 0.5]")
-        keep = (
-            IsolationForest(contamination=contamination, random_state=random_state).fit_predict(
-                dense(data.X)
-            )
-            == 1
+        params = outlier_options(
+            data.shape,
+            contamination=contamination,
+            random_state=random_state,
+            n_estimators=n_estimators,
+            max_samples=max_samples,
+            max_features=max_features,
+            bootstrap=bootstrap,
         )
-        self._commit(
-            data[keep].copy(),
-            "outliers",
-            {"contamination": contamination, "random_state": random_state},
-        )
+        keep = IsolationForest(**params).fit_predict(dense(data.X)) == 1
+        self._commit(data[keep].copy(), "outliers", {**params, "effective_parameters": params})
 
     def restore(self, layer):
         candidate = self.require_data().copy()

@@ -254,7 +254,7 @@ def test_compute_does_not_block_chat_and_failure_retains_summary(ai, monkeypatch
     started, release = threading.Event(), threading.Event()
     previous = context(ai)
 
-    def slow(_self, method):
+    def slow(_self, method, **_options):
         started.set()
         assert release.wait(10)
         raise ValueError("synthetic compute failure")

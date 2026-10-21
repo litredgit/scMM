@@ -427,3 +427,34 @@ test('latest result preselection, detailed help, stable QC and readable narrow l
   }
   await noError(page)
 })
+
+test('advanced preprocessing controls stay manual and record applied options', async ({ page }) => {
+  await importData(page, '高级预处理')
+  await page.getByRole('link', { name: /预处理/ }).click()
+  await page.getByLabel('下一项操作', { exact: true }).selectOption('normalize')
+  await page.getByText('预处理高级参数', { exact: true }).click()
+  await page.getByLabel('归一化总量尺度', { exact: true }).fill('100')
+  const pending = page.waitForRequest(
+    (r) => r.url().endsWith('/analysis/operation') && !r.postDataJSON().preview,
+  )
+  await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
+  expect((await pending).postDataJSON().options.scale).toBe(100)
+  await expect(page.getByRole('button', { name: '应用到当前数据', exact: true })).toBeEnabled()
+  await page.getByLabel('下一项操作', { exact: true }).selectOption('impute')
+  await page.getByLabel('imputation', { exact: true }).selectOption('knn')
+  await page.getByLabel('插补近邻数', { exact: true }).fill('3')
+  await page.getByLabel('插补近邻权重', { exact: true }).selectOption('distance')
+  const knn = page.waitForRequest(
+    (r) => r.url().endsWith('/analysis/operation') && !r.postDataJSON().preview,
+  )
+  await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
+  expect((await knn).postDataJSON().options).toEqual({
+    method: 'knn',
+    n_neighbors: 3,
+    weights: 'distance',
+  })
+  await expect(page.getByRole('button', { name: '应用到当前数据', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: '历史与恢复', exact: true }).click()
+  await expect(page.locator('.history-panel')).toContainText('effective_parameters')
+  await noError(page)
+})

@@ -489,3 +489,38 @@ def test_feature_scatter_reload_export_staleness_and_metadata_dependencies(workf
         == 400
     )
     assert data.shape == (64, 8)
+
+
+def test_preprocessing_options_precision_history_and_roundtrip(workflow):
+    import_data(workflow)
+    operation(workflow, "normalize", {"method": "total", "scale": 100.0})
+    matrix = pd.read_csv(StringIO(get(workflow, "/results/download?kind=matrix").text), index_col=0)
+    np.testing.assert_allclose(matrix.sum(axis=1), 100)
+    current = workflow[-2]()
+    for options in (
+        {"method": "total", "scale": -1},
+        {"method": "max", "axis": True},
+        {"method": "total", "unknown": 1},
+    ):
+        response = workflow[-1](
+            "/analysis/operation", {"operation": "normalize", "options": options}
+        )
+        assert response.status_code == 422
+        assert workflow[-2]() == current
+    response = workflow[-1](
+        "/analysis/operation", {"operation": "remove_outliers", "options": {"max_samples": "2bad"}}
+    )
+    assert response.status_code == 400
+    assert workflow[-2]() == current
+    operation(workflow, "impute", {"method": "most_frequent"})
+    operation(
+        workflow,
+        "remove_outliers",
+        {"n_estimators": 11, "max_samples": "0.5", "max_features": "1.0", "random_state": 3},
+    )
+    expected = get(workflow, "/analysis").json()["history"]
+    assert expected[-1]["parameters"]["effective_parameters"]["max_features"] == 1.0
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/save", {}).status_code == 200
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    assert get(workflow, "/analysis").json()["history"] == expected

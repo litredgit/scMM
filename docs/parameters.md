@@ -437,6 +437,24 @@ SNR 中不通过细胞判定的扫描仍按既有规则参与背景噪声估计�
 
 Vue normalization 的计算方向与零值影响见[归一化](#归一化)。选项使用同一数值实现，
 每次只执行一种方法，完整说明也可在第四步问号及方法列表查看。
+“预处理高级参数”只应用当前方法相关字段，实验参数不由界面自动选择：
+
+| 网页/工作台字段 | 默认值 | 范围及含义 |
+|---|---|---|
+| total `scale` | 1.0 | 有限正数，每细胞归一化总量 |
+| max/zscore/minmax `axis` | 方法默认 | max 为 1（每细胞），zscore/minmax 为 0（每特征）；可显式选 0/1，不接受布尔值 |
+| PQN `reference` | median | median/mean；自定义参考向量继续用 Python `normalize`/`CyESIData.normalize`，网页不接受任意向量 |
+| log `pseudo` | 1e-6 | 非负，计算 ln(1 + X + pseudo)，无定义或非有限结果拒绝提交 |
+| impute `method` | median | median/mean/most_frequent/knn；0 视为缺失，全空特征保留为 0 |
+| KNN `n_neighbors`/`weights` | 5 / uniform | 正整数，实际请求邻居数以细胞数为上限并记录；uniform/distance，不保证每个缺失项都有同样数量的有效供体 |
+| IsolationForest `n_estimators` | 100 | 1–10000 的整数 |
+| `max_samples` / `max_features` | auto / 1.0 | 整数数量或 (0,1] 小数比例，数量不能超出当前轴；max_samples 另可 auto，不允许比例选出 0 细胞 |
+| `bootstrap` / `random_state` | false / 42 | 是否有放回抽样；seed 为 0–2147483647 整数 |
+
+HTTP 子采样可传数值；为区分数量 1 和比例 1.0，网页传严格十进制字符串（例如 `"1"` / `"1.0"`），拒绝尾随字符。
+应用参数写入历史 `effective_parameters` 并随项目保存重开保留，草稿仅由维护恢复保存，不等同于主动保存的已生效参数。
+Notebook/Python 数据门面的默认插补方法仍各自保持，不把网页 median 默认追溯到其他入口。
+
 
 `min_detected` 为检出比例：当前强度大于 0 的特征数除以本次筛选前全部特征数，范围 0–1，默认 0.2；低于阈值移除，等于阈值保留，0 关闭此条件。先按 `min_total` 和 `min_detected` 筛选细胞，再在保留细胞中计算
 `min_feature_fraction`；筛选不会重新进行峰检出或 SNR 判断。变换和插补会改变这些指标的含义。

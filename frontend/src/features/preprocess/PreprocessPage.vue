@@ -27,6 +27,19 @@ const operation = ref('filter'),
   fraction = ref(0),
   contamination = ref(0.05),
   layer = ref('')
+const advanced = ref({
+  scale: 1,
+  axis: null as number | null,
+  reference: 'median',
+  pseudo: 1e-6,
+  n_neighbors: 5,
+  weights: 'uniform',
+  n_estimators: 100,
+  random_state: 42,
+  max_samples: 'auto',
+  max_features: '1.0',
+  bootstrap: false,
+})
 const signature = computed(() =>
   JSON.stringify([
     operation.value,
@@ -37,6 +50,7 @@ const signature = computed(() =>
     fraction.value,
     contamination.value,
     layer.value,
+    advanced.value,
   ]),
 )
 watch(signature, () => (impact.value = undefined))
@@ -73,10 +87,27 @@ function options() {
         min_feature_fraction: fraction.value,
       }
     : operation.value === 'normalize'
-      ? { method: method.value }
+      ? {
+          method: method.value,
+          scale: advanced.value.scale,
+          axis: advanced.value.axis,
+          reference: advanced.value.reference,
+          pseudo: advanced.value.pseudo,
+        }
       : operation.value === 'impute'
-        ? { method: imputation.value }
-        : { contamination: contamination.value, random_state: 42 }
+        ? {
+            method: imputation.value,
+            n_neighbors: advanced.value.n_neighbors,
+            weights: advanced.value.weights,
+          }
+        : {
+            contamination: contamination.value,
+            random_state: advanced.value.random_state,
+            n_estimators: advanced.value.n_estimators,
+            max_samples: advanced.value.max_samples,
+            max_features: advanced.value.max_features,
+            bootstrap: advanced.value.bootstrap,
+          }
 }
 async function run(preview: boolean) {
   if (preview)
@@ -133,6 +164,7 @@ useViewState('preprocess', {
   contamination,
   layer,
   impact,
+  advanced,
 })
 </script>
 <template>
@@ -215,6 +247,7 @@ useViewState('preprocess', {
             <option value="median">中位数</option>
             <option value="mean">均值</option>
             <option value="knn">近邻插补</option>
+            <option value="most_frequent">众数</option>
           </select></label
         ><label v-if="operation === 'remove_outliers'"
           ><FieldLabel name="contamination" /><input
@@ -227,6 +260,119 @@ useViewState('preprocess', {
             :disabled="store.busy"
         /></label>
       </div>
+      <details v-if="operation !== 'filter'" class="preprocessing-advanced">
+        <summary>预处理高级参数</summary>
+        <p class="muted">
+          仅当前方法使用的字段生效；编辑草稿不计算，生效参数记录在历史中。子采样填整数为数量，带小数点为比例。
+        </p>
+        <div class="field-grid">
+          <template v-if="operation === 'normalize'">
+            <label v-if="method === 'total'"
+              ><span title="scale：归一化后每个细胞的总量，须大于零">总量尺度</span
+              ><input
+                aria-label="归一化总量尺度"
+                type="number"
+                min="0"
+                step="any"
+                v-model.number="advanced.scale"
+                :disabled="store.busy"
+            /></label>
+            <label v-if="['max', 'zscore', 'minmax'].includes(method)"
+              ><span title="axis：0 按特征跨细胞，1 按细胞跨特征；自动沿用该方法默认值"
+                >计算方向</span
+              ><select aria-label="归一化计算方向" v-model="advanced.axis" :disabled="store.busy">
+                <option :value="null">方法默认</option>
+                <option :value="0">按特征（跨细胞）</option>
+                <option :value="1">按细胞（跨特征）</option>
+              </select></label
+            >
+            <label v-if="method === 'pqn'"
+              ><span title="reference：使用全体细胞中位数或均值参考谱；自定义向量使用 Python API"
+                >参考谱</span
+              ><select aria-label="PQN参考谱" v-model="advanced.reference" :disabled="store.busy">
+                <option value="median">中位数</option>
+                <option value="mean">均值</option>
+              </select></label
+            >
+            <label v-if="method === 'log'"
+              ><span title="pseudo：先加此偏移再 log1p，须非负且变换输入大于 -1">对数偏移</span
+              ><input
+                aria-label="对数偏移"
+                type="number"
+                min="0"
+                step="any"
+                v-model.number="advanced.pseudo"
+                :disabled="store.busy"
+            /></label>
+          </template>
+          <template v-if="operation === 'impute' && imputation === 'knn'">
+            <label
+              ><span title="n_neighbors：正整数；实际邻居数不超过细胞数，距离可用供体可能更少"
+                >近邻数</span
+              ><input
+                aria-label="插补近邻数"
+                type="number"
+                min="1"
+                step="1"
+                v-model.number="advanced.n_neighbors"
+                :disabled="store.busy"
+            /></label>
+            <label
+              ><span title="weights：uniform 等权，distance 按可用距离倒数加权">近邻权重</span
+              ><select aria-label="插补近邻权重" v-model="advanced.weights" :disabled="store.busy">
+                <option value="uniform">等权</option>
+                <option value="distance">距离加权</option>
+              </select></label
+            >
+          </template>
+          <template v-if="operation === 'remove_outliers'">
+            <label
+              ><span title="n_estimators：IsolationForest 树数量，1 至 10000">树数量</span
+              ><input
+                aria-label="异常检测树数量"
+                type="number"
+                min="1"
+                max="10000"
+                step="1"
+                v-model.number="advanced.n_estimators"
+                :disabled="store.busy"
+            /></label>
+            <label
+              ><span title="max_samples：auto、整数细胞数或 (0,1] 小数比例，不能超过当前细胞数"
+                >每树细胞数 / 比例</span
+              ><input
+                aria-label="异常检测细胞子采样"
+                v-model="advanced.max_samples"
+                :disabled="store.busy"
+            /></label>
+            <label
+              ><span title="max_features：整数特征数或 (0,1] 小数比例，不能超过当前特征数"
+                >每树特征数 / 比例</span
+              ><input
+                aria-label="异常检测特征子采样"
+                v-model="advanced.max_features"
+                :disabled="store.busy"
+            /></label>
+            <label
+              ><span title="random_state：随机种子，记录并随保存保留">随机种子</span
+              ><input
+                aria-label="异常检测随机种子"
+                type="number"
+                min="0"
+                max="2147483647"
+                step="1"
+                v-model.number="advanced.random_state"
+                :disabled="store.busy"
+            /></label>
+            <label
+              ><input type="checkbox" v-model="advanced.bootstrap" :disabled="store.busy" /><span
+                title="bootstrap：每棵树有放回抽样"
+                >有放回抽样</span
+              ></label
+            >
+          </template>
+        </div>
+      </details>
       <div v-if="operation === 'normalize'" class="method-help">
         <p>
           <strong>{{ method }}</strong>

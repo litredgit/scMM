@@ -323,3 +323,72 @@ def test_graph_resolution_changes_real_partition(method):
     repeated, _ = cluster_matrix(matrix, method, n_neighbors=6, resolution=4)
     assert len(np.unique(low)) < len(np.unique(high))
     np.testing.assert_array_equal(high, repeated)
+
+
+def test_advanced_preprocessing_values_history_and_failure_atomicity(tmp_path):
+    state = workspace()
+    before = state.data.X.copy()
+    state.normalize("total", scale=100)
+    np.testing.assert_allclose(state.data.X.sum(axis=1), 100)
+    assert state.history()[-1]["parameters"]["effective_parameters"] == {"scale": 100.0}
+    state.reset()
+    state.normalize("max", axis=0)
+    np.testing.assert_allclose(state.data.X.max(axis=0), 1)
+    state.reset()
+    state.normalize("pqn", reference="mean")
+    from scMM.util.normalize import normalize
+
+    np.testing.assert_allclose(state.data.X, normalize(before, "pqn", {"reference": "mean"}))
+    state.reset()
+    state.normalize("log", pseudo=0)
+    np.testing.assert_allclose(state.data.X, np.log1p(before))
+    snapshot, token = state.data.copy(), state.token
+    for invoke in (
+        lambda: state.normalize("total", scale=float("nan")),
+        lambda: state.normalize("zscore", axis=True),
+        lambda: state.normalize("pqn", reference="unknown"),
+        lambda: state.impute("knn", n_neighbors=0),
+        lambda: state.impute("knn", n_neighbors=1.2),
+        lambda: state.remove_outliers(n_estimators=True),
+        lambda: state.remove_outliers(max_samples=81),
+        lambda: state.remove_outliers(max_samples=0.001),
+        lambda: state.remove_outliers(max_features=6),
+        lambda: state.remove_outliers(max_samples="2garbage"),
+        lambda: state.remove_outliers(bootstrap=1),
+    ):
+        with pytest.raises(ValueError):
+            invoke()
+        assert state.token == token
+        np.testing.assert_array_equal(state.data.X, snapshot.X)
+    state.data.X[:] = -2
+    with pytest.raises(ValueError, match="undefined"):
+        state.normalize("log")
+    assert state.token == token
+
+
+def test_advanced_imputation_donors_and_outlier_reproducibility():
+    data = AnnData(np.array([[0.0, 0.0, 1.0], [2.0, 0.0, 2.0], [8.0, 0.0, 4.0], [2.0, 0.0, 8.0]]))
+    state = AnalysisWorkspace()
+    state.replace(data)
+    state.impute("most_frequent")
+    assert state.data.X[0, 0] == 2
+    np.testing.assert_array_equal(state.data.X[:, 1], 0)
+    state.reset()
+    state.impute("knn", n_neighbors=1, weights="distance")
+    assert state.data.X[0, 0] == 2
+    assert state.history()[-1]["parameters"]["effective_parameters"] == {
+        "n_neighbors": 1,
+        "weights": "distance",
+    }
+    state.reset()
+    state.impute("knn", n_neighbors=20)
+    assert state.history()[-1]["parameters"]["effective_parameters"]["n_neighbors"] == 4
+    first, second = workspace(), workspace()
+    for target in (first, second):
+        target.remove_outliers(
+            n_estimators=13, max_samples="0.5", max_features="1.0", bootstrap=True, random_state=19
+        )
+    assert first.data.obs_names.equals(second.data.obs_names)
+    params = first.history()[-1]["parameters"]["effective_parameters"]
+    assert params["max_features"] == 1.0 and isinstance(params["max_features"], float)
+    assert params["max_samples"] == 0.5 and params["n_estimators"] == 13
