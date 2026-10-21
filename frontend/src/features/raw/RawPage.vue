@@ -17,6 +17,7 @@ import { useAuth } from '../../stores/auth'
 import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
 import ProcessingFields from './ProcessingFields.vue'
+import SignalDiagnostics from './SignalDiagnostics.vue'
 const store = useWorkspace()
 const auth = useAuth()
 const sample = ref(''),
@@ -849,6 +850,7 @@ useViewState('raw', {
         <p v-else class="muted">打开样本并生成图形后显示。</p>
       </div>
     </div>
+    <SignalDiagnostics :sample="sample" :opened="opened" />
   </section>
   <div v-else class="card empty-state">
     <h1>请先打开项目</h1>

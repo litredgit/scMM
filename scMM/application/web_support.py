@@ -18,7 +18,16 @@ def table_view(frame, *, limit=200):
 
 def figure_view(figure):
     # Plotly's encoder retains float64 values and handles typed numerical arrays.
-    return json.loads(json.dumps(figure.to_dict(), cls=PlotlyJSONEncoder))
+    payload = figure.to_dict()
+    meta = payload.get("layout", {}).get("meta") or {}
+    # JS numbers cannot preserve nanosecond timestamps/inodes above 2**53.
+    for holder in (meta, meta.get("provenance", {})):
+        if isinstance(holder, dict) and isinstance(holder.get("input_identity"), dict):
+            holder["input_identity"] = {
+                key: str(value) if isinstance(value, int) else value
+                for key, value in holder["input_identity"].items()
+            }
+    return json.loads(json.dumps(payload, cls=PlotlyJSONEncoder))
 
 
 def json_view(value):

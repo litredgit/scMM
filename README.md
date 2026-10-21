@@ -18,6 +18,7 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | Thermo profile RAW 直接读取，接入 Python、CLI、目录处理及网页 | [RAW 依赖与真实样本验收](docs/thermo-raw.md) |
 | H5AD、预处理起点恢复、结果失效管理、只读报告与图表重载 | [数据与输出](docs/data-output.md) |
 | 统一降维、双特征散点/特征距离嵌入、差异/Marker/相关网络、监督模型诊断和 SHAP | [分析说明](docs/analysis.md) |
+| 独立 TIC/EIC 信号重构、残差与噪声对照，不改提取算法 | [原始信号诊断](docs/analysis.md#独立原始信号诊断) |
 | 当前数据 QC PDF、当前分析报告及完整参数/数值附件 ZIP | [报告说明](docs/analysis.md#统计解释与网页分析) |
 | 网页 LMSD 候选、相关性辅助排序、天然同位素标记、分类饼图及特征/分子网络 | [注释与同位素](docs/workflow.md#注释与同位素) |
 

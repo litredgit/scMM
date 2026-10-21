@@ -714,3 +714,5 @@ HTTP `/presence/register` 与 `/presence/heartbeat` 为登录页提供受限租�
 `api/routers/maintenance.py` 只开放认证管理入口。公开维护状态只含收集 nonce/完成标记，完整状态只给管理员。
 `frontend/src/api/viewState.ts` 注册可恢复页面状态，`maintenance.ts` 收集已访问页面的参数/图及控件；密码、文件输入和账号配置不进入通用草稿采集。
 `plot/export.py` 负责全精度 ZIP 与禁止外部资源/活动内容的 SVG→PDF；`plot/explanations.py` 和 `plot/isotopes.py` 提供可追溯解释图。
+
+原始独立诊断由 `application/raw_diagnostics.py` 有界冻结扫描、`analysis/signal_diagnostics.py` 运行既有秩一/峰工具和构造完整对照图；HTTP 仅校验契约与前后输入身份，Vue 独立组件保存表单/图，不持矩阵或修改提取参数。

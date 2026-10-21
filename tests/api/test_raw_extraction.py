@@ -216,3 +216,102 @@ def test_vue_snr_only_rejects_legacy_without_mutating_saved_project(workflow):
     assert not list((folder / "processing").glob("*/request.json"))
     assert workflow[-2]()["project"]["manifest"]["parameters"]["extraction_method"] == "legacy"
     assert samples
+
+
+def test_independent_raw_diagnostic_is_readonly_and_input_bound(workflow):
+    samples = raw_samples(workflow)
+    sample_id = samples[0]["id"]
+    assert workflow[-1]("/raw/open", {"sample_id": sample_id}).status_code == 200
+    before = workflow[-2]()
+    options = {
+        "sample_id": sample_id,
+        "signal": "eic",
+        "references": [150.0, 151.0],
+        "baseline": "median",
+        "window": 5,
+    }
+
+    def diagnostic(values):
+        return workflow[0].post(
+            "/api/v1/workspace/raw/diagnostic",
+            headers=workflow[1],
+            json={"revision": workflow[-2]()["revision"], **values},
+        )
+
+    response = diagnostic(options)
+    assert response.status_code == 200, response.text
+    value = response.json()["value"]
+    assert value["table"]["total"] == 62
+    meta = value["figure"]["layout"]["meta"]
+    assert meta["provenance"]["sample_id"] == sample_id
+    assert isinstance(meta["input_identity"]["mtime_ns"], str)
+    exported = workflow[0].post(
+        "/api/v1/workspace/figures/data", headers=workflow[1], json={"figure": value["figure"]}
+    )
+    assert exported.status_code == 200
+    assert "rank_residual" in meta["export_tables"]["diagnostic.csv"]
+    after = workflow[-2]()
+    assert after["revision"] == before["revision"] + 1
+    assert after["project"]["manifest"]["parameters"] == before["project"]["manifest"]["parameters"]
+    assert after["project"]["dataset"] is None
+    before = after
+    saved = get(workflow, f"/raw/diagnostic?sample_id={sample_id}")
+    assert saved.json()["figure"] == value["figure"]
+    assert workflow[-1]("/project/save").status_code == 200
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    assert (
+        get(workflow, f"/raw/diagnostic?sample_id={sample_id}").json()["figure"] == value["figure"]
+    )
+    assert workflow[-1]("/raw/open", {"sample_id": sample_id}).status_code == 200
+    before = workflow[-2]()
+    for change in (
+        {"signal": ""},
+        {"baseline": ""},
+        {"window": 4},
+        {"references": []},
+        {"rt_range": [3.0, 1.0]},
+        {"lam": -1},
+    ):
+        assert diagnostic({**options, **change}).status_code in {400, 422}
+        assert workflow[-2]() == before
+    with (workflow[3] / "a.mzML").open("a") as handle:
+        handle.write("\n")
+    assert diagnostic(options).status_code == 400
+    assert (
+        workflow[0]
+        .post(
+            "/api/v1/workspace/figures/data", headers=workflow[1], json={"figure": value["figure"]}
+        )
+        .status_code
+        == 400
+    )
+
+
+def test_raw_diagnostic_rechecks_input_after_numeric_work(workflow, monkeypatch):
+    import scMM.analysis.signal_diagnostics as domain
+
+    sample_id = raw_samples(workflow)[0]["id"]
+    assert workflow[-1]("/raw/open", {"sample_id": sample_id}).status_code == 200
+    before = workflow[-2]()
+    original = domain.signal_diagnostics
+
+    def changed(*args, **kwargs):
+        output = original(*args, **kwargs)
+        with (workflow[3] / "a.mzML").open("a") as handle:
+            handle.write("\n")
+        return output
+
+    monkeypatch.setattr(domain, "signal_diagnostics", changed)
+    response = workflow[0].post(
+        "/api/v1/workspace/raw/diagnostic",
+        headers=workflow[1],
+        json={
+            "revision": before["revision"],
+            "sample_id": sample_id,
+            "signal": "tic",
+            "baseline": "zero",
+        },
+    )
+    assert response.status_code == 400
+    assert workflow[-2]() == before

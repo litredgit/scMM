@@ -60,6 +60,7 @@
       "tests": [
         "tests/domain/test_analysis.py",
         "tests/domain/test_model_parameters.py",
+        "tests/domain/test_signal_diagnostics.py",
         "tests/domain/test_probability_diagnostics.py",
         "tests/domain/test_unified_embedding.py",
         "tests/domain/test_extended_analysis.py"
@@ -109,6 +110,7 @@
         "tests/application/test_processing_tasks.py",
         "tests/application/test_project_batch.py",
         "tests/application/test_cell_preview.py",
+        "tests/application/test_raw_diagnostics.py",
         "tests/application/test_workbench_parameters.py",
         "tests/application/test_preview_cache.py",
         "tests/application/test_quality_application.py",
@@ -117,6 +119,7 @@
       ],
       "sources": [
         "scMM/application/raw_preview.py",
+        "scMM/application/raw_diagnostics.py",
         "scMM/application/processing.py",
         "scMM/application/tasks.py",
         "scMM/application/worker.py",

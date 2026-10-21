@@ -50,6 +50,24 @@ class RawPlot(Controls):
     normalize: bool = False
 
 
+class RawDiagnostic(Controls):
+    revision: int = Field(ge=0)
+    sample_id: str
+    signal: Literal["tic", "eic"]
+    baseline: Literal["zero", "median"]
+    window: int | None = Field(default=None, ge=3, le=1001)
+    references: list[float] = Field(default_factory=list, max_length=8)
+    ppm: float = Field(default=10.0, gt=0)
+    ms_level: int = Field(default=1, ge=1)
+    rt_range: list[float] | None = Field(default=None, min_length=2, max_length=2)
+    lam: float = Field(default=0.5, ge=0)
+    tau: float = Field(default=2.0, ge=0)
+    sigma_min: float = Field(default=1e-3, gt=0)
+    max_iter: int = Field(default=50, ge=1, le=1000)
+    rank_tol: float = Field(default=1e-6, gt=0)
+    rank_max_iter: int = Field(default=100, ge=1, le=1000)
+
+
 class BatchRequest(RevisionRequest):
     path: str
 

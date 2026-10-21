@@ -32,7 +32,11 @@ def figure_data(body: s.FigureData, request: Request, manager: Service):
         with manager.access(request.headers.get("x-scmm-workspace", "")) as workspace:
             sample = manager.sample(workspace.require_project(), metadata["sample_id"])
             path = manager.storage.resolve_raw_file(sample["storage"], sample["path"])
-            if file_identity(path) != metadata["input_identity"]:
+            if not isinstance(metadata["input_identity"], dict):
+                raise ValueError("原始图的输入身份格式无效。")
+            expected = {key: str(value) for key, value in file_identity(path).items()}
+            supplied = {key: str(value) for key, value in metadata["input_identity"].items()}
+            if expected != supplied:
                 raise ValueError("原始文件已改变，请重新读取后下载。")
     from scMM.plot.export import data_archive
 

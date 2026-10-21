@@ -216,6 +216,72 @@ class RawWorkflow:
                 "detail": detail,
             }
 
+    def raw_diagnostic(self, identity, sample_id, revision, **options):
+        from scMM.analysis.signal_diagnostics import diagnostic_figure, signal_diagnostics
+
+        from .raw_diagnostics import diagnostic_input
+
+        read_keys = {"signal", "references", "ppm", "ms_level", "rt_range"}
+        with self.access(identity, operation="preview") as workspace:
+            workspace.check(revision)
+            sample = self.sample(workspace.require_project(), sample_id)
+            if not workspace.raw or workspace.raw["sample_id"] != sample_id:
+                raise ValueError("请先打开当前样本。")
+            preview = workspace.raw["preview"]
+            input_identity = file_identity(
+                self.storage.resolve_raw_file(sample["storage"], sample["path"])
+            )
+            if input_identity != preview.open_identity or str(preview.path) != sample["path"]:
+                raise ValueError("原始文件已改变，请重新打开。")
+            revision = workspace.revision
+            values, indices, times, channels = diagnostic_input(
+                preview, **{key: options[key] for key in read_keys}
+            )
+        # Frozen, bounded numeric input; iterative work does not hold the workspace lock.
+        result = signal_diagnostics(
+            values, **{key: value for key, value in options.items() if key not in read_keys}
+        )
+        figure, frame = diagnostic_figure(
+            result,
+            indices,
+            times,
+            channels,
+            provenance={
+                "sample_id": sample_id,
+                "input_identity": input_identity,
+                "selection": {key: options[key] for key in read_keys},
+            },
+        )
+        with self.access(identity) as workspace:
+            workspace.check(revision)
+            sample = self.sample(workspace.require_project(), sample_id)
+            if (
+                not workspace.raw
+                or workspace.raw.get("preview") is not preview
+                or file_identity(self.storage.resolve_raw_file(sample["storage"], sample["path"]))
+                != input_identity
+            ):
+                raise ValueError("诊断期间原始输入已改变，请重新打开。")
+            payload = {
+                "figure": figure_view(style_figure(figure)),
+                "table": table_view(frame),
+                "request": {"sample_id": sample_id, **options},
+            }
+            workspace.project.views["raw_diagnostic"] = payload
+            workspace.project.dirty = True
+            workspace.revision += 1
+            return {"workspace": self.view(workspace), "value": payload}
+
+    def saved_raw_diagnostic(self, identity, sample_id):
+        with self.access(identity) as workspace:
+            self.sample(workspace.require_project(), sample_id)
+            payload = workspace.project.views.get("raw_diagnostic")
+            return (
+                payload
+                if payload and payload.get("request", {}).get("sample_id") == sample_id
+                else None
+            )
+
     def start_preview(self, identity, revision, sample_id, parameters):
         with self.access(identity, operation="preview") as workspace:
             workspace.check(revision)

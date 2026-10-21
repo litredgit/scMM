@@ -52,3 +52,13 @@ def collect_preview(body: s.PreviewCollect, manager: Service, identity: Identity
 @router.get("/workspace/raw/scans")
 def scans(manager: Service, identity: Identity, sample_id: str, ms_level: int = 1):
     return manager.scan_catalog(identity, sample_id, ms_level)
+
+
+@router.post("/workspace/raw/diagnostic")
+def raw_diagnostic(body: s.RawDiagnostic, manager: Service, identity: Identity):
+    return manager.raw_diagnostic(identity, **body.model_dump())
+
+
+@router.get("/workspace/raw/diagnostic")
+def saved_raw_diagnostic(manager: Service, identity: Identity, sample_id: str):
+    return manager.saved_raw_diagnostic(identity, sample_id)
