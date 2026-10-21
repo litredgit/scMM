@@ -182,3 +182,22 @@ def test_window_rendering_matches_vrect_and_keeps_thousands_of_windows(monkeypat
     assert figure.layout.shapes[-1].x1 == frame.rt_seconds.iloc[-1]
     np.testing.assert_array_equal(figure.data[1].x, frame.loc[frame.cell_apex, "rt_seconds"])
     assert result.traces is frame
+
+
+def test_corrupt_detection_cache_is_recomputed_without_changing_results(tmp_path):
+    project, catalog = setup_project(tmp_path)
+    project.manifest.update(feature_strategy="independent", manual_parameters=True)
+    request = preview_request(project, catalog)
+    state = project.folder / "processing" / "preview-state.json"
+    first = run_preview(request, state)
+    request["manifest"]["samples"][0]["preview"] = {
+        "artifact": first["artifact"],
+        "parameters": first["parameters"],
+    }
+    (project.folder / first["artifact"] / "traces.csv").write_text("broken", encoding="utf-8")
+    result = run_preview(request, state)
+    assert not result["reused"]
+    assert result["artifact"] != first["artifact"]
+    pd.testing.assert_frame_equal(result["detection"].traces, first["detection"].traces)
+    assert result["detection"].window_ranges == first["detection"].window_ranges
+    assert json.loads(state.read_text(encoding="utf-8"))["status"] == "succeeded"

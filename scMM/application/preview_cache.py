@@ -10,6 +10,8 @@ import numpy as np
 
 from .projects import child_path, write_json
 
+PREVIEW_FILES = ("data.h5ad", "targets.npy", "traces.csv", "detection.json")
+
 
 def file_identity(path):
     path = Path(path).resolve(strict=True)
@@ -30,7 +32,7 @@ def digest_file(path):
 
 def signature(path, parameters):
     params = asdict(parameters) if not isinstance(parameters, dict) else dict(parameters)
-    return {"version": 2, "file": file_identity(path), "parameters": json.loads(json.dumps(params))}
+    return {"version": 3, "file": file_identity(path), "parameters": json.loads(json.dumps(params))}
 
 
 def save_preview(project, sample, preview, parameters, before):
@@ -41,7 +43,6 @@ def save_preview(project, sample, preview, parameters, before):
     folder.mkdir()
     preview.last_dataset.save_h5ad(folder / "data.h5ad")
     np.save(folder / "targets.npy", preview.last_targets, allow_pickle=False)
-    digest = digest_file(folder / "data.h5ad")
     preview.last_detection.traces.to_csv(folder / "traces.csv", index=False)
     write_json(
         folder / "detection.json",
@@ -51,7 +52,10 @@ def save_preview(project, sample, preview, parameters, before):
             "cell_count": preview.last_detection.cell_count,
         },
     )
-    write_json(folder / "identity.json", {**identity, "sha256": digest})
+    artifacts = {name: digest_file(folder / name) for name in PREVIEW_FILES}
+    if signature(sample["path"], parameters) != before:
+        raise ValueError("Input changed during preview; reopen the file")
+    write_json(folder / "identity.json", {**identity, "artifacts": artifacts})
     return str(folder.relative_to(project.folder))
 
 
@@ -62,18 +66,25 @@ def reusable_preview(project_folder, sample, targets=None):
     try:
         folder = child_path(project_folder, record["artifact"])
         identity = json.loads((folder / "identity.json").read_text(encoding="utf-8"))
+        if not isinstance(identity, dict):
+            return None
         expected = signature(sample["path"], sample["parameters"])
         if any(identity.get(key) != value for key, value in expected.items()):
+            return None
+        if any(
+            digest_file(child_path(folder, name)) != identity["artifacts"][name]
+            for name in PREVIEW_FILES
+        ):
             return None
         if targets is not None and not np.array_equal(
             np.load(folder / "targets.npy", allow_pickle=False), targets
         ):
             return None
         output = child_path(folder, "data.h5ad")
-        if digest_file(output) != identity["sha256"]:
+        if signature(sample["path"], sample["parameters"]) != expected:
             return None
         return output
-    except (OSError, ValueError, KeyError):
+    except (OSError, ValueError, KeyError, TypeError):
         return None
 
 
@@ -110,8 +121,11 @@ def cached_shared_targets(project_folder, request):
         metadata = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
         if digest_file(path) != metadata["sha256"]:
             return None
-        return np.load(path, allow_pickle=False)
-    except (OSError, ValueError, KeyError):
+        targets = np.load(path, allow_pickle=False)
+        if key != shared_cache_key(request):
+            return None
+        return targets
+    except (OSError, ValueError, KeyError, TypeError):
         return None
 
 
