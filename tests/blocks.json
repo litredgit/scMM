@@ -121,7 +121,6 @@
         "scMM/application/worker.py",
         "scMM/application/project_batch.py",
         "scMM/application/cell_preview.py",
-        "scMM/application/preview_cache.py",
         "scMM/application/parameters.py",
         "scMM/application/preferences.py",
         "scMM/application/quality.py",
@@ -136,11 +135,13 @@
       "tests": [
         "tests/application/test_projects.py",
         "tests/application/test_saved_items.py",
+        "tests/application/test_retention.py",
         "tests/application/test_text_encoding.py"
       ],
       "sources": [
         "scMM/application/projects.py",
         "scMM/application/trash.py",
+        "scMM/application/retention.py",
         "scMM/application/saved_catalog.py",
         "scMM/application/naming.py",
         "scMM/application/storage.py"
@@ -415,6 +416,7 @@
     ]
   },
   "shared": {
+    "scMM/application/preview_cache.py": ["processing", "projects"],
     "scMM/__init__.py": [
       "spectra",
       "data",

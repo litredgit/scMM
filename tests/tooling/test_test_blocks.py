@@ -56,6 +56,9 @@ def test_changes_select_only_affected_blocks(file, expected):
 
 
 def test_source_dependencies_expand_but_tests_and_fixtures_do_not():
+    preview = plan("scMM/application/preview_cache.py")
+    assert {"processing", "projects"} <= set(preview["selected"])
+    assert "tests/application/test_text_encoding.py" in preview["python_paths"]
     data = plan("scMM/file/data.py")
     assert {
         "data",

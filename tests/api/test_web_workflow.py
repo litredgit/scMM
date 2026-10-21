@@ -4,6 +4,7 @@
 import json
 import time
 from io import StringIO
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -350,3 +351,36 @@ def test_legend_order_persists_independently_of_position(workflow):
     workflow[-1]("/presentation", {"key": "example", "order": []}, "PUT").raise_for_status()
     assert workflow[-2]()["project"]["presentation"]["example"] == "hidden"
     assert workflow[-2]()["project"]["legend_orders"]["example"] == []
+
+
+def test_retention_advice_is_read_only_and_revision_guarded(workflow):
+    _, _, manager, _, _, _, _, current, post = workflow
+    before = current()
+    project_path = before["project"]["path"]
+    manager_state = manager.saved_items()
+    snapshot = {str(p): p.read_bytes() for p in Path(project_path).rglob("*") if p.is_file()}
+    response = post("/saved/retention", {"root": "项目结果", "path": project_path})
+    assert response.status_code == 200, response.text
+    advice = response.json()
+    assert advice["read_only"] and "token" not in advice
+    assert advice["immediate_freed_bytes"] == 0
+    assert current()["revision"] == before["revision"]
+    assert snapshot == {
+        str(p): p.read_bytes() for p in Path(project_path).rglob("*") if p.is_file()
+    }
+    assert not manager_state.trash_root.exists()
+    assert post("/saved/retention", {"root": "Output", "path": project_path}).status_code == 400
+    assert (
+        post(
+            "/saved/retention", {"root": "项目结果", "path": str(Path(project_path).parent)}
+        ).status_code
+        == 403
+    )
+    assert (
+        post(
+            "/saved/retention",
+            {"root": "项目结果", "path": project_path, "revision": before["revision"] + 1},
+        ).status_code
+        == 409
+    )
+    assert post("/saved/move", {"token": "retention-advice"}).status_code == 400

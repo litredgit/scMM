@@ -59,6 +59,17 @@ def plan(body: s.SavedPlan, manager: Service, identity: Identity):
         return {"token": token, **plan, **description}
 
 
+@router.post("/workspace/saved/retention")
+def retention(body: s.SavedPlan, manager: Service, identity: Identity):
+    from scMM.application.retention import retention_plan
+
+    with manager.access(identity) as workspace:
+        workspace.check(body.revision)
+        if body.root != "项目结果":
+            raise ValueError("保留计划仅支持本环境项目根中的项目。")
+        return retention_plan(manager.saved_items(), body.path)
+
+
 @router.post("/workspace/saved/move")
 def move(body: s.ExecutePlan, manager: Service, identity: Identity):
     with manager.access(identity) as workspace:

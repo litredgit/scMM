@@ -24,6 +24,55 @@ const plan = ref<{
   project_name?: string
   protection?: string
 }>()
+interface RetentionPlan {
+  project: string
+  generated_at: string
+  policy: string
+  scope: string
+  warnings: string[]
+  candidate_bytes: number
+  items: {
+    kind: string
+    paths: string[]
+    status: 'candidate' | 'protected' | 'unknown'
+    reasons: string[]
+    files: number | null
+    bytes: number | null
+  }[]
+}
+const retention = ref<RetentionPlan>()
+let retentionGeneration = 0
+watch([selected, () => store.current?.workspace_id], () => {
+  retentionGeneration++
+  retention.value = undefined
+})
+async function inspectRetention() {
+  const generation = ++retentionGeneration
+  const project = selected.value
+  const workspace = store.current?.workspace_id
+  retention.value = undefined
+  const value = await store.inspect<RetentionPlan>('/saved/retention', {
+    root: '项目结果',
+    path: project,
+  })
+  if (
+    generation === retentionGeneration &&
+    project === selected.value &&
+    workspace === store.current?.workspace_id
+  )
+    retention.value = value
+}
+function downloadRetention() {
+  if (!retention.value) return
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(retention.value, null, 2)], { type: 'application/json' }),
+  )
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'scmm-retention-plan.json'
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
 onActivated(() => void refresh())
 async function refresh() {
   try {
@@ -102,6 +151,61 @@ async function clear() {
       <button class="danger" :disabled="store.busy || !selected" @click="makePlan(true)">
         查看项目删除计划
       </button>
+      <button class="preview" :disabled="store.busy || !selected" @click="inspectRetention">
+        查看快照与缓存保留计划
+      </button>
+      <div v-if="retention" class="alert" aria-label="快照与缓存保留计划">
+        <p>{{ retention.policy }}</p>
+        <p>{{ retention.scope }}</p>
+        <p>
+          生成时间：{{
+            new Date(retention.generated_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+          }}（北京时间）
+        </p>
+        <p>
+          只读检查，生成后状态仍可能变化。候选逻辑大小
+          {{ (retention.candidate_bytes / 1024 / 1024).toFixed(2) }} MiB；本次释放 0 字节。
+        </p>
+        <p v-for="warning in retention.warnings" :key="warning">{{ warning }}</p>
+        <div class="data-table">
+          <table>
+            <thead>
+              <tr>
+                <th>用途 / 路径</th>
+                <th>结论</th>
+                <th>原因</th>
+                <th>文件数 / 大小</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in retention.items" :key="item.paths.join('|')">
+                <td>
+                  {{ item.kind }}
+                  <div v-for="value in item.paths" :key="value">{{ value }}</div>
+                </td>
+                <td>
+                  {{
+                    {
+                      candidate: '人工审阅候选',
+                      protected: '保留（受保护）',
+                      unknown: '保留（待核实）',
+                    }[item.status]
+                  }}
+                </td>
+                <td>{{ item.reasons.join('；') }}</td>
+                <td>
+                  {{ item.files ?? '—' }} /
+                  {{ item.bytes === null ? '—' : `${(item.bytes / 1024 / 1024).toFixed(2)} MiB` }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-if="!retention.items.length">当前没有快照或缓存条目。</p>
+        <button class="download" :disabled="store.busy" @click="downloadRetention">
+          下载只读保留计划
+        </button>
+      </div>
       <details>
         <summary>浏览并选择结果文件或目录</summary>
         <FileBrowser

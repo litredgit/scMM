@@ -6,11 +6,12 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from scMM.application.preferences import save_preferences
-from scMM.application.preview_cache import digest_file, signature
+from scMM.application.preview_cache import PREVIEW_FILES, digest_file, signature
 from scMM.application.processing import ProcessingParameters
 from scMM.application.projects import write_json
 
@@ -60,14 +61,20 @@ def test_preview_metadata_reuse_with_ascii_default_encoding(tmp_path):
     parameters = asdict(ProcessingParameters(ref_mz=150.0))
     identity = signature(raw, parameters)
     write_json(
-        folder / "identity.json", {**identity, "sha256": digest_file(output), "note": "中文"}
-    )
-    write_json(
         folder / "detection.json",
         {"reference_mz": [150.0], "window_ranges": [[1, 3]], "cell_count": 1, "note": "中文"},
     )
     pd.DataFrame({"scan_index": [0], "rt_seconds": [1.0]}).to_csv(
         folder / "traces.csv", index=False
+    )
+    np.save(folder / "targets.npy", np.array([150.0]), allow_pickle=False)
+    write_json(
+        folder / "identity.json",
+        {
+            **identity,
+            "artifacts": {name: digest_file(folder / name) for name in PREVIEW_FILES},
+            "note": "中文",
+        },
     )
     ascii_process(
         """
