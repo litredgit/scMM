@@ -232,3 +232,94 @@ def test_metadata_preserves_matrix_layers_embedding_and_unrelated_results():
     state.reset()
     assert state.data.obs.group.iloc[0] == "new"
     assert state.data.obs["sample"].iloc[0] == "renamed"
+
+
+def test_dbscan_parameters_change_labels_and_survive_h5ad(tmp_path):
+    state = AnalysisWorkspace()
+    matrix = np.array([[0, 0], [0, 0.1], [5, 5], [5, 5.1], [10, 0]], dtype=float)
+    state.replace(AnnData(matrix))
+    state.cluster("dbscan", key="tuned", eps=0.3, min_samples=2, metric="euclidean")
+    assert state.data.obs["tuned"].astype(str).tolist() == ["0", "0", "1", "1", "-1"]
+    state.cluster("dbscan", key="small_radius", eps=0.05, min_samples=2)
+    assert set(state.data.obs["small_radius"].astype(str)) == {"-1"}
+    effective = state.history()[-2]["parameters"]["effective_parameters"]
+    assert effective == {"eps": 0.3, "min_samples": 2, "metric": "euclidean"}
+    target = state.save_h5ad(
+        StorageCatalog([StorageRoot("output", tmp_path)]), "output", ".", "clusters.h5ad"
+    )
+    loaded = AnalysisWorkspace()
+    loaded.replace(read_h5ad(target))
+    assert loaded.history()[-2]["parameters"]["effective_parameters"] == effective
+    pd.testing.assert_series_equal(loaded.data.obs["tuned"], state.data.obs["tuned"])
+    np.testing.assert_array_equal(state.data.X, matrix)
+
+
+@pytest.mark.parametrize(
+    "method,options",
+    [
+        ("dbscan", {"eps": 0}),
+        ("dbscan", {"eps": float("nan")}),
+        ("dbscan", {"min_samples": True}),
+        ("dbscan", {"min_samples": 1.5}),
+        ("hierarchical", {"linkage": "ward", "metric": "cosine"}),
+        ("hierarchical", {"metric": "precomputed"}),
+        ("kmeans", {"n_clusters": 81}),
+        ("kmeans", {"n_init": 0}),
+        ("kmeans", {"tol": -1}),
+        ("leiden", {"resolution": 0}),
+        ("leiden", {"n_iterations": 0}),
+        ("leiden", {"n_iterations": -1.0}),
+        ("louvain", {"threshold": -1}),
+        ("louvain", {"max_level": 0}),
+        ("leiden", {"n_neighbors": 80}),
+    ],
+)
+def test_clustering_parameter_errors_are_atomic(method, options):
+    state = workspace()
+    before = state.data.copy()
+    token = state.token
+    with pytest.raises(ValueError):
+        state.cluster(method, key="invalid", **options)
+    assert state.token == token and not state.history()
+    assert "invalid" not in state.data.obs
+    np.testing.assert_array_equal(state.data.X, before.X)
+    pd.testing.assert_frame_equal(state.data.obs, before.obs)
+
+
+@pytest.mark.parametrize(
+    "method,options",
+    [
+        ("kmeans", {"n_init": 4, "max_iter": 80, "tol": 0.001}),
+        ("hierarchical", {"linkage": "average", "metric": "manhattan"}),
+        ("leiden", {"resolution": 0.5, "n_neighbors": 5, "n_iterations": 3}),
+        ("louvain", {"resolution": 0.7, "n_neighbors": 6, "threshold": 1e-6, "max_level": 2}),
+    ],
+)
+def test_clustering_effective_parameters_and_output_key_protection(method, options):
+    if method == "leiden":
+        pytest.importorskip("leidenalg")
+    state = workspace()
+    state.cluster(method, key="explicit", **options)
+    history = state.history()[-1]["parameters"]
+    for key, value in options.items():
+        assert history["effective_parameters"][key] == value
+    before = state.token
+    labels = state.data.obs["explicit"].copy()
+    with pytest.raises(ValueError, match="already exists"):
+        state.cluster(method, key="explicit", **options)
+    assert state.token == before
+    pd.testing.assert_series_equal(state.data.obs["explicit"], labels)
+
+
+@pytest.mark.parametrize("method", ["leiden", "louvain"])
+def test_graph_resolution_changes_real_partition(method):
+    if method == "leiden":
+        pytest.importorskip("leidenalg")
+    from scMM.analysis.clustering import cluster_matrix
+
+    matrix = np.random.default_rng(9).normal(size=(60, 4))
+    low, _ = cluster_matrix(matrix, method, n_neighbors=6, resolution=0.1)
+    high, _ = cluster_matrix(matrix, method, n_neighbors=6, resolution=4)
+    repeated, _ = cluster_matrix(matrix, method, n_neighbors=6, resolution=4)
+    assert len(np.unique(low)) < len(np.unique(high))
+    np.testing.assert_array_equal(high, repeated)

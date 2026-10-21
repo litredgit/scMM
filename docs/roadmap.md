@@ -184,7 +184,7 @@ ANN-04 相关性辅助排序、分类饼图、m/z 特征网络及分子网络已
 | QC-01 | Notebook 的采集稳定性 QC：参考强度、细胞数、样本中位强度相关 | 提升为应用层纯计算，保留采集顺序和来源，显示批次/时间变化及完整表；不把细胞级稳定性图当生物重复验证 |
 | REPORT-01 | `analysis.quality.render_quality_report()` QC PDF；后续实验报告 | 先接有效当前矩阵的 QC PDF 下载，再独立设计整份实验报告；明确快照/矩阵/参数来源，失效报告不可误作当前结果；中文字体、分页、大数据和导出失败覆盖 |
 | PARAM-01 | 预处理高级参数：normalization 选项、KNN 邻居数、most_frequent、IsolationForest 参数 | 显式白名单/类型/范围/样本量检查；参数写入历史，默认值保持现有入口各自定义；未应用草稿和已生效参数可区分 |
-| PARAM-02（承接 UI-07） | DBSCAN `eps`/`min_samples`、Leiden/Louvain `resolution` 及其余已支持的算法参数 | 当前应用层固定值须先扩展，再接 HTTP/Vue；不仅增加表单；完整参数溯源、非法值、输出键保护和旧项目重载通过 |
+| PARAM-02（承接 UI-07） | 已接 DBSCAN `eps`/`min_samples`/距离、图聚类 `resolution`、KMeans 初始化/迭代/容差、层次连接/距离、Leiden 迭代与 Louvain 停止/层数白名单；实际参数溯源及旧项目默认兼容已补，待本批统一验收 | 应用/HTTP/Vue/保存重载闭环；完整参数溯源、非法值、输出键保护和旧项目重载通过。不开放任意第三方 kwargs 或预计算距离矩阵 |
 | PARAM-03 | 监督模型与降维的其余已支持参数、SHAP 类别/显示选项 | HTTP 已有部分 model_params，Vue 主要开放 LDA solver；逐算法建立字段与约束，不开放任意对象/代码；保留分组验证、泄漏提示和失败语义 |
 | SUBSET-01 | 显式细胞/特征子集：AnnData 切片及特征读取能力 | `CyESIData.__getitem__` 实际是最近 m/z 强度读取，不是数据集切片；子集修改需应用层适配；预览数量、按稳定 ID 应用，矩阵/元数据/层/嵌入/结果及恢复起点一致；不按显示行号直接修改数据 |
 | TOOL-01 | `r1_decomposition()`、`peak_recon()` 等底层工具 | 先明确输入信号/基线、目标、噪声含义与处理位置，完成数值对照后接入；现有 SNR/legacy 提取保持原定义，工具接入不能暗中替换生产算法 |

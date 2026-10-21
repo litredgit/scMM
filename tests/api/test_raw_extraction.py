@@ -31,7 +31,8 @@ def test_strict_parameters_options_and_preview_state(workflow):
     import_data(workflow)
     current = workflow[-2]()
     bad = workflow[-1](
-        "/analysis/operation", {"operation": "cluster", "options": {"method": "kmeans", "eps": 4}}
+        "/analysis/operation",
+        {"operation": "cluster", "options": {"method": "kmeans", "unknown_parameter": 4}},
     )
     assert bad.status_code == 422 and workflow[-2]() == current
     bad = workflow[-1]("/analysis/plot", {"kind": "violin", "options": {"features": ["f0"] * 13}})

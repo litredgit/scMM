@@ -352,3 +352,63 @@ test('draft capture drops forms from the preceding project', async ({ page }) =>
   expect(current.forms['/analysis']).toBeUndefined()
   expect(JSON.stringify(current)).not.toContain('X_only_previous_project')
 })
+
+test('clustering parameters execute explicitly and persist across saved project reopen', async ({
+  page,
+}) => {
+  await importAnalysis(page, '聚类高级参数')
+  await module(page, '聚类')
+  await page.getByLabel('clustering', { exact: true }).selectOption('dbscan')
+  await expect(page.getByLabel('eps', { exact: true })).toHaveValue('0.5')
+  await expect(page.getByLabel('min_samples', { exact: true })).toHaveValue('5')
+  await page.getByLabel('eps', { exact: true }).fill('0.001')
+  await page.getByLabel('min_samples', { exact: true }).fill('2')
+  await page
+    .locator('summary')
+    .filter({ hasText: /^聚类高级参数$/ })
+    .click()
+  await page.getByLabel('聚类距离', { exact: true }).selectOption('manhattan')
+  await page.getByLabel('cluster_key', { exact: true }).fill('db_custom')
+  const ran = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/analysis/operation') &&
+      response.request().postDataJSON()?.operation === 'cluster',
+  )
+  await page.getByRole('button', { name: '运行聚类', exact: true }).click()
+  const response = await ran
+  expect(response.status()).toBe(200)
+  expect(response.request().postDataJSON().options).toMatchObject({
+    eps: 0.001,
+    min_samples: 2,
+    metric: 'manhattan',
+  })
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.getByRole('button', { name: '保存项目', exact: true }).click()
+  await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
+  await page.getByRole('button', { name: '关闭项目', exact: true }).click()
+  await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
+  await page
+    .getByRole('row')
+    .filter({ hasText: '聚类高级参数' })
+    .getByRole('button', { name: '打开项目 →' })
+    .click()
+  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await module(page, '聚类')
+  await expect(page.getByLabel('eps', { exact: true })).toHaveValue('0.001')
+  await expect(page.getByLabel('min_samples', { exact: true })).toHaveValue('2')
+  await page.getByLabel('clustering', { exact: true }).selectOption('louvain')
+  await expect(page.getByLabel('聚类分辨率', { exact: true })).toHaveValue('1')
+  await page.getByLabel('聚类分辨率', { exact: true }).fill('0.7')
+  await page.getByLabel('cluster_key', { exact: true }).fill('louvain_custom')
+  const graph = page.waitForResponse(
+    (value) =>
+      value.url().endsWith('/analysis/operation') &&
+      value.request().postDataJSON()?.operation === 'cluster',
+  )
+  await page.getByRole('button', { name: '运行聚类', exact: true }).click()
+  const graphResult = await graph
+  expect(graphResult.status()).toBe(200)
+  expect(graphResult.request().postDataJSON().options.resolution).toBe(0.7)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})

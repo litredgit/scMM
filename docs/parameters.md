@@ -345,6 +345,23 @@ CLI、Python API 和 Notebook 的默认提取方法仍为 legacy；两种提取�
 独立于降维，初始来自分析配置的 `random_state`（通用默认 42），SHAP 使用该监督 seed。
 监督 `group_key` 按用户所选字段计数来源组，拒绝空白标签；分组留出及 CV 的每类来源数量要求
 与解释边界见[统计解释](analysis.md#统计解释与网页分析)，不会因数量不足自动改 seed 或切换验证方式。
+
+网页聚类使用下表白名单；旧项目缺少新增字段时保留此前算法默认值，不追溯重算旧聚类。
+Python 工作台 `AnalysisWorkspace.cluster()` 同样接受这些参数；Notebook/PlotEngine 的参数入口及默认值仍按各自接口定义。
+
+| 方法 | 可调参数及网页/工作台默认值 | 合法性与含义 |
+|---|---|---|
+| 通用 | `use_rep="X"`、`random_state=42`、新输出 `key="clusters"` | 显式选矩阵/嵌入；输入须有限且非空，已有观测列不能覆盖 |
+| KMeans | `n_clusters=3`、`n_init=10`、`max_iter=300`、`tol=0.0001` | 簇数为 2 至细胞数；初始化/迭代次数为正整数，容差非负 |
+| 层次聚类 | `n_clusters=3`、`linkage="ward"`、`metric="euclidean"` | 连接方式为 ward/complete/average/single；Ward 仅支持欧氏距离 |
+| DBSCAN | `eps=0.5`、`min_samples=5`、`metric="euclidean"` | 半径为正数，尺度取决于输入表示及距离；邻域样本数含自身，至少为 1；可超过细胞数并得到全部噪声 |
+| Leiden / Louvain | `n_neighbors=15`、`resolution=1.0` | 邻居数为 1 至细胞数减 1；分辨率为有限正数，不等同于质谱质量分辨率 |
+| Leiden | `n_iterations=2` | 正整数或 -1（至不再改进） |
+| Louvain | `threshold=1e-7`、`max_level=null` | 停止阈值非负；最大层数为空时不限，否则为正整数 |
+
+DBSCAN 与层次聚类的距离白名单为 euclidean/manhattan/cosine，不开放预计算距离矩阵。
+所有数值须有限，整数不接受布尔值/小数；方法不适用的表单草稿不参与计算。
+历史 `effective_parameters` 仅记录该算法实际生效的参数；修改表单不计算，点击“运行聚类”后才生成新列。
 聚类仍共享降维面板的 `use_rep`、`n_neighbors` 和 `random_state`。旧项目缺独立字段时保留原先借用值，
 恢复/保存操作见[分析流程](workflow.md#分析显示与导出)，开发兼容规则见[接入指南](development.md#参数草稿与恢复)。
 

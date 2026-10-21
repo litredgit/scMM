@@ -131,6 +131,17 @@ class Cluster(Controls):
     n_clusters: int = Field(default=3, ge=2)
     n_neighbors: int = Field(default=15, ge=1)
     random_state: int = Field(default=42, ge=0, le=2147483647)
+    eps: float = Field(default=0.5, gt=0)
+    min_samples: int = Field(default=5, ge=1)
+    resolution: float = Field(default=1.0, gt=0)
+    n_init: int = Field(default=10, ge=1)
+    max_iter: int = Field(default=300, ge=1)
+    tol: float = Field(default=1e-4, ge=0)
+    linkage: Literal["ward", "complete", "average", "single"] = "ward"
+    metric: Literal["euclidean", "manhattan", "cosine"] = "euclidean"
+    n_iterations: int = Field(default=2, ge=-1)
+    threshold: float = Field(default=1e-7, ge=0)
+    max_level: int | None = Field(default=None, ge=1)
 
 
 class Markers(Controls):

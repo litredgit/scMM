@@ -334,32 +334,50 @@ class AnalysisWorkspace:
         )
 
     def cluster(
-        self, method, *, use_rep="X", key="clusters", n_clusters=3, n_neighbors=15, random_state=42
+        self,
+        method,
+        *,
+        use_rep="X",
+        key="clusters",
+        n_clusters=3,
+        n_neighbors=15,
+        random_state=42,
+        eps=0.5,
+        min_samples=5,
+        resolution=1.0,
+        n_init=10,
+        max_iter=300,
+        tol=1e-4,
+        linkage="ward",
+        metric="euclidean",
+        n_iterations=2,
+        threshold=1e-7,
+        max_level=None,
     ):
-        from sklearn.cluster import DBSCAN, AgglomerativeClustering, KMeans
+        from scMM.analysis.clustering import cluster_matrix
 
         candidate = self.require_data().copy()
         if key in candidate.obs:
             raise ValueError("Observation key already exists; choose a new key")
         X = dense(candidate.X if use_rep == "X" else candidate.obsm[use_rep])
-        if method == "kmeans":
-            labels = KMeans(
-                n_clusters=n_clusters, random_state=random_state, n_init=10
-            ).fit_predict(X)
-        elif method == "hierarchical":
-            labels = AgglomerativeClustering(n_clusters=n_clusters).fit_predict(X)
-        elif method == "dbscan":
-            labels = DBSCAN().fit_predict(X)
-        elif method in {"leiden", "louvain"}:
-            from scMM.plot._engine_clustering import _build_neighbor_edges, _cluster_graph
-
-            if not 1 <= n_neighbors < len(X):
-                raise ValueError("n_neighbors must be below n_obs")
-            labels = _cluster_graph(
-                method, len(X), _build_neighbor_edges(X, n_neighbors), 1.0, random_state, {}
-            )
-        else:
-            raise ValueError("unsupported clustering method")
+        labels, effective = cluster_matrix(
+            X,
+            method,
+            n_clusters=n_clusters,
+            n_neighbors=n_neighbors,
+            random_state=random_state,
+            eps=eps,
+            min_samples=min_samples,
+            resolution=resolution,
+            n_init=n_init,
+            max_iter=max_iter,
+            tol=tol,
+            linkage=linkage,
+            metric=metric,
+            n_iterations=n_iterations,
+            threshold=threshold,
+            max_level=max_level,
+        )
         candidate.obs[key] = pd.Categorical(labels.astype(str))
         metadata = candidate.uns["scmm_workbench"]
         metadata["derived_obs"] = [*metadata.get("derived_obs", []), key]
@@ -373,6 +391,7 @@ class AnalysisWorkspace:
                 "n_clusters": n_clusters,
                 "n_neighbors": n_neighbors,
                 "random_state": random_state,
+                "effective_parameters": effective,
             },
             clear_derived=False,
             save_layer=False,

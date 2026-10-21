@@ -26,6 +26,17 @@ export function useAnalysisSettings() {
     use_rep: 'X',
     n_neighbors: 15,
     random_state: 42,
+    eps: 0.5,
+    min_samples: 5,
+    resolution: 1,
+    n_init: 10,
+    max_iter: 300,
+    tol: 0.0001,
+    linkage: 'ward',
+    metric: 'euclidean',
+    n_iterations: 2,
+    threshold: 0.0000001,
+    max_level: null as number | null,
   })
   const diff = reactive({
     group_key: '',

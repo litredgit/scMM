@@ -1,5 +1,16 @@
 /** UI-specific explanations. Scientific extraction defaults come from /configuration. */
 export const fieldHelp: Record<string, string> = {
+  eps: 'DBSCAN 邻域半径，与所选输入表示和距离度量的尺度一致，必须大于 0。',
+  min_samples: 'DBSCAN 核心点所需邻域样本数（包括自身），至少为 1；超过细胞总数时可得到全部噪声。',
+  cluster_max_iter: 'max_iter：KMeans 最大迭代次数，至少 1，默认 300。',
+  n_init: 'KMeans 使用不同初始化重复拟合的次数，至少为 1；默认 10。',
+  tol: 'KMeans 迭代收敛的非负容差，默认 0.0001。',
+  linkage: '层次聚类的簇间连接方式，Ward 仅支持欧氏距离。',
+  n_iterations: 'Leiden 优化迭代次数，正整数或 -1（运行至不再改进），默认 2。',
+  threshold: 'Louvain 模块度改进的停止阈值，非负，默认 0.0000001。',
+  max_level: 'Louvain 最大层数，空值表示不限；填写时为正整数。',
+  cluster_resolution: 'resolution：图聚类分辨率，必须大于 0，默认 1；不等同于质谱仪质量分辨率。',
+
   min_total:
     '每个细胞各特征的当前强度之和至少需达到此值；低于阈值移除，等于阈值保留。单位随当前矩阵变换而改变，0 表示不限制非负强度数据。先筛选细胞，再筛选特征。',
   min_detected:

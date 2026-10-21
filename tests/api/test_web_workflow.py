@@ -403,3 +403,38 @@ def test_retention_advice_is_read_only_and_revision_guarded(workflow):
         == 409
     )
     assert post("/saved/move", {"token": "retention-advice"}).status_code == 400
+
+
+def test_clustering_parameters_reach_algorithm_and_persist_in_history(workflow):
+    data = import_data(workflow)
+    options = {
+        "method": "dbscan",
+        "key": "dbscan_tuned",
+        "eps": 0.001,
+        "min_samples": 2,
+        "metric": "manhattan",
+    }
+    operation(workflow, "cluster", options)
+    with workflow[2].access(workflow[1]["X-SCMM-Workspace"]) as browser:
+        project = browser.project
+    assert set(project.workspace.data.obs["dbscan_tuned"].astype(str)) == {"-1"}
+    assert project.workspace.history()[-1]["parameters"]["effective_parameters"] == {
+        "eps": 0.001,
+        "min_samples": 2,
+        "metric": "manhattan",
+    }
+    before = workflow[-2]()["revision"]
+    invalid = workflow[-1](
+        "/analysis/operation",
+        {"operation": "cluster", "options": {**options, "key": "bad", "eps": -1}},
+    )
+    assert invalid.status_code == 422
+    assert workflow[-2]()["revision"] == before
+    assert "bad" not in project.workspace.data.obs
+    assert workflow[-1]("/project/save").status_code == 200
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    with workflow[2].access(workflow[1]["X-SCMM-Workspace"]) as browser:
+        reloaded = browser.project
+    assert reloaded.workspace.history()[-1]["parameters"]["effective_parameters"]["eps"] == 0.001
+    np.testing.assert_array_equal(reloaded.workspace.data.X, data.X)
