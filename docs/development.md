@@ -13,7 +13,10 @@ Vue/FastAPI 网页按功能组织完整六步交互；前端页面在仓库根 `
 共享组件、路由、请求客户端及 Pinia 状态分别在相邻 `components/`、`router/`、`api/`、`stores/`。
 `scMM/api/routers/` 按项目、样本、存储、原始谱、提取、分析、结果和预设拆分 HTTP 边界，
 `schemas.py`、`workflow_schemas.py` 定义接口契约并校验科学参数。
-`application/web_workspace.py` 持有独立浏览器工作区、写入修订及事务候选；不依赖前端或 FastAPI。
+`application/web_workspace.py` 保持工作区门面，负责注册/过期、所有者复核、访问锁、写入修订与事务门禁；不依赖前端或 FastAPI。
+`workspace_state.py` 定义工作区状态与错误，`web_projects.py` 负责项目/样本操作、候选复制和元数据映射，
+`web_ai.py` 发布已筛选摘要并在短锁下读取。旧门面导出保持兼容；项目/样本操作仍经过同一 mutate/access 门禁，
+AI 网络调用继续不占科学工作区锁。
 `web_raw.py`、`web_analysis.py`、`web_results.py` 分别编排原始谱/任务、分析及下载/管理。
 `application/result_catalog.py` 集中已有统计/监督结果的操作名、关联图、元数据依赖、只读报告序列化与重载；
 前端 `features/analysis/results.contract.json` 保留显式映射，由契约测试与目录逐项核对。
@@ -115,7 +118,7 @@ scMM/
 
 当前优先审阅入口：`frontend/src/stores/workspace.ts` 的 run/read 与任务状态，
 RawPage/ExtractionPage 的 KeepAlive 轮询，AnalysisPage 的计算→刷新→绘图，
-`application/web_workspace.py` 的工作区锁和候选复制，`web_analysis.py` 的同步操作，
+`application/web_workspace.py` 的工作区锁与 `web_projects.py` 的候选复制，`web_analysis.py` 的同步操作，
 `web_results.py` 的保存/导出。它们是 M1/M2 的代码审阅起点，不能仅凭文件较长认定性能瓶颈。
 当前层次继续保持，复杂页面可随交互修复拆分组件；性能优化须有输入规模、实际参数与测量证据。
 
@@ -448,7 +451,7 @@ if (has('network')) await loadWithPlot('network', 'network_plot')
    空输入和零分母。可选依赖在对应功能调用时导入并提供明确缺失提示，不增加全站启动依赖。
 2. **应用编排**：`application/workbench.py::AnalysisWorkspace`承载数据 token、
    输出与溯源；现有方法为 `network`、`differential`、`train` 等。网页通过
-   `web_analysis.py::AnalysisWorkflow.run_operation` 创建 `project_candidate`，执行成功后一次发布。
+   `web_analysis.py::AnalysisWorkflow.run_operation` 使用 `web_projects.py::project_candidate`，执行成功后一次发布。
    失败不得修改原项目；会修改已有模型的操作参考 `explain_shap` 对结果的额外深复制。
    输出嵌入/obs 键须验证合法性和冲突，参考 `reduce/cluster/save_latent`，不能覆盖已有键。
 3. **严格 API**：`api/workflow_schemas.py` 增加/调整 `Controls` 子类及 `OPERATIONS`，并核对

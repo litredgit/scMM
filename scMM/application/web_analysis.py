@@ -272,7 +272,7 @@ class AnalysisWorkflow:
             return quality_view(workspace.require_project().workspace)
 
     def run_operation(self, identity, revision, operation, options, *, preview=False):
-        from .web_workspace import project_candidate
+        from .web_projects import project_candidate
 
         if operation not in PREPROCESS | ANALYSES or (preview and operation not in PREPROCESS):
             raise ValueError("不支持的分析操作。")

@@ -14,8 +14,8 @@ from cryptography.fernet import Fernet
 
 from .projects import Project, write_json
 from .state_codec import StateCodec
-from .web_workspace import BrowserWorkspace
 from .workbench import AnalysisWorkspace
+from .workspace_state import BrowserWorkspace
 
 
 class RecoveryStore:

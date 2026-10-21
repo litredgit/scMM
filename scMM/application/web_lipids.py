@@ -155,7 +155,7 @@ class LipidWorkflow:
             return {"workspace": self.view(workspace), "value": result}
 
     def lipid_run(self, identity, revision, options, rules, label):
-        from .web_workspace import project_candidate
+        from .web_projects import project_candidate
 
         with self.access(identity, operation="lipid_annotation") as workspace:
             workspace.check(revision)
@@ -196,7 +196,7 @@ class LipidWorkflow:
             return {"workspace": self.view(workspace), "value": save_rules_preset(name, rules)}
 
     def lipid_edit(self, identity, revision, version_id, action):
-        from .web_workspace import project_candidate
+        from .web_projects import project_candidate
 
         with self.access(identity) as workspace:
             workspace.check(revision)
@@ -254,7 +254,7 @@ class LipidWorkflow:
             return self.lipid_edit(identity, revision, values["version"], action)
 
     def lipid_activate(self, identity, revision, version_id):
-        from .web_workspace import project_candidate
+        from .web_projects import project_candidate
 
         with self.access(identity) as workspace:
             workspace.check(revision)

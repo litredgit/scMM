@@ -699,6 +699,33 @@
       "tooling",
       "ai"
     ],
+    "scMM/application/web_projects.py": [
+      "api",
+      "api-raw",
+      "api-lipids",
+      "auth",
+      "monitor",
+      "tooling",
+      "ai"
+    ],
+    "scMM/application/web_ai.py": [
+      "api",
+      "api-raw",
+      "api-lipids",
+      "auth",
+      "monitor",
+      "tooling",
+      "ai"
+    ],
+    "scMM/application/workspace_state.py": [
+      "api",
+      "api-raw",
+      "api-lipids",
+      "auth",
+      "monitor",
+      "tooling",
+      "ai"
+    ],
     "scMM/application/web_support.py": [
       "api",
       "api-raw",

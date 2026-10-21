@@ -390,7 +390,7 @@ class RawWorkflow:
                 )
 
     def extraction_preflight(self, identity, revision):
-        from .web_workspace import project_candidate
+        from .web_projects import project_candidate
 
         with self.access(identity) as workspace:
             workspace.check(revision)
@@ -414,7 +414,7 @@ class RawWorkflow:
         return match
 
     def start_extraction(self, identity, revision, retry_path=None):
-        from .web_workspace import project_candidate
+        from .web_projects import project_candidate
 
         with self.access(identity, operation="extract") as workspace:
             workspace.check(revision)
@@ -436,7 +436,7 @@ class RawWorkflow:
                 with workspace.ai_lock:
                     workspace.ai_batches = (*workspace.ai_batches, path)
             except Exception as exc:
-                from .web_workspace import WorkspaceError
+                from .workspace_state import WorkspaceError
 
                 raise WorkspaceError(
                     f"输入配置已保存，但批次未启动：{exc}", code="extraction_not_started"
@@ -491,7 +491,7 @@ class RawWorkflow:
             }
 
     def review_extraction(self, identity, revision, path, ids, *, compare=False):
-        from .web_workspace import project_candidate, sync_metadata
+        from .web_projects import project_candidate, sync_metadata
 
         with self.access(identity, operation="review") as workspace:
             workspace.check(revision)
