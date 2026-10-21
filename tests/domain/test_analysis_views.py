@@ -100,3 +100,95 @@ def test_display_precision_preserves_tiny_values():
     assert probability_number(0.123456789) == "1.23e-01"
     assert probability_number(1.23456789e-12) == "1.23e-12"
     assert probability_number(0) == "0"
+
+
+def scatter_data():
+    return AnnData(
+        np.array([[0.0, 1.0], [1.0, 3.0], [2.0, 5.0], [3.0, 7.0]]),
+        obs=pd.DataFrame(
+            {"sample": ["a", "a", "b", "b"], "continuous": [1.0, np.nan, 3.0, 4.0]},
+            index=["cell-A", "cell-B", "cell-C", "cell-D"],
+        ),
+        var=pd.DataFrame({"mz": [150.0, 151.0]}, index=["feature-a", "feature-b"]),
+    )
+
+
+def test_exact_feature_scatter_fit_zeros_and_full_export():
+    from io import StringIO
+
+    from scMM.analysis.feature_scatter import feature_scatter_figure
+
+    data = scatter_data()
+    before = data.copy()
+    figure = feature_scatter_figure(
+        data, feature_a="feature-a", feature_b="feature-b", color_key="sample"
+    )
+    fit = figure.layout.meta["regression"]
+    assert (
+        fit["n_cells"] == 4
+        and fit["slope"] == 2
+        and fit["intercept"] == 1
+        and fit["r_squared"] == 1
+    )
+    frame = pd.read_csv(StringIO(figure.layout.meta["export_tables"]["cells.csv"]))
+    assert frame.cell_id.tolist() == data.obs_names.tolist()
+    assert frame.x_value.tolist() == [0, 1, 2, 3]
+    assert frame.included.all()
+    np.testing.assert_array_equal(data.X, before.X)
+    with pytest.raises(ValueError, match="稳定特征 ID"):
+        feature_scatter_figure(data, feature_a="150.001", feature_b="feature-b")
+    with pytest.raises(ValueError, match="不同"):
+        feature_scatter_figure(data, feature_a="feature-a", feature_b="feature-a")
+
+
+@pytest.mark.parametrize("kind", ["constant-x", "constant-y", "nonfinite", "extreme"])
+def test_scatter_degeneracies_are_explicit_and_preserve_source(kind):
+    from io import StringIO
+
+    from scMM.analysis.feature_scatter import feature_scatter_figure
+
+    data = scatter_data()
+    matrix = data.X.copy()
+    if kind == "constant-x":
+        matrix[:, 0] = 0
+    elif kind == "constant-y":
+        matrix[:, 1] = 5
+    elif kind == "nonfinite":
+        matrix[1, 0] = np.nan
+    else:
+        matrix[:, 0] = [-1e308, -5e307, 5e307, 1e308]
+    data.layers["chosen"] = matrix
+    figure = feature_scatter_figure(
+        data, feature_a="feature-a", feature_b="feature-b", layer="chosen"
+    )
+    fit = figure.layout.meta["regression"]
+    assert figure.layout.meta["notes"]
+    frame = pd.read_csv(StringIO(figure.layout.meta["export_tables"]["cells.csv"]))
+    assert len(frame) == 4
+    assert (
+        fit["status"]
+        == {
+            "constant-x": "insufficient_or_constant_x",
+            "constant-y": "constant_y",
+            "nonfinite": "fitted",
+            "extreme": "numerical_failure",
+        }[kind]
+    )
+    assert int(frame.included.sum()) == (3 if kind == "nonfinite" else 4)
+    np.testing.assert_array_equal(data.layers["chosen"], matrix)
+
+
+def test_missing_color_keeps_every_finite_cell_and_no_finite_pairs_fail():
+    from scMM.analysis.feature_scatter import feature_scatter_figure
+
+    data = scatter_data()
+    for key in ("continuous", "sample"):
+        data.obs.loc["cell-B", key] = None
+        figure = feature_scatter_figure(
+            data, feature_a="feature-a", feature_b="feature-b", color_key=key, regression=False
+        )
+        assert sum(len(trace.x) for trace in figure.data) == 4
+        assert figure.layout.meta["regression"]["status"] == "disabled"
+    data.layers["invalid"] = np.full((4, 2), np.nan)
+    with pytest.raises(ValueError, match="共同有限值"):
+        feature_scatter_figure(data, feature_a="feature-a", feature_b="feature-b", layer="invalid")

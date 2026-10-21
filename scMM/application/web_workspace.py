@@ -123,6 +123,13 @@ def sync_metadata(project):
     for name in stale:
         for figure in RESULT_PLOTS.get(name, ()):
             project.views.get("figures", {}).pop(figure, None)
+    scatter = project.views.get("figures", {}).get("feature_scatter")
+    if scatter:
+        metadata = scatter["layout"]["meta"]
+        if set(metadata.get("observation_dependencies", [])) & changed:
+            project.views["figures"].pop("feature_scatter")
+        else:
+            metadata["dataset_token"] = list(project.workspace.token)
     project.report_token = project.workspace.token
 
 

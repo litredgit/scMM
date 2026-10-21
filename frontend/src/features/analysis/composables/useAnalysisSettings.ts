@@ -45,6 +45,13 @@ export function useAnalysisSettings() {
     method: 'mannwhitney',
     layer: null as string | null,
   })
+  const scatter = reactive({
+    feature_a: '',
+    feature_b: '',
+    layer: null as string | null,
+    color_key: null as string | null,
+    regression: true,
+  })
   const network = reactive({
     method: 'pearson',
     min_abs_correlation: 0.7,
@@ -88,6 +95,7 @@ export function useAnalysisSettings() {
       cluster: { ...cluster },
       diff: { ...diff },
       network: { ...network },
+      scatter: { ...scatter },
       train: { ...train },
       shap: { ...shap },
       volcano: { ...volcano },
@@ -100,6 +108,7 @@ export function useAnalysisSettings() {
       cluster,
       diff,
       network,
+      scatter,
       train,
       shap,
       volcano,
@@ -129,6 +138,7 @@ export function useAnalysisSettings() {
     cluster: { ...cluster },
     diff: { ...diff },
     network: { ...network },
+    scatter: { ...scatter },
     train: { ...train },
     ldaSolver: ldaSolver.value,
     validation: validation.value,
@@ -175,6 +185,7 @@ export function useAnalysisSettings() {
       cluster,
       diff,
       network,
+      scatter,
       train,
       shap,
       volcano,
@@ -222,6 +233,7 @@ export function useAnalysisSettings() {
     cluster,
     diff,
     network,
+    scatter,
     train,
     ldaSolver,
     validation,

@@ -23,6 +23,7 @@ export function useAnalysis() {
     cluster,
     diff,
     network,
+    scatter,
     train,
     ldaSolver,
     validation,
@@ -460,6 +461,7 @@ export function useAnalysis() {
     cluster,
     diff,
     network,
+    scatter,
     train,
     ldaSolver,
     validation,
@@ -499,5 +501,6 @@ export function useAnalysis() {
     loadWithPlot,
     saveSettings,
     reloadAnalysis,
+    refreshAnalysis: refresh,
   }
 }

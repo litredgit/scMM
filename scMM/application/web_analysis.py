@@ -203,10 +203,14 @@ class AnalysisWorkflow:
 
     def saved_figure(self, identity, key):
         with self.access(identity) as workspace:
-            figures = workspace.require_project().views.get("figures", {})
+            project = workspace.require_project()
+            figures = project.views.get("figures", {})
             if key not in figures:
                 raise ValueError("图形不存在或已失效。")
-            return stored_figure(figures[key])
+            value = stored_figure(figures[key])
+            if key == "feature_scatter":
+                value["layout"]["meta"]["dataset_token"] = list(project.workspace.token)
+            return value
 
     def feature_choices(
         self, identity, *, query="", sort="mean", descending=True, offset=0, limit=200
@@ -291,6 +295,10 @@ class AnalysisWorkflow:
             if operation in PREPROCESS:
                 candidate.saved_reports = {}
                 candidate.views.pop("figures", None)
+            elif operation in {"reduce", "cluster", "save_latent"}:
+                figure = candidate.views.get("figures", {}).get("feature_scatter")
+                if figure:
+                    figure["layout"]["meta"]["dataset_token"] = list(state.token)
             else:
                 result_name = RESULT_NAMES.get(operation, operation)
                 candidate.saved_reports.pop(result_name, None)
@@ -407,6 +415,10 @@ class AnalysisWorkflow:
                 from scMM.analysis.heatmap import heatmap_figure
 
                 figure = heatmap_figure(data, **options)
+            elif kind == "feature_scatter":
+                from scMM.analysis.feature_scatter import feature_scatter_figure
+
+                figure = feature_scatter_figure(data, **options)
             elif kind == "confusion":
                 analyzer = state.result("supervised")
                 values = np.asarray(analyzer.result_["confusion_matrix"])

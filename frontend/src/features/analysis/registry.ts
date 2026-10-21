@@ -1,3 +1,4 @@
+import FeatureScatterPanel from './modules/FeatureScatterPanel.vue'
 import HeatmapPanel from './modules/HeatmapPanel.vue'
 import ClusteringPanel from './modules/embedding/ClusteringPanel.vue'
 import LipidPanel from '../preprocess/LipidPanel.vue'
@@ -12,6 +13,13 @@ export const analysisModules: readonly AnalysisModule[] = [
     name: '降维',
     group: '探索',
     component: EmbeddingPanel,
+    requires: ['matrix'],
+  },
+  {
+    id: 'feature_scatter',
+    name: '双特征散点',
+    group: '探索',
+    component: FeatureScatterPanel,
     requires: ['matrix'],
   },
   { id: 'heatmap', name: '热图', group: '探索', component: HeatmapPanel, requires: ['matrix'] },

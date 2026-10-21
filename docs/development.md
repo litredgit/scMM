@@ -103,7 +103,7 @@ scMM/
 | 代谢速度 | `PlotEngine.metabolic_velocity()` | 无对应入口 | TIME-02，沿现有参数化坐标的窗口变化速度，不能解释为示踪通量 |
 | 代谢物趋势/趋势聚类 | `plot_metabolite_trends()` / `plot_trend_clusters()` | 无对应入口 | TIME-03/04，输入时间、窗口、统计量和趋势距离可追溯 |
 | 特征距离嵌入 | `PlotEngine.feature_network()`、`plot/_engine_network.py` | Vue 已有相关阈值网络，但无此距离嵌入 | PLOT-02；Pearson/Euclidean 距离加 UMAP 的特征图不等于相关图，需独立名称和资源检查 |
-| 双特征散点/回归 | `PlotEngine.plot_feature_scatter()` | 无双特征独立图入口 | PLOT-01；将最近质量读取规则转换成明确的特征选择，不静默错配 |
+| 双特征散点/回归 | `PlotEngine.plot_feature_scatter()`；网页 `analysis/feature_scatter.py` | 独立面板、精确 ID/层/着色、全体细胞回归、完整导出及只读图重载 | PLOT-01 待用户统一验收；网页不采用 Notebook 的最近质量匹配，不将细胞级回归解释为生物重复验证 |
 | 已处理结果合并 | `CyESIData.alignwith()`、`file.batch.concat()` | 当前已有原始样本提取审核合并；导入独立结果会替换当前数据 | MERGE-01；concat 当前读取旧结果目录，不是任意 H5AD 合并服务，须适配来源/特征/起点 |
 | 显式数据子集 | AnnData 支持 obs/var 切片 | Vue 有条件筛选，无任意细胞/特征 ID 子集应用 | SUBSET-01；CyESIData 的 `data[mz]` 是最近 m/z 的强度向量读取，不是细胞切片 |
 | 采集稳定性 QC | `scMM_workflow.ipynb` 的稳定性段 | 基础样本/细胞 QC 已有，无完整采集稳定性视图 | QC-01，先抽取应用层计算，再接时间/来源图和下载 |

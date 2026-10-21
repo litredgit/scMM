@@ -202,6 +202,7 @@ class Plot(RevisionRequest):
         "calibration",
         "confusion",
         "heatmap",
+        "feature_scatter",
         "shap_beeswarm",
         "shap_waterfall",
         "shap_dependence",
@@ -211,6 +212,14 @@ class Plot(RevisionRequest):
 
 class ConfusionPlot(Controls):
     normalize: bool = False
+
+
+class FeatureScatterPlot(Controls):
+    feature_a: str = Field(min_length=1)
+    feature_b: str = Field(min_length=1)
+    layer: str | None = None
+    color_key: str | None = None
+    regression: bool = True
 
 
 class HeatmapPlot(Controls):
@@ -323,6 +332,7 @@ OPERATIONS = {
 PLOTS = {
     "confusion": ConfusionPlot,
     "heatmap": HeatmapPlot,
+    "feature_scatter": FeatureScatterPlot,
     "shap_plot": ShapPlot,
     "shap_beeswarm": ShapPlot,
     "shap_waterfall": ShapPlot,

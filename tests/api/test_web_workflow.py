@@ -438,3 +438,54 @@ def test_clustering_parameters_reach_algorithm_and_persist_in_history(workflow):
         reloaded = browser.project
     assert reloaded.workspace.history()[-1]["parameters"]["effective_parameters"]["eps"] == 0.001
     np.testing.assert_array_equal(reloaded.workspace.data.X, data.X)
+
+
+def test_feature_scatter_reload_export_staleness_and_metadata_dependencies(workflow):
+    data = import_data(workflow)
+    options = {"feature_a": "f0", "feature_b": "f1", "color_key": "group", "regression": True}
+    response = workflow[-1]("/analysis/plot", {"kind": "feature_scatter", "options": options})
+    assert response.status_code == 200, response.text
+    figure = response.json()["value"]
+    assert figure["layout"]["meta"]["regression"]["n_cells"] == 64
+    assert workflow[-1]("/project/save").status_code == 200
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    saved = get(workflow, "/analysis/figures/feature_scatter").json()
+    assert saved["layout"]["meta"]["regression"] == figure["layout"]["meta"]["regression"]
+    assert (
+        workflow[0]
+        .post("/api/v1/workspace/figures/data", headers=workflow[1], json={"figure": saved})
+        .status_code
+        == 200
+    )
+    before = workflow[-2]()["revision"]
+    bad = workflow[-1](
+        "/analysis/plot",
+        {"kind": "feature_scatter", "options": {**options, "feature_a": "150.0001"}},
+    )
+    assert bad.status_code == 400 and workflow[-2]()["revision"] == before
+    samples = workflow[-2]()["project"]["manifest"]["samples"]
+    edits = [
+        {key: sample[key] for key in ("id", "name", "group", "subject", "batch")}
+        for sample in samples
+    ]
+    edits[0]["batch"] = "unrelated-change"
+    assert workflow[-1]("/samples", {"samples": edits}, "PATCH").status_code == 200
+    assert get(workflow, "/analysis/figures/feature_scatter").status_code == 200
+    edits[0]["group"] = "different"
+    assert workflow[-1]("/samples", {"samples": edits}, "PATCH").status_code == 200
+    assert get(workflow, "/analysis/figures/feature_scatter").status_code == 400
+    assert (
+        workflow[-1]("/analysis/plot", {"kind": "feature_scatter", "options": options}).status_code
+        == 200
+    )
+    fresh = get(workflow, "/analysis/figures/feature_scatter").json()
+    operation(workflow, "normalize", {"method": "total"})
+    assert get(workflow, "/analysis/figures/feature_scatter").status_code == 400
+    assert (
+        workflow[0]
+        .post("/api/v1/workspace/figures/data", headers=workflow[1], json={"figure": fresh})
+        .status_code
+        == 400
+    )
+    assert data.shape == (64, 8)

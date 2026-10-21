@@ -365,6 +365,10 @@ DBSCAN 与层次聚类的距离白名单为 euclidean/manhattan/cosine，不开�
 聚类仍共享降维面板的 `use_rep`、`n_neighbors` 和 `random_state`。旧项目缺独立字段时保留原先借用值，
 恢复/保存操作见[分析流程](workflow.md#分析显示与导出)，开发兼容规则见[接入指南](development.md#参数草稿与恢复)。
 
+双特征散点 `feature_a`/`feature_b` 必须是当前数据中两个不同的稳定特征 ID，不接受自动最近质量匹配。
+`layer=null` 使用当前 X；`color_key=null` 为统一颜色，否则明确选择一个观测列；`regression=true` 默认显示全体有限细胞的 y 对 x 回归。
+这些网页设置与图随主动保存保留；科学定义及常量/缺失边界见[统计解释](analysis.md#统计解释与网页分析)。
+
 网页分析默认 `color_source=annotation`（列标签），优先选择有效 group、其次 sample；
 可切换为 `feature` 或 `none`。Feature 默认 `color_sort=mean`、`color_descending=True`，即平均强度降序；
 排序还支持 `total`、`median`、`detection`、`mz`、`name`。下拉选择与搜索的操作见[工作流程](workflow.md#分析显示与导出)。
