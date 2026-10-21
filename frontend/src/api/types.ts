@@ -119,6 +119,7 @@ export interface AnalysisInfo {
   embeddings: string[]
   embedding_dimensions: Record<string, number>
   embedding_variance: Record<string, number[]>
+  feature_columns?: string[]
   observations: Record<string, string[]>
   history: Record<string, unknown>[]
   results: string[]

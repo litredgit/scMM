@@ -1,3 +1,4 @@
+import FeatureEmbeddingPanel from './modules/FeatureEmbeddingPanel.vue'
 import FeatureScatterPanel from './modules/FeatureScatterPanel.vue'
 import HeatmapPanel from './modules/HeatmapPanel.vue'
 import ClusteringPanel from './modules/embedding/ClusteringPanel.vue'
@@ -20,6 +21,13 @@ export const analysisModules: readonly AnalysisModule[] = [
     name: '双特征散点',
     group: '探索',
     component: FeatureScatterPanel,
+    requires: ['matrix'],
+  },
+  {
+    id: 'feature_embedding',
+    name: '特征距离嵌入',
+    group: '探索',
+    component: FeatureEmbeddingPanel,
     requires: ['matrix'],
   },
   { id: 'heatmap', name: '热图', group: '探索', component: HeatmapPanel, requires: ['matrix'] },

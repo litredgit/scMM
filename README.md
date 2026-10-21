@@ -17,7 +17,7 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | 持久批处理、共同/独立特征、失败继续、停止后续样本和重试 | [多样本流程](docs/workflow.md) |
 | Thermo profile RAW 直接读取，接入 Python、CLI、目录处理及网页 | [RAW 依赖与真实样本验收](docs/thermo-raw.md) |
 | H5AD、预处理起点恢复、结果失效管理、只读报告与图表重载 | [数据与输出](docs/data-output.md) |
-| 统一降维、差异/Marker/相关网络、监督模型诊断和 SHAP | [分析说明](docs/analysis.md) |
+| 统一降维、双特征散点/特征距离嵌入、差异/Marker/相关网络、监督模型诊断和 SHAP | [分析说明](docs/analysis.md) |
 | 网页 LMSD 候选、相关性辅助排序、天然同位素标记、分类饼图及特征/分子网络 | [注释与同位素](docs/workflow.md#注释与同位素) |
 
 待验收、工程改进和暂缓决策统一见 [roadmap](docs/roadmap.md)。

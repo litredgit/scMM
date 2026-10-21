@@ -365,6 +365,11 @@ DBSCAN 与层次聚类的距离白名单为 euclidean/manhattan/cosine，不开�
 聚类仍共享降维面板的 `use_rep`、`n_neighbors` 和 `random_state`。旧项目缺独立字段时保留原先借用值，
 恢复/保存操作见[分析流程](workflow.md#分析显示与导出)，开发兼容规则见[接入指南](development.md#参数草稿与恢复)。
 
+特征距离嵌入 `features=[]` 使用全部稳定 ID，显式列表不允许重复/缺失 ID；最多 500 项及 200 万输入数值。
+`layer=null` 使用 X，`metric=pearson` 可选 euclidean，`name_key`/`class_key=null` 默认用 ID/统一颜色；指定时须为现有 var 列。
+`n_neighbors=null` 使用 min(15, 特征数−1)，显式值为 2 至特征数−1；`min_dist=0.1` 范围 [0,1]，`random_state=42`。
+UMAP 固定二维、`init=random`/`n_jobs=1`，预计算距离定义见[统计解释](analysis.md#统计解释与网页分析)。
+
 双特征散点 `feature_a`/`feature_b` 必须是当前数据中两个不同的稳定特征 ID，不接受自动最近质量匹配。
 `layer=null` 使用当前 X；`color_key=null` 为统一颜色，否则明确选择一个观测列；`regression=true` 默认显示全体有限细胞的 y 对 x 回归。
 这些网页设置与图随主动保存保留；科学定义及常量/缺失边界见[统计解释](analysis.md#统计解释与网页分析)。

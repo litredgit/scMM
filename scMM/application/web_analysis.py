@@ -191,6 +191,7 @@ class AnalysisWorkflow:
                     for key in data.obsm
                 },
                 "observations": values,
+                "feature_columns": list(data.var.columns),
                 "history": state.history(),
                 "results": results,
                 "live_results": list(state.results),
@@ -208,7 +209,7 @@ class AnalysisWorkflow:
             if key not in figures:
                 raise ValueError("图形不存在或已失效。")
             value = stored_figure(figures[key])
-            if key == "feature_scatter":
+            if key in {"feature_scatter", "feature_embedding"}:
                 value["layout"]["meta"]["dataset_token"] = list(project.workspace.token)
             return value
 
@@ -296,9 +297,10 @@ class AnalysisWorkflow:
                 candidate.saved_reports = {}
                 candidate.views.pop("figures", None)
             elif operation in {"reduce", "cluster", "save_latent"}:
-                figure = candidate.views.get("figures", {}).get("feature_scatter")
-                if figure:
-                    figure["layout"]["meta"]["dataset_token"] = list(state.token)
+                for key in ("feature_scatter", "feature_embedding"):
+                    figure = candidate.views.get("figures", {}).get(key)
+                    if figure:
+                        figure["layout"]["meta"]["dataset_token"] = list(state.token)
             else:
                 result_name = RESULT_NAMES.get(operation, operation)
                 candidate.saved_reports.pop(result_name, None)
@@ -415,6 +417,10 @@ class AnalysisWorkflow:
                 from scMM.analysis.heatmap import heatmap_figure
 
                 figure = heatmap_figure(data, **options)
+            elif kind == "feature_embedding":
+                from scMM.analysis.feature_embedding import feature_embedding_figure
+
+                figure = feature_embedding_figure(data, **options)
             elif kind == "feature_scatter":
                 from scMM.analysis.feature_scatter import feature_scatter_figure
 

@@ -192,3 +192,88 @@ def test_missing_color_keeps_every_finite_cell_and_no_finite_pairs_fail():
     data.layers["invalid"] = np.full((4, 2), np.nan)
     with pytest.raises(ValueError, match="共同有限值"):
         feature_scatter_figure(data, feature_a="feature-a", feature_b="feature-b", layer="invalid")
+
+
+def test_feature_distances_preserve_existing_absolute_correlation_definition():
+    from scMM.analysis.feature_embedding import feature_distance_matrix
+
+    x = np.array([1.0, 2.0, 3.0, 4.0])
+    values = np.column_stack([x, -x, [1.0, 3.0, 2.0, 4.0]])
+    distance = feature_distance_matrix(values, "pearson")
+    np.testing.assert_allclose(distance[0, 1], 0, atol=1e-7)
+    np.testing.assert_allclose(distance[0, 2], np.sqrt(2 * (1 - 0.8)))
+    np.testing.assert_array_equal(np.diag(distance), 0)
+    np.testing.assert_allclose(
+        feature_distance_matrix(values, "euclidean")[0, 1], np.linalg.norm(2 * x)
+    )
+    with pytest.raises(ValueError, match="constant"):
+        feature_distance_matrix(np.ones((4, 3)), "pearson")
+    with pytest.raises(ValueError, match="finite"):
+        feature_distance_matrix([[1, 2], [np.nan, 4]], "euclidean")
+
+
+def test_feature_embedding_seed_missing_names_and_complete_distances():
+    from io import StringIO
+
+    from scMM.analysis.feature_embedding import feature_embedding_figure
+
+    data = AnnData(
+        np.random.default_rng(18).uniform(1, 4, (20, 4)),
+        var=pd.DataFrame(
+            {"name": ["same", "same", None, " "], "class": ["a", None, "b", "b"]},
+            index=["f0", "f1", "f2", "f3"],
+        ),
+    )
+    first = feature_embedding_figure(data, name_key="name", class_key="class")
+    second = feature_embedding_figure(data, name_key="name", class_key="class")
+    assert first.layout.meta["export_tables"] == second.layout.meta["export_tables"]
+    frame = pd.read_csv(StringIO(first.layout.meta["export_tables"]["features.csv"]))
+    assert frame.feature_id.tolist() == ["f0", "f1", "f2", "f3"]
+    assert frame.name.tolist() == ["same", "same", "f2", "f3"]
+    distance = pd.read_csv(
+        StringIO(first.layout.meta["export_tables"]["distances.csv"]), index_col=0
+    )
+    assert distance.shape == (4, 4)
+    assert not data.obsm and not data.uns
+    assert first.layout.meta["effective_parameters"]["n_neighbors"] == 3
+    three = feature_embedding_figure(data, features=["f0", "f1", "f2"], metric="euclidean")
+    assert three.layout.meta["effective_parameters"]["n_features"] == 3
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"features": ["f0", "missing", "f1"]},
+        {"features": ["f0", "f0", "f1"]},
+        {"features": ["f0", "f1"]},
+        {"name_key": "missing"},
+        {"n_neighbors": 4},
+        {"random_state": True},
+        {"min_dist": float("nan")},
+        {"layer": "missing"},
+    ],
+)
+def test_feature_embedding_invalid_controls_do_not_mutate(options):
+    from scMM.analysis.feature_embedding import feature_embedding_figure
+
+    data = AnnData(
+        np.random.default_rng(18).uniform(1, 4, (5, 4)),
+        var=pd.DataFrame(index=["f0", "f1", "f2", "f3"]),
+    )
+    before = data.X.copy()
+    with pytest.raises(ValueError):
+        feature_embedding_figure(data, **options)
+    np.testing.assert_array_equal(data.X, before)
+    assert not data.uns and not data.obsm
+
+
+def test_feature_embedding_rejects_all_zero_distances_and_allocation_before_fit():
+    from scMM.analysis.feature_embedding import feature_embedding_figure
+
+    for data, match in (
+        (AnnData(np.ones((4, 3))), "zero distance"),
+        (AnnData(np.ones((4, 501))), "500"),
+        (AnnData(np.ones((10001, 200))), "2000000"),
+    ):
+        with pytest.raises(ValueError, match=match):
+            feature_embedding_figure(data, metric="euclidean")

@@ -221,6 +221,7 @@ class Plot(RevisionRequest):
         "confusion",
         "heatmap",
         "feature_scatter",
+        "feature_embedding",
         "shap_beeswarm",
         "shap_waterfall",
         "shap_dependence",
@@ -230,6 +231,17 @@ class Plot(RevisionRequest):
 
 class ConfusionPlot(Controls):
     normalize: bool = False
+
+
+class FeatureEmbeddingPlot(Controls):
+    features: list[str] = Field(default_factory=list, max_length=500)
+    layer: str | None = None
+    metric: Literal["pearson", "euclidean"] = "pearson"
+    name_key: str | None = None
+    class_key: str | None = None
+    n_neighbors: int | None = Field(default=None, ge=2)
+    min_dist: float = Field(default=0.1, ge=0, le=1)
+    random_state: int = Field(default=42, ge=0, le=2147483647)
 
 
 class FeatureScatterPlot(Controls):
@@ -351,6 +363,7 @@ PLOTS = {
     "confusion": ConfusionPlot,
     "heatmap": HeatmapPlot,
     "feature_scatter": FeatureScatterPlot,
+    "feature_embedding": FeatureEmbeddingPlot,
     "shap_plot": ShapPlot,
     "shap_beeswarm": ShapPlot,
     "shap_waterfall": ShapPlot,

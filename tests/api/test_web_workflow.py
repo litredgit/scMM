@@ -524,3 +524,31 @@ def test_preprocessing_options_precision_history_and_roundtrip(workflow):
     assert workflow[-1]("/project/save", {}).status_code == 200
     assert workflow[-1]("/project/open", {"path": path}).status_code == 200
     assert get(workflow, "/analysis").json()["history"] == expected
+
+
+def test_feature_embedding_exact_features_saved_export_and_matrix_staleness(workflow):
+    import_data(workflow)
+    options = {"features": ["f0", "f1", "f2", "f3"], "metric": "euclidean", "random_state": 19}
+    response = workflow[-1]("/analysis/plot", {"kind": "feature_embedding", "options": options})
+    assert response.status_code == 200, response.text
+    figure = response.json()["value"]
+    assert figure["layout"]["meta"]["effective_parameters"]["n_features"] == 4
+    assert workflow[-1]("/project/save").status_code == 200
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    saved = get(workflow, "/analysis/figures/feature_embedding").json()
+    assert saved["layout"]["meta"]["export_tables"] == figure["layout"]["meta"]["export_tables"]
+    assert (
+        workflow[0]
+        .post("/api/v1/workspace/figures/data", headers=workflow[1], json={"figure": saved})
+        .status_code
+        == 200
+    )
+    operation(workflow, "normalize", {"method": "total"})
+    assert "feature_embedding" not in get(workflow, "/analysis").json()["figures"]
+    assert (
+        workflow[0]
+        .post("/api/v1/workspace/figures/data", headers=workflow[1], json={"figure": saved})
+        .status_code
+        != 200
+    )
