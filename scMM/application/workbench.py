@@ -22,6 +22,8 @@ from scMM.file.data import CyESIData
 from scMM.util.intensity import intensity_states, transformed_state, write_intensity_states
 from scMM.util.normalize import normalize
 
+from .result_catalog import serialize_reports, stale_metadata_results
+
 
 def dense(matrix):
     return matrix.toarray() if hasattr(matrix, "toarray") else np.asarray(matrix)
@@ -353,14 +355,9 @@ class AnalysisWorkspace:
                 data.obs.loc[update_mask, column] = values
         if not changed:
             return changed
-        for name, (_, value) in list(self.results.items()):
-            dependencies = (
-                {value.get("group_key")}
-                if isinstance(value, dict)
-                else {getattr(value, "label_key", None), getattr(value, "group_key", None)}
-            )
-            if dependencies & changed or (name == "shap" and "supervised" not in self.results):
-                self.results.pop(name, None)
+        values = {name: value for name, (_, value) in self.results.items()}
+        for name in stale_metadata_results(values, changed):
+            self.results.pop(name, None)
         self.revision += 1
         self.results = {key: (self.token, value) for key, (_, value) in self.results.items()}
         return changed
@@ -572,36 +569,7 @@ class AnalysisWorkspace:
         snapshot.uns["scmm_workbench"].update(
             dataset_id=self.dataset_id, revision=self.revision, source=self.source
         )
-        reports = {}
-        for name in ("markers", "network", "shap"):
-            if name in self.results:
-                result = self.result(name)
-                reports[name] = {
-                    **{
-                        k: v
-                        for k, v in result.items()
-                        if k not in {"table", "graph", "correlation"}
-                    },
-                    "table": result["table"].to_dict(orient="records"),
-                }
-                if name == "network":
-                    reports[name]["nodes"] = list(result["graph"].nodes)
-        if "differential" in self.results:
-            result = self.result("differential")
-            reports["differential"] = {
-                **{key: value for key, value in result.items() if key != "table"},
-                "table": result["table"].to_dict(orient="records"),
-            }
-        if "supervised" in self.results:
-            analyzer = self.result("supervised")
-            reports["supervised"] = {
-                "label_key": getattr(analyzer, "label_key", None),
-                "group_key": getattr(analyzer, "group_key", None),
-                "diagnostics": analyzer.result_,
-                "train_obs": analyzer.train_obs_names_.tolist(),
-                "test_obs": analyzer.test_obs_names_.tolist(),
-                "classes": analyzer.classes_.tolist(),
-            }
+        reports = serialize_reports({name: self.result(name) for name in self.results})
         snapshot.uns["scmm_workbench"]["reports_json"] = json.dumps(
             reports, default=lambda v: v.tolist()
         )

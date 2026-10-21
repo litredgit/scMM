@@ -19,6 +19,15 @@ from scMM.plot.workbench import (
     volcano_figure,
 )
 
+from .result_catalog import (
+    INDEPENDENT_PLOTS,
+    RESULT_NAMES,
+    RESULT_PLOTS,
+    RESULTS,
+    live_report,
+    related_results,
+    restore_report,
+)
 from .web_support import figure_view, json_view, table_view
 from .workbench import dense
 
@@ -33,7 +42,6 @@ ANALYSES = {
     "explain_shap",
     "save_latent",
 }
-RESULT_NAMES = {"train": "supervised", "explain_shap": "shap"}
 
 
 def quality_view(state):
@@ -178,7 +186,7 @@ class AnalysisWorkflow:
                 str(key): sorted(data.obs[key].dropna().astype(str).unique().tolist())
                 for key in data.obs
             }
-            results = sorted(set(state.results) | set(project.saved_reports))
+            results = sorted((set(state.results) | set(project.saved_reports)) & RESULTS.keys())
             return {
                 "token": list(state.token),
                 "layers": list(data.layers),
@@ -209,7 +217,7 @@ class AnalysisWorkflow:
             if key not in figures:
                 raise ValueError("图形不存在或已失效。")
             value = stored_figure(figures[key])
-            if key in {"feature_scatter", "feature_embedding", "stability"}:
+            if key in INDEPENDENT_PLOTS:
                 value["layout"]["meta"]["dataset_token"] = list(project.workspace.token)
             return value
 
@@ -297,20 +305,16 @@ class AnalysisWorkflow:
                 candidate.saved_reports = {}
                 candidate.views.pop("figures", None)
             elif operation in {"reduce", "cluster", "save_latent"}:
-                for key in ("feature_scatter", "feature_embedding", "stability"):
+                for key in INDEPENDENT_PLOTS:
                     figure = candidate.views.get("figures", {}).get(key)
                     if figure:
                         figure["layout"]["meta"]["dataset_token"] = list(state.token)
             else:
                 result_name = RESULT_NAMES.get(operation, operation)
-                candidate.saved_reports.pop(result_name, None)
-                from .web_workspace import RESULT_PLOTS
-
-                for name in RESULT_PLOTS.get(result_name, ()):
-                    candidate.views.get("figures", {}).pop(name, None)
-                if operation == "train":
-                    candidate.saved_reports.pop("shap", None)
-                    candidate.views.get("figures", {}).pop("shap_plot", None)
+                for name in related_results({result_name}):
+                    candidate.saved_reports.pop(name, None)
+                    for figure in RESULT_PLOTS.get(name, ()):
+                        candidate.views.get("figures", {}).pop(figure, None)
             candidate.report_token = state.token
             candidate.dirty = True
             workspace.project = candidate
@@ -329,13 +333,9 @@ class AnalysisWorkflow:
             return self.view(workspace)
 
     def invalidate_results(self, identity, revision, names):
-        from .web_workspace import RESULT_PLOTS
-
         def action(workspace):
             project = workspace.project
-            selected = set(names)
-            if "supervised" in selected:
-                selected.add("shap")
+            selected = related_results(names)
             for name in selected:
                 project.workspace.results.pop(name, None)
                 project.saved_reports.pop(name, None)
@@ -347,23 +347,12 @@ class AnalysisWorkflow:
 
     @staticmethod
     def result_value(project, name):
+        if name not in RESULTS:
+            raise ValueError("结果类型不存在。")
         if name in project.workspace.results:
-            result = project.workspace.result(name)
-            if name == "supervised":
-                return {
-                    "diagnostics": json_view(result.result_),
-                    "label_key": result.label_key,
-                    "group_key": result.group_key,
-                    "train_obs": result.train_obs_names_.tolist(),
-                    "test_obs": result.test_obs_names_.tolist(),
-                    "classes": result.classes_.tolist(),
-                }
-            return result
+            return live_report(name, project.workspace.result(name))
         if name in project.saved_reports:
-            result = deepcopy(project.saved_reports[name])
-            if "table" in result:
-                result["table"] = pd.DataFrame(result["table"])
-            return result
+            return restore_report(name, project.saved_reports[name])
         raise ValueError("结果不存在或已失效，请重新计算。")
 
     def result_view(self, identity, name, offset=0, limit=200):
@@ -400,15 +389,7 @@ class AnalysisWorkflow:
             elif kind == "violin":
                 figure = violin_figure(data, self.result_value(project, "differential"), **options)
             elif kind == "network_plot":
-                if "network" in state.results:
-                    figure = network_figure(state.result("network")["graph"])
-                elif kind in project.views.get("figures", {}):
-                    return {
-                        "workspace": self.view(workspace),
-                        "value": stored_figure(project.views["figures"][kind]),
-                    }
-                else:
-                    raise ValueError("请重新计算相关网络。")
+                figure = network_figure(self.result_value(project, "network")["graph"])
             elif kind in {"shap_plot", "shap_beeswarm", "shap_waterfall", "shap_dependence"}:
                 from scMM.plot.explanations import shap_figure
 

@@ -743,3 +743,42 @@ def test_invalid_model_parameters_preserve_fitted_result(workflow, params):
     assert response.status_code == 422
     assert workflow[-2]() == before
     assert get(workflow, "/analysis/results/supervised").json() == report
+
+
+def test_network_catalog_roundtrip_preserves_full_matrix_and_can_redraw(workflow):
+    from io import BytesIO
+    from zipfile import ZipFile
+
+    import_data(workflow)
+    operation(workflow, "network", {"min_abs_correlation": 0.99, "top_features": 4})
+    current = workflow[-2]()
+    with workflow[2].access(workflow[1]["X-SCMM-Workspace"]) as workspace:
+        expected = workspace.project.workspace.result("network")["correlation"].copy()
+    assert workflow[-1]("/project/save").status_code == 200
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    with workflow[2].access(workflow[1]["X-SCMM-Workspace"]) as workspace:
+        restored = workflow[2].result_value(workspace.project, "network")
+        pd.testing.assert_frame_equal(restored["correlation"], expected)
+        token = list(workspace.project.workspace.token)
+    drawn = workflow[-1]("/analysis/plot", {"kind": "network_plot", "options": {}})
+    assert drawn.status_code == 200, drawn.text
+    archive = get(workflow, "/results/download?kind=report_zip&key=" + json.dumps(token))
+    assert archive.status_code == 200
+    with ZipFile(BytesIO(archive.content)) as z:
+        names = [name for name in z.namelist() if "correlation" in name]
+        assert names
+    assert current["project"]["dataset"]["cells"] == workflow[-2]()["project"]["dataset"]["cells"]
+
+
+def test_retraining_invalidates_every_shap_plot_variant(workflow):
+    import_data(workflow)
+    operation(workflow, "train", {"label_key": "group", "model": "lda", "cv": 2})
+    keys = ("shap_plot", "shap_beeswarm", "shap_waterfall", "shap_dependence")
+    with workflow[2].access(workflow[1]["X-SCMM-Workspace"]) as workspace:
+        workspace.project.views["figures"] = {name: {"data": [], "layout": {}} for name in keys}
+        workspace.project.saved_reports["shap"] = {"table": []}
+    operation(workflow, "train", {"label_key": "group", "model": "lda", "cv": 2})
+    with workflow[2].access(workflow[1]["X-SCMM-Workspace"]) as workspace:
+        assert not set(keys) & workspace.project.views["figures"].keys()
+        assert "shap" not in workspace.project.saved_reports

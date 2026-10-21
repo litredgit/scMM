@@ -15,6 +15,8 @@ Vue/FastAPI 网页按功能组织完整六步交互；前端页面在仓库根 `
 `schemas.py`、`workflow_schemas.py` 定义接口契约并校验科学参数。
 `application/web_workspace.py` 持有独立浏览器工作区、写入修订及事务候选；不依赖前端或 FastAPI。
 `web_raw.py`、`web_analysis.py`、`web_results.py` 分别编排原始谱/任务、分析及下载/管理。
+`application/result_catalog.py` 集中已有统计/监督结果的操作名、关联图、元数据依赖、只读报告序列化与重载；
+前端 `features/analysis/results.contract.json` 保留显式映射，由契约测试与目录逐项核对。
 `plot/presentation.py`、`plot/raw.py`、`plot/workbench.py` 提供网页使用的共享图形构建。
 矩阵与模型留在 Python 应用层，前端只接收摘要和展示数据。`api/cli.py` 是唯一网页启动入口。
 
@@ -453,13 +455,13 @@ if (has('network')) await loadWithPlot('network', 'network_plot')
    `Operation.operation` Literal；`options_for` 校验 options。图形对应 `Plot.kind`、`PLOTS`。
    `api/routers/analysis.py` 只处理请求和返回，不写数值计算；应用层 `ANALYSES` 也须明确允许。
    注册 Vue 或加入任意 Python 函数不会获得 HTTP 执行能力；保持禁止额外字段和操作白名单。
-   `Train.model_params` 仍是现有模型参数字典，不能把它当任意函数调用入口。
-4. **Vue**：补齐 `AnalysisOperation/ResultName/PlotKind`、`operations/resultPlots`，对应模块调用公共流程；
+   `Train.model_params` 使用逐模型字段白名单和组合/训练折约束，不能作为任意函数调用入口。
+4. **Vue**：补齐 `results.contract.json`、`PlotKind` 与模块；`AnalysisOperation/ResultName` 从前端显式契约的键推导，对应模块调用公共流程；
    仅新能力需要独立导航时才注册新模块。配置帮助/预设入口在 `application/parameters.py`、`preferences.py`。
-5. **保存重载与导出**：`workbench.py::save_h5ad` 显式组装 `reports_json`，
+5. **保存重载与导出**：`workbench.py::save_h5ad` 经 `result_catalog.py::serialize_reports` 组装 `reports_json`，
    `projects.py::ProjectStore` 管理快照和视图，`web_analysis.py::result_value/result_view/analysis_plot`
    读取实时或只读结果；`web_results.py::ResultWorkflow.download_content` 导出完整内容。
-   扩展上述显式列表、API 结果/下载 Literal 和前端 `resultDownloads`；默认分页表不是完整导出。
+   在结果目录注册名称/关联图/元数据依赖/下载和序列化规则，同步前端显式 JSON 映射及 API 白名单；默认分页表不是完整导出。
    不保存可执行模型，不在 JSON 中舍入科学值，不把 Graph/模型塞进前端或快照。
 
 现有操作示例：`Network` API 模型约束 threshold 0～1、top_features 1～1000；应用层只在
@@ -486,7 +488,7 @@ if (has('network')) await loadWithPlot('network', 'network_plot')
 
 后端有效性入口为 `AnalysisWorkspace.result`、`AnalysisWorkflow.result_value`；
 `sync_sample_metadata` 和 `web_workspace.py::sync_metadata` 按依赖字段同步实时/已保存报告和图，
-`RESULT_PLOTS` 清理关联图；新增结果须补齐这些显式分支及下游依赖。
+`result_catalog.py` 的关联图与后继结果规则清理；新增结果须补齐目录、前端契约及下游依赖。
 `analysis_info.results` 用于页面可用性，`live_results` 区分可执行对象；页面隐藏按钮不能代替下载校验。
 `download_content` 必须继续通过有效性入口。纯图例、标签数量、特征显示等变更不清除统计结果。
 

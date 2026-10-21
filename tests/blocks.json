@@ -157,10 +157,12 @@
       "kind": "python",
       "tests": [
         "tests/application/test_workbench_state.py",
+        "tests/application/test_result_catalog.py",
         "tests/application/test_maintenance_recovery.py"
       ],
       "sources": [
         "scMM/application/workbench.py",
+        "scMM/application/result_catalog.py",
         "scMM/application/cell_spectra.py",
         "scMM/application/recovery.py",
         "scMM/application/state_codec.py",

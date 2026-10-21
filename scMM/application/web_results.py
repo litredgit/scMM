@@ -6,6 +6,7 @@ import json
 import pandas as pd
 
 from .projects import child_path
+from .result_catalog import RESULTS
 from .trash import SavedItems
 
 
@@ -41,7 +42,7 @@ class ResultWorkflow:
                 from .reporting import report_artifact
 
                 return report_artifact(project, self.result_value, kind, key)
-            if kind in {"differential", "markers", "network", "shap"}:
+            if kind in RESULTS and RESULTS[kind].download.endswith(".csv"):
                 return self.result_value(project, kind)["table"].to_csv(index=False).encode(
                     "utf-8"
                 ), "text/csv; charset=utf-8"

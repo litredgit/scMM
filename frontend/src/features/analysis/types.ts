@@ -1,15 +1,8 @@
 import type { Component, InjectionKey } from 'vue'
+import type contract from './results.contract.json'
 import type { useAnalysis } from './composables/useAnalysis'
-export type AnalysisOperation =
-  | 'reduce'
-  | 'cluster'
-  | 'differential'
-  | 'markers'
-  | 'network'
-  | 'train'
-  | 'explain_shap'
-  | 'save_latent'
-export type ResultName = 'differential' | 'markers' | 'network' | 'supervised' | 'shap'
+export type AnalysisOperation = keyof typeof contract.operations
+export type ResultName = keyof typeof contract.resultPlots
 export type PlotKind =
   | 'embedding'
   | 'volcano'

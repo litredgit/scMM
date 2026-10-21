@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from scMM import __version__
 from scMM.analysis.quality_pdf import quality_report_bytes, report_bundle
 
+from .result_catalog import INDEPENDENT_PLOTS, RESULTS
+
 
 def report_artifact(project, result_value, kind, key):
     if kind not in {"quality_pdf", "report_zip"}:
@@ -25,10 +27,7 @@ def report_artifact(project, result_value, kind, key):
     ):
         raise ValueError("Report input is stale; refresh the current dataset")
     data = state.require_data()
-    available = sorted(
-        (set(state.results) | set(project.saved_reports))
-        & {"differential", "markers", "network", "supervised", "shap"}
-    )
+    available = sorted((set(state.results) | set(project.saved_reports)) & RESULTS.keys())
     metadata = {
         "report_schema": 1,
         "created_at": datetime.now(UTC).isoformat(),
@@ -68,7 +67,7 @@ def report_artifact(project, result_value, kind, key):
     for name, source in project.views.get("figures", {}).items():
         figure = json.loads(source) if isinstance(source, str) else deepcopy(source)
         meta = figure.get("layout", {}).get("meta", {})
-        if name in {"feature_scatter", "feature_embedding", "stability"}:
+        if name in INDEPENDENT_PLOTS:
             meta["dataset_token"] = list(state.token)
         if meta.get("dataset_token") != list(state.token):
             omitted[name] = (

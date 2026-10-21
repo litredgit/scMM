@@ -20,19 +20,13 @@ import pandas as pd
 
 from .identity import actor
 from .projects import Project, ProjectStore
+from .result_catalog import INDEPENDENT_PLOTS, RESULT_PLOTS, related_results, stale_metadata_results
 from .storage import StorageCatalog
 from .web_analysis import AnalysisWorkflow
 from .web_lipids import LipidWorkflow
 from .web_raw import RawWorkflow
 from .web_results import ResultWorkflow
 from .workbench import read_dataset
-
-RESULT_PLOTS = {
-    "differential": ("volcano", "violin"),
-    "network": ("network_plot",),
-    "supervised": ("roc", "pr", "calibration", "confusion"),
-    "shap": ("shap_plot", "shap_beeswarm", "shap_waterfall", "shap_dependence"),
-}
 
 
 class WorkspaceError(RuntimeError):
@@ -112,18 +106,14 @@ def sync_metadata(project):
     if not changed:
         return
     stale = before - set(project.workspace.results)
-    for name, report in list(project.saved_reports.items()):
-        dependencies = {report.get("group_key"), report.get("label_key")}
-        if dependencies & changed or (name in {"supervised", "shap"} and not dependencies - {None}):
-            stale.add(name)
-            project.saved_reports.pop(name, None)
-    if "supervised" in stale:
-        stale.add("shap")
-        project.saved_reports.pop("shap", None)
+    stale.update(stale_metadata_results(project.saved_reports, changed, readonly=True))
+    stale = related_results(stale)
+    for name in stale:
+        project.saved_reports.pop(name, None)
     for name in stale:
         for figure in RESULT_PLOTS.get(name, ()):
             project.views.get("figures", {}).pop(figure, None)
-    for key in ("feature_scatter", "feature_embedding", "stability"):
+    for key in INDEPENDENT_PLOTS:
         figure = project.views.get("figures", {}).get(key)
         if figure:
             metadata = figure["layout"]["meta"]
