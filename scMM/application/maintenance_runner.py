@@ -12,7 +12,7 @@ from .server_config import ServerConfig, load_server_config
 
 
 def healthy(port):
-    for _ in range(45):
+    for _ in range(150):
         try:
             with urllib.request.urlopen(
                 f"http://127.0.0.1:{port}/api/v1/health", timeout=2
@@ -25,12 +25,16 @@ def healthy(port):
     raise RuntimeError("Service did not pass health check")
 
 
-def run(config_path, action, version=None):
+def run(config_path, action, version=None, *, deployment_first=False):
     config = load_server_config(config_path, environ={}).validate()
     environment = config.values["environment"]
     if environment not in {"dev", "prod"}:
         raise ValueError("Unsupported service environment")
     unit = "scmm-dev.service" if environment == "dev" else "scmm-ui.service"
+    if deployment_first:
+        from .deployment_client import prepare_service
+
+        prepare_service(config, config.values["port"])
     root = config.path.parent / (config.path.stem + ".recovery")
     pointer = root / "current.json"
     checkpoint = pointer.read_bytes()
@@ -97,8 +101,9 @@ def main():
     parser.add_argument("config", type=Path)
     parser.add_argument("action", choices=["restart", "update"])
     parser.add_argument("--version")
+    parser.add_argument("--deployment-first", action="store_true")
     args = parser.parse_args()
-    run(args.config, args.action, args.version)
+    run(args.config, args.action, args.version, deployment_first=args.deployment_first)
 
 
 if __name__ == "__main__":

@@ -147,6 +147,7 @@ test('administrator closure review clears an orphan without replacing workspace 
 }) => {
   await page.goto('/account')
   await expect(page.getByRole('heading', { name: '服务器资源与更新', exact: true })).toBeVisible()
+  await page.getByText('严格会话维护（可选）', { exact: true }).click()
   const orphan = await page.request.post('/api/v1/presence/register', {
     headers: { 'X-SCMM-Client': 'web' },
     data: { id: crypto.randomUUID().replaceAll('-', ''), route: '/login', visibility: 'suspended' },
@@ -182,4 +183,40 @@ test('administrator closure review clears an orphan without replacing workspace 
   } finally {
     await page.getByRole('button', { name: '取消维护', exact: true }).click()
   }
+})
+
+test('deployment notice lets the user save and then reloads after maintenance', async ({
+  page,
+}) => {
+  await page.goto('/projects')
+  await page.getByLabel('项目名称', { exact: true }).fill('部署通知合成项目')
+  await page.getByRole('button', { name: /创建并添加样本/ }).click()
+  await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
+  await page.getByRole('button', { name: /alpha.mzML/ }).click()
+  await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
+  await expect(page.getByText('有未保存修改', { exact: true })).toBeVisible()
+  let collecting = true
+  await page.route('**/api/v1/maintenance/status', (route) =>
+    route.fulfill({
+      json: {
+        request: collecting
+          ? { id: 'synthetic-deployment', policy: 'deployment', deadline: Date.now() / 1000 + 60 }
+          : null,
+        completed: false,
+      },
+    }),
+  )
+  await page.route('**/api/v1/workspace/maintenance/draft', async (route) => {
+    if (route.request().method() === 'PUT') await route.fulfill({ json: { saved: true } })
+    else await route.continue()
+  })
+  await expect(page.getByText(/可在顶部保存项目/)).toBeVisible()
+  await expect(page.getByRole('main')).toHaveAttribute('inert', '')
+  const saved = page.waitForResponse((r) => r.url().endsWith('/workspace/project/save'))
+  await page.getByRole('button', { name: '保存项目', exact: true }).click()
+  expect((await saved).ok()).toBeTruthy()
+  await expect(page.locator('.save-state')).toHaveText('已保存')
+  collecting = false
+  await page.waitForEvent('load')
+  await expect(page.getByRole('main')).not.toHaveAttribute('inert', '')
 })

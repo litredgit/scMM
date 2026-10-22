@@ -369,8 +369,48 @@ def dev_idle():
         )
 
 
+def prepare_deployment(values, name="prod"):
+    """Local OS authority performs audited maintenance; read-only tokens stay read-only."""
+    config = values.get(f"{name}_server_config")
+    if config is None:
+        # Legacy test/installation layouts still use their explicit idle checks.
+        idle(values)
+        return None
+    local = Path(__file__).resolve().parents[1]
+    source = (
+        local if (local / "scMM/application/deployment_client.py").is_file() else values["prod"]
+    )
+    if not (source / "scMM/application/deployment_client.py").is_file():
+        source = values["dev"]  # First installation of the deployment-first protocol.
+    env, _ = environment(values, name, create=False)
+    env["SCMM_DEPLOY_REPOSITORY"] = str(values[name])
+    result = subprocess.run(
+        [
+            str(source / ".venv/bin/python"),
+            "-m",
+            "scMM.application.deployment_client",
+            str(config),
+            "--port",
+            "5006" if name == "prod" else "5007",
+        ],
+        cwd=source,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=400,
+    )
+    if result.returncode:
+        raise RuntimeError("部署维护失败，服务尚未更新：" + result.stderr[-2000:])
+    report = json.loads(result.stdout)
+    print(
+        f"{name}: deployment maintenance completed; interrupted tasks={report['interrupted_tasks']}"
+    )
+    return report
+
+
 def health():
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + 150
     while time.monotonic() < deadline:
         try:
             with urllib.request.urlopen("http://127.0.0.1:5006", timeout=2) as response:
@@ -384,6 +424,20 @@ def health():
             pass
         time.sleep(0.5)
     raise RuntimeError("Production failed its HTTP/systemd health check")
+
+
+def compatible_recovery(values):
+    """Older code cannot read deployment bundles; isolate temporary state on downgrade."""
+    if not values.get("prod_server_config"):
+        return
+    config = Path(values["prod_server_config"])
+    pointer = config.parent / (config.stem + ".recovery") / "current.json"
+    if (
+        pointer.exists()
+        and not (values["prod"] / "scMM/application/deployment_maintenance.py").is_file()
+    ) and "deployment" in json.loads(pointer.read_text()):
+        pointer.replace(pointer.with_name("incompatible-deployment.json"))
+        print("Older code: temporary deployment sessions isolated; saved projects retained")
 
 
 def deploy(values, target, *, rollback=False, migrate_auth=False, config=CONFIG):
@@ -401,11 +455,17 @@ def deploy(values, target, *, rollback=False, migrate_auth=False, config=CONFIG)
         idle(values, migrate_auth=True)
         launchers = backup_launchers(values)
     else:
-        idle(values)
+        report = prepare_deployment(values)
     # The old revision remains recoverable even when local main moves backwards.
     git(root, "update-ref", "refs/scmm/recovery", previous)
     run("systemctl", "--user", "stop", SERVICE)
     try:
+        if not migrate_auth and report and report.get("discard_pointer"):
+            config_path = Path(values["prod_server_config"])
+            directory = config_path.parent / (config_path.stem + ".recovery")
+            pointer = directory / "current.json"
+            if pointer.exists():
+                pointer.replace(directory / "legacy-unverified.json")
         if migrate_auth:
             install(values, config)
         if rollback:
@@ -413,6 +473,7 @@ def deploy(values, target, *, rollback=False, migrate_auth=False, config=CONFIG)
         else:
             git(root, "merge", "--ff-only", target)
         sync(values, "prod")
+        compatible_recovery(values)
         run("systemctl", "--user", "start", SERVICE)
         health()
     except Exception:
@@ -422,6 +483,7 @@ def deploy(values, target, *, rollback=False, migrate_auth=False, config=CONFIG)
         if launchers:
             restore_launchers(launchers)
         sync(values, "prod")
+        compatible_recovery(values)
         run("systemctl", "--user", "start", SERVICE)
         health()
         raise
@@ -487,6 +549,8 @@ WorkingDirectory={unit_path(values[name])}
 ExecStart=/usr/bin/python3 "{unit_path(script)}" --config "{unit_path(config)}" serve {name}
 Restart=on-failure
 RestartSec=3
+TimeoutStopSec=30
+KillMode=control-group
 
 [Install]
 WantedBy=default.target

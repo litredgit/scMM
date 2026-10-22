@@ -498,6 +498,12 @@ def test_vue_cli_starts_without_panel_and_preserves_storage_options(api, monkeyp
         == 0
     )
     app, options = calls[0]
-    assert options == {"host": "127.0.0.1", "port": 5118, "workers": 1, "proxy_headers": False}
+    assert options == {
+        "host": "127.0.0.1",
+        "port": 5118,
+        "workers": 1,
+        "proxy_headers": False,
+        "timeout_graceful_shutdown": 15,
+    }
     assert app.state.workspaces.store.root == manager.store.root
     assert [root.label for root in app.state.workspaces.storage.roots] == ["Raw"]

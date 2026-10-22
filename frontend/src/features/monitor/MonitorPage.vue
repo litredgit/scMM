@@ -90,9 +90,7 @@ const stale = computed(
 const label = (value?: Decision, unavailable = false) =>
   unavailable
     ? '无法确认'
-    : { ready: '满足更新检查', blocked: '暂不可更新', unknown: '无法确认' }[
-        value?.state ?? 'unknown'
-      ]
+    : { ready: '实例空闲', blocked: '实例非空闲', unknown: '无法确认' }[value?.state ?? 'unknown']
 const when = (value?: number | null) => (value ? new Date(value * 1000).toLocaleString() : '未记录')
 const bytes = (value?: number | null) =>
   value == null ? '不可用' : `${(value / 1024 ** 3).toFixed(2)} GiB`
@@ -219,7 +217,7 @@ onUnmounted(stop)
         </article>
       </div>
       <p class="muted">
-        所有前台、后台及未登录页面均计入检查。失联不等于关闭；页面关闭待确认、未保存修改、打开的项目、活动任务或未完成请求均不能给出可更新结论。只读监控页单独列出；发布前仍须重新检查。
+        此处显示保守空闲诊断，计入前台、后台及未登录页面；失联不等于关闭。正式发布会通知用户并限时保全会话，打开项目、未保存修改或失联记录不再阻止更新；正式写入须安全结束。
       </p>
       <div class="metric-grid">
         <article class="card">

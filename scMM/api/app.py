@@ -109,6 +109,7 @@ def create_app(
     async def browser_boundary(request: Request, call_next):
         path, principal, context_token = request.url.path, None, None
         operation = None
+        deployment_operation = None
         status = 500
         try:
             if path.startswith("/api/"):
@@ -169,9 +170,14 @@ def create_app(
                     ):
                         raise AuthError("请求校验已失效，请重新登录。", 403, "csrf_rejected")
             maintenance_state = getattr(app.state, "maintenance", None)
+            if maintenance_state:
+                from scMM.application.deployment_maintenance import admit
+
+                deployment_operation = admit(maintenance_state, path, request.method)
             if (
                 maintenance_state
                 and maintenance_state.request
+                and maintenance_state.request.get("policy") != "deployment"
                 and request.method not in {"GET", "HEAD", "OPTIONS"}
                 and path.startswith("/api/")
                 and path
@@ -240,6 +246,9 @@ def create_app(
                 {"error": {"code": exc.code, "message": str(exc)}}, status_code=exc.status
             )
         finally:
+            if deployment_operation is not None:
+                with maintenance_state._control_lock:
+                    maintenance_state._deployment_requests.pop(deployment_operation, None)
             if operation:
                 monitoring.end(operation, status)
             if context_token is not None:

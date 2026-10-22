@@ -720,6 +720,9 @@ HTTP `/presence/register` 与 `/presence/heartbeat` 为登录页提供受限租�
 
 `application/state_codec.py` 明确编码 AnnData/数组/表/图及受审核模型；`recovery.py` 原子发布并校验恢复包，
 `maintenance.py` 管理页面握手和维护状态，`maintenance_runner.py` 在独立 systemd 任务中执行重启及配置回滚。
+`deployment_maintenance.py` 管理部署通知、请求准入、正式写入保护及限时逐会话暂存/隔离恢复；超时线程只能留下未引用产物，不能迟到发布指针。
+`deployment_client.py` 为本机维护建立及时撤销的审计管理员会话，串联通知、worker 身份核实/退出、暂存及报告；只读运维令牌不变。
+部署默认允许临时状态损失；严格会话维护保留为可选入口。期限、容量及首次旧版升级边界见[安装部署](installation.md#发布更新与回滚)。
 `maintenance_closure.py` 管理维护轮次内的一次性关闭审阅：只对经人工核实的失联记录及历史未登记请求更新证据，
 不删除工作区，不授予只读运维令牌写权限；新活动、过期或审计失败不应用旧确认。
 `api/routers/maintenance.py` 只开放认证管理入口。公开维护状态只含收集 nonce/完成标记，完整状态只给管理员。

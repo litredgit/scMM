@@ -61,7 +61,9 @@ export function startMaintenance(router: Router) {
     timer: ReturnType<typeof setTimeout> | undefined,
     nonce = '',
     restored = '',
-    working = false
+    working = false,
+    observedMaintenance = false,
+    reportedRestoration = false
   let restoredForms = false
   const appliedRoutes = new Set<string>()
   let savedRevision = -1,
@@ -159,8 +161,33 @@ export function startMaintenance(router: Router) {
           }, 500)
         }
       }
-      const status = await request<{ request: { id: string } | null }>('/maintenance/status')
+      const status = await request<{
+        request: { id: string; policy?: string; deadline?: number } | null
+        restoration?: { restored: number; failed: number; unavailable: boolean }
+      }>('/maintenance/status')
+      if (!reportedRestoration && !status.request && status.restoration) {
+        reportedRestoration = true
+        const recovery = status.restoration
+        if (recovery.failed || recovery.unavailable) {
+          store.notice = '更新已完成，部分临时状态未能恢复，请重新打开正式保存的项目。'
+        } else if (recovery.restored) {
+          store.notice = `更新已完成，已恢复你的 ${recovery.restored} 个工作区；未保存内容仍需主动保存。`
+        }
+      }
       store.maintenancePaused = Boolean(status.request)
+      if (status.request) observedMaintenance = true
+      if (status.request?.policy === 'deployment') {
+        const seconds = Math.max(0, Math.ceil((status.request.deadline || 0) - Date.now() / 1000))
+        store.notice =
+          seconds > 0
+            ? `服务将在 ${seconds} 秒后更新，已暂停新计算；可在顶部保存项目。未保存内容将尽力恢复。`
+            : '服务正在更新，请稍候；未恢复的临时内容可从正式保存的项目重新开始。'
+      }
+      if (observedMaintenance && !status.request) {
+        // Reconnect through a fresh document and reload the deployed frontend.
+        window.location.reload()
+        return
+      }
       if (status.request?.id && nonce !== status.request.id && !store.busy && !working) {
         working = true
         try {
@@ -185,7 +212,8 @@ export function startMaintenance(router: Router) {
             },
           })
           nonce = status.request.id
-          store.notice = '会话已暂存，等待管理员完成维护。'
+          if (status.request.policy !== 'deployment')
+            store.notice = '会话已暂存，等待管理员完成维护。'
         } finally {
           working = false
         }

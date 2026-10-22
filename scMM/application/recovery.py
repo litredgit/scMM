@@ -36,7 +36,12 @@ class RecoveryStore:
         self.cipher = Fernet(self.key.read_bytes())
         self.lock = threading.RLock()
 
-    def snapshot(self, manager):
+    def discard_pointer(self):
+        pointer = self.root / "current.json"
+        if pointer.exists():
+            pointer.replace(self.root / ("superseded-" + uuid4().hex + ".json"))
+
+    def snapshot(self, manager, *, publish=True):
         with self.lock, manager._lock, ExitStack() as stack:
             retention = getattr(manager, "retention", None)
             if retention is not None and retention.runtime()[0]:
@@ -96,6 +101,9 @@ class RecoveryStore:
                 + estimate(w.project.views if w.project else {})
                 for w in workspaces
             )
+            limit = getattr(manager, "snapshot_byte_limit", None)
+            if limit is not None and estimated > limit:
+                raise ValueError("工作区超出部署暂存容量上限。")
             required = max(64 * 1024**2, estimated * 3)
             if shutil.disk_usage(self.root).free < required:
                 raise ValueError("维护暂存磁盘空间不足，请先释放空间；尚未更新服务。")
@@ -150,6 +158,8 @@ class RecoveryStore:
                 state = codec.encode(
                     {"workspaces": records, "pages": getattr(manager, "maintenance_pages", {})}
                 )
+                if limit is not None and sum(p.stat().st_size for p in directory.iterdir()) > limit:
+                    raise ValueError("工作区产物超出部署暂存容量上限。")
                 # Verify every data artifact and every trained pipeline before publication.
                 restored = codec.decode(state)
                 if len(restored["workspaces"]) != len(records):
@@ -171,11 +181,14 @@ class RecoveryStore:
                 }
                 sealed = self.cipher.encrypt(json.dumps(manifest).encode())
                 (directory / "manifest.enc").write_bytes(sealed)
+                if limit is not None and sum(p.stat().st_size for p in directory.iterdir()) > limit:
+                    raise ValueError("工作区完整恢复包超出部署暂存容量上限。")
                 for path in directory.iterdir():
                     os.chmod(path, 0o600)
                     with path.open("rb") as handle:
                         os.fsync(handle.fileno())
-                write_json(self.root / "current.json", {"id": directory.name})
+                if publish:
+                    write_json(self.root / "current.json", {"id": directory.name})
                 return manifest
             except BaseException:
                 import shutil
@@ -183,8 +196,8 @@ class RecoveryStore:
                 shutil.rmtree(directory)
                 raise
 
-    def restore(self, manager):
-        pointer = self.root / "current.json"
+    def restore(self, manager, *, pointer=None, consume=True):
+        pointer = self.root / "current.json" if pointer is None else pointer
         if not pointer.exists():
             return 0
         identity = json.loads(pointer.read_text())["id"]
@@ -287,5 +300,6 @@ class RecoveryStore:
             manager.maintenance_pages = payload["pages"]
         for workspace in candidate.values():
             manager.publish_ai(workspace)
-        pointer.rename(self.root / "restored.json")
+        if consume:
+            pointer.rename(self.root / "restored.json")
         return len(candidate)

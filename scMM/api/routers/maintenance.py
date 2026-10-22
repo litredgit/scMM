@@ -46,9 +46,16 @@ class ClosedPages(Controls):
 @router.get("/maintenance/status")
 def status(request: Request):
     service = request.app.state.maintenance
+    report = getattr(service, "restoration_report", {})
+    owner = request.state.principal["id"]
     return {
         "request": service.request if service else None,
         "completed": bool(service and service.completed),
+        "restoration": {
+            key: sum(r.get("owner_id") == owner for r in report.get(key, []))
+            for key in ("restored", "failed")
+        }
+        | {"unavailable": bool(report.get("invalid_recovery"))},
     }
 
 
@@ -139,6 +146,25 @@ def database_update():
 @router.post("/admin/maintenance/prepare")
 def prepare(request: Request):
     return request.app.state.maintenance.prepare()
+
+
+@router.post("/admin/maintenance/deployment/prepare")
+def deployment_prepare(request: Request):
+    from scMM.application.deployment_maintenance import prepare
+
+    return prepare(request.app.state.maintenance)
+
+
+@router.post("/admin/maintenance/deployment/checkpoint")
+def deployment_checkpoint(request: Request):
+    from scMM.application.deployment_maintenance import checkpoint
+
+    return checkpoint(request.app.state.maintenance)
+
+
+@router.post("/admin/maintenance/deployment/execute")
+def deployment_execute(body: Action, request: Request):
+    return request.app.state.maintenance.execute(body.action, body.version, deployment_first=True)
 
 
 @router.post("/admin/maintenance/checkpoint")

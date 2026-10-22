@@ -160,6 +160,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         port=config.values["port"],
         workers=1,
         proxy_headers=False,
+        timeout_graceful_shutdown=15,
     )
     return 0
 

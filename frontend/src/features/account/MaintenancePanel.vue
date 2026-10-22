@@ -60,13 +60,23 @@ async function update() {
     }),
   )
 }
+async function deployment(action: 'restart' | 'update') {
+  await store.run(
+    () =>
+      request('/admin/maintenance/deployment/execute', {
+        method: 'POST',
+        body: { action, version: action === 'update' ? version.value : undefined },
+      }),
+    '维护已安排：通知用户后限时暂存会话并更新，临时状态可能无法恢复。',
+  )
+}
 onMounted(load)
 </script>
 <template>
   <div class="card">
     <h2>服务器资源与更新</h2>
     <p>
-      目录变更只切换可访问资源，不迁移原始文件。维护会先收集各页面草稿、加密聊天和全部工作区，并验证数据与模型可恢复。失联页面或活动任务会阻止更新。
+      目录变更只切换可访问资源，不迁移原始文件。部署维护会提前通知所有在线用户，限时保全会话；未保存内容和失联页面不阻止更新，超时计算会中断。正式项目写入须安全结束。
     </p>
     <label
       >资源目录配置<textarea
@@ -92,38 +102,54 @@ onMounted(load)
       </button>
     </div>
     <div class="actions">
-      <button class="primary" :disabled="store.busy" @click="action('prepare')">收集全部会话</button
-      ><button class="save" :disabled="store.busy" @click="action('checkpoint')">
-        验证并暂存会话</button
-      ><button class="restore" :disabled="store.busy" @click="action('execute')">暂存后重启</button
-      ><button :disabled="store.busy" @click="action('cancel')">取消维护</button
-      ><button class="preview" :disabled="store.busy" @click="load">读取状态</button>
+      <button class="restore" :disabled="store.busy" @click="deployment('restart')">
+        安排维护重启
+      </button>
     </div>
-    <pre>{{ JSON.stringify(status, null, 2) }}</pre>
-    <h3>失联页面已确认关闭</h3>
-    <p>
-      浏览器可能漏发关闭回执。先收集会话，再读取失联记录；仅在已经核实对应页面全部关闭后填写依据并执行。
-      只处理本轮失联记录和历史未登记请求，不清除正在连接的页面，不丢弃工作区或代替维护暂存。
-    </p>
-    <button class="preview" :disabled="store.busy" @click="reviewClosure">读取失联页面范围</button>
-    <p v-if="closure">
-      本轮失联 {{ closure.unconfirmed_pages }} 页；历史未登记请求：{{
-        closure.legacy_requests ? '有' : '无'
-      }}；仍连接 {{ closure.active_pages }} 页。审阅 5 分钟内有效，新活动会使范围失效。
-    </p>
-    <label
-      >页面关闭依据<input aria-label="页面关闭依据" v-model="closureReason" maxlength="200"
-    /></label>
-    <button
-      class="restore"
-      :disabled="store.busy || !closure || !closureReason.trim()"
-      @click="confirmClosure"
-    >
-      记录关闭确认并保留工作区
+    <label>已批准版本提交号<input v-model="version" /></label>
+    <button class="primary" :disabled="store.busy || !version" @click="deployment('update')">
+      安排更新已批准版本
     </button>
-    <label>已批准版本提交号<input v-model="version" /></label
-    ><button class="primary" :disabled="store.busy || !version" @click="update">
-      暂存后更新已批准版本
-    </button>
+    <details>
+      <summary>严格会话维护（可选）</summary>
+      <div class="actions">
+        <button class="primary" :disabled="store.busy" @click="action('prepare')">
+          收集全部会话</button
+        ><button class="save" :disabled="store.busy" @click="action('checkpoint')">
+          验证并暂存会话</button
+        ><button class="restore" :disabled="store.busy" @click="action('execute')">
+          暂存后重启</button
+        ><button :disabled="store.busy" @click="action('cancel')">取消维护</button
+        ><button class="preview" :disabled="store.busy" @click="load">读取状态</button>
+      </div>
+      <pre>{{ JSON.stringify(status, null, 2) }}</pre>
+      <h3>失联页面已确认关闭</h3>
+      <p>
+        浏览器可能漏发关闭回执。先收集会话，再读取失联记录；仅在已经核实对应页面全部关闭后填写依据并执行。
+        只处理本轮失联记录和历史未登记请求，不清除正在连接的页面，不丢弃工作区或代替维护暂存。
+      </p>
+      <button class="preview" :disabled="store.busy" @click="reviewClosure">
+        读取失联页面范围
+      </button>
+      <p v-if="closure">
+        本轮失联 {{ closure.unconfirmed_pages }} 页；历史未登记请求：{{
+          closure.legacy_requests ? '有' : '无'
+        }}；仍连接 {{ closure.active_pages }} 页。审阅 5 分钟内有效，新活动会使范围失效。
+      </p>
+      <label
+        >页面关闭依据<input aria-label="页面关闭依据" v-model="closureReason" maxlength="200"
+      /></label>
+      <button
+        class="restore"
+        :disabled="store.busy || !closure || !closureReason.trim()"
+        @click="confirmClosure"
+      >
+        记录关闭确认并保留工作区
+      </button>
+      <label>严格维护版本<input v-model="version" /></label
+      ><button class="primary" :disabled="store.busy || !version" @click="update">
+        暂存后更新已批准版本
+      </button>
+    </details>
   </div>
 </template>

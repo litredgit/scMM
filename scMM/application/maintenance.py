@@ -30,14 +30,23 @@ class Maintenance:
         self.completed = None
         self.acks = {}
         self.closure_review = None
-        self.recovery.restore(manager)
+        self.deployment = None
+        self._deployment_requests = {}
+        from .deployment_maintenance import restore
+
+        restore(self)
 
     @_serialized
     def status(self):
+        from .deployment_maintenance import finish
+
+        finish(self)
         return {
             "request": self.request,
             "completed": self.completed,
             "acknowledged": list(self.acks),
+            "deployment": self.deployment,
+            "restoration": self.restoration_report,
             "last_operation": json.loads((self.recovery.root / "last-operation.json").read_text())
             if (self.recovery.root / "last-operation.json").exists()
             else None,
@@ -73,7 +82,7 @@ class Maintenance:
         )
         if not page or page["user_id"] != owner_id:
             raise ValueError("页面身份已改变，请重新登记后重试。")
-        if self.completed:
+        if self.completed or (self.deployment and self.deployment["phase"] != "collecting"):
             raise ValueError("会话已冻结，请取消维护后重新收集。")
         if workspace is not None:
             workspace.client_state = state
@@ -85,6 +94,8 @@ class Maintenance:
 
     @_serialized
     def checkpoint(self):
+        if self.request and self.request.get("policy") == "deployment":
+            raise ValueError("部署维护请使用限时暂存入口。")
         if not self.request:
             raise ValueError("请先发起维护收集。")
         # No lost/legacy page is silently considered safe.
@@ -117,11 +128,14 @@ class Maintenance:
 
     @_serialized
     def cancel(self):
+        if self.deployment and self.deployment["phase"] != "collecting":
+            raise ValueError("部署暂存已开始，请由发布流程完成重启。")
         self.manager.maintenance_frozen = False
         self.request = None
         self.completed = None
         self.acks = {}
         self.closure_review = None
+        self.deployment = None
         (self.recovery.root / "current.json").unlink(missing_ok=True)
 
     @_serialized
@@ -131,8 +145,8 @@ class Maintenance:
         return all(p["id"] in self.acks for p in self.monitor.store.pages(include_ids=True))
 
     @_serialized
-    def execute(self, action, version=None):
-        if not self.verified_checkpoint():
+    def execute(self, action, version=None, *, deployment_first=False):
+        if not deployment_first and not self.verified_checkpoint():
             raise ValueError("请先完成全部会话暂存验证。")
         environment = self.config.values.get("environment")
         if environment not in {"dev", "prod"}:
@@ -167,6 +181,8 @@ class Maintenance:
         ]
         if version:
             command.extend(["--version", version])
+        if deployment_first:
+            command.append("--deployment-first")
         subprocess.run(
             [
                 "systemd-run",
@@ -179,4 +195,8 @@ class Maintenance:
             check=True,
             capture_output=True,
         )
-        return {"scheduled": True, "action": action, "checkpoint": self.completed["id"]}
+        return {
+            "scheduled": True,
+            "action": action,
+            "checkpoint": self.completed["id"] if self.completed else None,
+        }

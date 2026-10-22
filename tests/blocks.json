@@ -176,7 +176,9 @@
         "scMM/application/state_codec.py",
         "scMM/application/maintenance.py",
         "scMM/application/maintenance_closure.py",
-        "scMM/application/maintenance_runner.py"
+        "scMM/application/maintenance_runner.py",
+        "scMM/application/deployment_maintenance.py",
+        "scMM/application/deployment_client.py"
       ],
       "downstream": ["api", "api-lipids", "plotting"],
       "extras": []
@@ -188,7 +190,8 @@
         "tests/api/test_web_workflow.py",
         "tests/api/test_time_api.py",
         "tests/api/test_web_cli.py",
-        "tests/api/test_maintenance.py"
+        "tests/api/test_maintenance.py",
+        "tests/api/test_deployment_maintenance.py"
       ],
       "sources": [
         "scMM/api/cli.py",
@@ -432,7 +435,8 @@
       "tooling",
       "docs",
       "notebook"
-    ]
+    ],
+    "tests/support/maintenance.py": ["api"]
   },
   "shared": {
     "scMM/application/preview_cache.py": ["processing", "projects"],
