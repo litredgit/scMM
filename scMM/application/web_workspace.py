@@ -24,12 +24,19 @@ from .web_projects import project_candidate as project_candidate
 from .web_projects import sync_metadata as sync_metadata
 from .web_raw import RawWorkflow
 from .web_results import ResultWorkflow
+from .web_time import TimeWorkflow
 from .workspace_state import BrowserWorkspace as BrowserWorkspace
 from .workspace_state import WorkspaceError as WorkspaceError
 
 
 class WebWorkspaceService(
-    ProjectWorkflow, AISummaryWorkflow, RawWorkflow, AnalysisWorkflow, ResultWorkflow, LipidWorkflow
+    ProjectWorkflow,
+    AISummaryWorkflow,
+    RawWorkflow,
+    AnalysisWorkflow,
+    ResultWorkflow,
+    LipidWorkflow,
+    TimeWorkflow,
 ):
     def __init__(
         self, roots, result_roots, project_root, defaults, *, idle_seconds=3600, capacity=128

@@ -21,6 +21,8 @@ class _PalantirConfig:
     max_iterations: int
     seed: int
     use_early_cell_as_start: bool
+    check_connected: bool = False
+    n_jobs: int | None = None
 
     def to_params(self) -> dict:
         return {
@@ -31,6 +33,8 @@ class _PalantirConfig:
             "max_iterations": int(self.max_iterations),
             "seed": int(self.seed),
             "use_early_cell_as_start": bool(self.use_early_cell_as_start),
+            **({"check_connected": True} if self.check_connected else {}),
+            **({"n_jobs": self.n_jobs} if self.n_jobs is not None else {}),
         }
 
 
@@ -87,6 +91,8 @@ def run_palantir(
     seed: int = 42,
     use_early_cell_as_start: bool = True,
     store_prefix: str = "palantir",
+    check_connected: bool = False,
+    n_jobs: int | None = None,
 ):
     """Run Palantir and store aligned results and provenance in ``adata``."""
     _validate_palantir_input(adata, start_idx)
@@ -102,6 +108,8 @@ def run_palantir(
         max_iterations=max_iterations,
         seed=seed,
         use_early_cell_as_start=use_early_cell_as_start,
+        check_connected=check_connected,
+        n_jobs=n_jobs,
     )
     multiscale, result = _run_palantir_analysis(
         data,
@@ -160,10 +168,32 @@ def _run_palantir_analysis(
         knn=config.knn,
         seed=config.seed,
     )
+    if config.check_connected:
+        from scipy.sparse.csgraph import connected_components
+
+        count, _ = connected_components(diffusion["kernel"], directed=False)
+        if count != 1:
+            raise ValueError(f"Palantir diffusion graph is disconnected ({count} components)")
     n_eigenvectors = min(config.n_diff_components + 1, diffusion["EigenVectors"].shape[1])
     if n_eigenvectors < 2:
         raise ValueError("Too few diffusion eigenvectors were produced.")
     multiscale = palantir.utils.determine_multiscale_space(diffusion, n_eigs=n_eigenvectors)
+    if config.check_connected:
+        from sklearn.neighbors import NearestNeighbors
+        from sklearn.preprocessing import minmax_scale
+
+        # Match Palantir 1.4.5's shortest-path input before its _connect_graph
+        # can insert edges. A connected diffusion kernel alone is insufficient.
+        coordinates = minmax_scale(multiscale) if config.scale_components else multiscale
+        graph = NearestNeighbors(
+            n_neighbors=config.knn, metric="euclidean", n_jobs=config.n_jobs
+        ).fit(coordinates)
+        adjacency = graph.kneighbors_graph(coordinates, mode="distance")
+        count, _ = connected_components(adjacency, directed=False)
+        if count != 1:
+            raise ValueError(
+                f"Palantir multiscale neighbor graph is disconnected ({count} components)"
+            )
     result = palantir.core.run_palantir(
         multiscale,
         early_cell=early_cell,
@@ -174,6 +204,7 @@ def _run_palantir_analysis(
         max_iterations=config.max_iterations,
         use_early_cell_as_start=config.use_early_cell_as_start,
         seed=config.seed,
+        **({"n_jobs": config.n_jobs} if config.n_jobs is not None else {}),
     )
     return multiscale, result
 

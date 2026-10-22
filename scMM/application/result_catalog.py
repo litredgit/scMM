@@ -39,7 +39,7 @@ RESULTS = {
 RESULT_NAMES = {spec.operation: name for name, spec in RESULTS.items()}
 RESULT_PLOTS = {name: spec.plots for name, spec in RESULTS.items()}
 # Independent plots use only their explicit observation dependencies and X/layer.
-INDEPENDENT_PLOTS = ("feature_scatter", "feature_embedding", "stability")
+INDEPENDENT_PLOTS = ("feature_scatter", "feature_embedding", "stability", "time_plot")
 
 
 def related_results(names):
@@ -187,6 +187,14 @@ def rebind_figure_identity(figure, state, *, previous_token=None, kind=None, ide
         return False
     if kind not in PLOT_RESULTS and kind not in DATA_PLOTS:
         return False
+    if kind == "time_plot":
+        from scMM.util.time_results import valid_time_figure
+
+        metadata["time_result_valid"] = state.data is not None and valid_time_figure(
+            state.data, metadata
+        )
+        if not metadata["time_result_valid"]:
+            return False
     parent = PLOT_RESULTS.get(kind)
     if parent:
         identity = (identities or {}).get(parent)

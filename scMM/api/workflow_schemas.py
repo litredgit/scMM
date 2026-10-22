@@ -254,11 +254,49 @@ class Plot(RevisionRequest):
         "feature_scatter",
         "feature_embedding",
         "stability",
+        "time_plot",
         "shap_beeswarm",
         "shap_waterfall",
         "shap_dependence",
     ]
     options: dict[str, Any] = Field(default_factory=dict)
+
+
+class TimePalantir(Controls):
+    key: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,47}$")
+    root_cell_id: str = Field(min_length=1)
+    input_representation: str = Field(min_length=1)
+    terminal_cell_ids: list[str] | None = None
+    layer: str | None = None
+    n_diff_components: int = Field(default=10, ge=2, le=100)
+    knn: int = Field(default=30, ge=3)
+    num_waypoints: int = Field(default=500, ge=3)
+    scale_components: bool = True
+    max_iterations: int = Field(default=25, ge=1, le=1000)
+    seed: int = Field(default=42, ge=0, le=4294967295)
+    use_early_cell_as_start: bool = True
+
+
+class TimeTrajectory(Controls):
+    key: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,47}$")
+    coordinate_key: str = Field(min_length=1)
+    time_key: str = Field(min_length=1)
+    time_kind: Literal["acquisition_seconds", "normalized_time", "experimental_time", "pseudotime"]
+    unit: str = Field(min_length=1, max_length=80)
+    branch_probability_key: str | None = None
+    window_size: int = Field(default=100, ge=1, le=5000)
+    step_size: int = Field(default=50, ge=1, le=5000)
+    min_cells_per_window: int = Field(default=5, ge=1, le=5000)
+
+
+class TimeOperation(RevisionRequest):
+    operation: Literal["palantir", "trajectory"]
+    options: dict[str, Any]
+
+
+class TimePlot(Controls):
+    key: str
+    coordinate_key: str | None = None
 
 
 class ConfusionPlot(Controls):
@@ -416,6 +454,7 @@ OPERATIONS = {
     "save_latent": Latent,
 }
 PLOTS = {
+    "time_plot": TimePlot,
     "confusion": ConfusionPlot,
     "heatmap": HeatmapPlot,
     "feature_scatter": FeatureScatterPlot,

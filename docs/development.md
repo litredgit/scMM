@@ -108,7 +108,7 @@ scMM/
 | 细胞降维/聚类 | `analysis/embedding.py`、`analysis/clustering.py`、`PlotEngine`、`plot/embedding.py` | 五种降维、五种聚类、聚类参数白名单及着色已有；工作台保留候选提交，领域辅助函数负责参数校验/计算 | PARAM-03 已核对现有显式降维字段均有控件；三套 Python 入口的默认值/返回值不混用，Matplotlib 包装不重复造按钮 |
 | 差异/Marker/相关网络 | `analysis/statistics.py`、`plot/_engine_statistics.py` | 检验、全局 FDR、筛选/分页、图形与导出已有 | 保持 STAT-01 解释和结果生命周期；不是待重新移植的功能 |
 | 监督诊断/潜变量/SHAP | `analysis/supervised.py` | 分组验证、四模型、ROC/PR/校准、潜变量及 SHAP 已有 | PARAM-03 已接入 model_parameters.py 白名单/组合/训练折校验、四模型控件及 SHAP 显示设置；不序列化可执行模型 |
-| Palantir 与窗口轨迹 | `PlotEngine.run_palantir()` / `compute_trajectory()` | 无应用/HTTP/Vue 分析入口 | TIME-01；现有 Python 方法和暂缓的上游启发式方法分别管理 |
+| Palantir 与窗口轨迹 | `PlotEngine.run_palantir()` / `compute_trajectory()` | `time_analysis` / `web_time`、严格 HTTP、Vue 命名结果、只读重载/全量导出 | TIME-01 待本阶段用户验收；沿用现有定义，扩散核/多尺度近邻图断连检查仅网页显式启用；暂缓上游方法不引入 |
 | 代谢速度 | `PlotEngine.metabolic_velocity()` | 无对应入口 | TIME-02，沿现有参数化坐标的窗口变化速度，不能解释为示踪通量 |
 | 代谢物趋势/趋势聚类 | `plot_metabolite_trends()` / `plot_trend_clusters()` | 无对应入口 | TIME-03/04，输入时间、窗口、统计量和趋势距离可追溯 |
 | 特征距离嵌入 | `PlotEngine.feature_network()`；网页 `analysis/feature_embedding.py` | 独立特征距离 UMAP、层/ID/名称/类别、完整表及只读重载 | PLOT-02 待统一验收；Pearson 绝对相关/Euclidean 与相关阈值网络区分，常量/缺失及资源门限有明确规则 |

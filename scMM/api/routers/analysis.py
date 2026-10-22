@@ -23,10 +23,18 @@ def _check_figure_identity(metadata, manager, identity):
         raise ValueError("图的来源身份格式无效。")
     if metadata.get("result_identity_valid") is False:
         raise ValueError("图的计算结果身份不明或已失效，请重新绘图。")
-    if not any(metadata.get(key) for key in ("dataset_token", "result_name", "sample_id")):
+    if not any(
+        metadata.get(key)
+        for key in ("dataset_token", "result_name", "sample_id", "time_result_key")
+    ):
         return
     with manager.access(identity) as workspace:
         project = workspace.require_project()
+        if metadata.get("time_result_key"):
+            from scMM.util.time_results import valid_time_figure
+
+            if not valid_time_figure(project.workspace.require_data(), metadata):
+                raise ValueError("时间结果或作图输入已过期，请重新计算/绘图")
         if metadata.get("result_name"):
             if not isinstance(metadata["result_name"], str):
                 raise ValueError("图的计算结果身份格式无效。")
@@ -159,6 +167,39 @@ def result(
 def plot(body: s.Plot, manager: Service, identity: Identity):
     options = s.options_for(s.PLOTS.get(body.kind, s.Controls), body.options)
     return manager.analysis_plot(identity, body.revision, body.kind, options)
+
+
+@router.get("/workspace/analysis/time")
+def time_info(
+    manager: Service,
+    identity: Identity,
+    query: str = Query(default="", max_length=256),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=200, ge=1, le=1000),
+):
+    return manager.time_info(identity, query=query, offset=offset, limit=limit)
+
+
+@router.post("/workspace/analysis/time")
+def time_operation(body: s.TimeOperation, manager: Service, identity: Identity):
+    options = s.options_for(
+        s.TimePalantir if body.operation == "palantir" else s.TimeTrajectory, body.options
+    )
+    return manager.run_time(identity, body.revision, body.operation, options)
+
+
+@router.get("/workspace/analysis/time/download")
+def time_download(manager: Service, identity: Identity, key: str):
+    return Response(
+        manager.time_download(identity, key),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="scmm-time-result.zip"'},
+    )
+
+
+@router.get("/workspace/analysis/time/result")
+def time_result(manager: Service, identity: Identity, key: str):
+    return manager.time_result(identity, key)
 
 
 @router.put("/workspace/analysis/settings")

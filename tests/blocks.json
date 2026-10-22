@@ -46,7 +46,8 @@
         "scMM/util/normalize.py",
         "scMM/util/intensity.py",
         "scMM/util/denoise.py",
-        "scMM/util/lifecycle.py"
+        "scMM/util/lifecycle.py",
+        "scMM/util/time_results.py"
       ],
       "downstream": [
         "processing",
@@ -162,11 +163,13 @@
       "kind": "python",
       "tests": [
         "tests/application/test_workbench_state.py",
+        "tests/application/test_time_analysis.py",
         "tests/application/test_result_catalog.py",
         "tests/application/test_maintenance_recovery.py"
       ],
       "sources": [
         "scMM/application/workbench.py",
+        "scMM/application/time_analysis.py",
         "scMM/application/result_catalog.py",
         "scMM/application/cell_spectra.py",
         "scMM/application/recovery.py",
@@ -182,6 +185,7 @@
       "tests": [
         "tests/api/test_web_api.py",
         "tests/api/test_web_workflow.py",
+        "tests/api/test_time_api.py",
         "tests/api/test_web_cli.py",
         "tests/api/test_maintenance.py"
       ],
@@ -743,6 +747,7 @@
     "scMM/api/routers/results.py": ["api", "api-raw", "api-lipids"],
     "scMM/api/routers/projects.py": ["api", "api-raw", "api-lipids"],
     "scMM/application/web_analysis.py": ["api", "api-raw", "api-lipids", "ai"],
+    "scMM/application/web_time.py": ["api", "api-raw", "api-lipids", "ai"],
     "scMM/application/web_results.py": ["api", "api-raw", "api-lipids"],
     "frontend/src/api/maintenance.ts": [
       "browser-projects",

@@ -66,6 +66,12 @@ def main():
         )
         analysis.X[:32, 0] *= 5
         analysis.write_h5ad(results / "analysis.h5ad")
+        time_data = AnnData(
+            np.random.default_rng(12).normal(size=(40, 6)),
+            obs=pd.DataFrame({"time": np.linspace(0, 1, 40)}, index=[f"c{i}" for i in range(40)]),
+            var=pd.DataFrame({"mz": np.arange(150.0, 156.0)}, index=[f"f{i}" for i in range(6)]),
+        )
+        time_data.write_h5ad(results / "time.h5ad")
         # Local synthetic lipid database and peaks: browser tests never download LMSD.
         from scMM.util.lipid_isotopes import adduct_shift, resolved_distribution
 

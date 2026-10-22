@@ -77,6 +77,9 @@ uv sync --locked --extra plot --extra cluster
 uv sync --locked --extra web
 ```
 
+网页 Palantir 另需 `plot` 可选依赖：`uv sync --locked --extra web --extra plot`。
+仅安装 `web` 时仍可使用窗口轨迹；Palantir 缺失会明确报错，不改用其他算法。
+
 完整交互开发环境可使用 `uv sync --locked --all-extras --dev`。PR 验证按
 [受影响测试块](development.md#选择规则与-ci)安装需要的 extras，仍共享同一份锁文件，不默认安装 Notebook 工具链。
 

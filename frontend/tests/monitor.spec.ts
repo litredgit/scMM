@@ -20,12 +20,28 @@ test('monitor opens without creating a workspace and tracks hidden login pages',
   await expect
     .poll(async () => (await snapshot()).update_readiness.monitor_pages)
     .toBeGreaterThan(0)
-  const baseline = (await snapshot()).update_readiness.active_pages
   const other = await context.browser()!.newContext()
   const login = await other.newPage()
+  const openedAt = Date.now() / 1000
   await login.goto(new URL('/projects', page.url()).href)
   await expect(login.getByRole('button', { name: '登录', exact: true })).toBeVisible()
-  await expect.poll(async () => (await snapshot()).update_readiness.active_pages).toBe(baseline + 1)
+  // Other tests' closed pages can expire during this test. Administration
+  // deliberately omits lease IDs; scope to this test's new anonymous page.
+  const freshLogin = (p: { route: string; username: string; seen: number }) =>
+    p.route === '/login' && p.username === '未登录' && p.seen >= openedAt
+  await expect
+    .poll(async () =>
+      (await snapshot()).pages.some(
+        (p: {
+          route: string
+          username: string
+          seen: number
+          state: string
+          monitor_only: boolean
+        }) => freshLogin(p) && p.state === 'connected' && !p.monitor_only,
+      ),
+    )
+    .toBeTruthy()
   await page.bringToFront()
   // Emulate a background document's real visibility event in Chromium.
   await login.evaluate(() => {
@@ -35,14 +51,14 @@ test('monitor opens without creating a workspace and tracks hidden login pages',
   await expect
     .poll(async () =>
       (await snapshot()).pages.some(
-        (p: { route: string; visibility: string }) =>
-          p.route === '/login' && p.visibility === 'hidden',
+        (p: { route: string; username: string; seen: number; visibility: string }) =>
+          freshLogin(p) && p.visibility === 'hidden',
       ),
     )
     .toBeTruthy()
   await expect.poll(async () => (await snapshot()).update_readiness.state).toBe('blocked')
   await login.goto('about:blank')
-  await expect.poll(async () => (await snapshot()).update_readiness.active_pages).toBe(baseline)
+  await expect.poll(async () => (await snapshot()).pages.some(freshLogin)).toBeFalsy()
   await other.close()
   for (const width of [1440, 700, 390]) {
     await page.setViewportSize({ width, height: 1000 })

@@ -27,6 +27,10 @@ def report_artifact(project, result_value, kind, key):
     ):
         raise ValueError("Report input is stale; refresh the current dataset")
     data = state.require_data()
+    from .time_analysis import info as time_info
+    from .time_analysis import result_metadata, result_tables
+
+    time_results = [row for row in time_info(data) if row["valid"]]
     available = sorted((set(state.results) | set(project.saved_reports)) & RESULTS.keys())
     metadata = {
         "report_schema": 1,
@@ -40,7 +44,7 @@ def report_artifact(project, result_value, kind, key):
         "unsaved": project.unsaved,
         "loaded_project_revision": project.manifest.get("revision"),
         "last_saved_snapshot": project.manifest.get("artifacts", {}).get("current"),
-        "available_results": available,
+        "available_results": [*available, *(f"time_{row['key']}" for row in time_results)],
         "figures": sorted(project.views.get("figures", {})),
         "history": state.history(),
         "scope": "当前矩阵 QC 和现有有效数值结果；不自动分析，不代替科学验收",  # noqa: RUF001
@@ -48,6 +52,12 @@ def report_artifact(project, result_value, kind, key):
     if kind == "quality_pdf":
         return quality_report_bytes(data, metadata), "application/pdf"
     reports = {}
+    for row in time_results:
+        for name, table in result_tables(data, row["key"]).items():
+            reports[f"time_{row['key']}_{name}"] = {
+                "summary": result_metadata(data, row["key"]),
+                "table": table,
+            }
     for name in available:
         value = result_value(project, name)
         reports[name] = {
@@ -70,8 +80,10 @@ def report_artifact(project, result_value, kind, key):
         rebind_figure_identity(
             figure, state, kind=name, identities=project_result_identities(project)
         )
-        if meta.get("result_identity_valid") is False or meta.get("dataset_token") != list(
-            state.token
+        if (
+            meta.get("time_result_valid") is False
+            or meta.get("result_identity_valid") is False
+            or meta.get("dataset_token") != list(state.token)
         ):
             omitted[name] = (
                 "figure workspace identity is not current; use the figure's own read-only export"

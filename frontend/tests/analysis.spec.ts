@@ -7,14 +7,16 @@ test.beforeEach(async ({ page }) => {
 })
 test.afterEach(() => expect(pageErrors).toEqual([]))
 
-async function importAnalysis(page: Page, name: string) {
+async function importAnalysis(page: Page, name: string, filename = 'analysis.h5ad') {
   if (page.url() === 'about:blank') await page.goto('/')
   else await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
   await page.getByLabel('项目名称', { exact: true }).fill(name)
   await page.getByRole('button', { name: '创建并添加样本' }).click()
   await page.getByRole('button', { name: '导入已有结果', exact: true }).click()
   await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
-  await page.getByRole('button', { name: /^(?:▤ )?analysis\.h5ad\s/ }).click()
+  await page
+    .getByRole('button', { name: new RegExp(`^(?:▤ )?${filename.replaceAll('.', '[.]')}\\s`) })
+    .click()
   await page.getByRole('button', { name: '导入结果', exact: true }).click()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await expect(page.getByLabel('group_key', { exact: true }).first()).toBeAttached()
@@ -578,4 +580,79 @@ test('image exports show backend stale-source rejection without a download', asy
   await page.getByRole('button', { name: '下载 SVG', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('图形已过期，请基于当前数据重新绘图。')
   expect(downloads).toBe(0)
+})
+
+test('named Palantir and window results retain exact sources through save and reload', async ({
+  page,
+}) => {
+  test.setTimeout(90000)
+  await importAnalysis(page, '命名时间结果', 'time.h5ad')
+  await page.getByLabel('n_components', { exact: true }).fill('3')
+  await page.getByRole('button', { name: '运行降维', exact: true }).click()
+  await expect(page.getByLabel('查看嵌入', { exact: true })).toHaveValue('X_pca')
+  await module(page, '伪时间与轨迹')
+  let calculations = 0
+  page.on('request', (request) => {
+    if (request.url().endsWith('/analysis/time') && request.method() === 'POST') calculations++
+  })
+  await expect(page.getByRole('button', { name: '计算并应用时间结果', exact: true })).toBeDisabled()
+  await page.getByLabel('时间结果输出键', { exact: true }).fill('pal_browser')
+  await page.getByLabel('根点细胞 ID', { exact: true }).fill('c3')
+  await page.getByLabel('Palantir 输入表示', { exact: true }).selectOption('X')
+  await page.getByLabel('终末细胞 ID', { exact: true }).fill('c39')
+  await page.getByLabel('扩散成分数', { exact: true }).fill('3')
+  await page.getByLabel('Palantir 近邻数', { exact: true }).fill('10')
+  await page.getByLabel('路标数量', { exact: true }).fill('12')
+  await page.getByRole('button', { name: '计算并应用时间结果', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: '结果 pal_browser 的生效参数', exact: true }),
+  ).toBeVisible()
+  await page.getByLabel('时间图绘图坐标', { exact: true }).selectOption('X_pca')
+  await page.getByRole('button', { name: '绘制时间结果', exact: true }).click()
+  await expect(page.getByText('图来源结果：pal_browser', { exact: true })).toBeVisible()
+  await page.getByLabel('时间分析方法', { exact: true }).selectOption('trajectory')
+  await page.getByLabel('时间结果输出键', { exact: true }).fill('path_browser')
+  await page.getByLabel('轨迹坐标', { exact: true }).selectOption('X_pca')
+  await page.getByLabel('轨迹时间列', { exact: true }).selectOption('pal_browser_pseudotime')
+  await page.getByLabel('轨迹时间含义', { exact: true }).selectOption('pseudotime')
+  await expect(page.getByLabel('轨迹时间单位', { exact: true })).toHaveValue('unitless')
+  await page.getByLabel('轨迹分支概率', { exact: true }).selectOption('pal_browser_branch_probs')
+  await page.getByLabel('时间窗口细胞数', { exact: true }).fill('16')
+  await page.getByLabel('窗口步长细胞数', { exact: true }).fill('8')
+  await page.getByRole('button', { name: '计算并应用时间结果', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: '结果 path_browser 的生效参数', exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: '绘制时间结果', exact: true }).click()
+  await expect(page.getByText('图来源结果：path_browser', { exact: true })).toBeVisible()
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: '下载完整时间结果 ZIP', exact: true }).click()
+  expect((await download).suggestedFilename()).toBe('scmm-time-result.zip')
+  expect(calculations).toBe(2)
+  for (const width of [700, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true)
+  }
+  await page.getByRole('button', { name: '保存项目', exact: true }).click()
+  await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
+  await page.getByRole('button', { name: '关闭项目', exact: true }).click()
+  await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
+  await page
+    .getByRole('row')
+    .filter({ hasText: '命名时间结果' })
+    .getByRole('button', { name: '打开项目 →' })
+    .click()
+  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await page.getByRole('combobox', { name: '分析功能', exact: true }).selectOption('time')
+  await expect(page.getByLabel('选择命名时间结果', { exact: true })).toHaveValue('path_browser')
+  await page.getByRole('button', { name: '读取已保存时间图', exact: true }).click()
+  await expect(page.getByText('图来源结果：path_browser', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '读取时间结果表', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: '结果 path_browser 的生效参数', exact: true }),
+  ).toBeVisible()
+  expect(calculations).toBe(2)
 })

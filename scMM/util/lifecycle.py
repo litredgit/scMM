@@ -2,6 +2,9 @@
 
 
 def invalidate_derived(data):
+    from .time_results import invalidate_time_results
+
+    invalidate_time_results(data, clear=True)
     metadata = data.uns.setdefault("scmm_workbench", {})
     for column in metadata.get("derived_obs", []):
         if column in data.obs:
@@ -135,7 +138,9 @@ def invalidate_observation_embeddings(data, changed):
         if key in data.obsm and (fields is None or set(fields) & changed):
             expired.append(key)
     if not expired:
-        return set()
+        from .time_results import invalidate_time_results
+
+        return invalidate_time_results(data, changed)
     tracked = metadata.get("derived_obs", [])
     if isinstance(tracked, str):
         raise ValueError("invalid derived observation metadata")
@@ -156,4 +161,6 @@ def invalidate_observation_embeddings(data, changed):
         rules.pop(key, None)
     metadata["derived_obs"] = [key for key in tracked if key not in removed]
     metadata["latent_dependencies_json"] = json.dumps(rules)
-    return removed
+    from .time_results import invalidate_time_results
+
+    return removed | invalidate_time_results(data, set(changed) | removed)

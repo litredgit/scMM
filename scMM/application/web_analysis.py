@@ -438,6 +438,10 @@ class AnalysisWorkflow:
                 from scMM.analysis.stability import stability_figure
 
                 figure = stability_figure(data, **options)
+            elif kind == "time_plot":
+                from .time_analysis import time_figure
+
+                figure = time_figure(data, **options)
             elif kind == "feature_embedding":
                 from scMM.analysis.feature_embedding import feature_embedding_figure
 

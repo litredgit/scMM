@@ -1,5 +1,15 @@
 /** Display names only: scientific keys, IDs and downloaded precision remain unchanged. */
 export const names: Record<string, string> = {
+  pseudotime: '伪时间',
+  entropy: '分支熵',
+  time_center: '时间中心',
+  valid_cells: '有效细胞数',
+  weight_sum: '权重和',
+  window_start: '窗口排序起点',
+  branch_index: '分支索引',
+  branch_name: '分支名称',
+  window_index: '窗口索引',
+  sorted_position: '时间排序位置',
   ref_mz: '参考离子',
   reference_mz: '参考离子',
   reference_mode: '参考判定',

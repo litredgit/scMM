@@ -68,6 +68,8 @@ class ResultWorkflow:
         with self.access(identity) as workspace:
             project = workspace.require_project()
             state = project.workspace
+            if kind == "time_result":
+                return self.time_download(identity, key), "application/zip"
             if kind in {"quality_pdf", "report_zip"}:
                 from .reporting import report_artifact
 

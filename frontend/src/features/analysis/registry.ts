@@ -1,4 +1,5 @@
 import StabilityPanel from './modules/StabilityPanel.vue'
+import TimePanel from './modules/TimePanel.vue'
 import FeatureEmbeddingPanel from './modules/FeatureEmbeddingPanel.vue'
 import FeatureScatterPanel from './modules/FeatureScatterPanel.vue'
 import HeatmapPanel from './modules/HeatmapPanel.vue'
@@ -68,4 +69,5 @@ export const analysisModules: readonly AnalysisModule[] = [
     component: SupervisedPanel,
     requires: ['matrix', 'observations'],
   },
+  { id: 'time', name: '伪时间与轨迹', group: '时间', component: TimePanel, requires: ['matrix'] },
 ]
