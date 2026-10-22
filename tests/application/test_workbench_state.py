@@ -444,3 +444,71 @@ def test_subset_invalid_ids_preserve_every_state(options):
         state.subset(**options)
     assert state.token == token and state.history() == []
     np.testing.assert_array_equal(state.data.X, matrix)
+
+
+def _source_samples():
+    return [
+        {
+            "id": f"s{i}",
+            "name": str(i),
+            "group": "a" if i % 2 == 0 else "b",
+            "subject": f"s{i}",
+            "batch": "old",
+        }
+        for i in range(20)
+    ]
+
+
+@pytest.mark.parametrize("field,expected", [("group", False), ("batch", True)])
+def test_latent_metadata_dependencies_preserve_independent_pca(field, expected):
+    state = workspace()
+    samples = _source_samples()
+    state.sync_sample_metadata(samples)
+    state.reduce("pca", store_key="X_independent")
+    model = state.train("group", group_key="subject", model="lda", cv=2)
+    state.save_latent("X_latent")
+    matrix = state.data.X.copy()
+    pca = state.data.obsm["X_independent"].copy()
+    rules = json.loads(state.data.uns["scmm_workbench"]["latent_dependencies_json"])
+    assert rules["X_latent"] == ["group", "subject"]
+    samples[0][field] = "changed"
+    state.sync_sample_metadata(samples)
+    assert ("X_latent" in state.data.obsm) is expected
+    assert ("X_latent_split" in state.data.obs) is expected
+    assert ("supervised" in state.results) is expected
+    if expected:
+        assert state.result("supervised") is model
+    np.testing.assert_array_equal(state.data.X, matrix)
+    np.testing.assert_array_equal(state.data.obsm["X_independent"], pca)
+    assert state._original.obs.loc["cell0", field] == "changed"
+
+
+def test_bad_latent_dependency_rolls_back_both_metadata_scopes():
+    state = workspace()
+    samples = _source_samples()
+    state.sync_sample_metadata(samples)
+    model = state.train("group", group_key="subject", model="lda", cv=2)
+    state.data.uns["scmm_workbench"]["latent_dependencies_json"] = '{"X_bad":"invalid"}'
+    current, baseline, token = state.data, state._original, state.token
+    observations, original = current.obs.copy(), baseline.obs.copy()
+    samples[0]["group"] = "changed"
+    with pytest.raises(ValueError, match="latent"):
+        state.sync_sample_metadata(samples)
+    assert state.data is current and state._original is baseline and state.token == token
+    assert state.result("supervised") is model
+    pd.testing.assert_frame_equal(state.data.obs, observations)
+    pd.testing.assert_frame_equal(state._original.obs, original)
+
+
+def test_reused_pca_key_does_not_inherit_historical_latent_dependency():
+    state = workspace()
+    samples = _source_samples()
+    state.sync_sample_metadata(samples)
+    state.train("group", group_key="subject", model="lda", cv=2)
+    state.save_latent("X_reused")
+    state.normalize("total")
+    state.reduce("pca", store_key="X_reused")
+    coordinates = state.data.obsm["X_reused"].copy()
+    samples[0]["group"] = "changed"
+    state.sync_sample_metadata(samples)
+    np.testing.assert_array_equal(state.data.obsm["X_reused"], coordinates)

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from scMM import __version__
 from scMM.analysis.quality_pdf import quality_report_bytes, report_bundle
 
-from .result_catalog import INDEPENDENT_PLOTS, RESULTS
+from .result_catalog import RESULTS, project_result_identities, rebind_figure_identity
 
 
 def report_artifact(project, result_value, kind, key):
@@ -67,9 +67,12 @@ def report_artifact(project, result_value, kind, key):
     for name, source in project.views.get("figures", {}).items():
         figure = json.loads(source) if isinstance(source, str) else deepcopy(source)
         meta = figure.get("layout", {}).get("meta", {})
-        if name in INDEPENDENT_PLOTS:
-            meta["dataset_token"] = list(state.token)
-        if meta.get("dataset_token") != list(state.token):
+        rebind_figure_identity(
+            figure, state, kind=name, identities=project_result_identities(project)
+        )
+        if meta.get("result_identity_valid") is False or meta.get("dataset_token") != list(
+            state.token
+        ):
             omitted[name] = (
                 "figure workspace identity is not current; use the figure's own read-only export"
             )

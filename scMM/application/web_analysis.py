@@ -4,6 +4,7 @@
 from collections import Counter
 from copy import deepcopy
 from pathlib import PureWindowsPath
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -20,11 +21,13 @@ from scMM.plot.workbench import (
 )
 
 from .result_catalog import (
-    INDEPENDENT_PLOTS,
+    PLOT_RESULTS,
     RESULT_NAMES,
     RESULT_PLOTS,
     RESULTS,
     live_report,
+    project_result_identities,
+    rebind_figure_identity,
     related_results,
     restore_report,
 )
@@ -44,7 +47,7 @@ ANALYSES = {
 }
 
 
-def quality_view(state):
+def quality_view(state, *, preview_of=None):
     qc = state.qc()
     files = qc_file_table(qc["file"])
     files.insert(0, "source_path", files.attrs["source_paths"])
@@ -77,7 +80,16 @@ def quality_view(state):
         legend_title_text="",
         meta={
             "point_kind": "cell",
-            "parameters": {"definition": "current matrix; detected >0"},
+            "dataset_token": list(state.token)
+            if preview_of is None
+            else preview_of["source_token"],
+            "matrix_status": "current" if preview_of is None else "preview",
+            "preview_of": preview_of,
+            "parameters": {
+                "definition": "current matrix; detected >0"
+                if preview_of is None
+                else "unapplied candidate; detected >0"
+            },
             "export_tables": {"cells": cell_frame.to_csv(), "files": files.to_csv(index=False)},
         },
     )
@@ -86,7 +98,13 @@ def quality_view(state):
     figure.update_yaxes(
         rangemode="nonnegative", dtick=1 if detected.max() - detected.min() <= 8 else None
     )
-    notes = ["QC 基于当前矩阵；检出特征按强度 > 0 计数。变换后的总强度不代表原始信号量。"]
+    notes = [
+        "QC 基于当前矩阵；检出特征按强度 > 0 计数。变换后的总强度不代表原始信号量。"
+        if preview_of is None
+        else "QC 基于未应用的预览候选；检出特征按强度 > 0 计数，不代表当前矩阵。"
+    ]
+    if preview_of is not None:
+        figure.update_layout(title="每细胞 QC · 未应用预览")
     totals = qc["cell"]["total_intensity"].to_numpy(dtype=float)
     nonzero = totals[totals != 0]
     if (
@@ -217,8 +235,9 @@ class AnalysisWorkflow:
             if key not in figures:
                 raise ValueError("图形不存在或已失效。")
             value = stored_figure(figures[key])
-            if key in INDEPENDENT_PLOTS:
-                value["layout"]["meta"]["dataset_token"] = list(project.workspace.token)
+            rebind_figure_identity(
+                value, project.workspace, kind=key, identities=project_result_identities(project)
+            )
             return value
 
     def feature_choices(
@@ -299,16 +318,33 @@ class AnalysisWorkflow:
                     )
                 return {
                     "workspace": self.view(workspace),
-                    "value": {"impact": impact, "qc": quality_view(state)},
+                    "value": {
+                        "impact": impact,
+                        "qc": quality_view(
+                            state,
+                            preview_of={
+                                "operation": operation,
+                                "parameters": options,
+                                "source_token": list(project.workspace.token),
+                            },
+                        ),
+                    },
                 }
             if operation in PREPROCESS:
                 candidate.saved_reports = {}
                 candidate.views.pop("figures", None)
             elif operation in {"reduce", "cluster", "save_latent"}:
-                for key in INDEPENDENT_PLOTS:
-                    figure = candidate.views.get("figures", {}).get(key)
-                    if figure:
-                        figure["layout"]["meta"]["dataset_token"] = list(state.token)
+                for key, figure in candidate.views.get("figures", {}).items():
+                    if isinstance(figure, str):
+                        figure = stored_figure(figure)
+                        candidate.views["figures"][key] = figure
+                    rebind_figure_identity(
+                        figure,
+                        state,
+                        previous_token=project.workspace.token,
+                        kind=key,
+                        identities=project_result_identities(candidate),
+                    )
             else:
                 result_name = RESULT_NAMES.get(operation, operation)
                 for name in related_results({result_name}):
@@ -411,8 +447,21 @@ class AnalysisWorkflow:
 
                 figure = feature_scatter_figure(data, **options)
             elif kind == "confusion":
-                analyzer = state.result("supervised")
-                values = np.asarray(analyzer.result_["confusion_matrix"])
+                report = self.result_value(project, "supervised")
+                try:
+                    classes = np.asarray(report["classes"])
+                    values = np.asarray(report["diagnostics"]["confusion_matrix"], dtype=float)
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise ValueError("监督报告缺少有效混淆矩阵，请重新训练。") from exc
+                if (
+                    classes.ndim != 1
+                    or values.shape != (len(classes), len(classes))
+                    or not len(classes)
+                    or not np.isfinite(values).all()
+                    or (values < 0).any()
+                    or not np.equal(values, np.floor(values)).all()
+                ):
+                    raise ValueError("监督报告的混淆矩阵无效，请重新训练。")
                 normalized = np.divide(
                     values,
                     values.sum(axis=1, keepdims=True),
@@ -423,8 +472,8 @@ class AnalysisWorkflow:
                 figure = go.Figure(
                     go.Heatmap(
                         z=display,
-                        x=analyzer.classes_.astype(str),
-                        y=analyzer.classes_.astype(str),
+                        x=classes.astype(str),
+                        y=classes.astype(str),
                         colorscale="Blues",
                         text=display,
                         texttemplate="%{text:.2f}"
@@ -439,7 +488,7 @@ class AnalysisWorkflow:
                     meta={
                         "export_tables": {
                             "counts.csv": pd.DataFrame(
-                                values, index=analyzer.classes_, columns=analyzer.classes_
+                                values, index=classes, columns=classes
                             ).to_csv(),
                             "row_normalized.csv": pd.DataFrame(
                                 np.divide(
@@ -448,8 +497,8 @@ class AnalysisWorkflow:
                                     out=np.zeros_like(values, dtype=float),
                                     where=values.sum(axis=1, keepdims=True) > 0,
                                 ),
-                                index=analyzer.classes_,
-                                columns=analyzer.classes_,
+                                index=classes,
+                                columns=classes,
                             ).to_csv(),
                         }
                     },
@@ -457,16 +506,30 @@ class AnalysisWorkflow:
             elif kind in {"roc", "pr", "calibration"}:
                 if "supervised" not in state.results:
                     if kind in project.views.get("figures", {}):
-                        return {
-                            "workspace": self.view(workspace),
-                            "value": stored_figure(project.views["figures"][kind]),
-                        }
+                        value = stored_figure(project.views["figures"][kind])
+                        rebind_figure_identity(
+                            value, state, kind=kind, identities=project_result_identities(project)
+                        )
+                        return {"workspace": self.view(workspace), "value": value}
                     raise ValueError("重载的模型报告只读；请重新训练以生成新图。")
                 figure = supervised_figures(state.result("supervised"))[
                     {"roc": 0, "pr": 1, "calibration": 2}[kind]
                 ]
             else:
                 raise ValueError("不支持的图形。")
+            parent = PLOT_RESULTS.get(kind)
+            result_identity = project_result_identities(project).get(parent) if parent else None
+            if parent and not result_identity:
+                result_identity = uuid4().hex
+            if parent:
+                figure.update_layout(
+                    meta={
+                        **(figure.layout.meta or {}),
+                        "result_name": parent,
+                        "result_identity": result_identity,
+                        "result_identity_valid": True,
+                    }
+                )
             figure.update_layout(
                 meta={
                     **(figure.layout.meta or {}),
@@ -507,6 +570,11 @@ class AnalysisWorkflow:
                 meta={**(figure.layout.meta or {}), "export_tables": export_tables}
             )
             payload = figure_view(style_figure(figure))
+            if parent:
+                if parent in state.results:
+                    state._result_identities[parent] = result_identity
+                elif parent in project.saved_reports:
+                    project.saved_reports[parent]["_result_identity"] = result_identity
             project.views.setdefault("figures", {})[kind] = payload
             project.dirty = True
             workspace.revision += 1

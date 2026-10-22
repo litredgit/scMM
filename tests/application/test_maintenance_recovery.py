@@ -70,6 +70,8 @@ def test_unsaved_full_state_isolated_and_tamper_rejected(tmp_path):
     assert new._workspaces[other.id].project is None
     restored = new._workspaces[first.id]
     assert restored.project.unsaved and restored.client_state == first.client_state
+    assert restored.project.workspace._result_identities == project.workspace._result_identities
+    assert restored.project.workspace._result_identities["supervised"]
     np.testing.assert_array_equal(
         restored.project.workspace.result("supervised").probabilities_, model.probabilities_
     )

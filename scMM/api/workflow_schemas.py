@@ -329,7 +329,12 @@ class FigureData(Controls):
     figure: dict[str, Any]
 
 
+class FigureIdentity(Controls):
+    metadata: dict[str, Any]
+
+
 class FigurePDF(Controls):
+    identity: dict[str, Any] = Field(default_factory=dict)
     svg: str = Field(max_length=32 * 1024**2)
     width_mm: float = Field(default=89, ge=20, le=600)
     height_mm: float = Field(default=65, ge=20, le=600)

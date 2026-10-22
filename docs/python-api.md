@@ -351,3 +351,6 @@ reconstructed, noise_sigma = peak_recon(
 数值变换、提取和对齐在完整候选通过校验后才更新对象；插件归一化、缺失判定、调试钩子和估计器不会获得当前矩阵的可写视图。
 回调失败或返回非法矩阵/元数据时保留原状态；不要依赖调试钩子写入计算输入。矩阵变换失效旧分析及其序列化报告，测量层/raw 的保留规则见[AnnData 映射](data-output.md#anndata-映射)。
 离群筛选仍接受 sklearn kwargs，建议显式传 `random_state`；file_meta.outlier 记录种子/随机状态和筛选数量，完整参数由调用方保存。
+
+`assign_source_metadata(metadata_by_file, overwrite=False)` 默认拒绝已有列冲突；显式 overwrite=True 可更新标签并扩充已有分类字段。
+元数据修改按报告记录的字段依赖失效相应只读结果，无关字段/同值写回保留；畸形或未知版本报告使操作失败且不更改原状态，见[报告目录](data-output.md#统计与监督报告目录)。

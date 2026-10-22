@@ -272,3 +272,91 @@ def test_imported_observation_identity_mismatch_is_rejected_on_export():
     with pytest.raises(ValueError, match="peak_meta index"):
         dataset.to_anndata()
     assert dataset.__dict__ is original
+
+
+@pytest.mark.parametrize(
+    "key,value,remaining",
+    [
+        ("group", "new", {"network"}),
+        ("batch", "new", {"differential", "markers", "network", "supervised", "shap"}),
+        ("group", "control", {"differential", "markers", "network", "supervised", "shap"}),
+    ],
+)
+def test_python_metadata_updates_preserve_only_independent_reports(key, value, remaining):
+    import json
+
+    original = source()
+    original.obs["group"] = pd.Categorical(["control", "control", "treated"])
+    original.obs["batch"] = ["old", "old", "other"]
+    original.layers["measured"] = original.X.copy()
+    original.raw = original.copy()
+    reports = {
+        "differential": {"group_key": "group", "table": []},
+        "markers": {"group_key": "group", "table": []},
+        "network": {"table": [], "nodes": ["f1"]},
+        "supervised": {"label_key": "group", "group_key": "source_file", "diagnostics": {}},
+        "shap": {"table": []},
+    }
+    original.uns["scmm_workbench"] = {"reports_json": json.dumps(reports)}
+    dataset = CyESIData.from_anndata(original)
+    before = dataset.__dict__
+    dataset.assign_source_metadata({"a": {key: value}}, overwrite=True)
+    exported = dataset.to_anndata()
+    assert set(json.loads(exported.uns["scmm_workbench"]["reports_json"])) == remaining
+    assert exported.obs[key].iloc[:2].tolist() == [value, value]
+    assert exported.obs_names.tolist() == original.obs_names.tolist()
+    assert exported.var_names.tolist() == original.var_names.tolist()
+    np.testing.assert_array_equal(exported.X, original.X)
+    np.testing.assert_array_equal(exported.layers["measured"], original.X)
+    np.testing.assert_array_equal(exported.raw.X, original.raw.X)
+    np.testing.assert_array_equal(exported.obsm["X_pca"], original.obsm["X_pca"])
+    assert json.loads(original.uns["scmm_workbench"]["reports_json"]) == reports
+    if key == "group" and value == "control":
+        assert dataset.__dict__ is before
+
+
+@pytest.mark.parametrize(
+    "payload",
+    ["[]", "{invalid", '{"network":"invalid"}', '{"shap":{"_observation_dependencies":"group"}}'],
+)
+def test_bad_stored_dependency_metadata_leaves_current_annotations_unchanged(payload):
+    original = source()
+    original.uns["scmm_workbench"] = {"reports_json": payload}
+    dataset = CyESIData.from_anndata(original)
+    before = dataset.__dict__
+    observations = dataset.peak_meta.copy()
+    with pytest.raises(ValueError):
+        dataset.assign_source_metadata({"a": {"group": "new"}})
+    assert dataset.__dict__ is before
+    pd.testing.assert_frame_equal(dataset.peak_meta, observations)
+    assert dataset._anndata_template.uns["scmm_workbench"]["reports_json"] == payload
+
+
+def test_metadata_update_does_not_interpret_future_report_schema():
+    data = source()
+    data.uns["scmm_workbench"] = {"schema_version": 2, "reports_json": "{}"}
+    dataset = CyESIData.from_anndata(data)
+    original = dataset.__dict__
+    with pytest.raises(ValueError, match="schema"):
+        dataset.assign_source_metadata({"a": {"group": "new"}})
+    assert dataset.__dict__ is original
+
+
+def test_legacy_latent_coordinates_invalidate_conservatively_without_losing_pca():
+    import json
+
+    data = source()
+    data.obsm["X_old"] = np.ones((3, 1))
+    data.obs["X_old_split"] = ["train", "test", "train"]
+    data.uns["scmm_workbench"] = {
+        "history_json": json.dumps(
+            [{"operation": "latent", "parameters": {"model": "lda", "store_key": "X_old"}}]
+        ),
+        "derived_obs": ["X_old_split"],
+    }
+    dataset = CyESIData.from_anndata(data)
+    dataset.assign_source_metadata({"a": {"batch": "new"}})
+    result = dataset.to_anndata()
+    assert "X_old" not in result.obsm and "X_old_split" not in result.obs
+    np.testing.assert_array_equal(result.obsm["X_pca"], data.obsm["X_pca"])
+    assert "X_old" in data.obsm

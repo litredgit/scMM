@@ -782,3 +782,193 @@ def test_retraining_invalidates_every_shap_plot_variant(workflow):
     with workflow[2].access(workflow[1]["X-SCMM-Workspace"]) as workspace:
         assert not set(keys) & workspace.project.views["figures"].keys()
         assert "shap" not in workspace.project.saved_reports
+
+
+def test_editing_excluded_source_updates_baseline_without_invalidating_current_reports(workflow):
+    data = import_data(workflow)
+    cells = data.obs_names[data.obs["sample"] != "s7"].tolist()
+    operation(workflow, "subset", {"cell_ids": cells})
+    operation(workflow, "differential", {"group_key": "group", "group_a": "a", "group_b": "b"})
+    plotted = workflow[-1]("/analysis/plot", {"kind": "volcano", "options": {}})
+    assert plotted.status_code == 200
+    before = get(workflow, "/results/download?kind=differential").content
+    assert workflow[-1]("/project/save").status_code == 200
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    identity = workflow[1]["X-SCMM-Workspace"]
+    with workflow[2].access(identity) as workspace:
+        observations = workspace.project.workspace.data.obs.copy()
+    sample = next(s for s in workflow[-2]()["project"]["manifest"]["samples"] if s["name"] == "s7")
+    edit = {key: sample[key] for key in ("id", "name", "group", "subject", "batch")}
+    edit["group"] = "excluded-new"
+    response = workflow[-1]("/samples", {"samples": [edit]}, method="PATCH")
+    assert response.status_code == 200, response.text
+    assert get(workflow, "/results/download?kind=differential").content == before
+    with workflow[2].access(identity) as workspace:
+        state = workspace.project.workspace
+        pd.testing.assert_frame_equal(state.data.obs, observations)
+        assert (
+            state._original.obs.loc[data.obs_names[data.obs["sample"] == "s7"], "group"]
+            .eq("excluded-new")
+            .all()
+        )
+        assert workspace.project.report_token == state.token
+    figure = get(workflow, "/analysis/figures/volcano").json()
+    exported = workflow[0].post(
+        "/api/v1/workspace/figures/data", headers=workflow[1], json={"figure": figure}
+    )
+    assert exported.status_code == 200
+
+
+def test_readonly_latent_label_edit_removes_coordinates_split_and_cached_plot(workflow):
+    import_data(workflow)
+    operation(workflow, "reduce", {"method": "pca", "store_key": "X_independent"})
+    operation(
+        workflow,
+        "train",
+        {"label_key": "group", "group_key": "subject", "model": "lda", "cv": 2, "test_size": 0.5},
+    )
+    operation(workflow, "save_latent", {"key": "X_latent"})
+    assert (
+        workflow[-1](
+            "/analysis/plot",
+            {"kind": "embedding", "options": {"key": "X_latent", "dimensions": [1, 0]}},
+        ).status_code
+        == 200
+    )
+    assert workflow[-1]("/project/save").status_code == 200
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    sample = workflow[-2]()["project"]["manifest"]["samples"][0]
+    edit = {key: sample[key] for key in ("id", "name", "group", "subject", "batch")}
+    edit["group"] = "new-label"
+    response = workflow[-1]("/samples", {"samples": [edit]}, method="PATCH")
+    assert response.status_code == 200, response.text
+    info = get(workflow, "/analysis").json()
+    assert "X_latent" not in info["embeddings"] and "X_independent" in info["embeddings"]
+    assert "X_latent_split" not in info["observations"]
+    assert get(workflow, "/analysis/figures/embedding").status_code == 400
+    assert get(workflow, "/results/download?kind=supervised").status_code == 400
+
+
+def test_readonly_model_figures_export_after_reopen_and_confusion_needs_no_model(workflow):
+    from io import BytesIO
+    from zipfile import ZipFile
+
+    import_data(workflow)
+    operation(workflow, "train", {"label_key": "group", "model": "lda", "cv": 2})
+    for kind in ("roc", "pr", "calibration", "confusion"):
+        assert workflow[-1]("/analysis/plot", {"kind": kind, "options": {}}).status_code == 200
+    counts = np.asarray(
+        get(workflow, "/analysis/results/supervised").json()["diagnostics"]["confusion_matrix"]
+    )
+    assert workflow[-1]("/project/save").status_code == 200
+    path = workflow[-2]()["project"]["path"]
+    assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+    for kind in ("roc", "pr", "calibration"):
+        figure = workflow[-1]("/analysis/plot", {"kind": kind, "options": {}}).json()["value"]
+        assert (
+            workflow[0]
+            .post("/api/v1/workspace/figures/data", headers=workflow[1], json={"figure": figure})
+            .status_code
+            == 200
+        )
+    result = workflow[-1]("/analysis/plot", {"kind": "confusion", "options": {"normalize": True}})
+    assert result.status_code == 200, result.text
+    from io import StringIO
+
+    tables = result.json()["value"]["layout"]["meta"]["export_tables"]
+    restored = pd.read_csv(StringIO(tables["counts.csv"]), index_col=0)
+    np.testing.assert_array_equal(restored, counts)
+    token = get(workflow, "/analysis").json()["token"]
+    archive = get(workflow, "/results/download?kind=report_zip&key=" + json.dumps(token))
+    assert archive.status_code == 200
+    with ZipFile(BytesIO(archive.content)) as bundle:
+        metadata = json.loads(bundle.read("metadata.json"))
+        assert not metadata["omitted_figures"]
+
+
+def test_graph_result_identity_rejects_same_matrix_retraining_and_isolates_preview(workflow):
+    import_data(workflow)
+    operation(workflow, "train", {"label_key": "group", "model": "lda", "cv": 2})
+    figure = workflow[-1]("/analysis/plot", {"kind": "roc", "options": {}}).json()["value"]
+    identity = figure["layout"]["meta"]["result_identity"]
+    token = figure["layout"]["meta"]["dataset_token"]
+    operation(workflow, "normalize", {"method": "total"}, preview=True)
+    assert (
+        workflow[0]
+        .post("/api/v1/workspace/figures/data", headers=workflow[1], json={"figure": figure})
+        .status_code
+        == 200
+    )
+    with workflow[2].access(workflow[1]["X-SCMM-Workspace"]) as workspace:
+        assert workspace.project.workspace._result_identities["supervised"] == identity
+        assert list(workspace.project.workspace.token) == token
+    operation(workflow, "train", {"label_key": "group", "model": "logistic", "cv": 2})
+    with workflow[2].access(workflow[1]["X-SCMM-Workspace"]) as workspace:
+        assert workspace.project.workspace._result_identities["supervised"] != identity
+        assert list(workspace.project.workspace.token) == token
+    assert (
+        workflow[0]
+        .post("/api/v1/workspace/figures/data", headers=workflow[1], json={"figure": figure})
+        .status_code
+        == 400
+    )
+
+    for route, payload in (
+        ("check", {"metadata": figure["layout"]["meta"]}),
+        (
+            "pdf",
+            {
+                "svg": '<svg xmlns="http://www.w3.org/2000/svg"/>',
+                "width_mm": 89,
+                "height_mm": 65,
+                "identity": figure["layout"]["meta"],
+            },
+        ),
+    ):
+        response = workflow[0].post(
+            "/api/v1/workspace/figures/" + route, headers=workflow[1], json=payload
+        )
+        assert response.status_code == 400, response.text
+        assert "计算结果已改变" in response.text
+
+
+def test_qc_preview_identifies_candidate_and_expires_with_input(workflow):
+    import_data(workflow)
+    response = operation(workflow, "normalize", {"method": "total"}, preview=True)
+    # A candidate is downloadable while its input is current, but is never labelled current data.
+    view = response["value"]["qc"]
+    figure = view["figure"]
+    metadata = figure["layout"]["meta"]
+    assert metadata["matrix_status"] == "preview"
+    assert metadata["preview_of"]["operation"] == "normalize"
+    assert "未应用预览" in figure["layout"]["title"]["text"]
+
+    def check():
+        return workflow[0].post(
+            "/api/v1/workspace/figures/check", headers=workflow[1], json={"metadata": metadata}
+        )
+
+    assert check().status_code == 204
+    operation(workflow, "normalize", {"method": "total"})
+    assert check().status_code == 400
+
+
+def test_readonly_graph_result_identity_survives_repeated_project_saves(workflow):
+    import_data(workflow)
+    operation(workflow, "train", {"label_key": "group", "model": "lda", "cv": 2})
+    created = workflow[-1]("/analysis/plot", {"kind": "roc", "options": {}}).json()["value"]
+    identity = created["layout"]["meta"]["result_identity"]
+    for _ in range(2):
+        assert workflow[-1]("/project/save").status_code == 200
+        path = workflow[-2]()["project"]["path"]
+        assert workflow[-1]("/project/open", {"path": path}).status_code == 200
+        figure = get(workflow, "/analysis/figures/roc").json()
+        assert figure["layout"]["meta"]["result_identity"] == identity
+        assert (
+            workflow[0]
+            .post("/api/v1/workspace/figures/data", headers=workflow[1], json={"figure": figure})
+            .status_code
+            == 200
+        )

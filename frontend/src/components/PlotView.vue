@@ -10,6 +10,7 @@ import {
   computed,
 } from 'vue'
 import LegendOrder from './LegendOrder.vue'
+import resultContract from '../features/analysis/results.contract.json'
 import { useLegendOrder } from './useLegendOrder'
 import { useViewState } from '../api/viewState'
 import { useWorkspace } from '../stores/workspace'
@@ -124,8 +125,17 @@ const widthMm = ref(89),
   fontPt = ref(7)
 const viewport = ref<Record<string, unknown>>({})
 const fresh = computed(() => {
-  const token = (props.figure.layout.meta as { dataset_token?: unknown[] } | undefined)
-    ?.dataset_token
+  const meta = props.figure.layout.meta as
+    | { dataset_token?: unknown[]; result_identity?: string; result_identity_valid?: boolean }
+    | undefined
+  const resultKinds = Object.values(resultContract.resultPlots).flat()
+  const kind = chartKey.value.split('.').at(-1) ?? props.name
+  if (
+    meta?.result_identity_valid === false ||
+    (resultKinds.includes(kind) && !meta?.result_identity)
+  )
+    return false
+  const token = meta?.dataset_token
   return (
     !token ||
     JSON.stringify(token) ===
@@ -435,7 +445,10 @@ async function exportRequest(path: string, body: unknown) {
     },
     body: JSON.stringify(body),
   })
-  if (!response.ok) throw new Error(await response.text())
+  if (!response.ok) {
+    const value = await response.json().catch(() => ({}))
+    throw new Error(value.error?.message ?? '导出失败，请重试。')
+  }
   return response.blob()
 }
 async function plotData() {
@@ -500,6 +513,19 @@ async function image(format: string) {
     if (format === 'png' && width * height * (dpi.value / 96) ** 2 > 60_000_000)
       throw new Error('成图像素过多，请减小尺寸或 DPI。')
     const copy = orderedFigure()
+    const source = (copy.layout.meta ?? {}) as Record<string, unknown>
+    const identity = Object.fromEntries(
+      [
+        'dataset_token',
+        'result_name',
+        'result_identity',
+        'result_identity_valid',
+        'sample_id',
+        'input_identity',
+      ]
+        .filter((key) => Object.hasOwn(source, key))
+        .map((key) => [key, source[key]]),
+    )
     for (const [key, value] of Object.entries(viewport.value)) {
       const match = /^([xy]axis\d*)\.(range)(?:\[(\d)\])?$/.exec(key)
       if (match) {
@@ -607,10 +633,12 @@ async function image(format: string) {
             svg: await rendered.text(),
             width_mm: widthMm.value,
             height_mm: heightMm.value,
+            identity,
           })
         : format === 'png'
           ? await pngWithDpi(rendered, dpi.value)
           : rendered
+    if (format !== 'pdf') await exportRequest('check', { metadata: identity })
     saveBlob(blob, `${filename.value || props.name}.${format}`)
   } catch (cause) {
     failure.value = String(cause)

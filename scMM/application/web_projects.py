@@ -1,6 +1,7 @@
 """Project and sample operations using the service's existing transaction gate."""
 # ruff: noqa: RUF001
 
+import json
 from copy import copy, deepcopy
 from io import StringIO
 from uuid import uuid4
@@ -8,7 +9,15 @@ from uuid import uuid4
 import pandas as pd
 
 from .identity import actor
-from .result_catalog import INDEPENDENT_PLOTS, RESULT_PLOTS, related_results, stale_metadata_results
+from .result_catalog import (
+    INDEPENDENT_PLOTS,
+    REPORT_PLOTS,
+    RESULT_PLOTS,
+    project_result_identities,
+    rebind_figure_identity,
+    related_results,
+    stale_metadata_results,
+)
 from .workbench import read_dataset
 from .workspace_state import WorkspaceError
 
@@ -21,6 +30,7 @@ def project_candidate(project):
     candidate.views = deepcopy(project.views)
     candidate.workspace = copy(project.workspace)
     candidate.workspace.results = dict(project.workspace.results)
+    candidate.workspace._result_identities = dict(project.workspace._result_identities)
     if project.workspace.data is not None:
         candidate.workspace.data = project.workspace.data.copy()
         candidate.workspace._original = project.workspace._original.copy()
@@ -30,12 +40,31 @@ def project_candidate(project):
 def sync_metadata(project):
     """Invalidate reports and saved plots using their recorded data dependencies."""
     before = set(project.workspace.results)
+    previous_token = project.workspace.token
+    previous_embeddings = (
+        set(project.workspace.data.obsm) if project.workspace.data is not None else set()
+    )
     changed = project.workspace.sync_sample_metadata(
         project.samples,
         project.manifest.get("sample_mapping"),
         project.manifest.get("sample_column", "sample"),
     )
     if not changed:
+        if previous_token != project.workspace.token:
+            for key, source in list(project.views.get("figures", {}).items()):
+                try:
+                    figure = json.loads(source) if isinstance(source, str) else source
+                except (TypeError, ValueError):
+                    continue
+                if rebind_figure_identity(
+                    figure,
+                    project.workspace,
+                    previous_token=previous_token,
+                    kind=key,
+                    identities=project_result_identities(project),
+                ):
+                    project.views["figures"][key] = figure
+            project.report_token = project.workspace.token
         return
     stale = before - set(project.workspace.results)
     stale.update(stale_metadata_results(project.saved_reports, changed, readonly=True))
@@ -52,7 +81,40 @@ def sync_metadata(project):
             if set(metadata.get("observation_dependencies", [])) & changed:
                 project.views["figures"].pop(key)
             else:
-                metadata["dataset_token"] = list(project.workspace.token)
+                rebind_figure_identity(
+                    figure,
+                    project.workspace,
+                    previous_token=previous_token,
+                    kind=key,
+                    identities=project_result_identities(project),
+                )
+    for key in REPORT_PLOTS:
+        if key in project.views.get("figures", {}):
+            source = project.views["figures"][key]
+            try:
+                figure = json.loads(source) if isinstance(source, str) else source
+            except (TypeError, ValueError):
+                # Opaque legacy views remain stored, without asserting their identity.
+                continue
+            rebind_figure_identity(
+                figure,
+                project.workspace,
+                previous_token=previous_token,
+                kind=key,
+                identities=project_result_identities(project),
+            )
+            project.views["figures"][key] = figure
+    removed_embeddings = previous_embeddings - set(project.workspace.require_data().obsm)
+    if removed_embeddings:
+        for key, source in list(project.views.get("figures", {}).items()):
+            try:
+                figure = json.loads(source) if isinstance(source, str) else source
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(figure, dict):
+                continue
+            if figure.get("layout", {}).get("meta", {}).get("embedding") in removed_embeddings:
+                project.views["figures"].pop(key)
     project.report_token = project.workspace.token
 
 

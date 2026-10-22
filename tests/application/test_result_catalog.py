@@ -95,4 +95,60 @@ def test_http_result_and_plot_whitelists_cover_catalog():
 
     assert set(get_args(get_args(Invalidate.model_fields["names"].annotation)[0])) == RESULTS.keys()
     plot_kinds = set(get_args(Plot.model_fields["kind"].annotation))
-    assert {kind for spec in RESULTS.values() for kind in spec.plots} <= plot_kinds
+    from scMM.application.result_catalog import DATA_PLOTS
+
+    assert {kind for spec in RESULTS.values() for kind in spec.plots} | set(DATA_PLOTS) - {
+        "qc_plot"
+    } == plot_kinds
+
+
+@pytest.mark.parametrize(
+    "changed,expected",
+    [
+        ({"condition"}, {"supervised", "shap"}),
+        ({"subject"}, {"supervised", "shap"}),
+        ({"batch"}, set()),
+        (set(), set()),
+    ],
+)
+def test_live_and_serialized_dependencies_have_same_decisions(changed, expected):
+    from types import SimpleNamespace
+
+    from scMM.util.lifecycle import stale_stored_reports
+
+    model = SimpleNamespace(
+        label_key="condition",
+        group_key="subject",
+        result_={},
+        train_obs_names_=np.array(["c1"]),
+        test_obs_names_=np.array(["c2"]),
+        classes_=np.array(["a", "b"]),
+    )
+    values = {
+        "supervised": model,
+        "shap": {"table": pd.DataFrame(columns=["feature_id", "mean_abs_shap"])},
+    }
+    reports = serialize_reports(values)
+    assert reports["supervised"]["_observation_dependencies"] == ["condition", "subject"]
+    assert reports["shap"]["_observation_dependencies"] == ["condition", "subject"]
+    assert stale_metadata_results(values, changed) == expected
+    assert stale_stored_reports(reports, changed) == expected
+    assert stale_metadata_results(reports, changed, readonly=True) == expected
+
+
+def test_saved_figure_identity_requires_unchanged_snapshot_evidence():
+    from anndata import AnnData
+
+    from scMM.application.result_catalog import rebind_figure_identity
+    from scMM.application.workbench import AnalysisWorkspace
+
+    state = AnalysisWorkspace()
+    state.replace(AnnData(np.ones((3, 2))))
+    state.data.uns["scmm_workbench"].update(dataset_id="saved-source", revision=3)
+    figure = {"data": [], "layout": {"meta": {"dataset_token": ["saved-source", 3]}}}
+    assert rebind_figure_identity(figure, state, kind="embedding")
+    assert figure["layout"]["meta"]["dataset_token"] == list(state.token)
+    state.normalize("total")
+    stale = {"data": [], "layout": {"meta": {"dataset_token": ["saved-source", 3]}}}
+    assert not rebind_figure_identity(stale, state, kind="embedding")
+    assert stale["layout"]["meta"]["dataset_token"] == ["saved-source", 3]

@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from scMM.util.lifecycle import stale_stored_reports
+
 
 @dataclass(frozen=True)
 class ResultSpec:
@@ -63,14 +65,12 @@ def metadata_dependencies(name, value, all_values):
 
 
 def stale_metadata_results(values, changed, *, readonly=False):
+    if readonly:
+        return related_results(stale_stored_reports(values, changed))
     stale = set()
     for name, value in values.items():
         dependencies = metadata_dependencies(name, value, values)
-        if (
-            (name == "shap" and "supervised" not in values and not readonly)
-            or dependencies & changed
-            or (readonly and name in {"supervised", "shap"} and not dependencies)
-        ):
+        if (name == "shap" and "supervised" not in values) or dependencies & changed:
             stale.add(name)
     return related_results(stale)
 
@@ -90,7 +90,7 @@ def live_report(name, value):
     return value
 
 
-def serialize_reports(values):
+def serialize_reports(values, *, identities=None):
     reports = {}
     for name in RESULTS:
         if name not in values:
@@ -112,10 +112,9 @@ def serialize_reports(values):
                     result["correlation"].index.name,
                     result["correlation"].columns.name,
                 ]
-        if name == "shap":
-            payload["_observation_dependencies"] = sorted(
-                metadata_dependencies(name, result, values)
-            )
+        if identities and identities.get(name):
+            payload["_result_identity"] = identities[name]
+        payload["_observation_dependencies"] = sorted(metadata_dependencies(name, result, values))
         reports[name] = payload
     return reports
 
@@ -125,6 +124,7 @@ def restore_report(name, value):
         raise ValueError("Unknown analysis result")
     result = deepcopy(value)
     result.pop("_observation_dependencies", None)
+    result.pop("_result_identity", None)
     columns = result.pop("table_columns", None)
     if "table" in result:
         result["table"] = pd.DataFrame(result["table"], columns=columns)
@@ -160,3 +160,58 @@ def frontend_contract():
         "resultPlots": {name: list(spec.plots) for name, spec in RESULTS.items()},
         "resultDownloads": {name: spec.download for name, spec in RESULTS.items()},
     }
+
+
+PLOT_RESULTS = {plot: name for name, spec in RESULTS.items() for plot in spec.plots}
+REPORT_PLOTS = set(PLOT_RESULTS) - {"violin"}
+DATA_PLOTS = (*INDEPENDENT_PLOTS, "embedding", "qc_plot", "heatmap")
+
+
+def project_result_identities(project):
+    return {
+        name: project.workspace._result_identities.get(name)
+        if name in project.workspace.results
+        else project.saved_reports.get(name, {}).get("_result_identity")
+        for name in RESULTS
+    }
+
+
+def rebind_figure_identity(figure, state, *, previous_token=None, kind=None, identities=None):
+    """Rebind proven unchanged inputs; persisted identity is trusted only on reopen."""
+    from numbers import Integral
+
+    if not isinstance(figure, dict) or not isinstance(figure.get("layout"), dict):
+        return False
+    metadata = figure["layout"].get("meta")
+    if not isinstance(metadata, dict):
+        return False
+    if kind not in PLOT_RESULTS and kind not in DATA_PLOTS:
+        return False
+    parent = PLOT_RESULTS.get(kind)
+    if parent:
+        identity = (identities or {}).get(parent)
+        valid = bool(
+            identity
+            and metadata.get("result_name") == parent
+            and metadata.get("result_identity") == identity
+        )
+        metadata["result_identity_valid"] = valid
+        if not valid:
+            return False
+    if state.data is None or metadata.get("dataset_token") is None:
+        return False
+    previous = state.token if previous_token is None else previous_token
+    accepted = [list(previous)]
+    if previous[1] == 0:
+        saved = state.require_data().uns.get("scmm_workbench", {})
+        if (
+            isinstance(saved, dict)
+            and isinstance(saved.get("dataset_id"), str)
+            and isinstance(saved.get("revision"), Integral)
+            and not isinstance(saved.get("revision"), bool)
+        ):
+            accepted.append([saved["dataset_id"], int(saved["revision"])])
+    if metadata.get("dataset_token") not in accepted:
+        return False
+    metadata["dataset_token"] = list(state.token)
+    return True

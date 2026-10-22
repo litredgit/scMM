@@ -106,8 +106,39 @@ class DatasetInteropMixin:
                     updated[key] = pd.Series(
                         [None] * len(updated), index=updated.index, dtype=object
                     )
+                if (
+                    isinstance(updated[key].dtype, pd.CategoricalDtype)
+                    and pd.api.types.is_scalar(value)
+                    and not pd.isna(value)
+                    and value not in updated[key].cat.categories
+                ):
+                    updated[key] = updated[key].cat.add_categories([value])
                 updated.loc[updated["source_file"] == source, key] = value
-        self.peak_meta = updated
+        changed = {
+            key
+            for key in updated
+            if key not in self.peak_meta or not updated[key].equals(self.peak_meta[key])
+        }
+        if not changed:
+            return self
+        from ..util.lifecycle import (
+            invalidate_observation_embeddings,
+            invalidate_observation_reports,
+        )
+        from ._dataset_candidates import commit_candidate, prepare_candidate
+
+        candidate = prepare_candidate(self, data=self.data, peak_meta=updated, invalidate=False)
+        template = getattr(self, "_anndata_template", None)
+        if template is not None:
+            template = template.copy()
+            removed = invalidate_observation_embeddings(template, changed)
+            changed.update(removed)
+            invalidate_observation_reports(template, changed)
+            candidate["peak_meta"] = candidate["peak_meta"].drop(
+                columns=list(removed), errors="ignore"
+            )
+            candidate["_anndata_template"] = template
+        commit_candidate(self, candidate)
         return self
 
     def get_annotation(

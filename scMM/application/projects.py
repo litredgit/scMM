@@ -272,6 +272,20 @@ class ProjectStore:
             candidate = deepcopy(project.manifest)
             candidate["data_source"] = project.workspace.source
             saved_reports = dict(project.saved_reports)
+            views = deepcopy(project.views)
+            if project.workspace.data is not None:
+                from .result_catalog import project_result_identities, rebind_figure_identity
+
+                identities = project_result_identities(project)
+                for kind, source in views.get("figures", {}).items():
+                    try:
+                        figure = json.loads(source) if isinstance(source, str) else source
+                    except (TypeError, ValueError):
+                        continue
+                    if rebind_figure_identity(
+                        figure, project.workspace, kind=kind, identities=identities
+                    ):
+                        views["figures"][kind] = figure
             saved_at = utc_now()
             revision = disk["revision"] + 1
             snapshot = None
@@ -313,11 +327,12 @@ class ProjectStore:
                 saved = read_h5ad(current)
                 saved_reports = json.loads(saved.uns["scmm_workbench"]["reports_json"])
             if snapshot is not None:
-                write_json(snapshot / "views.json", project.views)
+                write_json(snapshot / "views.json", views)
                 candidate["artifacts"]["views"] = str((snapshot / "views.json").relative_to(folder))
             candidate.update(revision=revision, saved_at=saved_at)
             write_json(folder / "project.json", candidate)
             project.manifest = candidate
+            project.views = views
             project.saved_reports = saved_reports
             project.saved_token = project.workspace.token
             project.report_token = project.workspace.token

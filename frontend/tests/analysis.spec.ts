@@ -561,3 +561,21 @@ test('explicit model parameters reach training and persist display settings', as
   )
   await expect(page.getByLabel('SHAP 显示特征数', { exact: true })).toHaveValue('7')
 })
+
+test('image exports show backend stale-source rejection without a download', async ({ page }) => {
+  await importAnalysis(page, '图像来源失效')
+  await page.getByRole('button', { name: '运行降维', exact: true }).click()
+  await expect(page.locator('.js-plotly-plot')).toBeVisible()
+  let downloads = 0
+  page.on('download', () => downloads++)
+  await page.route('**/workspace/figures/check', async (route) => {
+    expect(route.request().postDataJSON().metadata.dataset_token).toHaveLength(2)
+    await route.fulfill({
+      status: 400,
+      json: { error: { message: '图形已过期，请基于当前数据重新绘图。' } },
+    })
+  })
+  await page.getByRole('button', { name: '下载 SVG', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('图形已过期，请基于当前数据重新绘图。')
+  expect(downloads).toBe(0)
+})

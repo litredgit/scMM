@@ -22,7 +22,7 @@ from scMM.file.data import CyESIData
 from scMM.util.intensity import intensity_states, transformed_state, write_intensity_states
 from scMM.util.normalize import normalize
 
-from .result_catalog import serialize_reports, stale_metadata_results
+from .result_catalog import metadata_dependencies, serialize_reports, stale_metadata_results
 
 
 def dense(matrix):
@@ -74,6 +74,7 @@ class AnalysisWorkspace:
         self.revision = 0
         self.source = ""
         self.results = {}
+        self._result_identities = {}
 
     @property
     def token(self):
@@ -112,6 +113,7 @@ class AnalysisWorkspace:
         self.data = candidate
         self._original = candidate.copy()
         self.results.clear()
+        self._result_identities.clear()
 
     @staticmethod
     def _validate(data):
@@ -169,6 +171,7 @@ class AnalysisWorkspace:
         self.revision += 1
         if clear_derived:
             self.results.clear()
+            self._result_identities.clear()
         else:
             # Additive embeddings/annotations do not alter existing analysis inputs.
             self.results = {key: (self.token, value) for key, (_, value) in self.results.items()}
@@ -292,6 +295,9 @@ class AnalysisWorkspace:
     def put_result(self, name, value, token):
         if token != self.token:
             raise RuntimeError("Dataset changed; discard stale analysis result")
+        previous = self.results.get(name)
+        if previous is None or previous[1] is not value or name not in self._result_identities:
+            self._result_identities[name] = uuid4().hex
         self.results[name] = (token, value)
 
     def result(self, name):
@@ -301,15 +307,17 @@ class AnalysisWorkspace:
         return value
 
     def sync_sample_metadata(self, samples, mapping=None, source_key="sample"):
-        """Update annotations on current/reset data without changing intensities."""
+        """Stage current/reset metadata; return fields changed on current data."""
         if self.data is None:
             return set()
         lookup = {s["id"]: s for s in samples}
         names = {}
         for sample in samples:
             names.setdefault(sample["name"], []).append(sample["id"])
-        changed = set()
-        for data in (self.data, self._original):
+        current_changes, baseline_changes = set(), set()
+        current = self.data.copy()
+        baseline = self._original.copy() if self._original is not None else None
+        for data, changed in ((current, current_changes), (baseline, baseline_changes)):
             if data is None:
                 continue
             ids = (
@@ -329,7 +337,7 @@ class AnalysisWorkspace:
                 continue
             if "sample_id" not in data.obs or not data.obs["sample_id"].astype(str).equals(ids):
                 changed.add("sample_id")
-            data.obs["sample_id"] = ids
+                data.obs["sample_id"] = ids
             for column, key in (
                 ("sample", "name"),
                 ("group", "group"),
@@ -349,18 +357,31 @@ class AnalysisWorkspace:
                 values = ids.loc[update_mask].map(
                     lambda identity, key=key: str(lookup[identity][key])
                 )
-                if not previous.loc[update_mask].equals(values):
+                if column not in data.obs or not previous.loc[update_mask].equals(values):
                     changed.add(column)
-                data.obs[column] = previous
-                data.obs.loc[update_mask, column] = values
-        if not changed:
-            return changed
+                    data.obs[column] = previous
+                    data.obs.loc[update_mask, column] = values
+        if not current_changes and not baseline_changes:
+            return set()
+        from scMM.util.lifecycle import (
+            invalidate_observation_embeddings,
+            invalidate_observation_reports,
+        )
+
+        for data, changed in ((current, current_changes), (baseline, baseline_changes)):
+            if data is not None:
+                changed.update(invalidate_observation_embeddings(data, changed))
+                invalidate_observation_reports(data, changed)
         values = {name: value for name, (_, value) in self.results.items()}
-        for name in stale_metadata_results(values, changed):
-            self.results.pop(name, None)
+        stale = stale_metadata_results(values, current_changes)
+        remaining = {name: value for name, value in values.items() if name not in stale}
+        self.data, self._original = current, baseline
         self.revision += 1
-        self.results = {key: (self.token, value) for key, (_, value) in self.results.items()}
-        return changed
+        self.results = {key: (self.token, value) for key, value in remaining.items()}
+        self._result_identities = {
+            key: value for key, value in self._result_identities.items() if key in remaining
+        }
+        return current_changes
 
     def qc(self):
         return quality_metrics(self.require_data())
@@ -542,10 +563,22 @@ class AnalysisWorkspace:
         candidate.obs[f"{key}_split"] = pd.Categorical(split)
         metadata = candidate.uns["scmm_workbench"]
         metadata["derived_obs"] = [*metadata.get("derived_obs", []), f"{key}_split"]
+        fields = sorted(metadata_dependencies("supervised", analyzer, {}))
+        rules = json.loads(metadata.get("latent_dependencies_json", "{}"))
+        if not isinstance(rules, dict):
+            raise ValueError("invalid latent dependency metadata")
+        rules[key] = fields
+        metadata["latent_dependencies_json"] = json.dumps(rules)
         self._commit(
             candidate,
             "latent",
-            {"model": analyzer.model_name_, "store_key": key},
+            {
+                "model": analyzer.model_name_,
+                "store_key": key,
+                "label_key": analyzer.label_key,
+                "group_key": analyzer.group_key,
+                "observation_dependencies": fields,
+            },
             clear_derived=False,
             save_layer=False,
         )
@@ -569,7 +602,9 @@ class AnalysisWorkspace:
         snapshot.uns["scmm_workbench"].update(
             dataset_id=self.dataset_id, revision=self.revision, source=self.source
         )
-        reports = serialize_reports({name: self.result(name) for name in self.results})
+        reports = serialize_reports(
+            {name: self.result(name) for name in self.results}, identities=self._result_identities
+        )
         snapshot.uns["scmm_workbench"]["reports_json"] = json.dumps(
             reports, default=lambda v: v.tolist()
         )

@@ -18,33 +18,62 @@ def spectra(body: s.CellSpectra, manager: Service, identity: Identity):
     return cell_spectra(manager, identity, **body.model_dump())
 
 
-@router.post("/workspace/figures/data")
-def figure_data(body: s.FigureData, request: Request, manager: Service):
-    metadata = body.figure.get("layout", {}).get("meta") or {}
-    if metadata.get("dataset_token"):
-        identity = request.headers.get("x-scmm-workspace", "")
-        with manager.access(identity) as workspace:
-            if list(workspace.require_project().workspace.token) != metadata["dataset_token"]:
-                raise ValueError("图形已过期，请基于当前数据重新绘图。")
-    if metadata.get("sample_id") and metadata.get("input_identity"):
-        from scMM.application.preview_cache import file_identity
+def _check_figure_identity(metadata, manager, identity):
+    if not isinstance(metadata, dict):
+        raise ValueError("图的来源身份格式无效。")
+    if metadata.get("result_identity_valid") is False:
+        raise ValueError("图的计算结果身份不明或已失效，请重新绘图。")
+    if not any(metadata.get(key) for key in ("dataset_token", "result_name", "sample_id")):
+        return
+    with manager.access(identity) as workspace:
+        project = workspace.require_project()
+        if metadata.get("result_name"):
+            if not isinstance(metadata["result_name"], str):
+                raise ValueError("图的计算结果身份格式无效。")
+            from scMM.application.result_catalog import project_result_identities
 
-        with manager.access(request.headers.get("x-scmm-workspace", "")) as workspace:
-            sample = manager.sample(workspace.require_project(), metadata["sample_id"])
+            expected = project_result_identities(project).get(metadata["result_name"])
+            if not expected or expected != metadata.get("result_identity"):
+                raise ValueError("图的计算结果已改变，请重新绘图。")
+        if (
+            metadata.get("dataset_token")
+            and list(project.workspace.token) != metadata["dataset_token"]
+        ):
+            raise ValueError("图形已过期，请基于当前数据重新绘图。")
+        if metadata.get("sample_id"):
+            from scMM.application.preview_cache import file_identity
+
+            sample = manager.sample(project, metadata["sample_id"])
             path = manager.storage.resolve_raw_file(sample["storage"], sample["path"])
-            if not isinstance(metadata["input_identity"], dict):
-                raise ValueError("原始图的输入身份格式无效。")
+            if not isinstance(metadata.get("input_identity"), dict):
+                raise ValueError("原始图的输入身份格式无效，请重新读取。")
             expected = {key: str(value) for key, value in file_identity(path).items()}
             supplied = {key: str(value) for key, value in metadata["input_identity"].items()}
             if expected != supplied:
                 raise ValueError("原始文件已改变，请重新读取后下载。")
+
+
+@router.post("/workspace/figures/check", status_code=204)
+def figure_check(body: s.FigureIdentity, request: Request, manager: Service):
+    _check_figure_identity(body.metadata, manager, request.headers.get("x-scmm-workspace", ""))
+    return Response(status_code=204)
+
+
+@router.post("/workspace/figures/data")
+def figure_data(body: s.FigureData, request: Request, manager: Service):
+    _check_figure_identity(
+        body.figure.get("layout", {}).get("meta") or {},
+        manager,
+        request.headers.get("x-scmm-workspace", ""),
+    )
     from scMM.plot.export import data_archive
 
     return Response(data_archive(body.figure), media_type="application/zip")
 
 
 @router.post("/workspace/figures/pdf")
-def figure_pdf(body: s.FigurePDF):
+def figure_pdf(body: s.FigurePDF, request: Request, manager: Service):
+    _check_figure_identity(body.identity, manager, request.headers.get("x-scmm-workspace", ""))
     from scMM.plot.export import publication_pdf
 
     return Response(
