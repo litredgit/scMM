@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
 import PlotView from '../../../../components/PlotView.vue'
+import PlotScope from '../../components/PlotScope.vue'
 defineProps<{ panel: string }>()
 const {
   projection,
@@ -20,12 +22,26 @@ const {
   colors,
   figures,
   draw,
+  plotScope,
   pageFeatures,
 } = useAnalysisContext()
+const scopeEdited = computed(() => {
+  const meta = figures.value.embedding?.layout.meta as
+    { parameters?: { scope?: unknown } } | undefined
+  return (
+    !!figures.value.embedding &&
+    JSON.stringify(meta?.parameters?.scope) !== JSON.stringify(plotScope.value)
+  )
+})
 </script>
 <template>
   <div class="embedding-view">
     <h3>图形与显示</h3>
+    <PlotScope
+      v-model="plotScope"
+      :observations="info?.observations ?? {}"
+      :disabled="store.busy"
+    />
     <div class="field-grid">
       <label
         >显示维度<select v-model="projection.threeD">
@@ -103,6 +119,9 @@ const {
         更新嵌入图
       </button>
     </div>
+    <p v-if="scopeEdited" role="status">
+      作图范围已编辑，点击“更新嵌入图”生效；当前图与下载仍使用上次成功的范围。
+    </p>
     <p v-if="!embedding" class="empty-state">
       先运行降维，再选择嵌入查看图形；显示设置不会重新计算降维。
     </p>

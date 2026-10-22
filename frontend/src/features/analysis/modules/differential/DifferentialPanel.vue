@@ -5,6 +5,7 @@ import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
 import PlotView from '../../../../components/PlotView.vue'
 import ResultTable from '../../components/ResultTable.vue'
+import PlotScope from '../../components/PlotScope.vue'
 const {
   diff,
   selectedFeatures,
@@ -21,12 +22,15 @@ const {
   execute,
   loadResult,
   draw,
+  plotScope,
   toggleFeature,
 } = useAnalysisContext()
 const violinStale = computed(() => {
   const meta = figures.value.violin?.layout.meta as { selection_signature?: string } | undefined
   return (
-    !meta || meta.selection_signature !== JSON.stringify([selectedFeatures.value, hideZero.value])
+    !meta ||
+    meta.selection_signature !==
+      JSON.stringify([selectedFeatures.value, hideZero.value, plotScope.value])
   )
 })
 </script>
@@ -160,6 +164,14 @@ const violinStale = computed(() => {
         />
         <p class="muted">调整阈值或标签后点击“更新火山图”；仅更新显示，不重新进行检验。</p>
         <FeaturePicker v-model="selectedFeatures" />
+        <PlotScope
+          v-model="plotScope"
+          :observations="info?.observations ?? {}"
+          :disabled="store.busy"
+        />
+        <p class="muted">
+          小提琴图可筛选展示范围，检验与全局 FDR 沿用原比较；火山图使用完整比较结果。
+        </p>
         <div class="check-list">
           <label
             ><input

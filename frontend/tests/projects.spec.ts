@@ -59,10 +59,11 @@ test('project, samples, metadata, save and reopen with no browser errors', async
 
 test('dataset import, mapping, CSV and snapshot reload', async ({ page }) => {
   await create(page, '导入与保存')
-  await page.getByRole('button', { name: '导入已有结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入独立结果', exact: true }).click()
   await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
   await page.getByRole('button', { name: /^▤ example.h5ad/ }).click()
-  await page.getByRole('button', { name: '导入结果', exact: true }).click()
+  await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await expect(page.getByRole('heading', { name: '结果与样本关联' })).toBeVisible()
   await expect(page.getByLabel('映射 alpha', { exact: true })).not.toHaveValue('')
   await page.getByLabel('导入样本信息 CSV', { exact: true }).setInputFiles({
@@ -91,6 +92,8 @@ test('dataset import, mapping, CSV and snapshot reload', async ({ page }) => {
     .filter({ hasText: '导入与保存' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
+  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
+  await page.locator('a[href="/samples"]').first().click()
   await expect(page.getByLabel('alpha batch', { exact: true })).toHaveValue('批次A')
 })
 

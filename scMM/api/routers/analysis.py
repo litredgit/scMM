@@ -85,7 +85,8 @@ def figure_pdf(body: s.FigurePDF, request: Request, manager: Service):
     from scMM.plot.export import publication_pdf
 
     return Response(
-        publication_pdf(body.svg, body.width_mm, body.height_mm), media_type="application/pdf"
+        publication_pdf(body.svg, body.width_mm, body.height_mm, font_family=body.font_family),
+        media_type="application/pdf",
     )
 
 

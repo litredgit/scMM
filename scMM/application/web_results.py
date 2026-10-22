@@ -85,7 +85,9 @@ class ResultWorkflow:
                     default=lambda v: v.tolist(),
                 ).encode("utf-8"), "application/json"
             if kind == "matrix":
-                frame = state.require_data().to_df()
+                from .matrix_export import matrix_csv
+
+                return matrix_csv(state.require_data()), "text/csv; charset=utf-8"
             elif kind == "embedding":
                 data = state.require_data()
                 if key not in data.obsm:

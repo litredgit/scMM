@@ -95,11 +95,14 @@ def qc_file_table(frame):
     return result
 
 
+PLOT_COLORS = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#000000"]
+
+
 def style_figure(figure):
     if figure is None or not hasattr(figure, "update_layout"):
         return figure
     figure.update_layout(
-        colorway=["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#000000"],
+        colorway=PLOT_COLORS,
         font={"family": "Arial, Helvetica, sans-serif", "size": 13, "color": "#111111"},
         template="plotly_white",
         paper_bgcolor="white",

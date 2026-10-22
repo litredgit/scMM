@@ -9,6 +9,8 @@ import pandas as pd
 import plotly.express as px
 from sklearn.metrics import pairwise_distances
 
+from scMM.plot.presentation import PLOT_COLORS
+
 from .preprocessing import integer, real
 
 MAX_FEATURES = 500
@@ -137,6 +139,7 @@ def feature_embedding_figure(
         )
     figure = px.scatter(
         frame,
+        color_discrete_sequence=PLOT_COLORS,
         x="UMAP1",
         y="UMAP2",
         color="category" if class_key else None,

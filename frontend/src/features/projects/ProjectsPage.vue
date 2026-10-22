@@ -41,8 +41,20 @@ async function create() {
   }
 }
 async function open(path: string) {
+  if (store.project?.unsaved) {
+    pendingPath.value = path
+    return
+  }
+  await finishOpen(path)
+}
+const pendingPath = ref('')
+async function finishOpen(path: string, save = false) {
+  if (save && !(await store.mutate('/project/save', {}))) return
   const result = await store.mutate('/project/open', { path })
-  if (result) await router.push('/samples')
+  if (result) {
+    pendingPath.value = ''
+    await router.push(result.project?.dataset ? '/preprocess' : '/samples')
+  }
 }
 function date(value: string) {
   return new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
@@ -94,7 +106,7 @@ function date(value: string) {
           <h2>
             已保存项目 <span class="count">{{ projects.length }}</span>
           </h2>
-          <p>打开项目继续工作，当前未保存修改会被放弃。</p>
+          <p>打开项目会恢复其最后主动保存的数据与预处理起点，无需再次导入结果。</p>
         </div>
         <div class="actions">
           <input v-model="search" aria-label="搜索项目" placeholder="搜索项目名称" /><button
@@ -104,6 +116,18 @@ function date(value: string) {
           >
             刷新
           </button>
+        </div>
+      </div>
+      <div v-if="pendingPath" class="picker-panel" role="status">
+        <p>当前项目有未保存修改，请选择如何打开目标项目。</p>
+        <div class="actions">
+          <button class="save" :disabled="store.busy" @click="finishOpen(pendingPath, true)">
+            保存并打开
+          </button>
+          <button class="danger" :disabled="store.busy" @click="finishOpen(pendingPath)">
+            放弃修改并打开
+          </button>
+          <button :disabled="store.busy" @click="pendingPath = ''">留在当前项目</button>
         </div>
       </div>
       <p v-if="loading" class="muted">正在读取已保存项目…</p>
@@ -118,7 +142,8 @@ function date(value: string) {
             <tr>
               <th>项目名称</th>
               <th>样本数</th>
-              <th>保存时间（北京时间）</th>
+              <th>数据状态</th>
+              <th>项目记录时间（北京时间）</th>
               <th><span class="sr-only">操作</span></th>
             </tr>
           </thead>
@@ -131,6 +156,15 @@ function date(value: string) {
                 /></small>
               </td>
               <td>{{ item.samples }}</td>
+              <td>
+                <template v-if="item.data_state === 'saved'"
+                  >已保存数据 · {{ item.cells }} 细胞 × {{ item.features }} 特征</template
+                >
+                <template v-else-if="item.data_state === 'unavailable'"
+                  >快照不可读取，请检查文件</template
+                >
+                <template v-else>尚未保存数据集</template>
+              </td>
               <td>{{ date(item.saved_at) }}</td>
               <td><button :disabled="store.busy" @click="open(item.path)">打开项目 →</button></td>
             </tr>

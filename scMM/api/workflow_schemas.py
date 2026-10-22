@@ -11,6 +11,17 @@ class Controls(RequestModel):
     model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
 
 
+class PlotScope(Controls):
+    group_key: str = "group"
+    groups: list[str] | None = Field(default=None, max_length=5000)
+    sample_key: str = "sample"
+    samples: list[str] | None = Field(default=None, max_length=5000)
+
+
+class ScopedPlot(Controls):
+    scope: PlotScope | None = None
+
+
 class Parameters(RevisionRequest):
     parameters: dict[str, Any]
     sample_id: str | None = None
@@ -323,7 +334,7 @@ class FeatureEmbeddingPlot(Controls):
     random_state: int = Field(default=42, ge=0, le=2147483647)
 
 
-class FeatureScatterPlot(Controls):
+class FeatureScatterPlot(ScopedPlot):
     feature_a: str = Field(min_length=1)
     feature_b: str = Field(min_length=1)
     layer: str | None = None
@@ -331,7 +342,7 @@ class FeatureScatterPlot(Controls):
     regression: bool = True
 
 
-class HeatmapPlot(Controls):
+class HeatmapPlot(ScopedPlot):
     features: list[str] = Field(min_length=1, max_length=1000)
     layer: str | None = None
     group_key: str | None = None
@@ -340,6 +351,9 @@ class HeatmapPlot(Controls):
     zscore: bool = True
     cluster_rows: bool = True
     cluster_columns: bool = True
+    colorscale: Literal["RdBu", "PuOr", "Viridis", "Cividis"] = "RdBu"
+    color_min: float | None = None
+    color_max: float | None = None
 
 
 class ShapPlot(Controls):
@@ -349,7 +363,7 @@ class ShapPlot(Controls):
     top: int = Field(default=20, ge=1, le=100)
 
 
-class EmbeddingPlot(Controls):
+class EmbeddingPlot(ScopedPlot):
     key: str
     color: str | None = None
     dimensions: list[int] = Field(default_factory=lambda: [1, 2], min_length=2, max_length=3)
@@ -376,6 +390,7 @@ class FigurePDF(Controls):
     svg: str = Field(max_length=32 * 1024**2)
     width_mm: float = Field(default=89, ge=20, le=600)
     height_mm: float = Field(default=65, ge=20, le=600)
+    font_family: Literal["Arial"] | None = None
 
 
 class BatchSignal(RevisionRequest):
@@ -390,7 +405,7 @@ class VolcanoPlot(Controls):
     order: Literal["fdr", "effect", "p_value", "intensity"] = "fdr"
 
 
-class ViolinPlot(Controls):
+class ViolinPlot(ScopedPlot):
     features: list[str] = Field(max_length=12)
     hide_zero: bool = False
     columns: int = Field(default=3, ge=1, le=3)

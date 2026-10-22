@@ -11,6 +11,45 @@ from scMM.application.projects import ProjectStore, child_path
 from tests.support.project import setup_project
 
 
+def test_project_list_distinguishes_configuration_saved_and_missing_snapshot(tmp_path):
+    store = ProjectStore(tmp_path)
+    project = store.create("states")
+    assert store.list()[0]["data_state"] == "configuration"
+    project.workspace.replace(AnnData(np.ones((3, 2))))
+    store.save(project)
+    summary = store.list()[0]
+    assert (summary["data_state"], summary["cells"], summary["features"]) == ("saved", 3, 2)
+    child_path(project.folder, project.manifest["artifacts"]["current"]).unlink()
+    assert store.list()[0]["data_state"] == "unavailable"
+    with pytest.raises(ValueError, match="项目数据恢复失败"):
+        store.open(project.folder)
+
+
+def test_metaboanalyst_matrix_csv_labels_order_and_exact_values():
+    from io import StringIO
+
+    from scMM.application.matrix_export import matrix_csv
+
+    data = AnnData(
+        np.array([[1.2345678901234567, -2.345678901234567], [0, 9.87654321098765]]),
+        obs=pd.DataFrame({"group": ["A", "B"]}, index=["c2", "c1"]),
+        var=pd.DataFrame(index=["f2", "f1"]),
+    )
+    frame = pd.read_csv(
+        StringIO(matrix_csv(data, features=["f1", "f2"]).decode()), float_precision="round_trip"
+    )
+    assert list(frame) == ["Sample", "Label", "f1", "f2"]
+    assert frame.Sample.tolist() == ["c2", "c1"] and frame.Label.tolist() == ["A", "B"]
+    np.testing.assert_array_equal(frame[["f1", "f2"]].to_numpy(), data.X[:, ::-1])
+    for invalid in (["A", ""], ["A", None]):
+        data.obs["group"] = invalid
+        with pytest.raises(ValueError, match="group"):
+            matrix_csv(data)
+    del data.obs["group"]
+    with pytest.raises(ValueError, match="group"):
+        matrix_csv(data)
+
+
 def test_project_roundtrip_reset_and_conflict(tmp_path):
     store = ProjectStore(tmp_path)
     project = store.create("实验 / A")

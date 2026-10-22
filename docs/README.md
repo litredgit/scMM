@@ -13,10 +13,13 @@
 3. [工作流程](workflow.md)：Vue 六步项目与 Notebook，从输入到审核、分析和保存；[注释与同位素](workflow.md#注释与同位素)含规则和筛选导出。
 4. 运行失败时查 [排错与调参](troubleshooting.md)，需要选择或解释参数时查 [参数参考](parameters.md)。
 
+同行了解处理方法可直接阅读[细胞事件与特征峰确认流程](cell-feature-identification.md)，包含事件窗口、时间、特征轴、定量、保留条件与人工复核。
+
 ## 按需查阅
 
 | 文档 | 内容 |
 |---|---|
+| [细胞事件与特征峰确认流程](cell-feature-identification.md) | 从原始谱到细胞与特征矩阵的完整判定、数值示例与核对证据 |
 | [参数参考](parameters.md) | Notebook/API/CLI/网页默认值的区别、单位、算法阈值、评分规则 JSON/CSV 格式 |
 | [Python API 与批处理](python-api.md) | 提取、变换、注释、合并、保存重载与 CLI 调用示例 |
 | [分析](analysis.md) | 分析方法、不同分析入口、统计解释、轨迹与绘图、暂缓方法定义 |

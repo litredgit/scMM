@@ -450,3 +450,12 @@ LMSD 官方更新来源为 `https://lipidmaps.org/files/?ext=sdf.zip&file=LMSD`�
 源文件 50,586 条，其中有效质量 49,981 条，无效质量 605 条；总组成汇总 21,377 条。
 活动指针 `database_provenance.json` 最后发布；版本目录保存 ZIP、`LMSD_metadata.csv.gz`、`LMSD_collapsed_formula_species.csv.gz` 和每个文件的 SHA256。
 旧版本保留，不改写旧注释结果绑定的数据库身份。
+
+### Cell PDF 字体
+
+Cell PDF 导出要求服务账号可发现真实且有使用授权的 Arial（常规、粗体、斜体、粗斜体），
+通过 Matplotlib 字体发现机制读取并由 ReportLab 嵌入。项目不附带或下载商业字体；
+管理员按字体授权安装到服务账号字体目录后，在维护更新时重建该账号的 Matplotlib 字体索引并重启服务。
+未找到 Arial 时该规格 PDF 明确报错，通用 PDF 仍可使用原有嵌入字体；SVG 可交给有 Arial 的排版环境处理。
+浏览器端 SVG 声明字体、PNG 使用浏览器实际字体，服务器装字体不等于用户浏览器已安装。
+具体出版规格见[论文图操作](workflow.md#论文图细胞联动与热图)。

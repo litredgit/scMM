@@ -74,7 +74,7 @@ def sync_metadata(project):
     for name in stale:
         for figure in RESULT_PLOTS.get(name, ()):
             project.views.get("figures", {}).pop(figure, None)
-    for key in INDEPENDENT_PLOTS:
+    for key in (*INDEPENDENT_PLOTS, "heatmap", "embedding", "violin"):
         figure = project.views.get("figures", {}).get(key)
         if figure:
             metadata = figure["layout"]["meta"]
@@ -164,6 +164,28 @@ def prepare_mapping(project, storage_label):
 
 
 class ProjectWorkflow:
+    def inspect_dataset(self, identity, root, path):
+        with self.access(identity) as workspace:
+            workspace.require_project()
+            data = read_dataset(self.results, root, path, trust_pickle=False)
+            return {
+                "cells": data.n_obs,
+                "features": data.n_vars,
+                "layers": list(data.layers),
+                "observations": list(data.obs),
+                "samples": data.obs["sample"].dropna().astype(str).unique().tolist()
+                if "sample" in data.obs
+                else [],
+                "groups": data.obs["group"].dropna().astype(str).unique().tolist()
+                if "group" in data.obs
+                else [],
+                "missing_group": "group" not in data.obs
+                or bool(
+                    data.obs["group"].isna().any()
+                    or data.obs["group"].astype(str).str.strip().eq("").any()
+                ),
+            }
+
     def create_project(self, identity, revision, name):
         def action(workspace):
             project = self.store.create(name, self.defaults)

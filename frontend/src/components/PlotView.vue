@@ -72,6 +72,12 @@ function orderedFigure(): Figure {
   const copy = JSON.parse(JSON.stringify(props.figure)) as Figure
   for (const trace of copy.data as Record<string, unknown>[]) {
     if (typeof trace.name === 'string') trace.legendrank = legendItems.value.indexOf(trace.name)
+    if (
+      ['scatter', 'scattergl', 'scatter3d'].includes(String(trace.type)) &&
+      String(trace.mode ?? 'markers').includes('markers')
+    ) {
+      trace.marker = { ...(trace.marker as object), opacity: pointOpacity.value }
+    }
   }
   copy.layout.legend = { ...(copy.layout.legend as object), traceorder: 'normal' }
   return copy
@@ -144,6 +150,10 @@ const fresh = computed(() => {
 })
 const exporting = ref(false)
 const preset = ref('nature-single')
+const pointOpacity = ref(1)
+const artwork = ref('color')
+const includeTitle = ref(true)
+const previewImage = ref('')
 const exportLanguage = ref('en'),
   exportTitle = ref(''),
   exportX = ref(''),
@@ -190,17 +200,35 @@ useViewState(`plot:${chartKey.value}`, {
   exportTitle,
   exportX,
   exportY,
+  pointOpacity,
+  artwork,
+  includeTitle,
 })
 function paperPreset() {
   const values: Record<string, [number, number]> = {
     'nature-single': [89, 65],
     'nature-double': [183, 120],
-    'acs-single': [84.6, 65],
-    'acs-double': [177.8, 120],
+    'cell-single': [85, 65],
+    'cell-onehalf': [114, 85],
+    'cell-double': [174, 120],
   }
   const size = values[preset.value]
   if (size) [widthMm.value, heightMm.value] = size
+  if (preset.value.startsWith('cell-')) {
+    fontPt.value = 7
+    includeTitle.value = false
+    dpi.value = artwork.value === 'line' ? 1000 : artwork.value === 'bw' ? 500 : 300
+  }
 }
+watch(preset, (value) => {
+  if (value.startsWith('acs-')) {
+    preset.value = 'nature-single'
+    paperPreset()
+  }
+})
+watch(artwork, () => {
+  dpi.value = artwork.value === 'line' ? 1000 : artwork.value === 'bw' ? 500 : 300
+})
 watch(
   () => props.name,
   (name) => (filename.value = name),
@@ -348,10 +376,24 @@ async function draw() {
           responsive: true,
           displaylogo: false,
           modeBarButtonsToRemove: [
+            'toImage',
             'sendDataToCloud',
             'editInChartStudio',
             'share',
             'sendChartToCloud',
+          ],
+          modeBarButtonsToAdd: [
+            {
+              name: '下载论文 SVG',
+              icon: {
+                width: 24,
+                height: 24,
+                path: 'M3 3H21V21H3ZM7 7V17H17V7ZM11 8H13V13H15L12 16L9 13H11Z',
+              },
+              click: () => {
+                if (!exporting.value && !store.busy && fresh.value) void image('svg')
+              },
+            },
           ],
           locale: 'zh-CN',
           scrollZoom: true,
@@ -399,7 +441,14 @@ async function draw() {
   }
 }
 watch(
-  () => [props.figure, position.value, props.selectRange, chartHeight.value, legendItems.value],
+  () => [
+    props.figure,
+    position.value,
+    props.selectRange,
+    chartHeight.value,
+    legendItems.value,
+    pointOpacity.value,
+  ],
   () => void draw(),
   { deep: false },
 )
@@ -434,6 +483,7 @@ onBeforeUnmount(() => {
   active = false
   ++generation
   observer?.disconnect()
+  if (previewImage.value) URL.revokeObjectURL(previewImage.value)
   if (element.value) plotly?.purge(element.value)
 })
 async function exportRequest(path: string, body: unknown) {
@@ -475,6 +525,9 @@ async function plotData() {
                 legend: position.value,
                 legend_order: legendItems.value,
                 viewport: viewport.value,
+                preset: preset.value,
+                point_opacity: pointOpacity.value,
+                include_title: includeTitle.value,
               },
             },
           },
@@ -488,7 +541,7 @@ async function plotData() {
     exporting.value = false
   }
 }
-async function image(format: string) {
+async function image(format: string, preview = false) {
   if (!plotly) return
   failure.value = ''
   exporting.value = true
@@ -497,7 +550,11 @@ async function image(format: string) {
   document.body.appendChild(temporary)
   try {
     if (
-      ![widthMm.value, heightMm.value, dpi.value, fontPt.value].every(Number.isFinite) ||
+      ![widthMm.value, heightMm.value, dpi.value, fontPt.value, pointOpacity.value].every(
+        Number.isFinite,
+      ) ||
+      pointOpacity.value < 0.1 ||
+      pointOpacity.value > 1 ||
       widthMm.value < 20 ||
       widthMm.value > 600 ||
       heightMm.value < 20 ||
@@ -544,7 +601,9 @@ async function image(format: string) {
     for (const trace of copy.data as Record<string, unknown>[])
       if (trace.type === 'scattergl') trace.type = 'scatter'
     const font = {
-      family: 'Arial, Helvetica, Microsoft YaHei, sans-serif',
+      family: preset.value.startsWith('cell-')
+        ? 'Arial'
+        : 'Arial, Helvetica, Microsoft YaHei, sans-serif',
       size: (fontPt.value * 96) / 72,
       color: '#111111',
     }
@@ -590,7 +649,7 @@ async function image(format: string) {
     const titleText = (copy.layout.title as { text?: string })?.text
     copy.layout.title = {
       ...(copy.layout.title as object),
-      text: exportTitle.value || paperText(titleText),
+      text: includeTitle.value ? exportTitle.value || paperText(titleText) : '',
     }
     copy.layout.showlegend = position.value !== 'hidden'
     const inside = position.value !== 'right',
@@ -615,7 +674,25 @@ async function image(format: string) {
       if (/^coloraxis\d*$/.test(name)) {
         const axis = copy.layout[name] as Record<string, unknown>
         axis.showscale = position.value !== 'hidden'
+        axis.colorbar = {
+          ...(axis.colorbar as object),
+          tickfont: font,
+          title: { ...((axis.colorbar as { title?: object })?.title ?? {}), font },
+        }
       }
+    for (const trace of copy.data as Record<string, unknown>[]) {
+      const bar = trace.colorbar as Record<string, unknown> | undefined
+      if (bar)
+        trace.colorbar = {
+          ...bar,
+          tickfont: font,
+          title: {
+            ...(bar.title as object),
+            text: paperText((bar.title as { text?: string })?.text ?? ''),
+            font,
+          },
+        }
+    }
     await plotly.newPlot(temporary, copy.data as never, copy.layout as never, {
       staticPlot: true,
       displayModeBar: false,
@@ -634,12 +711,18 @@ async function image(format: string) {
             width_mm: widthMm.value,
             height_mm: heightMm.value,
             identity,
+            font_family: preset.value.startsWith('cell-') ? 'Arial' : null,
           })
         : format === 'png'
           ? await pngWithDpi(rendered, dpi.value)
           : rendered
     if (format !== 'pdf') await exportRequest('check', { metadata: identity })
-    saveBlob(blob, `${filename.value || props.name}.${format}`)
+    if (preset.value.startsWith('cell-') && blob.size > 20 * 1024 * 1024)
+      throw new Error('Cell 单图文件应不超过 20 MB，请调整尺寸或分辨率。')
+    if (preview) {
+      if (previewImage.value) URL.revokeObjectURL(previewImage.value)
+      previewImage.value = URL.createObjectURL(blob)
+    } else saveBlob(blob, `${filename.value || props.name}.${format}`)
   } catch (cause) {
     failure.value = String(cause)
   } finally {
@@ -676,6 +759,22 @@ async function image(format: string) {
       <label
         ><FieldLabel name="图文件名" /><input v-model="filename" :aria-label="`图文件名：${name}`"
       /></label>
+      <label
+        >点不透明度<input
+          v-model.number="pointOpacity"
+          aria-label="点不透明度"
+          type="number"
+          min="0.1"
+          max="1"
+          step="0.1"
+      /></label>
+      <button
+        class="preview"
+        :disabled="exporting || store.busy || !fresh"
+        @click="image('svg', true)"
+      >
+        预览导出效果
+      </button>
       <button class="save" :disabled="exporting || store.busy || !fresh" @click="image('svg')">
         下载 SVG
       </button>
@@ -693,19 +792,39 @@ async function image(format: string) {
       <summary>论文导出设置 · 尺寸、字号与 DPI</summary>
       <div class="field-grid">
         <label
-          >论文规格<select v-model="preset" @change="paperPreset">
+          >论文规格<select v-model="preset" aria-label="论文规格" @change="paperPreset">
             <option value="nature-single">Nature 单栏</option>
             <option value="nature-double">Nature 双栏</option>
-            <option value="acs-single">Analytical Chemistry 单栏</option>
-            <option value="acs-double">Analytical Chemistry 双栏</option>
+            <option value="cell-single">Cell 单栏（85 mm）</option>
+            <option value="cell-onehalf">Cell 一栏半（114 mm）</option>
+            <option value="cell-double">Cell 双栏（174 mm）</option>
+            <option value="custom">自定义</option>
           </select></label
         >
-        <label>宽度（mm）<input v-model.number="widthMm" type="number" min="20" max="600" /></label>
         <label
-          >高度（mm）<input v-model.number="heightMm" type="number" min="20" max="600"
+          >宽度（mm）<input
+            aria-label="宽度（mm）"
+            v-model.number="widthMm"
+            type="number"
+            min="20"
+            max="600"
         /></label>
         <label
-          >字号（pt）<input v-model.number="fontPt" type="number" min="4.5" max="24" step="0.5"
+          >高度（mm）<input
+            aria-label="高度（mm）"
+            v-model.number="heightMm"
+            type="number"
+            min="20"
+            max="600"
+        /></label>
+        <label
+          >字号（pt）<input
+            aria-label="字号（pt）"
+            v-model.number="fontPt"
+            type="number"
+            min="4.5"
+            max="24"
+            step="0.5"
         /></label>
         <label
           >位图 DPI<input
@@ -718,11 +837,32 @@ async function image(format: string) {
         /></label>
         <datalist :id="`${name}-dpi`">
           <option value="300" />
+          <option value="500" />
           <option value="600" />
+          <option value="1000" />
           <option value="1200" />
         </datalist>
       </div>
+      <label class="inline-check"
+        ><input v-model="includeTitle" type="checkbox" />图内显示标题</label
+      >
+      <label
+        >图形内容（设置 DPI）<select v-model="artwork">
+          <option value="color">彩色或灰度（至少 300 DPI）</option>
+          <option value="bw">黑白（至少 500 DPI）</option>
+          <option value="line">线图（至少 1000 DPI）</option>
+        </select></label
+      >
+      <p v-if="preset.startsWith('cell-')" class="muted">
+        Cell：Arial，正文约 6–8 pt，线宽 0.5–1.5 pt；推荐高度不超过 200 mm。主标题与图注另附，PDF
+        优先用于生产。PDF 检查服务器真实 Arial 字体；SVG 和 PNG 需在装有 Arial
+        的环境核对。此预设不代替最终投稿检查。
+      </p>
     </details>
+    <div v-if="previewImage" class="export-preview">
+      <button @click="previewImage = ''">关闭导出预览</button
+      ><img :src="previewImage" alt="按论文设置生成的导出预览" style="max-width: 100%" />
+    </div>
     <LegendOrder
       :items="legendItems"
       :disabled="store.busy"

@@ -21,6 +21,7 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | 统一降维、双特征散点/特征距离嵌入、差异/Marker/相关网络、监督模型诊断和 SHAP | [分析说明](docs/analysis.md) |
 | 网页 Palantir 稳定 ID 根点、滑动窗口轨迹、命名结果和完整导出 | [伪时间与轨迹](docs/analysis.md#palantir-伪时间) |
 | 独立 TIC/EIC 信号重构、残差与噪声对照，不改提取算法 | [原始信号诊断](docs/analysis.md#独立原始信号诊断) |
+| 热图组别／样本筛选与排序、Nature／Cell 图形及 MetaboAnalyst 矩阵 CSV 导出 | [图形操作](docs/workflow.md#论文图细胞联动与热图) · [矩阵格式](docs/data-output.md#面向-metaboanalyst-的矩阵下载) |
 | 当前数据 QC PDF、当前分析报告及完整参数/数值附件 ZIP | [报告说明](docs/analysis.md#统计解释与网页分析) |
 | 网页 LMSD 候选、相关性辅助排序、天然同位素标记、分类饼图及特征/分子网络 | [注释与同位素](docs/workflow.md#注释与同位素) |
 
@@ -28,6 +29,8 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 网页覆盖范围与全部 Python 能力不同：网页注释与同位素功能保留全部峰和候选，只在显示/导出时筛选；
 Python 原有删峰/求和去同位素接口与部分时间/趋势分析继续保留，边界见[分析说明](docs/analysis.md)。
 待验收与新会话起点见 [发展计划](docs/roadmap.md#新会话起点)。
+
+同行复核提取方法可直接阅读[细胞事件与特征峰确认流程](docs/cell-feature-identification.md)。
 
 ## 从这里开始
 

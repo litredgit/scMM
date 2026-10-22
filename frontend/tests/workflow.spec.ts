@@ -11,10 +11,11 @@ async function create(page: Page, name: string) {
 }
 async function importData(page: Page, name: string) {
   await create(page, name)
-  await page.getByRole('button', { name: '导入已有结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入独立结果', exact: true }).click()
   await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
   await page.getByRole('button', { name: /^▤ analysis.h5ad/ }).click()
-  await page.getByRole('button', { name: '导入结果', exact: true }).click()
+  await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await expect(page.getByRole('heading', { name: '结果与样本关联' })).toBeVisible()
 }
 async function noError(page: Page) {
@@ -168,7 +169,7 @@ test('preprocessing, all analysis panels, precision export and snapshot restore'
     .filter({ hasText: 'Vue 全部分析' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await analysisModule(page, 'supervised', '监督与 SHAP')
   await expect(
@@ -421,20 +422,22 @@ test('automatic retention rules require review, survive refresh and stop explici
   await expect(page.getByRole('status')).toContainText('已停用自动保留')
 })
 
-test('latest result preselection, detailed help, stable QC and readable narrow layout', async ({
+test('explicit result selection, detailed help, stable QC and readable narrow layout', async ({
   page,
 }) => {
   test.setTimeout(60000)
   await create(page, '界面说明与默认结果')
-  await page.getByRole('button', { name: '导入已有结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入独立结果', exact: true }).click()
   const listing = await page.request.get('/api/v1/storage/entries?root=Results&kind=results')
   const latest = (await listing.json()).latest.name as string
   await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
-  await expect(page.getByText(`已选结果：${latest}`, { exact: true })).toBeVisible()
+  await expect(page.getByText(`已选结果：${latest}`, { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '导入并替换当前数据', exact: true })).toBeDisabled()
   await page.getByRole('button', { name: /^▤ analysis.h5ad/ }).click()
   await expect(page.getByText('已选结果：analysis.h5ad', { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '结果与样本关联' })).toHaveCount(0)
-  await page.getByRole('button', { name: '导入结果', exact: true }).click()
+  await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await page.getByRole('link', { name: /预处理/ }).click()
   const helper = page.getByRole('button', { name: 'min_detected说明', exact: true })
   await helper.hover()

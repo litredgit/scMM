@@ -83,7 +83,8 @@ def main():
         lipids = AnnData(
             np.column_stack([parent, parent * peak["ratio"], parent * 0.3, parent * 0.1]),
             obs=pd.DataFrame(
-                {"sample": np.repeat(["a", "b"], 20)}, index=[f"lipid-cell{i}" for i in range(40)]
+                {"sample": np.repeat(["a", "b"], 20), "group": np.repeat(["A", "B"], 20)},
+                index=[f"lipid-cell{i}" for i in range(40)],
             ),
             var=pd.DataFrame(
                 {"mz": [protonated, peak["mz"], mass + adduct_shift("[M+Na]+"), 300.0]},

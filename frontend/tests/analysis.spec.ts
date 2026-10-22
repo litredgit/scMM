@@ -1,4 +1,5 @@
 import { test, expect, type Page } from './fixtures'
+import { readFile } from 'node:fs/promises'
 
 let pageErrors: string[] = []
 test.beforeEach(async ({ page }) => {
@@ -12,18 +13,75 @@ async function importAnalysis(page: Page, name: string, filename = 'analysis.h5a
   else await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
   await page.getByLabel('项目名称', { exact: true }).fill(name)
   await page.getByRole('button', { name: '创建并添加样本' }).click()
-  await page.getByRole('button', { name: '导入已有结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入独立结果', exact: true }).click()
   await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
   await page
     .getByRole('button', { name: new RegExp(`^(?:▤ )?${filename.replaceAll('.', '[.]')}\\s`) })
     .click()
-  await page.getByRole('button', { name: '导入结果', exact: true }).click()
+  await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await expect(page.getByLabel('group_key', { exact: true }).first()).toBeAttached()
 }
 async function module(page: Page, name: string) {
   await page.getByRole('button', { name, exact: true }).click()
 }
+
+test('heatmap selected sample order, pending settings and Cell SVG use one export path', async ({
+  page,
+}) => {
+  test.setTimeout(60000)
+  await importAnalysis(page, '热图范围与论文导出')
+  await module(page, '热图')
+  const panel = page
+    .locator('.analysis-module-split')
+    .filter({ has: page.getByRole('heading', { name: '特征热图', exact: true }) })
+  await panel.getByLabel('特征编号（换行或逗号分隔）').fill('f0\nf1')
+  await panel.getByText('样本 · 全部', { exact: true }).click()
+  await panel.getByRole('button', { name: '清空样本', exact: true }).click()
+  await panel.getByLabel('作图样本 s1', { exact: true }).check()
+  await panel.getByLabel('作图样本 s0', { exact: true }).check()
+  await panel.getByText('组别 · 全部', { exact: true }).click()
+  await panel.getByRole('button', { name: '清空组别', exact: true }).click()
+  await panel.getByLabel('作图组别 a', { exact: true }).check()
+  const plotted = page.waitForResponse(
+    (r) => r.url().endsWith('/analysis/plot') && r.request().postDataJSON().kind === 'heatmap',
+  )
+  await panel.getByRole('button', { name: '生成热图', exact: true }).click()
+  const response = await plotted
+  expect(response.ok()).toBeTruthy()
+  const figure = (await response.json()).value
+  expect(figure.layout.meta.column_order).toEqual([
+    ...Array.from({ length: 8 }, (_, i) => `c${i + 8}`),
+    ...Array.from({ length: 8 }, (_, i) => `c${i}`),
+  ])
+  await panel.getByLabel('热图色阶下限').fill('-2')
+  await panel.getByLabel('热图色阶上限').fill('2')
+  await expect(panel.getByRole('status').filter({ hasText: '设置已编辑' })).toBeVisible()
+  await panel.getByRole('button', { name: '生成热图', exact: true }).click()
+  const plot = panel.locator('.plot-shell')
+  await plot.locator('.plot-settings summary').click()
+  await plot.getByLabel('论文规格', { exact: true }).selectOption('cell-single')
+  await expect(plot.getByLabel('宽度（mm）', { exact: true })).toHaveValue('85')
+  await expect(plot.getByLabel('图内显示标题', { exact: true })).not.toBeChecked()
+  await expect(plot.getByRole('option', { name: /Analytical Chemistry/ })).toHaveCount(0)
+  await plot.getByRole('button', { name: '预览导出效果', exact: true }).click()
+  await expect(plot.getByAltText('按论文设置生成的导出预览')).toBeVisible()
+  const direct = page.waitForEvent('download')
+  await plot.getByRole('button', { name: '下载 SVG', exact: true }).click()
+  const directSvg = await readFile((await (await direct).path())!, 'utf8')
+  expect(directSvg).toContain('Arial')
+  expect(directSvg).not.toContain('Feature heatmap')
+  const toolbar = page.waitForEvent('download')
+  await plot.locator('.plot').hover()
+  await plot.locator('[data-title="下载论文 SVG"]').click()
+  const toolbarSvg = await readFile((await (await toolbar).path())!, 'utf8')
+  expect(toolbarSvg).toContain('Arial')
+  const images = (svg: string) => svg.match(/data:image\/png;base64,[^"]+/g) ?? []
+  expect(images(directSvg).length).toBeGreaterThan(0)
+  expect(images(toolbarSvg)).toEqual(images(directSvg))
+  await page.screenshot({ path: test.info().outputPath('heatmap-cell-export.png'), fullPage: true })
+})
 
 test('legacy settings, independent parameters, draft and project reset, narrow panels', async ({
   page,
@@ -89,7 +147,7 @@ test('legacy settings, independent parameters, draft and project reset, narrow p
     .filter({ hasText: '分析设置迁移' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await module(page, '监督与 SHAP')
   await expect(
@@ -267,8 +325,8 @@ test('PCA axes, stable cell clicks, paper exports and complete heatmap data', as
   expect((await pdf).suggestedFilename()).toBe('cell-spectra.pdf')
   await module(page, '热图')
   await page.getByLabel('特征编号（换行或逗号分隔）', { exact: true }).fill('f0\nf1\nf2')
-  await page.getByRole('combobox', { name: '分组列', exact: true }).selectOption('group')
-  await page.getByRole('combobox', { name: '样本列', exact: true }).selectOption('sample')
+  await page.getByRole('combobox', { name: '列汇总', exact: true }).selectOption('group')
+  await page.getByRole('combobox', { name: '均值的样本权重列', exact: true }).selectOption('sample')
   await page
     .getByRole('combobox', { name: '均值权重', exact: true })
     .selectOption({ label: '样本等权' })
@@ -394,7 +452,7 @@ test('clustering parameters execute explicitly and persist across saved project 
     .filter({ hasText: '聚类高级参数' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await module(page, '聚类')
   await expect(page.getByLabel('eps', { exact: true })).toHaveValue('0.001')
@@ -445,7 +503,7 @@ test('exact feature scatter plots manually and reloads a saved exportable figure
     .filter({ hasText: '双特征散点闭环' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await module(page, '双特征散点')
   await expect(x).toHaveValue('f0')
@@ -479,7 +537,7 @@ test('feature-distance embedding exports distances and reloads a read-only figur
     .filter({ hasText: '特征距离嵌入' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await module(page, '特征距离嵌入')
   await expect(page.getByLabel('距离嵌入特征ID', { exact: true })).toHaveValue('f0\nf1\nf2\nf3')
@@ -514,7 +572,7 @@ test('acquisition stability requires explicit choices and persists full tables',
     .filter({ hasText: '采集稳定性' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await module(page, '采集稳定性 QC')
   await expect(page.getByLabel('稳定性坐标含义', { exact: true })).toHaveValue('stored_order')
@@ -554,7 +612,7 @@ test('explicit model parameters reach training and persist display settings', as
     .filter({ hasText: '模型高级参数' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await module(page, '监督与 SHAP')
   await page.getByText('监督高级参数', { exact: true }).click()
@@ -644,7 +702,7 @@ test('named Palantir and window results retain exact sources through save and re
     .filter({ hasText: '命名时间结果' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await page.getByRole('combobox', { name: '分析功能', exact: true }).selectOption('time')
   await expect(page.getByLabel('选择命名时间结果', { exact: true })).toHaveValue('path_browser')

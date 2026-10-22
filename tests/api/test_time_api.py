@@ -95,7 +95,8 @@ def test_time_roundtrip_full_export_and_current_report_use_stored_values(workflo
         index_col=0,
         float_precision="round_trip",
     )
-    np.testing.assert_array_equal(frame.to_numpy(), original.X)
+    assert frame.columns[0] == "Label"
+    np.testing.assert_array_equal(frame.drop(columns="Label").to_numpy(), original.X)
     table = get(workflow, "/analysis/time/result?key=pal_a").json()
     assert table["tables"]["cells"]["rows"][0]["cell_id"] == "c0"
     assert table["parameters"]["actual_earliest_cell_id"] == "c3"

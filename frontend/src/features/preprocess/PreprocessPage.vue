@@ -519,8 +519,13 @@ useViewState('preprocess', {
   </section>
   <div v-else class="card empty-state">
     <h1>尚未建立当前数据集</h1>
-    <p>请先审核提取结果，或导入已有 H5AD。</p>
+    <p>
+      当前打开的项目尚无已保存并载入的数据集。原始谱提取后，请审核并纳入样本；独立 H5AD
+      可从样本页导入。
+    </p>
+    <p>打开含数据快照的完整项目会自动恢复矩阵，无需再从快照目录选择文件导入。</p>
     <RouterLink to="/extraction">前往提取审核 →</RouterLink>
+    <RouterLink to="/samples">前往样本与独立结果导入 →</RouterLink>
   </div>
 </template>
 

@@ -5,6 +5,7 @@ import { useViewState } from '../../../api/viewState'
 import { displayName } from '../../../help/labels'
 import PlotView from '../../../components/PlotView.vue'
 import type { Figure } from '../../../api/types'
+import PlotScope from '../components/PlotScope.vue'
 const {
   store,
   info,
@@ -16,6 +17,7 @@ const {
   featureTotal,
   pageFeatures,
   refreshAnalysis,
+  plotScope,
 } = useAnalysisContext()
 const figure = ref<Figure>()
 let generation = 0
@@ -43,7 +45,11 @@ const notes = computed(() => metadata.value.notes ?? [])
 const fit = computed(() => metadata.value.regression)
 const edited = computed(() => {
   const parameters = metadata.value.parameters
-  return parameters && Object.entries(scatter).some(([key, value]) => parameters[key] !== value)
+  return (
+    parameters &&
+    (Object.entries(scatter).some(([key, value]) => parameters[key] !== value) ||
+      JSON.stringify(parameters.scope) !== JSON.stringify(plotScope.value))
+  )
 })
 const states: Record<string, string> = {
   fitted: '已拟合',
@@ -63,7 +69,7 @@ async function draw(saved = false) {
       ? await api.read<Figure>('/analysis/figures/feature_scatter')
       : await api.command<Figure>('/analysis/plot', {
           kind: 'feature_scatter',
-          options: { ...scatter },
+          options: { ...scatter, scope: plotScope.value },
         })
     if (target === identity() && token === generation && value && api.isCurrent?.() !== false) {
       figure.value = value
@@ -77,9 +83,15 @@ useViewState('feature_scatter', { figure })
   <div class="card analysis-module-split">
     <section class="analysis-calculation">
       <h2>双特征散点</h2>
+      <PlotScope
+        v-model="plotScope"
+        :observations="info?.observations ?? {}"
+        :disabled="store.busy"
+      />
+      <p class="muted">回归线描述当前作图范围内的细胞，不重新计算已有差异检验。</p>
       <p>
         按稳定特征 ID 选择两轴，不自动匹配最近
-        m/z。零值保留，回归描述全部有限细胞，不能替代独立生物重复。
+        m/z。零值保留，回归描述所选范围内全部有限细胞，不能替代独立生物重复。
       </p>
       <label
         >搜索特征<input aria-label="散点特征搜索" v-model="search" :disabled="store.busy"

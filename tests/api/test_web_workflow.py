@@ -14,6 +14,59 @@ from anndata import AnnData, read_h5ad
 from tests.support.workflow import get, import_data, operation, raw_samples
 
 
+def test_inspect_independent_result_is_read_only_and_reports_missing_metadata(workflow):
+    data = import_data(workflow)
+    before = workflow[-2]()
+    response = get(workflow, "/dataset/inspect?root=Output&path=data.h5ad")
+    assert response.status_code == 200
+    assert (response.json()["cells"], response.json()["features"]) == data.shape
+    assert response.json()["missing_group"] is False
+    assert workflow[-2]() == before
+    assert get(workflow, "/dataset/inspect?root=Output&path=../outside.h5ad").status_code in {
+        400,
+        403,
+        404,
+    }
+    assert workflow[-2]() == before
+
+
+def test_plot_scope_does_not_recompute_embedding_or_replace_current_matrix(workflow):
+    data = import_data(workflow)
+    operation(workflow, "reduce", {"method": "pca", "store_key": "X_scope", "n_components": 2})
+    before = workflow[-2]()["project"]["dataset"]
+    scope = {"group_key": "group", "groups": ["a"], "sample_key": "sample", "samples": ["s1", "s0"]}
+    result = workflow[-1](
+        "/analysis/plot", {"kind": "embedding", "options": {"key": "X_scope", "scope": scope}}
+    )
+    assert result.status_code == 200, result.text
+    metadata = result.json()["value"]["layout"]["meta"]
+    assert metadata["selected_cells"] == 16 and metadata["total_cells"] == 64
+    assert len(pd.read_csv(StringIO(metadata["export_tables"]["coordinates"]))) == 16
+    assert workflow[-2]()["project"]["dataset"] == before
+    heatmap = workflow[-1](
+        "/analysis/plot",
+        {
+            "kind": "heatmap",
+            "options": {"features": ["f0"], "scope": scope, "cluster_columns": False},
+        },
+    )
+    assert heatmap.status_code == 200, heatmap.text
+    assert heatmap.json()["value"]["layout"]["meta"]["column_order"] == [
+        f"c{i}" for i in [*range(8, 16), *range(8)]
+    ]
+    unchanged = workflow[-2]()
+    invalid = workflow[-1](
+        "/analysis/plot",
+        {"kind": "heatmap", "options": {"features": ["f0"], "scope": {**scope, "groups": []}}},
+    )
+    assert invalid.status_code == 400 and workflow[-2]() == unchanged
+    exported = pd.read_csv(
+        StringIO(get(workflow, "/results/download?kind=matrix").text), index_col=0
+    )
+    assert exported.shape == (64, 9) and exported.columns[0] == "Label"
+    np.testing.assert_allclose(exported.drop(columns="Label"), data.X)
+
+
 def test_qc_candidate_apply_failure_history_and_complete_reset(workflow):
     data = import_data(workflow)
     before = workflow[-2]()
@@ -35,7 +88,9 @@ def test_qc_candidate_apply_failure_history_and_complete_reset(workflow):
     assert [row["operation"] for row in history] == ["filter", "normalize"]
     operation(workflow, "reset")
     restored = get(workflow, "/results/download?kind=matrix").text
-    np.testing.assert_allclose(pd.read_csv(StringIO(restored), index_col=0).to_numpy(), data.X)
+    np.testing.assert_allclose(
+        pd.read_csv(StringIO(restored), index_col=0).drop(columns="Label").to_numpy(), data.X
+    )
 
 
 def test_analysis_plots_results_staleness_and_saved_report_reload(workflow):
@@ -702,7 +757,8 @@ def test_preprocessing_options_precision_history_and_roundtrip(workflow):
     import_data(workflow)
     operation(workflow, "normalize", {"method": "total", "scale": 100.0})
     matrix = pd.read_csv(StringIO(get(workflow, "/results/download?kind=matrix").text), index_col=0)
-    np.testing.assert_allclose(matrix.sum(axis=1), 100)
+    assert matrix.columns[0] == "Label"
+    np.testing.assert_allclose(matrix.drop(columns="Label").sum(axis=1), 100)
     current = workflow[-2]()
     for options in (
         {"method": "total", "scale": -1},
@@ -782,8 +838,8 @@ def test_subset_preview_apply_save_reopen_and_reset(workflow):
         assert workflow[-2]() == before
     operation(workflow, "subset", options)
     frame = pd.read_csv(StringIO(get(workflow, "/results/download?kind=matrix").text), index_col=0)
-    assert frame.index.tolist() == ids and frame.columns.tolist() == ["f3", "f0"]
-    np.testing.assert_array_equal(frame.to_numpy(), data[ids, ["f3", "f0"]].X)
+    assert frame.index.tolist() == ids and frame.columns.tolist() == ["Label", "f3", "f0"]
+    np.testing.assert_array_equal(frame.drop(columns="Label").to_numpy(), data[ids, ["f3", "f0"]].X)
     assert workflow[-1]("/project/save").status_code == 200
     path = workflow[-2]()["project"]["path"]
     assert workflow[-1]("/project/open", {"path": path}).status_code == 200

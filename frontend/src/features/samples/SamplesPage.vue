@@ -10,6 +10,16 @@ const picker = ref<'raw' | 'results' | null>(null)
 const fileRoot = ref('')
 const paths = ref<string[]>([])
 const manual = ref('')
+const inspected = ref<{
+  cells: number
+  features: number
+  layers: string[]
+  samples: string[]
+  groups: string[]
+  missing_group: boolean
+}>()
+const inspectedPath = ref('')
+const pendingProject = ref('')
 const selected = ref<string[]>([])
 const samples = ref<Sample[]>([])
 const name = ref('')
@@ -95,6 +105,36 @@ const chosen = computed(() => [
       .filter(Boolean),
   ]),
 ])
+watch(
+  () => JSON.stringify([fileRoot.value, chosen.value, store.project?.manifest.id]),
+  () => {
+    inspected.value = undefined
+    inspectedPath.value = ''
+  },
+)
+async function inspect() {
+  const path = chosen.value[0]
+  if (!path) return
+  const source = JSON.stringify([fileRoot.value, path, store.project?.manifest.id])
+  const value = await store.read<NonNullable<typeof inspected.value>>(
+    `/dataset/inspect?${new URLSearchParams({ root: fileRoot.value, path })}`,
+  )
+  if (
+    source === JSON.stringify([fileRoot.value, chosen.value[0], store.project?.manifest.id]) &&
+    value
+  ) {
+    inspected.value = value
+    inspectedPath.value = path
+  }
+}
+async function openProject(path: string, decision?: 'save' | 'discard') {
+  if (store.project?.unsaved && !decision) {
+    pendingProject.value = path
+    return
+  }
+  if (decision === 'save' && !(await store.mutate('/project/save', {}))) return
+  if (await store.mutate('/project/open', { path })) pendingProject.value = ''
+}
 async function add() {
   const result = await store.mutate(
     '/samples',
@@ -109,6 +149,7 @@ async function add() {
   }
 }
 async function importDataset() {
+  if (!inspected.value || inspectedPath.value !== chosen.value[0]) return
   const result = await store.mutate(
     '/dataset/import',
     { root: fileRoot.value, path: chosen.value[0] },
@@ -200,7 +241,7 @@ async function applyMapping() {
           <button class="primary" :disabled="store.busy" @click="togglePicker('raw')">
             ＋ 添加原始文件</button
           ><button class="primary" :disabled="store.busy" @click="togglePicker('results')">
-            导入已有结果</button
+            导入独立结果</button
           ><button
             class="danger"
             :disabled="store.busy || !selected.length"
@@ -212,7 +253,7 @@ async function applyMapping() {
       </div>
       <div v-if="picker" class="picker-panel">
         <div class="section-heading">
-          <h3>{{ picker === 'raw' ? '选择原始文件' : '选择结果目录或 H5AD' }}</h3>
+          <h3>{{ picker === 'raw' ? '选择原始文件' : '选择独立结果目录或 H5AD' }}</h3>
           <button :disabled="store.busy" @click="picker = null">收起</button>
         </div>
         <FileBrowser
@@ -222,8 +263,22 @@ async function applyMapping() {
           :kind="picker"
           :disabled="store.busy"
           @selected="selectFiles"
-          @project="(path) => store.mutate('/project/open', { path })"
+          @project="(path) => openProject(path)"
         />
+        <div v-if="pendingProject" class="picker-panel" role="status">
+          <p>当前项目有未保存修改，请选择如何打开完整项目。</p>
+          <button class="save" :disabled="store.busy" @click="openProject(pendingProject, 'save')">
+            保存并打开
+          </button>
+          <button
+            class="danger"
+            :disabled="store.busy"
+            @click="openProject(pendingProject, 'discard')"
+          >
+            放弃修改并打开
+          </button>
+          <button :disabled="store.busy" @click="pendingProject = ''">留在当前项目</button>
+        </div>
         <details>
           <summary>直接输入服务器路径</summary>
           <label
@@ -254,16 +309,35 @@ async function applyMapping() {
               为选中样本重新定位
             </button></template
           ><template v-else
-            ><button
+            ><button class="preview" :disabled="store.busy || chosen.length !== 1" @click="inspect">
+              检查所选结果
+            </button>
+            <div v-if="inspected" role="status">
+              <p>
+                {{ inspected.cells }} 细胞 × {{ inspected.features }} 特征；分组：{{
+                  inspected.groups.join('、') || '缺失'
+                }}；样本：{{ inspected.samples.join('、') || '未记录 sample 列' }}。
+              </p>
+              <p>
+                数据层：{{
+                  inspected.layers.join('、') || '仅当前矩阵'
+                }}。独立结果建立新的预处理起点，不恢复完整项目的原起点和全部视图。
+              </p>
+              <p v-if="inspected.missing_group">
+                分组不完整，导入后请补齐样本关联及 group，再导出矩阵 CSV。
+              </p>
+            </div>
+            <button
               class="primary"
-              :disabled="store.busy || chosen.length !== 1"
+              :disabled="store.busy || chosen.length !== 1 || !inspected"
               @click="importDataset()"
             >
-              导入结果
+              导入并替换当前数据
             </button>
             <p class="muted">
-              网页仅导入 H5AD 或不含 pickle 的结果目录；旧 pickle
-              请先离线转换。导入会替换当前工作数据。
+              继续已有实验请使用“打开完整项目”，无需再次导入。此入口仅用于独立 H5AD
+              或兼容结果目录；旧 pickle
+              请先离线转换。导入会替换当前矩阵和预处理起点，请先保存需要保留的修改。
             </p></template
           >
         </div>

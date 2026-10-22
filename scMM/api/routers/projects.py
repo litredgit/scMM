@@ -33,6 +33,11 @@ def list_projects(manager: Service):
     return manager.store.list()
 
 
+@router.get("/workspace/dataset/inspect")
+def inspect_dataset(root: str, path: str, manager: Service, identity: Identity):
+    return manager.inspect_dataset(identity, root, path)
+
+
 @router.post("/workspace/project", response_model=s.WorkspaceView, status_code=201)
 def create_project(body: s.CreateProject, manager: Service, identity: Identity):
     return manager.create_project(identity, body.revision, body.name)

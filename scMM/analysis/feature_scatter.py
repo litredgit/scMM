@@ -7,7 +7,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from scipy.stats import linregress
 
-from scMM.plot.presentation import feature_label
+from scMM.plot.presentation import PLOT_COLORS, feature_label
 
 
 def feature_scatter_figure(
@@ -54,7 +54,13 @@ def feature_scatter_figure(
             f"排除 {int((~included).sum())} 个非有限数值细胞的绘图/回归，完整 CSV 仍保留这些行及 included 标记。"
         )
     if color_key is None:
-        figure = px.scatter(displayed, x="x_value", y="y_value", custom_data=["cell_id"])
+        figure = px.scatter(
+            displayed,
+            color_discrete_sequence=PLOT_COLORS,
+            x="x_value",
+            y="y_value",
+            custom_data=["cell_id"],
+        )
     elif pd.api.types.is_numeric_dtype(data.obs[color_key]) and not pd.api.types.is_bool_dtype(
         data.obs[color_key]
     ):
@@ -65,6 +71,7 @@ def feature_scatter_figure(
         displayed["color_value"] = colors
         figure = px.scatter(
             displayed.loc[valid_color],
+            color_discrete_sequence=PLOT_COLORS,
             x="x_value",
             y="y_value",
             color="color_value",
@@ -94,6 +101,7 @@ def feature_scatter_figure(
         displayed.loc[missing, "color_value"] = missing_label
         figure = px.scatter(
             displayed,
+            color_discrete_sequence=PLOT_COLORS,
             x="x_value",
             y="y_value",
             color="color_value",

@@ -416,6 +416,12 @@ class AnalysisWorkflow:
             project = workspace.require_project()
             state = project.workspace
             data = state.require_data()
+            options = options.copy()
+            scope = options.get("scope")
+            if kind in {"embedding", "violin", "feature_scatter"}:
+                from scMM.analysis.plot_scope import plot_subset
+
+                data = plot_subset(data, options.pop("scope", None))
             if kind == "embedding":
                 figure = embedding_figure(data, **options)
             elif kind == "volcano":
@@ -538,7 +544,35 @@ class AnalysisWorkflow:
                 meta={
                     **(figure.layout.meta or {}),
                     "dataset_token": list(state.token),
-                    "parameters": options,
+                    "selected_cells": (figure.layout.meta or {}).get("selected_cells", data.n_obs),
+                    "total_cells": state.require_data().n_obs,
+                    "parameters": {**options, **({"scope": scope} if scope is not None else {})},
+                    "observation_dependencies": sorted(
+                        set((figure.layout.meta or {}).get("observation_dependencies", []))
+                        | (
+                            {options["color"][4:]}
+                            if kind == "embedding"
+                            and (options.get("color") or "").startswith("obs:")
+                            else set()
+                        )
+                        | {
+                            scope[key]
+                            for key, values in (("group_key", "groups"), ("sample_key", "samples"))
+                            if scope and scope.get(values) is not None and scope.get(key)
+                        }
+                        | (
+                            {options["group_key"]}
+                            if kind == "heatmap" and options.get("group_key")
+                            else set()
+                        )
+                        | (
+                            {options["sample_key"]}
+                            if kind == "heatmap"
+                            and options.get("equal_samples")
+                            and options.get("sample_key")
+                            else set()
+                        )
+                    ),
                 }
             )
             export_tables = dict((figure.layout.meta or {}).get("export_tables", {}))

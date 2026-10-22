@@ -184,6 +184,10 @@ async function exportH5ad() {
           >
             下载完整结果
           </button>
+          <p v-if="kind === 'matrix'" class="muted">
+            MetaboAnalyst 格式：每行一个细胞，首列 Sample、第二列 Label 来自
+            group，其余列为特征强度。请先补齐分组；导出不自动归一化或补值。
+          </p>
           <p v-if="['quality_pdf', 'report_zip'].includes(kind)" class="muted">
             报告注明当前矩阵修订和未保存状态，不代替保存项目，不自动分析。 PDF 是分页摘要；ZIP
             保留完整 QC、历史/参数和已有有效分析表，图形使用各图的论文导出入口。

@@ -1,5 +1,7 @@
 """Publication export and lossless, self-describing plot-data archives."""
 
+# ruff: noqa: RUF001
+
 import base64
 import csv
 import io
@@ -76,7 +78,7 @@ def data_archive(figure):
     return output.getvalue()
 
 
-def publication_pdf(svg, width_mm, height_mm):
+def publication_pdf(svg, width_mm, height_mm, *, font_family=None):
     """Convert the browser's actual SVG to vector PDF; prohibit external resources."""
     from pathlib import Path
 
@@ -112,16 +114,39 @@ def publication_pdf(svg, width_mm, height_mm):
             r"@import|url\(", element.text or "", re.I
         ):
             raise ValueError("External SVG styles are not supported")
-    family = "scMM-Sans"
+    family = "scMM-Arial" if font_family == "Arial" else "scMM-Sans"
+    fonts = Path(get_data_path()) / "fonts/ttf"
+    files = {
+        "": fonts / "DejaVuSans.ttf",
+        "-Bold": fonts / "DejaVuSans-Bold.ttf",
+        "-Oblique": fonts / "DejaVuSans-Oblique.ttf",
+        "-BoldOblique": fonts / "DejaVuSans-BoldOblique.ttf",
+    }
+    if font_family == "Arial":
+        from matplotlib.font_manager import FontProperties, findfont
+
+        try:
+            files = {
+                suffix: Path(
+                    findfont(
+                        FontProperties(family="Arial", weight=weight, style=style),
+                        fallback_to_default=False,
+                    )
+                )
+                for suffix, weight, style in (
+                    ("", "normal", "normal"),
+                    ("-Bold", "bold", "normal"),
+                    ("-Oblique", "normal", "italic"),
+                    ("-BoldOblique", "bold", "italic"),
+                )
+            }
+        except ValueError as exc:
+            raise ValueError(
+                "Cell PDF 需要服务器安装有授权的 Arial 字体；当前未找到，未使用其他字体冒充。可先导出 SVG，在安装 Arial 的排版环境完成生产文件。"
+            ) from exc
     if family not in pdfmetrics.getRegisteredFontNames():
-        fonts = Path(get_data_path()) / "fonts/ttf"
-        for name, filename in (
-            (family, "DejaVuSans.ttf"),
-            (family + "-Bold", "DejaVuSans-Bold.ttf"),
-            (family + "-Oblique", "DejaVuSans-Oblique.ttf"),
-            (family + "-BoldOblique", "DejaVuSans-BoldOblique.ttf"),
-        ):
-            pdfmetrics.registerFont(TTFont(name, str(fonts / filename)))
+        for suffix, filename in files.items():
+            pdfmetrics.registerFont(TTFont(family + suffix, str(filename)))
         pdfmetrics.registerFontFamily(
             family,
             normal=family,
@@ -132,6 +157,15 @@ def publication_pdf(svg, width_mm, height_mm):
         pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
     for element in root.iter():
         if element.tag.rsplit("}", 1)[-1] in {"text", "tspan"}:
+            if font_family == "Arial":
+                supported = pdfmetrics.getFont(family).face.charToGlyph
+                if any(
+                    not character.isspace() and ord(character) not in supported
+                    for character in "".join(element.itertext())
+                ):
+                    raise ValueError(
+                        "图中文字包含 Arial 未覆盖的字符，请使用英文图中文字，或导出 SVG 后完成字体核对。"
+                    )
             font = (
                 "STSong-Light"
                 if re.search(r"[\u3400-\u9fff]", "".join(element.itertext()))
@@ -143,7 +177,7 @@ def publication_pdf(svg, width_mm, height_mm):
     from svglib.fonts import FontMap
 
     font_map = FontMap()
-    font_map.register_font(family, str(Path(get_data_path()) / "fonts/ttf/DejaVuSans.ttf"))
+    font_map.register_font(family, str(files[""]))
     font_map._map["STSong-Light"] = {
         "svg_family": "STSong-Light",
         "svg_weight": "normal",

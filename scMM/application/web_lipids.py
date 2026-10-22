@@ -551,7 +551,9 @@ class LipidWorkflow:
                     )
                 return frame.to_csv(index=False).encode(), "text/csv; charset=utf-8"
             if kind == "matrix":
-                return data[:, ids].to_df().to_csv(index=True).encode(), "text/csv; charset=utf-8"
+                from .matrix_export import matrix_csv
+
+                return matrix_csv(data, features=ids), "text/csv; charset=utf-8"
             if kind == "candidates":
                 rows = [r for r in filtered_candidates(version, filters) if r["feature_id"] in ids]
             elif kind == "isotopes":

@@ -17,6 +17,7 @@ export function useAnalysis() {
     active.value = false
   })
   const {
+    plotScope,
     projection,
     reduction,
     usePca,
@@ -162,6 +163,7 @@ export function useAnalysis() {
       requestedEmbedding = ''
       delete figures.value.embedding
       if (identity !== previous?.[0]) {
+        plotScope.value = { group_key: 'group', groups: null, sample_key: 'sample', samples: null }
         initializedPath = ''
         tab.value = 'embedding'
         hydrating = true
@@ -409,6 +411,7 @@ export function useAnalysis() {
         ? {
             key: embedding.value,
             color: colorSource.value === 'none' ? null : color.value || null,
+            scope: plotScope.value,
             dimensions: projection.threeD
               ? [projection.x, projection.y, projection.z]
               : [projection.x, projection.y],
@@ -419,6 +422,7 @@ export function useAnalysis() {
             ? {
                 features: selectedFeatures.value,
                 hide_zero: hideZero.value,
+                scope: plotScope.value,
                 columns: Math.max(1, Math.min(3, Math.floor(window.innerWidth / 400))),
               }
             : {}
@@ -436,6 +440,7 @@ export function useAnalysis() {
           selection_signature: JSON.stringify([
             (options as { features: string[] }).features,
             (options as { hide_zero: boolean }).hide_zero,
+            plotScope.value,
           ]),
         }
       figures.value[kind] = value
@@ -470,6 +475,7 @@ export function useAnalysis() {
   }
 
   useViewState('analysis', {
+    plotScope,
     tab,
     figures,
     tables,
@@ -485,6 +491,7 @@ export function useAnalysis() {
     legend,
   })
   return {
+    plotScope,
     projection,
     reduction,
     usePca,

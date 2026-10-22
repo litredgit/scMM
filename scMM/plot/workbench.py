@@ -11,7 +11,7 @@ from plotly.subplots import make_subplots
 
 from scMM.application.workbench import dense
 
-from .presentation import feature_label, mass_label, probability_number, style_figure
+from .presentation import PLOT_COLORS, feature_label, mass_label, probability_number, style_figure
 
 
 def volcano_figure(table, *, fdr=0.05, fold_change=1.0, labels=10, order="fdr"):
@@ -31,6 +31,7 @@ def volcano_figure(table, *, fdr=0.05, fold_change=1.0, labels=10, order="fdr"):
     frame["display_fdr"] = frame.fdr.map(probability_number)
     figure = px.scatter(
         frame,
+        color_discrete_sequence=PLOT_COLORS,
         x="log2_fold_change",
         y="minus_log10_fdr",
         text="label",
@@ -151,6 +152,7 @@ def embedding_figure(data, key, color=None, dimensions=None):
             else f"维度 {dimension}"
         )
     kwargs = {
+        "color_discrete_sequence": PLOT_COLORS,
         "x": "x",
         "y": "y",
         "color": color_key,

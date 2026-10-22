@@ -50,6 +50,9 @@ export interface SavedProject {
   name: string
   saved_at: string
   samples: number
+  data_state?: 'configuration' | 'saved' | 'unavailable'
+  cells?: number | null
+  features?: number | null
 }
 export interface Root {
   label: string

@@ -13,7 +13,6 @@ const emit = defineEmits<{ selected: [root: string, paths: string[]]; project: [
 const root = ref(props.roots[0]?.label ?? '')
 const path = ref('.')
 const includeInternal = ref(false)
-let chooseLatest = true
 const selectedInfo = ref<FileEntry>()
 function date(value?: string | null) {
   return value
@@ -47,12 +46,6 @@ async function browse(target = path.value, offset = 0) {
     directory.value = result
     path.value = result.path
     page.value = offset
-    if (props.kind === 'results' && props.purpose !== 'manage' && chooseLatest && result.latest) {
-      chooseLatest = false
-      selectedInfo.value = result.latest
-      selection.value = [result.latest.path]
-      emit('selected', root.value, [...selection.value])
-    }
   } catch (cause) {
     if (ticket === generation) error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
@@ -60,8 +53,9 @@ async function browse(target = path.value, offset = 0) {
   }
 }
 function select(value: string) {
-  chooseLatest = false
-  selectedInfo.value = directory.value?.entries.find((e) => e.path === value)
+  selectedInfo.value =
+    directory.value?.entries.find((e) => e.path === value) ??
+    (directory.value?.latest?.path === value ? directory.value.latest : undefined)
   selection.value =
     props.kind === 'results'
       ? [value]
@@ -71,7 +65,6 @@ function select(value: string) {
   emit('selected', root.value, [...selection.value])
 }
 function clear() {
-  chooseLatest = false
   selectedInfo.value = undefined
   selection.value = []
   emit('selected', root.value, [])
@@ -83,7 +76,6 @@ function remove(value: string) {
 }
 watch(root, () => {
   clear()
-  chooseLatest = true
   path.value = '.'
   directory.value = null
   void browse('.')
@@ -159,6 +151,25 @@ defineExpose({ clear })
         @click="emit('project', selectedInfo!.project_path!)"
       >
         打开完整项目（推荐）
+      </button>
+    </div>
+    <div
+      v-if="kind === 'results' && purpose !== 'manage' && !selection.length && directory?.latest"
+      class="latest-result"
+    >
+      <p>
+        当前目录最近记录的可用矩阵：{{ directory.latest.name }} · {{ directory.latest.role }} ·
+        {{ date(directory.latest.modified_at) }}（北京时间）。时间仅供参考，请核对所属项目和用途。
+      </p>
+      <button
+        v-if="directory.latest.project_path"
+        :disabled="disabled || loading"
+        @click="emit('project', directory!.latest!.project_path!)"
+      >
+        打开所属完整项目（推荐）
+      </button>
+      <button :disabled="disabled || loading" @click="select(directory!.latest!.path)">
+        选择此矩阵供导入检查
       </button>
     </div>
     <div class="browser-toolbar">

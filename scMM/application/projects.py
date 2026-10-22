@@ -6,6 +6,7 @@ Snapshot directories are internal recovery artifacts, not user-facing branches.
 
 from __future__ import annotations
 
+# ruff: noqa: RUF001
 import json
 import os
 import re
@@ -27,6 +28,26 @@ from .tasks import utc_now
 from .workbench import AnalysisWorkspace
 
 PROJECT_ROOT = Path("~/data/results").expanduser()
+
+
+def saved_dataset_summary(folder, manifest):
+    """Read dimensions only; never load project matrices while listing projects."""
+    artifacts = manifest["artifacts"]
+    if "current" not in artifacts:
+        return {"data_state": "configuration", "cells": None, "features": None}
+    try:
+        import h5py
+
+        current = child_path(folder, artifacts["current"])
+        if not child_path(folder, artifacts["baseline"]).is_file():
+            raise ValueError("Missing baseline")
+        with h5py.File(current, "r") as handle:
+            cells, features = (
+                handle[axis][handle[axis].attrs["_index"]].shape[0] for axis in ("obs", "var")
+            )
+        return {"data_state": "saved", "cells": cells, "features": features}
+    except (OSError, ValueError, KeyError, TypeError, PermissionError):
+        return {"data_state": "unavailable", "cells": None, "features": None}
 
 
 @contextmanager
@@ -182,6 +203,7 @@ class ProjectStore:
                     "name": manifest["name"],
                     "saved_at": manifest["saved_at"],
                     "samples": len(manifest["samples"]),
+                    **saved_dataset_summary(path, manifest),
                 }
             )
         return sorted(entries, key=lambda row: row["saved_at"], reverse=True)
@@ -245,8 +267,14 @@ class ProjectStore:
         ProcessingParameters(**manifest["parameters"])
         artifacts = manifest["artifacts"]
         if "current" in artifacts:
-            data = read_h5ad(child_path(folder, artifacts["current"]))
-            baseline = read_h5ad(child_path(folder, artifacts["baseline"]))
+            try:
+                data = read_h5ad(child_path(folder, artifacts["current"]))
+                baseline = read_h5ad(child_path(folder, artifacts["baseline"]))
+            except (OSError, ValueError, KeyError) as exc:
+                raise ValueError(
+                    "项目数据恢复失败，请检查项目清单记录的当前快照和预处理起点："
+                    f"{folder}；当前工作区未替换。"
+                ) from exc
             project.workspace.replace(data, source=str(folder))
             project.workspace._validate(baseline)
             write_intensity_states(baseline, intensity_states(baseline))

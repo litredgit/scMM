@@ -69,6 +69,99 @@ def test_heatmap_sample_equal_aggregation_and_no_mutation():
     )
 
 
+def test_heatmap_selected_samples_keep_order_and_acquisition_time_without_mutation():
+    data = AnnData(
+        np.arange(12.0).reshape(6, 2),
+        obs=pd.DataFrame(
+            {
+                "sample": ["A", "B", "A", "C", "B", "C"],
+                "group": ["keep", "keep", "keep", "other", "keep", "other"],
+                "rt": [2, 8, 1, 1, 3, 2],
+            },
+            index=list("abcdef"),
+        ),
+        var=pd.DataFrame(index=["f0", "f1"]),
+    )
+    scope = {
+        "sample_key": "sample",
+        "samples": ["B", "A"],
+        "group_key": "group",
+        "groups": ["keep"],
+    }
+    figure = heatmap_figure(
+        data,
+        features=["f0", "f1"],
+        scope=scope,
+        cluster_columns=False,
+        cluster_rows=False,
+        zscore=False,
+        colorscale="Cividis",
+        color_min=0,
+        color_max=10,
+    )
+    assert figure.layout.meta["column_order"] == ["e", "b", "c", "a"]
+    assert list(figure.layout.xaxis.categoryarray) == ["e", "b", "c", "a"]
+    assert figure.layout.meta["selected_cells"] == 4
+    source = pd.read_csv(
+        io.StringIO(figure.layout.meta["export_tables"]["source.csv"]), index_col=0
+    )
+    np.testing.assert_array_equal(source.to_numpy(), data[list("ebca")].X.T)
+    assert figure.data[0].zmin == 0 and figure.data[0].zmax == 10
+    group_strip = figure.data[1]
+    assert group_strip.zmin == -0.5 and group_strip.zmax == 0.5
+    assert group_strip.colorscale[0][1] == group_strip.colorscale[-1][1] == "#0072B2"
+    assert data.obs_names.tolist() == list("abcdef")
+    averaged = heatmap_figure(
+        data, features=["f0"], scope=scope, group_key="sample", cluster_columns=False
+    )
+    assert averaged.layout.meta["column_order"] == ["B", "A"]
+    for invalid in (
+        {**scope, "samples": []},
+        {**scope, "groups": ["missing"]},
+        {**scope, "groups": ["other"]},
+    ):
+        with pytest.raises(ValueError):
+            heatmap_figure(data, features=["f0"], scope=invalid)
+    with pytest.raises(ValueError, match="色阶"):
+        heatmap_figure(data, features=["f0"], color_min=1)
+
+
+def test_heatmap_without_rt_keeps_stable_order_and_zscore_uses_selected_scope():
+    data = dataset()
+    figure = heatmap_figure(
+        data,
+        features=["f0"],
+        cluster_columns=False,
+        scope={
+            "sample_key": "sample",
+            "samples": ["two", "one"],
+            "group_key": "group",
+            "groups": ["A"],
+        },
+    )
+    assert figure.layout.meta["column_order"] == [f"c{i}" for i in [*range(10, 20), *range(10)]]
+    display = np.asarray(figure.data[0].z)
+    assert display.shape == (1, 20)
+    np.testing.assert_allclose(display.mean(axis=1), 0, atol=1e-14)
+    np.testing.assert_allclose(display.std(axis=1), 1)
+
+
+def test_cell_pdf_requires_real_arial_instead_of_silent_substitution(monkeypatch):
+    from matplotlib import font_manager
+
+    def missing(*args, **kwargs):
+        raise ValueError("Arial unavailable")
+
+    monkeypatch.setattr(font_manager, "findfont", missing)
+    with pytest.raises(ValueError, match="Arial"):
+        publication_pdf(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"/>',
+            85,
+            65,
+            font_family="Arial",
+        )
+
+
 def test_pca_selected_axes_ratio_and_complete_export():
     from scMM.analysis.embedding import reduce_dimension
 

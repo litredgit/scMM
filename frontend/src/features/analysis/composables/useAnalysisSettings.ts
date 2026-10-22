@@ -1,6 +1,13 @@
 import { ref, reactive, computed } from 'vue'
+import type { Scope } from '../components/PlotScope.vue'
 
 export function useAnalysisSettings() {
+  const plotScope = ref<Scope>({
+    group_key: 'group',
+    groups: null,
+    sample_key: 'sample',
+    samples: null,
+  })
   const reduction = reactive({
     method: 'pca',
     store_key: 'X_pca',
@@ -182,6 +189,7 @@ export function useAnalysisSettings() {
     }
   }
   function resetSettings() {
+    plotScope.value = { group_key: 'group', groups: null, sample_key: 'sample', samples: null }
     for (const [key, target] of Object.entries({
       projection,
       reduction,
@@ -220,6 +228,7 @@ export function useAnalysisSettings() {
     featureOffset.value = 0
   }
   const settings = computed(() => ({
+    plotScope: { ...plotScope.value },
     projection: { ...projection },
     reduction: { ...reduction },
     usePca: usePca.value,
@@ -306,6 +315,17 @@ export function useAnalysisSettings() {
         )
       }
     }
+    if (saved.plotScope && typeof saved.plotScope === 'object') {
+      const scope = saved.plotScope as Scope
+      if (
+        typeof scope.group_key === 'string' &&
+        typeof scope.sample_key === 'string' &&
+        [scope.groups, scope.samples].every(
+          (v) => v === null || (Array.isArray(v) && v.every((item) => typeof item === 'string')),
+        )
+      )
+        plotScope.value = { ...scope }
+    }
     if (typeof saved.embedding === 'string') embedding.value = saved.embedding
     if (typeof saved.color === 'string') color.value = saved.color
     if (typeof saved.colorSource === 'string') colorSource.value = saved.colorSource
@@ -331,6 +351,7 @@ export function useAnalysisSettings() {
       network.layer = diff.layer
   }
   return {
+    plotScope,
     projection,
     reduction,
     usePca,

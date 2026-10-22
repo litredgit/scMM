@@ -3,10 +3,11 @@ async function openAnalysis(page: Page) {
   await page.goto('/')
   await page.getByLabel('项目名称', { exact: true }).fill('图例与差异交互回归')
   await page.getByRole('button', { name: '创建并添加样本' }).click()
-  await page.getByRole('button', { name: '导入已有结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入独立结果', exact: true }).click()
   await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
   await page.getByRole('button', { name: /^▤ analysis.h5ad/ }).click()
-  await page.getByRole('button', { name: '导入结果', exact: true }).click()
+  await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
 }
 test('legend reorder persists, selection is manual and six steps fit narrow screens', async ({
@@ -46,7 +47,7 @@ test('legend reorder persists, selection is manual and six steps fit narrow scre
     .filter({ hasText: '图例与差异交互回归' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await page.getByRole('button', { name: '更新嵌入图', exact: true }).click()
   await expect(plot.locator('.legendtext')).toHaveText(['b', 'a'])

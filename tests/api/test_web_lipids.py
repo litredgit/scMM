@@ -17,6 +17,7 @@ def setup_lipids(workflow, monkeypatch):
     (root / "test.sdf").write_text(sdf_record() + sdf_record("LMGP01010002", name="Synthetic B"))
     monkeypatch.setenv("SCMM_LIPID_DATABASE_DIR", str(root))
     data = synthetic_data(duplicate=True)
+    data.obs["group"] = data.obs["sample"].astype(str)
     data.write_h5ad(workflow[4] / "lipid.h5ad")
     workflow[-1]("/dataset/import", {"root": "Output", "path": "lipid.h5ad"}).raise_for_status()
     return data
@@ -84,14 +85,14 @@ def test_lipid_http_roundtrip_preserves_matrix_snr_analysis_and_all_candidates(
         "/lipids/export", {"version": version, "kind": "matrix", "filters": {"isotopes": "hide"}}
     )
     frame = pd.read_csv(StringIO(response.text), index_col=0, float_precision="round_trip")
-    assert list(frame.columns) == ["f0", "f2", "f3"]
-    np.testing.assert_array_equal(frame.to_numpy(), original.X[:, [0, 2, 3]])
+    assert list(frame.columns) == ["Label", "f0", "f2", "f3"]
+    np.testing.assert_array_equal(frame.drop(columns="Label").to_numpy(), original.X[:, [0, 2, 3]])
     current = pd.read_csv(
         StringIO(get(workflow, "/results/download?kind=matrix").text),
         index_col=0,
         float_precision="round_trip",
     )
-    np.testing.assert_array_equal(current.to_numpy(), original.X)
+    np.testing.assert_array_equal(current.drop(columns="Label").to_numpy(), original.X)
     workflow[-1]("/project/save").raise_for_status()
     path = workflow[-2]()["project"]["path"]
     workflow[-1]("/project/open", {"path": path}).raise_for_status()
@@ -224,7 +225,7 @@ def test_empty_annotation_keeps_matrix_and_exports_headers(workflow, monkeypatch
         "/lipids/export",
         {"version": version, "kind": "matrix", "filters": {"include_unannotated": False}},
     )
-    assert pd.read_csv(StringIO(response.text), index_col=0).shape == (40, 0)
+    assert pd.read_csv(StringIO(response.text), index_col=0).shape == (40, 1)
     with workflow[2].access(workflow[1]["X-SCMM-Workspace"]) as workspace:
         np.testing.assert_array_equal(workspace.project.workspace.data.X, original.X)
 
@@ -258,7 +259,9 @@ def test_save_reload_manual_state_and_filtered_csv_full_precision(workflow, monk
         },
     )
     frame = pd.read_csv(StringIO(response.text), index_col=0, float_precision="round_trip")
-    np.testing.assert_allclose(frame.to_numpy(), original.X[:, :3], rtol=2e-16)
+    np.testing.assert_allclose(
+        frame.drop(columns="Label").to_numpy(), original.X[:, :3], rtol=2e-16
+    )
     assert (
         workflow[-1](
             "/lipids/export",

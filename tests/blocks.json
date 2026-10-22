@@ -193,6 +193,7 @@
       "sources": [
         "scMM/api/cli.py",
         "scMM/application/reporting.py",
+        "scMM/application/matrix_export.py",
         "scMM/api/routers/samples.py",
         "scMM/api/routers/storage.py",
         "scMM/api/routers/preferences.py",
@@ -223,6 +224,7 @@
         "scMM/api/lipid_schemas.py",
         "scMM/api/routers/lipids.py",
         "scMM/application/web_lipids.py",
+        "scMM/application/matrix_export.py",
         "scMM/util/lipid_names.py"
       ],
       "downstream": ["browser-lipids"],
