@@ -280,6 +280,7 @@ engine.adata.uns["metabolite_trends"]["pooled"]
 
 - 普通 HTTP 地址打开后白屏、控制台提示 `crypto.randomUUID is not a function`：属于旧前端在非安全上下文调用受限浏览器接口；更新到修正版并刷新页面。页面登记改用普通 HTTP 可用的 `crypto.getRandomValues`，保留随机性；不需要为排错临时关闭浏览器安全检查。
 - 启动提示配置/认证数据库缺失：管理员先检查仓库外资源文件及优先级；首次部署执行初始化，已有部署不要重新初始化覆盖账号。缺认证不会匿名启动。
+- 启动在 `RetentionScheduler` 报 `database is locked`：先检查是否确有其他进程占用；若项目目录在 CIFS 共享盘，确认挂载支持 SQLite 文件锁。可在停服后备份并迁移策略数据库，通过[资源配置](installation.md#访问与路径配置)将 `retention_db` 指向独立本地持久路径；已有规则不得用空库替换，不通过关闭锁或改为内存库绕过。
 - 一次性凭据失效：凭据限首次登录且 24 小时内有效；已消耗、超时或首次设密中断时由管理员重置，命令见[账号初始化与恢复](installation.md#服务器初始化与账号)。
 - 内部 HTTP 登录后仍返回 401：检查该开发配置是否显式关闭 Cookie Secure 标记、开发与生产是否使用不同 Cookie 名；Cookie 不按端口隔离。
 - 修改接口返回 403：区分管理员权限、请求来源和 CSRF 错误，重新登录获取有效会话；不自动重放保存或计算请求。

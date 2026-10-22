@@ -18,9 +18,11 @@ class RetentionCancelled(RuntimeError):
 
 
 class RetentionScheduler:
-    def __init__(self, manager, auth, *, clock=time.time):
+    def __init__(self, manager, auth, *, clock=time.time, path=None):
         self.manager, self.auth, self.clock = manager, auth, clock
-        self.path = manager.store.root / ".scmm-retention.sqlite3"
+        self.path = (
+            Path(path) if path is not None else manager.store.root / ".scmm-retention.sqlite3"
+        )
         _safe(self.path)
         self._lock = threading.RLock()
         self._stop = threading.Event()

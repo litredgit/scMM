@@ -55,6 +55,51 @@ def test_resource_precedence_and_no_implicit_storage(resources, monkeypatch):
     assert list(load_server_config(path).values["storage"]) == ["Only"]
 
 
+def test_retention_database_precedence_and_private_location(resources, monkeypatch):
+    path, values, folders = resources
+    local = path.parent / "retention.sqlite3"
+    monkeypatch.setenv("SCMM_RETENTION_DB", str(local))
+    assert load_server_config(path).validate().values["retention_db"] == str(local)
+    override = path.parent / "other.sqlite3"
+    assert load_server_config(path, {"retention_db": override}).validate().values[
+        "retention_db"
+    ] == str(override)
+    for invalid in (
+        values["auth_db"],
+        folders["project"] / "retention.sqlite3",
+        path.parent / "absent" / "retention.sqlite3",
+    ):
+        with pytest.raises(ValueError):
+            load_server_config(path, {"retention_db": invalid}).validate()
+    from scMM.api.cli import build_parser
+
+    assert build_parser().parse_args(["--retention-db", str(local)]).retention_db == local
+
+
+def test_app_uses_explicit_local_retention_database(resources):
+    from fastapi.testclient import TestClient
+
+    from scMM.api.app import create_app
+    from scMM.application.storage import StorageRoot
+
+    path, values, folders = resources
+    local = path.parent / "retention.sqlite3"
+    legacy = folders["project"] / ".scmm-retention.sqlite3"
+    legacy.write_bytes(b"inaccessible legacy database must not be opened")
+    cfg = load_server_config(path, {"retention_db": local}).validate()
+    app = create_app(
+        [StorageRoot("Raw", folders["raw"])],
+        project_root=folders["project"],
+        auth_store=AuthStore(values["auth_db"]),
+        server_config=cfg,
+    )
+    with TestClient(app) as client:
+        assert client.get("/api/v1/health").status_code == 200
+        assert app.state.workspaces.retention.path == local
+    assert local.is_file()
+    assert legacy.read_bytes() == b"inaccessible legacy database must not be opened"
+
+
 def test_bad_config_or_explicit_path_never_falls_back(resources, monkeypatch):
     path, values, folders = resources
     with pytest.raises(ValueError, match="不存在"):

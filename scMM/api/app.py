@@ -62,7 +62,9 @@ def create_app(
     monitoring = MonitorService(manager, auth_store, server_config)
     from scMM.application.retention_scheduler import RetentionScheduler
 
-    manager.retention = RetentionScheduler(manager, auth_store)
+    manager.retention = RetentionScheduler(
+        manager, auth_store, path=getattr(server_config, "values", {}).get("retention_db")
+    )
 
     @asynccontextmanager
     async def lifespan(_app):

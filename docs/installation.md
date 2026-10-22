@@ -170,6 +170,7 @@ uv run --locked scmm-admin --server-config ~/.config/scmm/dev.json rotate-operat
 | 资源 | 命令行 | 环境变量 | 资源配置字段 |
 |---|---|---|---|
 | 监控数据库 | `--monitor-db` | `SCMM_MONITOR_DB` | `monitor_db` |
+| 自动保留数据库（可选） | `--retention-db` | `SCMM_RETENTION_DB` | `retention_db` |
 | 环境标识 | `--environment` | `SCMM_ENVIRONMENT` | `environment`（dev/prod/standalone） |
 | 生产只读检查 | `--monitor-peer-url` / `--monitor-peer-token-file` | `SCMM_MONITOR_PEER_URL` / `SCMM_MONITOR_PEER_TOKEN_FILE` | `monitor_peer_url` / `monitor_peer_token_file` |
 | 认证数据库 | `--auth-db` | `SCMM_AUTH_DB` | `auth_db` |
@@ -243,7 +244,9 @@ TLS 使用原始主机名验证；不使用环境代理、不跟随重定向。�
 
 已有部署的回收区约定为 `~/data/results/recycle`；新部署由 `recycle_root` 明确指定，需要服务用户可读写；
 项目根、缓存、预设和临时目录仍分别隔离；这些是部署目录约定，实际资源值由仓库外配置指定。回收及清空操作见[网页指南](workflow.md#保存和离开)。
-自动保留策略与最近运行记录保存在各环境项目根的 `.scmm-retention.sqlite3`，按项目 ID 和启用管理员授权隔离，
+自动保留策略与最近运行记录默认保存在各环境项目根的 `.scmm-retention.sqlite3`，可用 `retention_db` 明确指定仓库外、不可浏览的本地持久路径；父目录须已存在。
+CIFS 等共享盘可能不支持 SQLite 文件锁，项目仍可留在共享盘，数据库须选择支持 SQLite 的本地磁盘，并按开发/生产隔离。指定路径失败时报错，不自动切换或创建父目录。
+已有策略迁移须在服务停止后备份并完整复制数据库，不能用空库代替；备份包含所配置路径。策略按项目 ID 和启用管理员授权隔离，
 默认无启用规则；备份项目根时保留此环境管理数据库，不把它当缓存清理。服务保持单进程、一个串行自动保留线程。
 正常停止会等当前归档到达安全检查点，维护暂存/更新检查会阻止跨越正在运行或无法核实的清理。
 异常退出的运行不会自动重放，检查回收区并处理后重新审阅启用；详情见[持续自动保留](data-output.md#持续自动保留)。

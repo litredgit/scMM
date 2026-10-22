@@ -18,6 +18,7 @@ _PATHS = {
     "ai_db": "SCMM_AI_DB",
     "ai_key_file": "SCMM_AI_KEY_FILE",
     "monitor_db": "SCMM_MONITOR_DB",
+    "retention_db": "SCMM_RETENTION_DB",
     "monitor_peer_token_file": "SCMM_MONITOR_PEER_TOKEN_FILE",
     "project_root": "SCMM_PROJECT_ROOT",
     "preferences": "SCMM_PREFERENCES",
@@ -64,6 +65,7 @@ DEFAULTS = {
     "ai_key_file": None,
     "ai_private_urls": [],
     "monitor_db": None,
+    "retention_db": None,
     "monitor_peer_url": None,
     "monitor_peer_token_file": None,
     "environment": "standalone",
@@ -121,6 +123,11 @@ class ServerConfig:
         auth_path = outside_repository(self.auth_db)
         recovery_root = self.path.resolve().parent / (self.path.stem + ".recovery")
         private_paths = [auth_path, monitor_path, self.path.resolve(), recovery_root]
+        if self.values.get("retention_db"):
+            retention_path = outside_repository(self.values["retention_db"])
+            if not retention_path.parent.is_dir():
+                raise ValueError("自动保留数据库父目录不存在。")
+            private_paths.append(retention_path)
         if bool(self.values["ai_db"]) != bool(self.values["ai_key_file"]):
             raise ValueError("AI 数据库与主密钥必须同时配置，请执行 scmm-admin init-ai。")
         if self.values["ai_db"]:

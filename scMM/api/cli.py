@@ -67,6 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
     for option in (
         "auth-db",
         "monitor-db",
+        "retention-db",
         "monitor-peer-token-file",
         "preferences",
         "recycle-root",
@@ -103,6 +104,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "project_root",
             "auth_db",
             "monitor_db",
+            "retention_db",
             "environment",
             "monitor_peer_url",
             "monitor_peer_token_file",

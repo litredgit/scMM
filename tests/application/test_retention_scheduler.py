@@ -301,3 +301,20 @@ def test_unknown_database_version_is_rejected_without_disabling_existing_policy(
     with sqlite3.connect(scheduler.path) as db:
         assert db.execute("SELECT enabled FROM policies").fetchone()[0] == 1
     assert scheduler.runtime()[1] is not None
+
+
+def test_explicit_database_keeps_policy_and_never_falls_back(tmp_path):
+    manager, auth, owner, clock, original, project, _ = setup(tmp_path)
+    path = tmp_path / "local-retention.sqlite3"
+    scheduler = RetentionScheduler(manager, auth, path=path, clock=lambda: clock[0])
+    enable(scheduler, project, owner)
+    restarted = RetentionScheduler(manager, auth, path=path, clock=lambda: clock[0])
+    assert restarted.status(project.folder)["policy"]["enabled"]
+    assert original.status(project.folder)["policy"] is None
+    with sqlite3.connect(path) as db:
+        db.execute("PRAGMA user_version=99")
+    with pytest.raises(ValueError, match="版本不受支持"):
+        RetentionScheduler(manager, auth, path=path)
+    with pytest.raises(sqlite3.OperationalError):
+        RetentionScheduler(manager, auth, path=tmp_path / "absent" / "retention.sqlite3")
+    assert original.status(project.folder)["policy"] is None
