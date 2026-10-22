@@ -431,6 +431,88 @@ def test_retention_advice_is_read_only_and_revision_guarded(workflow):
     assert post("/saved/move", {"token": "retention-advice"}).status_code == 400
 
 
+def test_retention_cleanup_requires_review_token_and_restores_pair(workflow):
+    client, _, manager, _, _, _, _, current, post = workflow
+    folder = Path(current()["project"]["path"])
+    shared = folder / "processing" / f"shared-{'b' * 64}.npy"
+    np.save(shared, np.array([150.123456789]))
+    shared.with_suffix(".json").write_text('{"input":"test"}')
+    expected = (shared.read_bytes(), shared.with_suffix(".json").read_bytes())
+    assert post("/project/close").status_code == 200
+    before = current()
+    options = {"root": "项目结果", "path": str(folder), "keep_latest": 0}
+    assert post("/saved/retention-move", {"token": "missing"}).status_code == 400
+    assert (
+        post("/saved/retention-plan", {"root": "项目结果", "path": str(folder)}).status_code == 400
+    )
+    response = post("/saved/retention-plan", options)
+    assert response.status_code == 200, response.text
+    plan = response.json()
+    assert len(plan["members"]) == 2 and shared.exists()
+    assert current() == before
+    assert post("/saved/move", {"token": plan["token"]}).status_code == 400
+    assert (
+        post(
+            "/saved/retention-move", {"token": plan["token"], "revision": before["revision"] + 1}
+        ).status_code
+        == 409
+    )
+    other = client.post("/api/v1/workspaces").json()["workspace_id"]
+    assert (
+        client.post(
+            "/api/v1/workspace/saved/retention-move",
+            headers={"X-SCMM-Workspace": other},
+            json={"revision": 0, "token": plan["token"]},
+        ).status_code
+        == 400
+    )
+    moved = post("/saved/retention-move", {"token": plan["token"]})
+    assert moved.status_code == 200, moved.text
+    assert not shared.exists() and not shared.with_suffix(".json").exists()
+    assert post("/saved/retention-move", {"token": plan["token"]}).status_code == 400
+    assert current() == before
+    entry = moved.json()["entry"]
+    assert post("/saved/restore", {"entry": entry}).status_code == 200
+    assert (shared.read_bytes(), shared.with_suffix(".json").read_bytes()) == expected
+    assert not manager.saved_items().list_trash()
+
+
+def test_project_opening_and_retention_execution_reservations_exclude_each_other(
+    workflow, monkeypatch
+):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    _, _, manager, _, _, _, _, current, post = workflow
+    folder = Path(current()["project"]["path"])
+    post("/project/close").raise_for_status()
+    identity = manager.create()["workspace_id"]
+    original = manager.store.open
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_open(path):
+        entered.set()
+        assert release.wait(5)
+        return original(path)
+
+    monkeypatch.setattr(manager.store, "open", slow_open)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        pending = executor.submit(manager.open_project, identity, 0, str(folder))
+        try:
+            assert entered.wait(5)
+            with pytest.raises(RuntimeError, match="正在打开"), manager.retention_operation(folder):
+                pass
+        finally:
+            release.set()
+        assert pending.result(timeout=5)["project"]["path"] == str(folder)
+    assert not manager._project_openings
+    manager.close_project(identity, 1)
+    with manager.retention_operation(folder), pytest.raises(RuntimeError, match="清理或恢复"):
+        manager.open_project(identity, 2, str(folder))
+    assert not manager._retention_operations
+    assert manager.open_project(identity, 2, str(folder))["project"]["path"] == str(folder)
+
+
 def test_clustering_parameters_reach_algorithm_and_persist_in_history(workflow):
     data = import_data(workflow)
     options = {

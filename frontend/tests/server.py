@@ -155,6 +155,11 @@ def main():
             auth_store=auth,
             server_config=ServerConfig(values, private_config).validate(),
         )
+        # Closed synthetic project for reviewing/removing a paired cache in the UI.
+        retention_project = app.state.workspaces.store.create("策略配对缓存合成项目")
+        shared = retention_project.folder / "processing" / f"shared-{'b' * 64}.npy"
+        np.save(shared, np.array([150.123456789]))
+        shared.with_suffix(".json").write_text('{"synthetic":true}')
         # AI uses real encrypted settings and HTTP routes, with a synthetic upstream.
         # No user credentials or external model service are needed by browser tests.
         import asyncio

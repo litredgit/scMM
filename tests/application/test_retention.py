@@ -10,6 +10,7 @@ from anndata import AnnData
 
 from scMM.application.projects import ProjectStore, write_json
 from scMM.application.retention import retention_plan
+from scMM.application.retention_cleanup import cleanup_plan, execute_cleanup
 from scMM.application.storage import StorageRoot
 from scMM.application.trash import SavedItems
 
@@ -320,3 +321,283 @@ def test_product_changes_during_plan_disable_policy(tmp_path, monkeypatch, chang
 def test_policy_requires_nonnegative_integers(tmp_path, key, value):
     with pytest.raises(ValueError, match=key):
         retention_plan(None, tmp_path, **{key: value})
+
+
+def test_cleanup_archives_paired_members_and_restores_all_without_changing_current(tmp_path):
+    store, project, manager, previous, preview, shared = setup(tmp_path)
+    before = inventory(project.folder)
+    plan = cleanup_plan(manager, project.folder, min_age_days=0, keep_latest=0)
+    assert {
+        str(shared.relative_to(project.folder)),
+        str(shared.with_suffix(".json").relative_to(project.folder)),
+    } <= {m["path"] for m in plan["members"]}
+    entry = execute_cleanup(manager, plan)
+    assert not (project.folder / previous).exists()
+    assert not preview.exists() and not shared.exists() and not shared.with_suffix(".json").exists()
+    assert store.open(project.folder).workspace.data.shape == (3, 2)
+    assert manager.list_trash()[0]["status"] == "moved"
+    assert manager.restore(entry) == project.folder
+    after = inventory(project.folder)
+    assert {k: v[1] for k, v in after.items() if not k.endswith(".project.lock")} == {
+        k: v[1] for k, v in before.items() if not k.endswith(".project.lock")
+    }
+    assert not manager.list_trash()
+    with pytest.raises(ValueError):
+        cleanup_plan(manager, project.folder)
+
+
+@pytest.mark.parametrize("change", ["content", "active", "reference", "unknown_task"])
+def test_cleanup_revalidates_plan_and_leaves_all_sources(tmp_path, change):
+    _, project, manager, _, preview, _ = setup(tmp_path)
+    plan = cleanup_plan(manager, project.folder, keep_latest=0)
+    if change == "content":
+        (preview / "data.h5ad").write_bytes(b"changed")
+    elif change == "active":
+        manager.active_paths = lambda: [project.folder]
+    elif change == "reference":
+        project.manifest["samples"] = [{"preview": {"artifact": str(preview)}}]
+        write_json(project.folder / "project.json", project.manifest)
+    else:
+        job = project.folder / "processing" / "new-job"
+        job.mkdir()
+        write_json(job / "state.json", {"status": "uncertain"})
+    before = inventory(project.folder)
+    with pytest.raises((RuntimeError, ValueError)):
+        execute_cleanup(manager, plan)
+    assert inventory(project.folder) == before
+    assert not manager.list_trash()
+
+
+@pytest.mark.parametrize("damage", ["copy_failure", "copy_corruption", "new_active"])
+def test_archive_failure_never_removes_sources(tmp_path, monkeypatch, damage):
+    from scMM.application import retention_cleanup as cleanup
+
+    _, project, manager, *_ = setup(tmp_path)
+    plan = cleanup_plan(manager, project.folder, keep_latest=0)
+    before = {k: v[1] for k, v in inventory(project.folder).items()}
+    original = cleanup._copy
+
+    def copy(source, target):
+        if damage == "copy_failure":
+            raise OSError("disk full")
+        original(source, target)
+        if damage == "copy_corruption":
+            if target.is_dir():
+                (target / "corrupt").write_bytes(b"corrupt")
+            else:
+                target.write_bytes(b"corrupt")
+        else:
+            manager.active_paths = lambda: [project.folder]
+
+    monkeypatch.setattr(cleanup, "_copy", copy)
+    with pytest.raises((OSError, ValueError, RuntimeError)):
+        execute_cleanup(manager, plan)
+    after = {k: v[1] for k, v in inventory(project.folder).items()}
+    assert {k: v for k, v in after.items() if not k.endswith(".project.lock")} == {
+        k: v for k, v in before.items() if not k.endswith(".project.lock")
+    }
+    assert not manager.list_trash()
+
+
+def test_partial_directory_deletion_is_rolled_back_from_verified_archive(tmp_path, monkeypatch):
+    from scMM.application import retention_cleanup as cleanup
+
+    _, project, manager, *_ = setup(tmp_path)
+    plan = cleanup_plan(manager, project.folder, keep_latest=0)
+    before = {
+        k: v[1] for k, v in inventory(project.folder).items() if not k.endswith(".project.lock")
+    }
+
+    def fail(path):
+        next(p for p in path.rglob("*") if p.is_file()).unlink()
+        raise OSError("partial deletion")
+
+    monkeypatch.setattr(cleanup, "_remove", fail)
+    with pytest.raises(OSError, match="partial deletion"):
+        execute_cleanup(manager, plan)
+    assert {
+        k: v[1] for k, v in inventory(project.folder).items() if not k.endswith(".project.lock")
+    } == before
+    assert not manager.list_trash()
+
+
+def test_crash_leaves_recoverable_record_and_clear_is_blocked(tmp_path, monkeypatch):
+    from scMM.application import retention_cleanup as cleanup
+
+    class Crash(BaseException):
+        pass
+
+    _, project, manager, *_ = setup(tmp_path)
+    plan = cleanup_plan(manager, project.folder, keep_latest=0)
+    before = {
+        k: v[1] for k, v in inventory(project.folder).items() if not k.endswith(".project.lock")
+    }
+    original = cleanup._remove
+    calls = 0
+
+    def crash(path):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise Crash()
+        original(path)
+
+    monkeypatch.setattr(cleanup, "_remove", crash)
+    with pytest.raises(Crash):
+        execute_cleanup(manager, plan)
+    record = manager.list_trash()[0]
+    assert record["status"] == "prepared"
+    with pytest.raises(RuntimeError, match="先恢复"):
+        manager.clear()
+    monkeypatch.setattr(cleanup, "_remove", original)
+    # A new manager has no in-memory plan or task to rely on.
+    recovered = SavedItems(manager.store, manager.catalog.roots[1:], trash_root=manager.trash_root)
+    recovered.restore(record["entry"])
+    assert {
+        k: v[1] for k, v in inventory(project.folder).items() if not k.endswith(".project.lock")
+    } == before
+    assert not recovered.list_trash()
+
+
+def test_failed_rollback_preserves_archive_then_restoration_checks_conflicts(tmp_path, monkeypatch):
+    from scMM.application import retention_cleanup as cleanup
+
+    _, project, manager, *_ = setup(tmp_path)
+    plan = cleanup_plan(manager, project.folder, keep_latest=0)
+    remove, copy = cleanup._remove, cleanup._copy
+    calls = 0
+
+    def fail_remove(path):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("removal failed")
+        remove(path)
+
+    def fail_restore(source, target):
+        if target.name.startswith(".restore-"):
+            raise OSError("restore disk full")
+        copy(source, target)
+
+    monkeypatch.setattr(cleanup, "_remove", fail_remove)
+    monkeypatch.setattr(cleanup, "_copy", fail_restore)
+    with pytest.raises(RuntimeError, match="完整副本保留"):
+        execute_cleanup(manager, plan)
+    record = manager.list_trash()[0]
+    entry = Path(record["entry"])
+    assert record["status"] == "restoring"
+    with pytest.raises(RuntimeError, match="先恢复"):
+        manager.clear()
+    monkeypatch.setattr(cleanup, "_remove", remove)
+    monkeypatch.setattr(cleanup, "_copy", copy)
+    missing = project.folder / record["members"][0]["path"]
+    missing.mkdir()
+    (missing / "conflict").write_bytes(b"user change")
+    with pytest.raises(FileExistsError):
+        manager.restore(entry)
+    assert (missing / "conflict").read_bytes() == b"user change"
+    (missing / "conflict").unlink()
+    missing.rmdir()
+    manager.restore(entry)
+    assert missing.exists() and not manager.list_trash()
+
+
+def test_cleanup_archive_tampering_prevents_restore(tmp_path):
+    _, project, manager, *_ = setup(tmp_path)
+    entry = execute_cleanup(manager, cleanup_plan(manager, project.folder, keep_latest=0))
+    (entry / "payload" / "0" / "tampered").write_bytes(b"tampered")
+    with pytest.raises(RuntimeError, match="副本内容发生变化"):
+        manager.restore(entry)
+    assert manager.list_trash()
+
+
+def test_pair_second_removal_failure_restores_both_and_all_earlier_members(tmp_path, monkeypatch):
+    from scMM.application import retention_cleanup as cleanup
+
+    _, project, manager, _, _, shared = setup(tmp_path)
+    before = {
+        k: v[1] for k, v in inventory(project.folder).items() if not k.endswith(".project.lock")
+    }
+    remove = cleanup._remove
+
+    def fail(path):
+        if path == shared:
+            assert not shared.with_suffix(".json").exists()
+            raise OSError("second member failed")
+        remove(path)
+
+    monkeypatch.setattr(cleanup, "_remove", fail)
+    with pytest.raises(OSError, match="second member failed"):
+        execute_cleanup(manager, cleanup_plan(manager, project.folder, keep_latest=0))
+    assert {
+        k: v[1] for k, v in inventory(project.folder).items() if not k.endswith(".project.lock")
+    } == before
+    assert not manager.list_trash()
+
+
+def test_archive_flush_failure_preserves_sources(tmp_path, monkeypatch):
+    from scMM.application import retention_cleanup as cleanup
+
+    _, project, manager, *_ = setup(tmp_path)
+    before = {
+        k: v[1] for k, v in inventory(project.folder).items() if not k.endswith(".project.lock")
+    }
+
+    def fail(path):
+        raise OSError("flush failed")
+
+    monkeypatch.setattr(cleanup, "_sync_tree", fail)
+    with pytest.raises(OSError, match="flush failed"):
+        execute_cleanup(manager, cleanup_plan(manager, project.folder, keep_latest=0))
+    assert {
+        k: v[1] for k, v in inventory(project.folder).items() if not k.endswith(".project.lock")
+    } == before
+    assert not manager.list_trash()
+
+
+def test_restoration_without_hardlink_support_and_residual_archive_retry(tmp_path, monkeypatch):
+    import errno
+    from scMM.application import retention_cleanup as cleanup
+
+    _, project, manager, *_ = setup(tmp_path)
+    plan = cleanup_plan(manager, project.folder, keep_latest=0)
+    entry = execute_cleanup(manager, plan)
+    rmtree = cleanup.shutil.rmtree
+
+    def unsupported(*args):
+        raise OSError(errno.EOPNOTSUPP, "links unavailable")
+
+    def residual(path, *args, **kwargs):
+        if Path(path) == entry:
+            raise OSError("residual cleanup failed")
+        return rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(cleanup.os, "link", unsupported)
+    monkeypatch.setattr(cleanup.shutil, "rmtree", residual)
+    with pytest.raises(OSError, match="residual cleanup failed"):
+        manager.restore(entry)
+    assert manager.list_trash()[0]["status"] == "restored"
+    assert all((project.folder / m["path"]).exists() for m in plan["members"])
+    monkeypatch.setattr(cleanup.shutil, "rmtree", rmtree)
+    manager.restore(entry)
+    assert not manager.list_trash()
+
+
+def test_restore_checks_all_conflicts_and_rejects_member_traversal_before_writing(tmp_path):
+    _, project, manager, *_ = setup(tmp_path)
+    plan = cleanup_plan(manager, project.folder, keep_latest=0)
+    entry = execute_cleanup(manager, plan)
+    record_path = entry / "record.json"
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    last = project.folder / record["members"][-1]["path"]
+    last.write_bytes(b"new user contents")
+    with pytest.raises(FileExistsError):
+        manager.restore(entry)
+    assert not (project.folder / record["members"][0]["path"]).exists()
+    assert last.read_bytes() == b"new user contents"
+    last.unlink()
+    record["members"][-1]["path"] = "../outside"
+    write_json(record_path, record)
+    with pytest.raises(PermissionError, match="越界"):
+        manager.restore(entry)
+    assert not (project.folder / record["members"][0]["path"]).exists()

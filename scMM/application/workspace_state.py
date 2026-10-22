@@ -30,6 +30,7 @@ class BrowserWorkspace:
     raw: dict | None = None
     preview_job: dict | None = None
     trash_plan: tuple | None = None
+    retention_cleanup_plan: tuple | None = None
     owner_id: str | None = None
     # Published AI state has its own short lock; readers never take the data lock.
     ai_lock: threading.RLock = field(default_factory=threading.RLock)

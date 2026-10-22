@@ -347,6 +347,42 @@ test('saved item plan, protected active project, recycle and restore', async ({ 
   await noError(page)
 })
 
+test('reviewed retention cleanup archives a shared pair and restores it', async ({ page }) => {
+  await page.goto('/')
+  await page.getByText('管理已保存项目 / 结果', { exact: true }).click()
+  const selected = page.getByLabel('已保存项目', { exact: true })
+  const option = selected.locator('option').filter({ hasText: '策略配对缓存合成项目' })
+  await selected.selectOption((await option.getAttribute('value'))!)
+  await page.getByLabel('每类至少保留最新数量', { exact: true }).fill('0')
+  await page.getByRole('button', { name: '查看快照与缓存保留计划', exact: true }).click()
+  const retention = page.locator('[aria-label="快照与缓存保留计划"]')
+  await expect(retention).toContainText('共同特征缓存')
+  await expect(page.getByRole('button', { name: '将策略清单移入回收区', exact: true })).toHaveCount(
+    0,
+  )
+  await page.getByRole('button', { name: '查看策略清理执行计划', exact: true }).click()
+  const plan = page.locator('[aria-label="策略清理执行计划"]')
+  await expect(plan).toContainText('2 文件')
+  await expect(plan).toContainText('.npy')
+  await expect(plan).toContainText('.json')
+  await page.getByLabel('每类至少保留最新数量', { exact: true }).fill('1')
+  await expect(plan).toHaveCount(0)
+  await page.getByLabel('每类至少保留最新数量', { exact: true }).fill('0')
+  await page.getByRole('button', { name: '查看快照与缓存保留计划', exact: true }).click()
+  await page.getByRole('button', { name: '查看策略清理执行计划', exact: true }).click()
+  await page.getByRole('button', { name: '将策略清单移入回收区', exact: true }).click()
+  await expect(page.getByRole('status')).toHaveText('策略清单已移入共享回收区，尚未释放磁盘空间。')
+  await page.getByRole('button', { name: '查看快照与缓存保留计划', exact: true }).click()
+  await expect(retention).toContainText('当前没有快照或缓存条目。')
+  await page.getByText(/^共享回收区（/).click()
+  const entry = page.getByRole('row').filter({ hasText: '快照与缓存策略清理' })
+  await entry.getByRole('button', { name: '恢复', exact: true }).click()
+  await expect(page.getByRole('status')).toHaveText('已恢复到原位置。')
+  await page.getByRole('button', { name: '查看快照与缓存保留计划', exact: true }).click()
+  await expect(retention).toContainText('共同特征缓存')
+  await expect(entry).toHaveCount(0)
+})
+
 test('latest result preselection, detailed help, stable QC and readable narrow layout', async ({
   page,
 }) => {

@@ -12,7 +12,9 @@ const projects = ref<SavedProject[]>([]),
   selected = ref(''),
   root = ref('项目结果'),
   path = ref(''),
-  trash = ref<{ entry: string; path: string; deleted_at: string; kind: string }[]>([])
+  trash = ref<{ entry: string; path: string; deleted_at: string; kind: string; status?: string }[]>(
+    [],
+  )
 const plan = ref<{
   token: string
   path: string
@@ -47,16 +49,58 @@ interface RetentionPlan {
 const retention = ref<RetentionPlan>()
 const minAgeDays = ref<number | ''>('')
 const keepLatest = ref<number | ''>('')
+const cleanupPlan = ref<{
+  token: string
+  files: number
+  bytes: number
+  members: { path: string }[]
+}>()
 let retentionGeneration = 0
-watch([selected, minAgeDays, keepLatest, () => store.current?.workspace_id], () => {
-  retentionGeneration++
+watch(
+  [
+    selected,
+    minAgeDays,
+    keepLatest,
+    () => store.current?.workspace_id,
+    () => store.current?.revision,
+  ],
+  () => {
+    retentionGeneration++
+    retention.value = undefined
+    cleanupPlan.value = undefined
+  },
+)
+async function prepareCleanup() {
+  const generation = ++retentionGeneration
+  cleanupPlan.value = undefined
+  const value = await store.inspect<typeof cleanupPlan.value>('/saved/retention-plan', {
+    root: '项目结果',
+    path: selected.value,
+    min_age_days: minAgeDays.value === '' ? null : minAgeDays.value,
+    keep_latest: keepLatest.value === '' ? null : keepLatest.value,
+  })
+  if (generation === retentionGeneration) cleanupPlan.value = value
+}
+async function executeCleanup() {
+  if (!cleanupPlan.value) return
+  const token = cleanupPlan.value.token
+  const workspace = store.current?.workspace_id
+  cleanupPlan.value = undefined
+  const result = await store.inspect('/saved/retention-move', { token })
+  if (workspace !== store.current?.workspace_id) return
   retention.value = undefined
-})
+  await refresh()
+  if (result) {
+    emit('changed')
+    store.notice = '策略清单已移入共享回收区，尚未释放磁盘空间。'
+  }
+}
 async function inspectRetention() {
   const generation = ++retentionGeneration
   const project = selected.value
   const workspace = store.current?.workspace_id
   retention.value = undefined
+  cleanupPlan.value = undefined
   const value = await store.inspect<RetentionPlan>('/saved/retention', {
     root: '项目结果',
     path: project,
@@ -118,6 +162,8 @@ async function move() {
 async function restore(entry: string) {
   const result = await store.inspect('/saved/restore', { entry })
   if (result) {
+    retention.value = undefined
+    cleanupPlan.value = undefined
     await refresh()
     emit('changed')
     store.notice = '已恢复到原位置。'
@@ -199,6 +245,26 @@ async function clear() {
       <button class="preview" :disabled="store.busy || !selected" @click="inspectRetention">
         查看快照与缓存保留计划
       </button>
+      <button
+        class="preview"
+        :disabled="store.busy || !retention?.selected_bytes"
+        @click="prepareCleanup"
+      >
+        查看策略清理执行计划
+      </button>
+      <div v-if="cleanupPlan" class="alert" aria-label="策略清理执行计划">
+        <p>
+          仅处理下列清单：{{ cleanupPlan.files }} 文件 ·
+          {{ (cleanupPlan.bytes / 1024 / 1024).toFixed(2) }}
+          MiB。先完整复制并校验恢复副本，再移走原件；执行时重新核对状态，回收区仍占磁盘。
+        </p>
+        <ul>
+          <li v-for="member in cleanupPlan.members" :key="member.path">{{ member.path }}</li>
+        </ul>
+        <button class="danger" :disabled="store.busy" @click="executeCleanup">
+          将策略清单移入回收区
+        </button>
+      </div>
       <div v-if="retention" class="alert" aria-label="快照与缓存保留计划">
         <p>{{ retention.policy }}</p>
         <p>{{ retention.scope }}</p>
@@ -317,7 +383,9 @@ async function clear() {
     </details>
     <details>
       <summary>共享回收区（{{ trash.length }}）</summary>
-      <p class="muted">回收区仍占用磁盘。永久清空直接执行且不可恢复，不出现二次确认。</p>
+      <p class="muted">
+        回收区仍占用磁盘。中断的策略清理须先恢复，完成前禁止永久清空。永久清空直接执行且不可恢复，不出现二次确认。
+      </p>
       <div class="data-table">
         <table>
           <thead>
@@ -330,7 +398,12 @@ async function clear() {
           </thead>
           <tbody>
             <tr v-for="entry in trash" :key="entry.entry">
-              <td>{{ entry.kind }}</td>
+              <td>
+                {{ entry.kind }}
+                <div v-if="entry.status === 'prepared' || entry.status === 'restoring'">
+                  未完成，请先恢复
+                </div>
+              </td>
               <td>{{ entry.path }}</td>
               <td>
                 {{

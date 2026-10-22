@@ -2,6 +2,8 @@
 # ruff: noqa: RUF001
 
 import json
+from contextlib import contextmanager
+from pathlib import Path
 
 import pandas as pd
 
@@ -16,7 +18,31 @@ class ResultWorkflow:
         with self._lock:
             self._prune()
             workspaces = list(self._workspaces.values())
-        return [w.project.folder for w in workspaces if not w.closed and w.project is not None]
+            openings = list(self._project_openings)
+        return openings + [
+            w.project.folder for w in workspaces if not w.closed and w.project is not None
+        ]
+
+    @contextmanager
+    def retention_operation(self, path):
+        folder = Path(path).resolve()
+        with self._lock:
+            if folder in self._retention_operations or folder in self.active_paths():
+                raise RuntimeError("项目正在打开、仍在工作区使用或正在清理，请先关闭后重试")
+            self._retention_operations.add(folder)
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._retention_operations.discard(folder)
+
+    def restore_saved(self, entry):
+        manager = self.saved_items()
+        record = next((r for r in manager.list_trash() if r["entry"] == entry), None)
+        if record and record.get("retention_version") == 1:
+            with self.retention_operation(record["path"]):
+                return manager.restore(entry)
+        return manager.restore(entry)
 
     def saved_items(self):
         return SavedItems(

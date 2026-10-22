@@ -34,7 +34,8 @@ scMM/
 │   ├── projects.py        # 项目清单、快照、修订冲突和保存重载
 │   ├── naming.py          # 北京时间与项目/批次/快照/H5AD 默认命名
 │   ├── trash.py           # 删除计划、引用/任务保护及回收区恢复
-│   ├── retention.py       # 只读快照/缓存保留建议、引用与任务核实；不执行清理
+│   ├── retention.py       # 只读快照/缓存保留建议、引用与任务核实
+│   ├── retention_cleanup.py # 显式策略清理计划、完整配对归档、身份复核及中断恢复
 │   ├── project_batch.py   # 多样本持久 worker、重试及审核合并
 │   ├── workbench.py       # 数据身份、预处理、分析与结果生命周期
 │   ├── preview_cache.py   # 完整预览/共同特征的身份校验与复用

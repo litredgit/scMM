@@ -148,6 +148,7 @@
         "scMM/application/projects.py",
         "scMM/application/trash.py",
         "scMM/application/retention.py",
+        "scMM/application/retention_cleanup.py",
         "scMM/application/saved_catalog.py",
         "scMM/application/naming.py",
         "scMM/application/storage.py"

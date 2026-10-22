@@ -260,6 +260,10 @@ class SavedItems:
             if str(entry) not in records:
                 raise PermissionError("请选择当前回收区条目")
             record = records[str(entry)]
+            if record.get("retention_version") == 1:
+                from .retention_cleanup import restore_cleanup
+
+                return restore_cleanup(self, entry, record)
             root, original = Path(record["root"]), Path(record["path"])
             if (
                 root not in {r.path for r in self.catalog.roots}
@@ -340,6 +344,16 @@ class SavedItems:
             entries = sorted(p for p in self.trash_root.iterdir() if p.name != ".project.lock")
             plans = []
             for entry in entries:
+                record_path = entry / "record.json"
+                if record_path.is_file() and not record_path.is_symlink():
+                    record = json.loads(record_path.read_text(encoding="utf-8"))
+                    if not isinstance(record, dict):
+                        raise ValueError("回收记录无法核实，请先检查回收区")
+                    if record.get("retention_version") == 1 and record.get("status") not in {
+                        "moved",
+                        "restored",
+                    }:
+                        raise RuntimeError("存在未完成的策略清理，请先恢复回收条目再永久清空")
                 self._check_usage(entry)
                 plans.append((entry, self._inventory(entry)))
             removed, errors = 0, []

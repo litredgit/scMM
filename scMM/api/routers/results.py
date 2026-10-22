@@ -86,11 +86,47 @@ def move(body: s.ExecutePlan, manager: Service, identity: Identity):
         return {"entry": str(entry)}
 
 
+@router.post("/workspace/saved/retention-plan")
+def plan_retention_cleanup(body: s.RetentionPlan, manager: Service, identity: Identity):
+    from scMM.application.retention_cleanup import cleanup_plan
+
+    with manager.access(identity) as workspace:
+        workspace.check(body.revision)
+        if body.root != "项目结果":
+            raise ValueError("清理计划仅支持本环境项目根中的项目。")
+        plan = cleanup_plan(
+            manager.saved_items(),
+            body.path,
+            min_age_days=body.min_age_days,
+            keep_latest=body.keep_latest,
+        )
+        token = uuid4().hex
+        workspace.retention_cleanup_plan = (token, plan)
+        return {"token": token, **plan}
+
+
+@router.post("/workspace/saved/retention-move")
+def move_retention_cleanup(body: s.ExecutePlan, manager: Service, identity: Identity):
+    from scMM.application.retention_cleanup import execute_cleanup
+
+    with manager.access(identity) as workspace:
+        workspace.check(body.revision)
+        plan = workspace.retention_cleanup_plan
+        if not plan or plan[0] != body.token:
+            raise ValueError("请先生成有效的策略清理计划。")
+        # Consume before executing: failures and uncertain responses must be inspected,
+        # never automatically replayed under the old authorization.
+        workspace.retention_cleanup_plan = None
+        with manager.retention_operation(plan[1]["path"]):
+            entry = execute_cleanup(manager.saved_items(), plan[1])
+        return {"entry": str(entry)}
+
+
 @router.post("/workspace/saved/restore")
 def restore(body: s.RestoreTrash, manager: Service, identity: Identity):
     with manager.access(identity) as workspace:
         workspace.check(body.revision)
-        return {"path": str(manager.saved_items().restore(body.entry))}
+        return {"path": str(manager.restore_saved(body.entry))}
 
 
 @router.post("/workspace/saved/clear")

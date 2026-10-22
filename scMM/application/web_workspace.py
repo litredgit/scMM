@@ -46,6 +46,8 @@ class WebWorkspaceService(
         self.capacity = capacity
         self._workspaces = {}
         self._lock = threading.RLock()
+        self._project_openings = {}
+        self._retention_operations = set()
 
     def _prune(self):
         now = time.monotonic()

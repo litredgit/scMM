@@ -176,9 +176,23 @@ class ProjectWorkflow:
 
     def open_project(self, identity, revision, path):
         def action(workspace):
-            project = self.store.open(path)
-            workspace.discard_views()
-            workspace.project = project
+            folder = self.store._folder(path).resolve()
+            with self._lock:
+                if folder in self._retention_operations:
+                    raise RuntimeError("项目正在执行缓存清理或恢复，请稍后重新打开")
+                self._project_openings[folder] = self._project_openings.get(folder, 0) + 1
+            try:
+                project = self.store.open(folder)
+                with self._lock:
+                    workspace.discard_views()
+                    workspace.project = project
+            finally:
+                with self._lock:
+                    remaining = self._project_openings[folder] - 1
+                    if remaining:
+                        self._project_openings[folder] = remaining
+                    else:
+                        del self._project_openings[folder]
 
         return self.mutate(
             identity, revision, action, require_project=False, operation="open_project"
