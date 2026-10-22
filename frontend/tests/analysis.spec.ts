@@ -714,3 +714,37 @@ test('named Palantir and window results retain exact sources through save and re
   ).toBeVisible()
   expect(calculations).toBe(2)
 })
+
+test('window velocity uses explicit time and retains stored results after reload', async ({
+  page,
+}) => {
+  await importAnalysis(page, '窗口速度结果', 'time.h5ad')
+  await module(page, '伪时间与轨迹')
+  await page.getByLabel('时间分析方法', { exact: true }).selectOption('velocity')
+  await expect(page.getByLabel('轨迹坐标', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '计算并应用时间结果', exact: true })).toBeDisabled()
+  await page.getByLabel('时间结果输出键', { exact: true }).fill('speed_browser')
+  await page.getByLabel('轨迹时间列', { exact: true }).selectOption('time')
+  await page.getByLabel('轨迹时间含义', { exact: true }).selectOption('normalized_time')
+  await expect(page.getByLabel('轨迹时间单位', { exact: true })).toHaveValue('unitless')
+  await page.getByLabel('时间窗口细胞数', { exact: true }).fill('8')
+  await page.getByLabel('窗口步长细胞数', { exact: true }).fill('4')
+  await page.getByRole('button', { name: '计算并应用时间结果', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: '结果 speed_browser 的生效参数', exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: '绘制时间结果', exact: true }).click()
+  await expect(page.getByText('图来源结果：speed_browser', { exact: true })).toBeVisible()
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: '下载完整时间结果 ZIP', exact: true }).click()
+  expect((await download).suggestedFilename()).toBe('scmm-time-result.zip')
+  await page.getByRole('button', { name: '保存项目', exact: true }).click()
+  await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
+  await page.reload()
+  await page.getByRole('button', { name: '读取时间结果表', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: '结果 speed_browser 的生效参数', exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: '读取已保存时间图', exact: true }).click()
+  await expect(page.getByText('图来源结果：speed_browser', { exact: true })).toBeVisible()
+})

@@ -244,3 +244,71 @@ def test_time_full_download_is_not_limited_to_display_rows(workflow):
         windows = pd.read_csv(BytesIO(archive.read("windows.csv")))
         assert len(cells) == 234 and cells.cell_id.iloc[-1] == "c233"
         assert len(windows) == 227 and windows.window_start.iloc[-1] == 226
+
+
+def test_velocity_http_full_export_failure_atomicity_and_reload(workflow, monkeypatch):
+    import_time(workflow, count=234)
+    _, _, _, _, _, _, _, current, post = workflow
+    options = dict(
+        key="speed_a",
+        time_key="time",
+        time_kind="normalized_time",
+        unit="unitless",
+        window_size=8,
+        step_size=1,
+    )
+    before = current()
+    for changes, status in (
+        ({"window_size": 1}, 422),
+        ({"window_size": True}, 422),
+        ({"unit": "s"}, 400),
+        ({"time_key": "missing"}, 400),
+        ({"layer": "missing"}, 400),
+        ({"layer": ""}, 422),
+        ({"seed": 42}, 422),
+    ):
+        response = post(
+            "/analysis/time", {"operation": "velocity", "options": {**options, **changes}}
+        )
+        assert response.status_code == status, response.text
+        assert current() == before
+    post("/analysis/time", {"operation": "velocity", "options": options}).raise_for_status()
+    table = get(workflow, "/analysis/time/result?key=speed_a").json()
+    assert table["tables"]["features"]["total"] == 227 * 6
+    assert len(table["tables"]["features"]["rows"]) == 200
+    with ZipFile(BytesIO(get(workflow, "/analysis/time/download?key=speed_a").content)) as archive:
+        assert len(pd.read_csv(BytesIO(archive.read("features.csv")))) == 227 * 6
+        assert len(pd.read_csv(BytesIO(archive.read("cells.csv")))) == 234
+    post("/analysis/plot", {"kind": "time_plot", "options": {"key": "speed_a"}}).raise_for_status()
+    saved_path = current()["project"]["path"]
+    post("/project/save").raise_for_status()
+    post("/project/close").raise_for_status()
+    post("/project/open", {"path": saved_path}).raise_for_status()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("read-only reload must not calculate")
+
+    monkeypatch.setattr("scMM.plot._trajectory.metabolic_velocity_field", forbidden)
+    assert get(workflow, "/analysis/time/result?key=speed_a").json() == table
+    assert get(workflow, "/analysis/figures/time_plot").status_code == 200
+    before = current()
+    assert post("/analysis/time", {"operation": "velocity", "options": options}).status_code == 400
+    assert current() == before
+    monkeypatch.undo()
+    from scMM.application import time_analysis
+
+    original = time_analysis.velocity
+
+    def fail(data, **options):
+        original(data, **options)
+        data.X[:] = -999
+        raise ValueError("candidate failed")
+
+    monkeypatch.setattr(time_analysis, "velocity", fail)
+    assert (
+        post(
+            "/analysis/time", {"operation": "velocity", "options": {**options, "key": "failed"}}
+        ).status_code
+        == 400
+    )
+    assert current() == before

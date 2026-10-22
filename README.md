@@ -19,7 +19,7 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | Thermo profile RAW 直接读取，接入 Python、CLI、目录处理及网页 | [RAW 依赖与真实样本验收](docs/thermo-raw.md) |
 | H5AD、预处理起点恢复、结果失效管理、只读报告与图表重载 | [数据与输出](docs/data-output.md) |
 | 统一降维、双特征散点/特征距离嵌入、差异/Marker/相关网络、监督模型诊断和 SHAP | [分析说明](docs/analysis.md) |
-| 网页 Palantir 稳定 ID 根点、滑动窗口轨迹、命名结果和完整导出 | [伪时间与轨迹](docs/analysis.md#palantir-伪时间) |
+| 网页 Palantir 稳定 ID 根点、滑动窗口轨迹/代谢速度、命名结果和完整导出 | [伪时间与轨迹](docs/analysis.md#palantir-伪时间) |
 | 独立 TIC/EIC 信号重构、残差与噪声对照，不改提取算法 | [原始信号诊断](docs/analysis.md#独立原始信号诊断) |
 | 热图组别／样本筛选与排序、Nature／Cell 图形及 MetaboAnalyst 矩阵 CSV 导出 | [图形操作](docs/workflow.md#论文图细胞联动与热图) · [矩阵格式](docs/data-output.md#面向-metaboanalyst-的矩阵下载) |
 | 当前数据 QC PDF、当前分析报告及完整参数/数值附件 ZIP | [报告说明](docs/analysis.md#统计解释与网页分析) |

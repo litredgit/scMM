@@ -56,7 +56,7 @@ def registry(data):
             or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,47}", key)
             or key.startswith("scmm_")
             or not isinstance(run, dict)
-            or run.get("kind") not in {"palantir", "trajectory"}
+            or run.get("kind") not in {"palantir", "trajectory", "velocity"}
             or not isinstance(run.get("parameters"), dict)
             or not isinstance(run.get("identity"), str)
             or not re.fullmatch(r"[0-9a-f]{32}", run["identity"])
@@ -131,6 +131,11 @@ def valid_run(data, run, cache=None):
         cache[("cell_identity", "")] = cell_identity(data)
     identity = cache[("cell_identity", "")]
     if run.get("stale") or run.get("cell_identity") != identity:
+        return False
+    if (
+        run["kind"] == "velocity"
+        and run["parameters"].get("feature_ids") != data.var_names.astype(str).tolist()
+    ):
         return False
     try:
         for item in [*run["inputs"], *run["outputs"]]:

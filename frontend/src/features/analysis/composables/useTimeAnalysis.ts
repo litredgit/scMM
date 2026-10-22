@@ -119,6 +119,16 @@ export function useTimeAnalysis() {
         seed: form.seed,
         use_early_cell_as_start: form.use_early_cell_as_start,
       }
+    if (form.mode === 'velocity')
+      return {
+        key: form.key,
+        time_key: form.time_key,
+        time_kind: form.time_kind,
+        unit: form.unit,
+        layer: form.layer,
+        window_size: form.window_size,
+        step_size: form.step_size,
+      }
     return {
       key: form.key,
       coordinate_key: form.coordinate_key,

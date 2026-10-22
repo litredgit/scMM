@@ -130,6 +130,11 @@ def _publish(data, key, kind, parameters, inputs, outputs):
         for name, run in value["runs"].items()
         if run["kind"] == "trajectory" and not run.get("stale")
     )
+    total += sum(
+        sum(np.asarray(item).size for item in data.uns[name].values())
+        for name, run in value["runs"].items()
+        if run["kind"] == "velocity" and not run.get("stale")
+    )
     if total > 5_000_000:
         raise ValueError("时间结果数值超过同步工程上限 500 万，未应用候选")
     write_registry(data, value)
@@ -313,23 +318,8 @@ def trajectory(
     )
     if coordinates.ndim != 2 or coordinates.shape[1] < 2:
         raise ValueError("轨迹坐标须至少二维")
-    time = _numeric(data.obs[time_key], "参数化时间")
-    if time_kind == "normalized_time" and ((time < 0).any() or (time > 1).any()):
-        raise ValueError("归一化采集时间须在 0–1 内")
-    if time_kind in {"normalized_time", "pseudotime"} and unit != "unitless":
-        raise ValueError("归一化/伪时间单位须为 unitless")
-    if time_kind == "acquisition_seconds" and unit != "s":
-        raise ValueError("采集秒数的单位须为 s")
-    if not unit.strip():
-        raise ValueError("须显式声明时间单位")
+    time = _validated_time(data, time_key, time_kind, unit)
     inputs = [binding(data, "obsm", coordinate_key), binding(data, "obs", time_key)]
-    for parent_key, parent in registry(data)["runs"].items():
-        if (
-            parent["kind"] == "palantir"
-            and time_key == f"{parent_key}_pseudotime"
-            and time_kind != "pseudotime"
-        ):
-            raise ValueError("该列由 Palantir 产生，须声明为伪时间")
     names = ["branch_0"]
     tolerance = None
     if branch_probability_key:
@@ -397,6 +387,128 @@ def trajectory(
     return _publish(data, key, "trajectory", parameters, inputs, outputs)
 
 
+def _validated_time(data, time_key, time_kind, unit):
+    time = _numeric(data.obs[time_key], "参数化时间")
+    if time_kind == "normalized_time" and ((time < 0).any() or (time > 1).any()):
+        raise ValueError("归一化采集时间须在 0–1 内")
+    if time_kind in {"normalized_time", "pseudotime"} and unit != "unitless":
+        raise ValueError("归一化/伪时间单位须为 unitless")
+    if time_kind == "acquisition_seconds" and unit != "s":
+        raise ValueError("采集秒数的单位须为 s")
+    if not unit.strip():
+        raise ValueError("须显式声明时间单位")
+    for parent_key, parent in registry(data)["runs"].items():
+        if (
+            parent["kind"] == "palantir"
+            and time_key == f"{parent_key}_pseudotime"
+            and time_kind != "pseudotime"
+        ):
+            raise ValueError("该列由 Palantir 产生，须声明为伪时间")
+    if time_kind not in {
+        "acquisition_seconds",
+        "normalized_time",
+        "experimental_time",
+        "pseudotime",
+    }:
+        raise ValueError("须明确声明时间含义")
+    return time
+
+
+def velocity(data, *, key, time_key, time_kind, unit, layer=None, window_size=100, step_size=50):
+    from scMM.plot._trajectory import _window_starts, metabolic_velocity_field
+
+    check_size(data)
+    _new_key(data, key, [key, f"{key}_params"])
+    time = _validated_time(data, time_key, time_kind, unit)
+    matrix = _numeric(data.layers[layer] if layer else data.X, "速度输入强度")
+    starts = _window_starts(data.n_obs, window_size, step_size)
+    expected = len(starts) * (2 * data.n_vars + 5)
+    existing = sum(
+        sum(np.asarray(value).size for value in data.uns[name].values())
+        for name, run in registry(data)["runs"].items()
+        if run["kind"] == "velocity" and not run.get("stale")
+    )
+    if expected + existing > 5_000_000:
+        raise ValueError("速度窗口结果超过同步工程上限 500 万数值")
+    inputs = expanded_inputs(
+        data,
+        [
+            binding(data, "layers", layer) if layer else binding(data, "X", "X"),
+            binding(data, "obs", time_key),
+        ],
+    )
+    _dependency_fields(data, inputs)
+    work = AnnData(matrix.copy(), obs=pd.DataFrame({time_key: time}, index=data.obs_names.copy()))
+    try:
+        with np.errstate(over="raise", invalid="raise", divide="raise"):
+            metabolic_velocity_field(
+                work, parameterization_key=time_key, window_size=window_size, step_size=step_size
+            )
+    except FloatingPointError as exc:
+        raise ValueError("速度回归出现数值溢出，未应用结果；请检查强度和时间尺度") from exc
+    values = work.uns["metabolic_velocity"]
+    valid = values["counts"] > 0
+    if any(
+        not np.isfinite(values[name][valid]).all()
+        for name in ("state_centers", "velocity_field", "speeds", "time_centers")
+    ):
+        raise ValueError("速度回归产生非有限值，未应用结果")
+    values["sorted_obs_order"] = np.argsort(time)
+    parameters = {
+        "time_key": time_key,
+        "time_kind": time_kind,
+        "unit": unit,
+        "layer": layer,
+        "input_representation": "X" if layer is None else f"layers:{layer}",
+        "feature_ids": data.var_names.astype(str).tolist(),
+        "requested_window_size": window_size,
+        "window_size": min(window_size, data.n_obs),
+        "step_size": step_size,
+        "seed": None,
+        "direction": "increasing_time",
+        "velocity_unit": f"input_intensity / {unit}",
+    }
+    data.uns[key] = values
+    data.uns[f"{key}_params"] = parameters.copy()
+    return _publish(
+        data,
+        key,
+        "velocity",
+        parameters,
+        inputs,
+        [binding(data, "uns", name) for name in (key, f"{key}_params")],
+    )
+
+
+def _velocity_tables(data, key, run):
+    values = data.uns[key]
+    windows = pd.DataFrame(
+        {
+            "window_index": np.arange(len(values["speeds"])),
+            "window_start": values["window_starts"],
+            "time_center": values["time_centers"],
+            "valid_cells": values["counts"],
+            "speed": values["speeds"],
+        }
+    )
+    features = pd.DataFrame(
+        {
+            "window_index": np.repeat(windows.window_index.to_numpy(), data.n_vars),
+            "feature_id": np.tile(data.var_names.astype(str), len(windows)),
+            "state_center": np.asarray(values["state_centers"]).ravel(),
+            "velocity": np.asarray(values["velocity_field"]).ravel(),
+        }
+    )
+    cells = pd.DataFrame(
+        {
+            "cell_id": data.obs_names.astype(str),
+            "time": data.obs[run["parameters"]["time_key"]].to_numpy(),
+            "sorted_position": np.argsort(values["sorted_obs_order"]),
+        }
+    )
+    return {"windows": windows, "features": features, "cells": cells}
+
+
 def info(data):
     cache = {}
     return [
@@ -413,6 +525,8 @@ def info(data):
 
 def result_tables(data, key):
     run = require_run(data, key)
+    if run["kind"] == "velocity":
+        return _velocity_tables(data, key, run)
     if run["kind"] == "palantir":
         frame = pd.DataFrame(
             {
@@ -540,6 +654,33 @@ def time_figure(data, *, key, coordinate_key=None):
             title=f"Palantir · {key}",
             xaxis_title=f"{coordinate_key} 1",
             yaxis_title=f"{coordinate_key} 2",
+        )
+    elif run["kind"] == "velocity":
+        if coordinate_key is not None:
+            raise ValueError("速度图使用参数化时间，不接受嵌入坐标")
+        inputs = []
+        windows = tables["windows"]
+        figure = go.Figure(
+            go.Scatter(
+                x=windows["time_center"],
+                y=windows["speed"],
+                mode="lines+markers",
+                connectgaps=False,
+                name="速度范数",
+                customdata=windows[["window_index", "valid_cells"]].to_numpy(),
+                hovertemplate="窗口 %{customdata[0]}<br>有效细胞 %{customdata[1]}<br>速度 %{y}<extra></extra>",
+            )
+        )
+        notes = [
+            "各特征强度对递增时间的局部回归斜率组成向量，图为其欧氏范数；符号方向见完整特征表。",
+            "不是同位素示踪代谢通量；输入层、强度尺度和时间单位影响数值，不可跨尺度直接比较。",
+            "相同时间或不足两个细胞的窗口无有效回归，保留为空；窗口和步长单位为细胞数。",
+            f"时间含义：{run['parameters']['time_kind']}；单位：{run['parameters']['unit']}。伪时间和归一化时间不是物理时间。",
+        ]
+        figure.update_layout(
+            title=f"窗口代谢速度 · {key}",
+            xaxis_title=f"时间 ({run['parameters']['unit']})",
+            yaxis_title=run["parameters"]["velocity_unit"],
         )
     else:
         if coordinate_key is not None and coordinate_key != run["parameters"]["coordinate_key"]:

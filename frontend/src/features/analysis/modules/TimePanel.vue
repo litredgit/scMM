@@ -6,6 +6,7 @@ const tableNames: Record<string, string> = {
   cells: '细胞',
   windows: '窗口',
   multiscale: '多尺度坐标',
+  features: '窗口特征速度',
 }
 const {
   store,
@@ -43,6 +44,7 @@ const {
           <select v-model="form.mode" aria-label="时间分析方法" :disabled="store.busy">
             <option value="palantir">Palantir 伪时间</option>
             <option value="trajectory">滑动窗口轨迹</option>
+            <option value="velocity">窗口代谢速度</option>
           </select>
         </label>
         <label
@@ -189,9 +191,12 @@ const {
         </div>
       </fieldset>
       <fieldset v-else :disabled="store.busy">
-        <legend>窗口轨迹输入</legend>
+        <legend>{{ form.mode === 'velocity' ? '窗口代谢速度输入' : '窗口轨迹输入' }}</legend>
+        <p v-if="form.mode === 'velocity'">
+          沿递增时间回归特征强度，输出带符号斜率及向量范数；不是同位素示踪代谢通量。时间、强度层和尺度影响单位，相同时间窗口保留为空。
+        </p>
         <div class="field-grid">
-          <label
+          <label v-if="form.mode === 'trajectory'"
             ><FieldLabel
               name="轨迹坐标"
               help-key="coordinate_key"
@@ -232,7 +237,17 @@ const {
               aria-label="轨迹时间单位"
               :disabled="form.time_kind !== 'experimental_time'"
           /></label>
-          <label
+          <label v-if="form.mode === 'velocity'"
+            ><FieldLabel
+              name="速度强度层"
+              help-key="layer"
+              text="使用当前 X 或明确选择已有强度层；强度尺度会影响斜率与范数，不自动归一化。"
+            /><select v-model="form.layer" aria-label="速度强度层">
+              <option :value="null">当前 X</option>
+              <option v-for="key in info?.layers" :key="key">{{ key }}</option>
+            </select></label
+          >
+          <label v-if="form.mode === 'trajectory'"
             ><FieldLabel
               name="分支概率"
               help-key="branch_probability_key"
@@ -248,7 +263,7 @@ const {
               help-key="window_size"
               text="单位是细胞数，超过总细胞数时沿用原方法截断并记录实际值。" /><input
               type="number"
-              min="1"
+              :min="form.mode === 'velocity' ? 2 : 1"
               max="5000"
               step="1"
               v-model.number="form.window_size"
@@ -263,7 +278,7 @@ const {
               v-model.number="form.step_size"
               aria-label="窗口步长细胞数"
           /></label>
-          <label
+          <label v-if="form.mode === 'trajectory'"
             ><FieldLabel
               name="每窗口最少有效细胞"
               help-key="min_cells_per_window"
@@ -284,7 +299,11 @@ const {
           !form.key ||
           (form.mode === 'palantir'
             ? !form.root_cell_id || !form.input_representation
-            : !form.coordinate_key || !form.time_key || !form.time_kind || !form.unit)
+            : (form.mode === 'trajectory' && !form.coordinate_key) ||
+              !form.time_key ||
+              !form.time_kind ||
+              !form.unit ||
+              (form.mode === 'velocity' && form.window_size < 2))
         "
         @click="calculate"
       >

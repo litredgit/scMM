@@ -187,7 +187,7 @@ Python 离群筛选另记录传入种子（未指定为 null）或 NumPy RandomS
 
 ## 命名时间结果
 
-网页 Palantir 和窗口轨迹随当前 AnnData 保存，不保存可执行模型。
+网页 Palantir、窗口轨迹和窗口代谢速度随当前 AnnData 保存，不保存可执行模型。
 `uns["scmm_time_results_json"]` 为版本 1 的 JSON 注册表：每个命名结果保存 UUID、类型、生效参数、
 实现/依赖版本、稳定细胞顺序、输入/输出摘要及观察字段依赖。Palantir 写入命名前缀的
 `obs` 伪时间/熵、`obsm` 分支概率/多尺度坐标和 `uns` 分支名称/内部 ID 映射/参数；
@@ -200,6 +200,10 @@ H5AD 容器转换采用规范摘要；请求中的 null/default 值完整保留�
 
 完整结果 ZIP 包含 `metadata.json`，Palantir 为 `cells.csv`、`multiscale.csv`；窗口轨迹为 `windows.csv`、
 `cells.csv`，包含全细胞 ID、原时间/全部坐标/分支概率与排序位置，以及全部窗口/分支数值。
+速度结果的命名 `uns` 保存每窗特征均值、带符号斜率、范数、时间中心、有效计数、窗口起点及排序；
+`_params` 和注册表记录输入层、时间含义/单位、递增方向及稳定特征 ID。特征 ID 变化也使速度结果失效。
+速度 ZIP 为 `windows.csv`、`features.csv`（每窗口/特征一行，含稳定 ID、均值和斜率）、
+`cells.csv`（原时间及排序位置）及 `metadata.json`，不受页面 200 行限制。
 当前分析报告收录有效命名结果和元数据。空窗口保留空值，不将显示抽样或四舍五入写回源数据。
 正式项目保存仍由用户主动执行；操作见[网页时间分析](workflow.md#伪时间与窗口轨迹)。
 
