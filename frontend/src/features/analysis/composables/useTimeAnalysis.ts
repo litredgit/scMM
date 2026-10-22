@@ -10,6 +10,7 @@ type TimeInfo = {
   observations: string[]
   embeddings: string[]
   probability_keys: string[]
+  feature_columns: string[]
   layers: string[]
   cells: string[]
   total_cells: number
@@ -23,7 +24,7 @@ type ResultView = {
 }
 
 export function useTimeAnalysis() {
-  const { store, timeAnalysis: form, refreshAnalysis } = useAnalysisContext()
+  const { store, timeAnalysis: form, refreshAnalysis, selectedFeatures } = useAnalysisContext()
   const info = ref<TimeInfo>()
   const result = ref<ResultView>()
   const figure = ref<Figure>()
@@ -119,6 +120,19 @@ export function useTimeAnalysis() {
         seed: form.seed,
         use_early_cell_as_start: form.use_early_cell_as_start,
       }
+    if (form.mode === 'trends')
+      return {
+        key: form.key,
+        time_key: form.time_key,
+        time_kind: form.time_kind,
+        unit: form.unit,
+        layer: form.layer,
+        window_size: form.window_size,
+        step_size: form.step_size,
+        features: form.features,
+        feature_name_key: form.feature_name_key,
+        kernel_stat: form.kernel_stat,
+      }
     if (form.mode === 'velocity')
       return {
         key: form.key,
@@ -187,6 +201,9 @@ export function useTimeAnalysis() {
             options: {
               key,
               coordinate_key: selected.value?.kind === 'palantir' ? form.plot_coordinate_key : null,
+              ...(selected.value?.kind === 'trends'
+                ? { plot_top_n: form.plot_top_n, display_standardize: form.display_standardize }
+                : {}),
             },
           })
       if (value && api.isCurrent?.() !== false && key === form.selected_result) {
@@ -202,6 +219,7 @@ export function useTimeAnalysis() {
   useViewState('time_analysis', { figure, result, search })
   return {
     store,
+    selectedFeatures,
     form,
     info,
     result,

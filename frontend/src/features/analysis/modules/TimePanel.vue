@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useTimeAnalysis } from '../composables/useTimeAnalysis'
 import PlotView from '../../../components/PlotView.vue'
 import DataTable from '../../../components/DataTable.vue'
@@ -7,9 +8,12 @@ const tableNames: Record<string, string> = {
   windows: '窗口',
   multiscale: '多尺度坐标',
   features: '窗口特征速度',
+  trends: '窗口特征趋势',
+  statistics: '特征趋势统计',
 }
 const {
   store,
+  selectedFeatures,
   form,
   info,
   result,
@@ -24,6 +28,15 @@ const {
   draw,
   download,
 } = useTimeAnalysis()
+const trendFeatures = computed({
+  get: () => form.features.join('\n'),
+  set: (value: string) => {
+    form.features = value
+      .split(/[\n,;]+/)
+      .map((v) => v.trim())
+      .filter(Boolean)
+  },
+})
 </script>
 <template>
   <div class="card analysis-module-split">
@@ -45,6 +58,7 @@ const {
             <option value="palantir">Palantir 伪时间</option>
             <option value="trajectory">滑动窗口轨迹</option>
             <option value="velocity">窗口代谢速度</option>
+            <option value="trends">代谢物窗口趋势</option>
           </select>
         </label>
         <label
@@ -191,7 +205,15 @@ const {
         </div>
       </fieldset>
       <fieldset v-else :disabled="store.busy">
-        <legend>{{ form.mode === 'velocity' ? '窗口代谢速度输入' : '窗口轨迹输入' }}</legend>
+        <legend>
+          {{
+            form.mode === 'velocity'
+              ? '窗口代谢速度输入'
+              : form.mode === 'trends'
+                ? '代谢物趋势输入'
+                : '窗口轨迹输入'
+          }}
+        </legend>
         <p v-if="form.mode === 'velocity'">
           沿递增时间回归特征强度，输出带符号斜率及向量范数；不是同位素示踪代谢通量。时间、强度层和尺度影响单位，相同时间窗口保留为空。
         </p>
@@ -237,12 +259,15 @@ const {
               aria-label="轨迹时间单位"
               :disabled="form.time_kind !== 'experimental_time'"
           /></label>
-          <label v-if="form.mode === 'velocity'"
+          <label v-if="form.mode === 'velocity' || form.mode === 'trends'"
             ><FieldLabel
-              name="速度强度层"
+              :name="form.mode === 'trends' ? '趋势强度层' : '速度强度层'"
               help-key="layer"
-              text="使用当前 X 或明确选择已有强度层；强度尺度会影响斜率与范数，不自动归一化。"
-            /><select v-model="form.layer" aria-label="速度强度层">
+              text="使用当前 X 或明确选择已有强度层；强度尺度影响统计结果，不自动归一化。"
+            /><select
+              v-model="form.layer"
+              :aria-label="form.mode === 'trends' ? '趋势强度层' : '速度强度层'"
+            >
               <option :value="null">当前 X</option>
               <option v-for="key in info?.layers" :key="key">{{ key }}</option>
             </select></label
@@ -291,6 +316,47 @@ const {
               aria-label="每窗口最少有效细胞"
           /></label>
         </div>
+      </fieldset>
+      <fieldset v-if="form.mode === 'trends'" :disabled="store.busy">
+        <legend>趋势特征与统计</legend>
+        <label
+          ><FieldLabel
+            name="趋势特征 ID"
+            help-key="features"
+            text="空白使用全部稳定 ID；每行一个，不做最近 m/z 匹配。选择范围也是 BH 校正的特征范围。"
+          />
+          <textarea v-model="trendFeatures" aria-label="趋势特征 ID" rows="4" />
+        </label>
+        <button class="preview" @click="form.features = [...selectedFeatures]">
+          使用已选趋势特征
+        </button>
+        <div class="field-grid">
+          <label
+            ><FieldLabel
+              name="趋势名称来源"
+              help-key="feature_name_key"
+              text="明确选择特征元数据列；缺失名称回退到稳定 ID，重名仍显示 ID。"
+            /><select v-model="form.feature_name_key" aria-label="趋势名称来源">
+              <option :value="null">稳定特征 ID</option>
+              <option v-for="key in info?.feature_columns" :key="key">{{ key }}</option>
+            </select></label
+          >
+          <label
+            ><FieldLabel
+              name="趋势窗口统计"
+              help-key="kernel_stat"
+              text="保留现有 median/mean/sum；忽略 NaN，全空的中位数/均值未定义，总和为 0，结合有限细胞数解释。"
+            /><select v-model="form.kernel_stat" aria-label="趋势窗口统计">
+              <option value="median">中位数</option>
+              <option value="mean">均值</option>
+              <option value="sum">总和</option>
+            </select></label
+          >
+        </div>
+        <p>
+          时间列及含义须明确选择；重叠窗口不独立，Spearman/BH
+          仅作探索排序，细胞数不是生物重复。计算不标准化源矩阵。
+        </p>
       </fieldset>
       <button
         class="primary"
@@ -342,6 +408,29 @@ const {
           <option v-for="key in info?.embeddings" :key="key">{{ key }}</option>
         </select></label
       >
+      <fieldset v-if="selected?.kind === 'trends'" :disabled="store.busy">
+        <legend>趋势热图显示</legend>
+        <label
+          ><FieldLabel
+            name="趋势显示特征数"
+            help-key="plot_top_n"
+            text="按已计算的 q 值及相关性排名；只限制热图，不截断完整下载。最多 500 个特征、20 万显示值。" /><input
+            v-model.number="form.plot_top_n"
+            type="number"
+            min="1"
+            max="500"
+            aria-label="趋势显示特征数"
+        /></label>
+        <label
+          ><FieldLabel
+            name="趋势显示行标准分"
+            help-key="display_standardize"
+            text="仅对各特征窗口值做总体标准差的行标准分，常量行显示 0；不修改原趋势值或重新计算。" /><input
+            v-model="form.display_standardize"
+            type="checkbox"
+            aria-label="趋势显示行标准分"
+        /></label>
+      </fieldset>
       <div class="actions">
         <button class="preview" :disabled="store.busy || !selected?.valid" @click="readResult">
           读取时间结果表

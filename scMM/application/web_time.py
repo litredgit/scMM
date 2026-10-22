@@ -38,6 +38,7 @@ class TimeWorkflow:
                 ],
                 "probability_keys": list(data.obsm),
                 "layers": list(data.layers),
+                "feature_columns": list(data.var.columns),
                 "cells": cells[offset : offset + limit],
                 "total_cells": len(cells),
                 "saved_plot_key": saved.get("layout", {}).get("meta", {}).get("time_result_key"),
@@ -62,7 +63,7 @@ class TimeWorkflow:
     def run_time(self, identity, revision, operation, options):
         from .web_projects import project_candidate
 
-        if operation not in {"palantir", "trajectory", "velocity"}:
+        if operation not in {"palantir", "trajectory", "velocity", "trends"}:
             raise ValueError("不支持的时间分析操作")
         with self.access(identity, operation=operation) as workspace:
             workspace.check(revision)

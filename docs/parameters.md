@@ -287,6 +287,12 @@ adduct,LIPID_CLASS,PC,pos,[M+H]+,5
 仅接受现有强度层，不使用嵌入坐标或分支概率。`window_size` 最少 2、最多 5000，
 不使用 `min_cells_per_window`，无随机步骤，记录 seed 为 null。
 
+代谢物窗口趋势沿用 `window_size=100`、`step_size=50`，窗口至少 1 个细胞；`layer=null` 为当前 X。
+`features=[]` 使用全部稳定特征 ID，显式列表须非空 ID、唯一且存在；不做最近 m/z 匹配。
+`feature_name_key=null` 使用 ID，指定列缺失则拒绝，列内缺失/空白名称回退 ID；`kernel_stat=median`，只允许 median/mean/sum。
+没有随机步骤，seed 记录为 null。`plot_top_n=30`（1–500），`display_standardize=true`，均仅控制绘图；
+热图至多 20 万显示值，完整趋势下载不受该限制。NaN/相同时间/统计边界见[代谢趋势](analysis.md#代谢趋势)。
+
 网页固定单计算线程；依赖 Palantir 时按需导入，缺失时明确提示，不替换算法。
 当前同步工程上限为 5000 细胞、当前矩阵和单个输入表示各 500 万数值、64 个命名记录（含失效键），
 累计有效结果及预计单次窗口结果各 500 万数值；为限制请求资源，不是实验推荐阈值或耗时承诺。

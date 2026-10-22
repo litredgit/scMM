@@ -170,6 +170,7 @@
       "sources": [
         "scMM/application/workbench.py",
         "scMM/application/time_analysis.py",
+        "scMM/application/time_trends.py",
         "scMM/application/result_catalog.py",
         "scMM/application/cell_spectra.py",
         "scMM/application/recovery.py",

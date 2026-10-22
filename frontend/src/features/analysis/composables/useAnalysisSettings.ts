@@ -76,6 +76,11 @@ export function useAnalysisSettings() {
     min_cells_per_window: 5,
     selected_result: '',
     plot_coordinate_key: '',
+    features: [] as string[],
+    feature_name_key: null as string | null,
+    kernel_stat: 'median',
+    plot_top_n: 30,
+    display_standardize: true,
   })
   const stability = reactive({
     source_key: '',

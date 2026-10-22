@@ -310,14 +310,29 @@ class TimeVelocity(Controls):
     step_size: int = Field(default=50, ge=1, le=5000)
 
 
+class TimeTrends(Controls):
+    key: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,47}$")
+    time_key: str = Field(min_length=1)
+    time_kind: Literal["acquisition_seconds", "normalized_time", "experimental_time", "pseudotime"]
+    unit: str = Field(min_length=1, max_length=80)
+    layer: str | None = Field(default=None, min_length=1)
+    features: list[str] = Field(default_factory=list, max_length=5000)
+    feature_name_key: str | None = Field(default=None, min_length=1)
+    kernel_stat: Literal["median", "mean", "sum"] = "median"
+    window_size: int = Field(default=100, ge=1, le=5000)
+    step_size: int = Field(default=50, ge=1, le=5000)
+
+
 class TimeOperation(RevisionRequest):
-    operation: Literal["palantir", "trajectory", "velocity"]
+    operation: Literal["palantir", "trajectory", "velocity", "trends"]
     options: dict[str, Any]
 
 
 class TimePlot(Controls):
     key: str
     coordinate_key: str | None = None
+    plot_top_n: int = Field(default=30, ge=1, le=500)
+    display_standardize: bool = True
 
 
 class ConfusionPlot(Controls):

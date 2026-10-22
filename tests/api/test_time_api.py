@@ -312,3 +312,84 @@ def test_velocity_http_full_export_failure_atomicity_and_reload(workflow, monkey
         == 400
     )
     assert current() == before
+
+
+def test_trends_full_export_readonly_reload_and_candidate_failure(workflow, monkeypatch):
+    import_time(workflow, count=234)
+    _, _, _, _, _, _, _, current, post = workflow
+    options = dict(
+        key="trend_a",
+        time_key="time",
+        time_kind="normalized_time",
+        unit="unitless",
+        features=["f5", "f2", "f0"],
+        feature_name_key="mz",
+        window_size=8,
+        step_size=1,
+    )
+    before = current()
+    for change, status in (
+        ({"kernel_stat": "max"}, 422),
+        ({"window_size": True}, 422),
+        ({"features": ["absent"]}, 400),
+        ({"features": ["f0", "f0"]}, 400),
+        ({"feature_name_key": "missing"}, 400),
+        ({"unit": "h"}, 400),
+    ):
+        response = post("/analysis/time", {"operation": "trends", "options": {**options, **change}})
+        assert response.status_code == status, response.text
+        assert current() == before
+    post("/analysis/time", {"operation": "trends", "options": options}).raise_for_status()
+    table = get(workflow, "/analysis/time/result?key=trend_a").json()
+    assert table["tables"]["trends"]["total"] == 227 * 3
+    assert len(table["tables"]["trends"]["rows"]) == 200
+    assert table["tables"]["statistics"]["rows"][0]["feature_id"] == "f5"
+    with ZipFile(BytesIO(get(workflow, "/analysis/time/download?key=trend_a").content)) as archive:
+        assert set(archive.namelist()) == {
+            "metadata.json",
+            "windows.csv",
+            "statistics.csv",
+            "trends.csv",
+            "cells.csv",
+        }
+        assert len(pd.read_csv(BytesIO(archive.read("trends.csv")))) == 227 * 3
+        assert len(pd.read_csv(BytesIO(archive.read("cells.csv")))) == 234
+    figure = post(
+        "/analysis/plot",
+        {
+            "kind": "time_plot",
+            "options": {"key": "trend_a", "plot_top_n": 2, "display_standardize": False},
+        },
+    )
+    assert figure.status_code == 200, figure.text
+    assert figure.json()["value"]["layout"]["meta"]["trend_display_standardize"] is False
+    path = current()["project"]["path"]
+    post("/project/save").raise_for_status()
+    post("/project/close").raise_for_status()
+    post("/project/open", {"path": path}).raise_for_status()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("must not rerun trend statistics")
+
+    monkeypatch.setattr("scMM.plot._trajectory.metabolite_trends", forbidden)
+    assert get(workflow, "/analysis/time/result?key=trend_a").json() == table
+    assert get(workflow, "/analysis/figures/time_plot").status_code == 200
+    monkeypatch.undo()
+    from scMM.application import time_analysis
+
+    original = time_analysis.trends
+
+    def fail(data, **options):
+        original(data, **options)
+        data.X[:] = -999
+        raise ValueError("candidate failure")
+
+    monkeypatch.setattr(time_analysis, "trends", fail)
+    before = current()
+    assert (
+        post(
+            "/analysis/time", {"operation": "trends", "options": {**options, "key": "failed"}}
+        ).status_code
+        == 400
+    )
+    assert current() == before

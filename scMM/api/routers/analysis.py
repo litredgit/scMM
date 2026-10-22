@@ -184,9 +184,12 @@ def time_info(
 @router.post("/workspace/analysis/time")
 def time_operation(body: s.TimeOperation, manager: Service, identity: Identity):
     options = s.options_for(
-        {"palantir": s.TimePalantir, "trajectory": s.TimeTrajectory, "velocity": s.TimeVelocity}[
-            body.operation
-        ],
+        {
+            "palantir": s.TimePalantir,
+            "trajectory": s.TimeTrajectory,
+            "velocity": s.TimeVelocity,
+            "trends": s.TimeTrends,
+        }[body.operation],
         body.options,
     )
     return manager.run_time(identity, body.revision, body.operation, options)

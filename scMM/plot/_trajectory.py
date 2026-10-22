@@ -556,7 +556,11 @@ def _pool_feature_windows(
         values, window_time = matrix[window], time[window]
         if values.shape[0] == 0:
             continue
-        pooled[index] = reducer(values, axis=0)
+        if kernel_stat == "sum":
+            pooled[index] = reducer(values, axis=0)
+        else:
+            defined = (~np.isnan(values)).any(axis=0)
+            pooled[index, defined] = reducer(values[:, defined], axis=0)
         time_centers[index] = np.nanmean(window_time)
         counts[index] = values.shape[0]
     return pooled, time_centers, counts
@@ -571,7 +575,7 @@ def _trend_significance(
     for feature in range(pooled.shape[1]):
         values = pooled[:, feature]
         valid = valid_time & np.isfinite(values)
-        if valid.sum() < 3 or np.nanstd(values[valid]) == 0:
+        if valid.sum() < 3 or np.nanstd(values[valid]) == 0 or np.ptp(time_centers[valid]) == 0:
             continue
         rho[feature], p_values[feature] = spearmanr(time_centers[valid], values[valid])
     return rho, p_values

@@ -17,7 +17,7 @@ def _plain(value):
             "columns": value.columns.astype(str).tolist(),
             "values": value.to_numpy().tolist(),
         }
-    if isinstance(value, np.ndarray):
+    if isinstance(value, (np.ndarray, pd.Series)):
         return value.tolist()
     if isinstance(value, np.generic):
         return value.item()
@@ -56,7 +56,7 @@ def registry(data):
             or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,47}", key)
             or key.startswith("scmm_")
             or not isinstance(run, dict)
-            or run.get("kind") not in {"palantir", "trajectory", "velocity"}
+            or run.get("kind") not in {"palantir", "trajectory", "velocity", "trends"}
             or not isinstance(run.get("parameters"), dict)
             or not isinstance(run.get("identity"), str)
             or not re.fullmatch(r"[0-9a-f]{32}", run["identity"])
@@ -76,7 +76,7 @@ def registry(data):
             for item in run[field]:
                 if (
                     not isinstance(item, dict)
-                    or item.get("axis") not in {"X", "layers", "obs", "obsm", "uns"}
+                    or item.get("axis") not in {"X", "layers", "obs", "obsm", "uns", "var"}
                     or not isinstance(item.get("key"), str)
                     or not isinstance(item.get("digest"), str)
                     or not re.fullmatch(r"[0-9a-f]{64}", item["digest"])
@@ -111,6 +111,8 @@ def _uns_value(value):
 
 def binding(data, axis, key):
     value = read_binding(data, axis, key)
+    if axis == "var":
+        value = value.astype("string").fillna("").tolist()
     digest = (
         hashlib.sha256(
             json.dumps(_uns_value(value), sort_keys=True, ensure_ascii=False).encode()
@@ -135,6 +137,11 @@ def valid_run(data, run, cache=None):
     if (
         run["kind"] == "velocity"
         and run["parameters"].get("feature_ids") != data.var_names.astype(str).tolist()
+    ):
+        return False
+    if (
+        run["kind"] == "trends"
+        and run["parameters"].get("feature_axis") != data.var_names.astype(str).tolist()
     ):
         return False
     try:

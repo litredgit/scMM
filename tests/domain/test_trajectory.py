@@ -170,3 +170,16 @@ def test_trend_cluster_rejects_ward_with_correlation_distance() -> None:
             n_clusters=2,
             linkage="ward",
         )
+
+
+@pytest.mark.parametrize("stat, expected", [("median", np.nan), ("mean", np.nan), ("sum", 0.0)])
+def test_trends_all_missing_columns_and_constant_time_are_explicit_without_warnings(stat, expected):
+    data = make_adata()
+    data.X[:, 1] = np.nan
+    data.obs["time"] = 0.0
+    metabolite_trends(data, window_size=2, step_size=1, kernel_stat=stat)
+    result = data.uns["metabolite_trends"]
+    np.testing.assert_equal(result["pooled"][:, 1], np.full(5, expected))
+    assert np.isnan(result["rho"]).all()
+    assert np.isnan(result["pval"]).all()
+    assert np.isnan(result["qval"]).all()

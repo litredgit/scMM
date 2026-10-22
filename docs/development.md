@@ -110,7 +110,8 @@ scMM/
 | 监督诊断/潜变量/SHAP | `analysis/supervised.py` | 分组验证、四模型、ROC/PR/校准、潜变量及 SHAP 已有 | PARAM-03 已接入 model_parameters.py 白名单/组合/训练折校验、四模型控件及 SHAP 显示设置；不序列化可执行模型 |
 | Palantir 与窗口轨迹 | `PlotEngine.run_palantir()` / `compute_trajectory()` | `time_analysis` / `web_time`、严格 HTTP、Vue 命名结果、只读重载/全量导出 | 沿用现有定义，扩散核/多尺度近邻图断连检查仅网页显式启用；暂缓上游方法不引入 |
 | 代谢速度 | `PlotEngine.metabolic_velocity()` | `time_analysis` / `web_time`、严格 HTTP、Vue 显式层/时间/单位、命名结果/完整表/只读重载 | TIME-02 已接待统一验收；沿递增时间计算强度斜率及范数，不能解释为示踪通量 |
-| 代谢物趋势/趋势聚类 | `plot_metabolite_trends()` / `plot_trend_clusters()` | 无对应入口 | TIME-03/04，输入时间、窗口、统计量和趋势距离可追溯 |
+| 代谢物趋势 | `plot_metabolite_trends()` | `time_trends` 适配既有数值算法、表/热图，`time_analysis` / `web_time` 管理命名结果与工作区；HTTP/Vue/完整导出/只读重载 | TIME-03 已接待统一验收；时间/层/精确 ID/名称来源/窗口统计可追溯，显示标准化不修改数据 |
+| 趋势聚类 | `plot_trend_clusters()` | 尚未接网页 | TIME-04，依赖有效趋势，趋势距离和聚类参数可追溯 |
 | 特征距离嵌入 | `PlotEngine.feature_network()`；网页 `analysis/feature_embedding.py` | 独立特征距离 UMAP、层/ID/名称/类别、完整表及只读重载 | PLOT-02 待统一验收；Pearson 绝对相关/Euclidean 与相关阈值网络区分，常量/缺失及资源门限有明确规则 |
 | 双特征散点/回归 | `PlotEngine.plot_feature_scatter()`；网页 `analysis/feature_scatter.py` | 独立面板、精确 ID/层/着色、全体细胞回归、完整导出及只读图重载 | PLOT-01 待用户统一验收；网页不采用 Notebook 的最近质量匹配，不将细胞级回归解释为生物重复验证 |
 | 已处理结果合并 | `CyESIData.alignwith()`、`file.batch.concat()` | 当前已有原始样本提取审核合并；导入独立结果会替换当前数据 | MERGE-01；concat 当前读取旧结果目录，不是任意 H5AD 合并服务，须适配来源/特征/起点 |
