@@ -32,6 +32,7 @@ class BrowserWorkspace:
     trash_plan: tuple | None = None
     retention_cleanup_plan: tuple | None = None
     retention_policy_review: tuple | None = None
+    merge_plan: dict | None = None
     owner_id: str | None = None
     # Published AI state has its own short lock; readers never take the data lock.
     ai_lock: threading.RLock = field(default_factory=threading.RLock)
@@ -50,6 +51,7 @@ class BrowserWorkspace:
     ai_reviewed: set = field(default_factory=set)
 
     def discard_views(self):
+        self.merge_plan = None
         self.raw = None
         if self.preview_job:
             self.preview_job["future"].cancel()

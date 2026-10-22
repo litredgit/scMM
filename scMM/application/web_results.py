@@ -68,6 +68,12 @@ class ResultWorkflow:
         with self.access(identity) as workspace:
             project = workspace.require_project()
             state = project.workspace
+            if kind == "merge_preview":
+                return self.merge_preview_download(identity, key), "application/zip"
+            if kind == "merge_audit":
+                from .merge_audit import audit_bundle
+
+                return audit_bundle(state, key), "application/zip"
             if kind == "time_result":
                 return self.time_download(identity, key), "application/zip"
             if kind in {"quality_pdf", "report_zip"}:

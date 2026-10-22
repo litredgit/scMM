@@ -17,6 +17,7 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | 管理员创建账号、会话认证和单团队共享项目 | [服务器初始化与登录](docs/installation.md#服务器初始化与账号) |
 | 持久批处理、共同/独立特征、失败继续、停止后续样本和重试 | [多样本流程](docs/workflow.md) |
 | Thermo profile RAW 直接读取，接入 Python、CLI、目录处理及网页 | [RAW 依赖与真实样本验收](docs/thermo-raw.md) |
+| 已处理 H5AD/旧 CSV 矩阵 union/ref 合并、来源映射和完整起点 | [合并流程](docs/workflow.md#合并已处理矩阵) |
 | H5AD、预处理起点恢复、结果失效管理、只读报告与图表重载 | [数据与输出](docs/data-output.md) |
 | 统一降维、双特征散点/特征距离嵌入、差异/Marker/相关网络、监督模型诊断和 SHAP | [分析说明](docs/analysis.md) |
 | 网页 Palantir 稳定 ID 根点、滑动窗口轨迹/代谢速度/代谢物趋势及趋势聚类、命名结果和完整导出 | [伪时间与轨迹](docs/analysis.md#palantir-伪时间) |

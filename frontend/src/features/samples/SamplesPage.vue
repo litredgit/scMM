@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import FileBrowser from '../../components/FileBrowser.vue'
+import ProcessedMergePanel from './ProcessedMergePanel.vue'
 import { request } from '../../api/client'
 import type { Mapping, Sample } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
@@ -521,6 +522,7 @@ async function applyMapping() {
         应用样本关联
       </button>
     </section>
+    <ProcessedMergePanel />
     <div class="page-note">细胞数不等于生物重复数。同一独立来源的多个样本应填写相同 subject。</div>
   </section>
   <div v-else class="card empty-state">

@@ -4,6 +4,8 @@ import json
 from copy import deepcopy
 from datetime import UTC, datetime
 
+import pandas as pd
+
 from scMM import __version__
 from scMM.analysis.quality_pdf import quality_report_bytes, report_bundle
 
@@ -52,6 +54,12 @@ def report_artifact(project, result_value, kind, key):
     if kind == "quality_pdf":
         return quality_report_bytes(data, metadata), "application/pdf"
     reports = {}
+    if "scmm_merge_json" in data.uns:
+        merge_metadata = json.loads(data.uns["scmm_merge_json"])
+        reports["historical_merge_mapping"] = {
+            "summary": {"scope": "historical_merge_not_current_analysis", **merge_metadata},
+            "table": pd.DataFrame(merge_metadata["feature_mapping"]),
+        }
     for row in time_results:
         for name, table in result_tables(data, row["key"]).items():
             reports[f"time_{row['key']}_{name}"] = {

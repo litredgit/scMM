@@ -164,6 +164,7 @@
       "tests": [
         "tests/application/test_workbench_state.py",
         "tests/application/test_time_analysis.py",
+        "tests/application/test_processed_merge.py",
         "tests/application/test_time_trend_clusters.py",
         "tests/application/test_result_catalog.py",
         "tests/application/test_maintenance_recovery.py"
@@ -171,6 +172,10 @@
       "sources": [
         "scMM/application/workbench.py",
         "scMM/application/time_analysis.py",
+        "scMM/application/processed_merge.py",
+        "scMM/application/merge_sources.py",
+        "scMM/application/merge_metadata.py",
+        "scMM/application/merge_audit.py",
         "scMM/application/time_trends.py",
         "scMM/application/time_trend_clusters.py",
         "scMM/application/result_catalog.py",
@@ -192,6 +197,7 @@
         "tests/api/test_web_api.py",
         "tests/api/test_web_workflow.py",
         "tests/api/test_time_api.py",
+        "tests/api/test_merge_api.py",
         "tests/api/test_web_cli.py",
         "tests/api/test_maintenance.py",
         "tests/api/test_deployment_maintenance.py"
@@ -757,6 +763,8 @@
     "scMM/api/routers/results.py": ["api", "api-raw", "api-lipids"],
     "scMM/api/routers/projects.py": ["api", "api-raw", "api-lipids"],
     "scMM/application/web_analysis.py": ["api", "api-raw", "api-lipids", "ai"],
+    "scMM/application/web_merge.py": ["api", "api-raw", "api-lipids", "ai"],
+    "scMM/api/merge_schemas.py": ["api", "api-raw", "api-lipids"],
     "scMM/application/web_time.py": ["api", "api-raw", "api-lipids", "ai"],
     "scMM/application/web_results.py": ["api", "api-raw", "api-lipids"],
     "frontend/src/api/maintenance.ts": [

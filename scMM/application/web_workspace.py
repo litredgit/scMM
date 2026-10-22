@@ -18,6 +18,7 @@ from .storage import StorageCatalog
 from .web_ai import AISummaryWorkflow
 from .web_analysis import AnalysisWorkflow
 from .web_lipids import LipidWorkflow
+from .web_merge import MergeWorkflow
 from .web_projects import ProjectWorkflow
 from .web_projects import prepare_mapping as prepare_mapping
 from .web_projects import project_candidate as project_candidate
@@ -37,6 +38,7 @@ class WebWorkspaceService(
     ResultWorkflow,
     LipidWorkflow,
     TimeWorkflow,
+    MergeWorkflow,
 ):
     def __init__(
         self, roots, result_roots, project_root, defaults, *, idle_seconds=3600, capacity=128

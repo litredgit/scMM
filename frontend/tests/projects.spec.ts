@@ -112,3 +112,77 @@ test('invalid sample edit leaves saved data unchanged and allows retry', async (
   await page.getByLabel('beta-renamed name', { exact: true }).press('Tab')
   await expect(page.getByRole('status')).toHaveText('样本信息已更新。')
 })
+
+test('processed merge explicitly maps sources, previews ref and restores the full union baseline', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await create(page, '独立矩阵合并')
+  const panel = page
+    .locator('details')
+    .filter({ has: page.locator('summary').filter({ hasText: '合并已处理矩阵' }) })
+  await panel.locator('summary').click()
+  for (const [i, file, name] of [
+    [1, 'merge-left.h5ad', 'merged-left'],
+    [2, 'merge-right.h5ad', 'merged-right'],
+  ] as const) {
+    await panel.getByRole('button', { name: '选择合并结果文件', exact: true }).click()
+    await panel.getByLabel('合并来源存储', { exact: true }).selectOption('Results')
+    await panel.getByLabel('合并来源路径', { exact: true }).fill(file)
+    await panel.getByRole('button', { name: '添加所选合并文件', exact: true }).click()
+    await panel.getByLabel(`合并输入 ${i} 的 m/z 来源`, { exact: true }).selectOption('mz')
+    await panel.getByLabel(`合并输入 ${i} 的样本来源`, { exact: true }).selectOption('sample')
+    await panel.getByLabel(`合并输入 ${i} 样本 1 目标名`, { exact: true }).fill(name)
+  }
+  await expect(
+    panel.getByRole('button', { name: '预览已处理矩阵合并', exact: true }),
+  ).toBeDisabled()
+  await panel.getByLabel('合并参考集', { exact: true }).selectOption('0')
+  await panel.getByLabel('合并特征范围', { exact: true }).selectOption('ref')
+  await panel.getByLabel('合并共同观察字段', { exact: true }).fill('time')
+  const reviewing = page.waitForResponse((r) => r.url().endsWith('/dataset/merge/preview'))
+  await panel.getByRole('button', { name: '预览已处理矩阵合并', exact: true }).click()
+  const review = await (await reviewing).json()
+  expect(review.workspace.project.dataset).toBeNull()
+  expect(review.value.summaries.data.features).toBe(2)
+  expect(review.value.summaries.baseline.features).toBe(3)
+  const previewDownload = page.waitForEvent('download')
+  await panel.getByRole('button', { name: '下载完整合并预览', exact: true }).click()
+  expect((await previewDownload).suggestedFilename()).toBe('scmm-merge-preview.zip')
+  const applying = page.waitForResponse((r) => r.url().endsWith('/dataset/merge/apply'))
+  await panel.getByRole('button', { name: '合并并替换当前数据和起点', exact: true }).click()
+  const applied = await (await applying).json()
+  expect(applied.project.dataset.cells).toBe(3)
+  expect(applied.project.dataset.features).toBe(2)
+  await expect(panel.getByRole('heading', { name: '历史合并溯源', exact: true })).toBeVisible()
+  const auditDownload = page.waitForEvent('download')
+  await panel.getByRole('button', { name: '下载历史合并溯源', exact: true }).click()
+  expect((await auditDownload).suggestedFilename()).toBe('scmm-merge-audit.zip')
+  for (const width of [700, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true)
+  }
+  await page.getByRole('button', { name: '保存项目', exact: true }).click()
+  await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
+  await page.reload()
+  const restored = page
+    .locator('details')
+    .filter({ has: page.locator('summary').filter({ hasText: '合并已处理矩阵' }) })
+  if (!(await restored.getByRole('heading', { name: '历史合并溯源', exact: true }).isVisible()))
+    await restored.locator('summary').click()
+  await expect(restored.getByRole('heading', { name: '历史合并溯源', exact: true })).toBeVisible()
+  await page.getByRole('link', { name: /预处理/ }).click()
+  await page.getByRole('button', { name: '历史与恢复', exact: true }).click()
+  const resetting = page.waitForResponse(
+    (r) =>
+      r.url().endsWith('/analysis/operation') && r.request().postDataJSON()?.operation === 'reset',
+  )
+  await page.getByRole('button', { name: '恢复到预处理起点', exact: true }).click()
+  const reset = await (await resetting).json()
+  expect(reset.project.dataset.features).toBe(3)
+  expect(reset.project.dataset.cells).toBe(3)
+  expect(errors).toEqual([])
+})

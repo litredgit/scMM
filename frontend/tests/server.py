@@ -72,6 +72,23 @@ def main():
             var=pd.DataFrame({"mz": np.arange(150.0, 156.0)}, index=[f"f{i}" for i in range(6)]),
         )
         time_data.write_h5ad(results / "time.h5ad")
+        merge_left = AnnData(
+            np.array([[1.123456789012345, 2.0], [3.0, 4.0]]),
+            obs=pd.DataFrame(
+                {"sample": ["left", "left"], "group": ["A", "A"], "time": [0.0, 1.0]},
+                index=["c0", "c1"],
+            ),
+            var=pd.DataFrame({"mz": [100.0, 200.0]}, index=["f0", "f1"]),
+        )
+        merge_left.layers["signal"] = merge_left.X * 2
+        merge_left.raw = merge_left.copy()
+        merge_right = AnnData(
+            np.array([[5.0, 6.0]]),
+            obs=pd.DataFrame({"sample": ["right"], "group": ["B"], "time": [2.0]}, index=["c0"]),
+            var=pd.DataFrame({"mz": [100.0001, 300.0]}, index=["f0", "f2"]),
+        )
+        merge_left.write_h5ad(results / "merge-left.h5ad")
+        merge_right.write_h5ad(results / "merge-right.h5ad")
         # Local synthetic lipid database and peaks: browser tests never download LMSD.
         from scMM.util.lipid_isotopes import adduct_shift, resolved_distribution
 

@@ -39,6 +39,11 @@ scMM/
 │   ├── retention_scheduler.py # 默认关闭的管理员持续规则、单线程周期、持久状态与停用
 │   ├── project_batch.py   # 多样本持久 worker、重试及审核合并
 │   ├── workbench.py       # 数据身份、预处理、分析与结果生命周期
+│   ├── processed_merge.py # 既有质量匹配、分来源元数据/层及完整 union 起点候选
+│   ├── merge_sources.py   # 安全装载、大小门限、内容身份及应用前复核
+│   ├── merge_metadata.py  # 样本映射、无损类型及共同列
+│   ├── merge_audit.py     # 完整预览/历史溯源 ZIP
+│   ├── web_merge.py       # 所属工作区预览凭据、原子应用和历史下载
 │   ├── preview_cache.py   # 完整预览/共同特征的身份校验与复用
 │   ├── cell_preview.py    # 冻结提取请求、独立预览进程与持久阶段状态
 │   ├── preferences.py     # 全局预设、显式保存与 CPU 默认值
@@ -114,7 +119,7 @@ scMM/
 | 趋势聚类 | `plot_trend_clusters()` | `time_trend_clusters` / 命名时间协议 / HTTP / Vue，完整分组/曲线/距离导出及只读重载 | TIME-04 已接待统一验收；复用原标准化/聚类，`plot/_trend_worker.py` 隔离拟合随机源/警告及诊断；短进程单并发/限时回收，非 M2 持久任务 |
 | 特征距离嵌入 | `PlotEngine.feature_network()`；网页 `analysis/feature_embedding.py` | 独立特征距离 UMAP、层/ID/名称/类别、完整表及只读重载 | PLOT-02 待统一验收；Pearson 绝对相关/Euclidean 与相关阈值网络区分，常量/缺失及资源门限有明确规则 |
 | 双特征散点/回归 | `PlotEngine.plot_feature_scatter()`；网页 `analysis/feature_scatter.py` | 独立面板、精确 ID/层/着色、全体细胞回归、完整导出及只读图重载 | PLOT-01 待用户统一验收；网页不采用 Notebook 的最近质量匹配，不将细胞级回归解释为生物重复验证 |
-| 已处理结果合并 | `CyESIData.alignwith()`、`file.batch.concat()` | 当前已有原始样本提取审核合并；导入独立结果会替换当前数据 | MERGE-01；concat 当前读取旧结果目录，不是任意 H5AD 合并服务，须适配来源/特征/起点 |
+| 已处理结果合并 | `CyESIData.alignwith()`、`file.batch.concat()` | `merge_sources` / `processed_merge` / `web_merge` / 严格 HTTP / Vue，当前与完整起点独立候选、只读溯源 | MERGE-01 已接待统一验收；直接适配 H5AD/旧目录，复用原匹配规则；concat 仍仅读取旧目录，非批次校正 |
 | 显式数据子集 | `AnalysisWorkspace.subset()` | 稳定细胞/特征 ID、数量预览、手动应用和完整起点恢复 | SUBSET-01 待统一验收；不是 `CyESIData.__getitem__` 的最近 m/z 强度读取，失败原子性及保存重开受检查 |
 | 采集稳定性 QC | Notebook 稳定性段；网页 `analysis/stability.py` | 显式坐标/来源/参考特征、箱图/窗口数量/来源中位谱相关和完整表、只读图重载 | QC-01 待统一验收；存储顺序不当采集时间，不把细胞级 QC 当生物重复验证 |
 | QC / 当前分析报告 | Python `analysis.quality.render_quality_report()`；网页 `analysis/quality_pdf.py`、`application/reporting.py` | 当前矩阵 QC PDF、分页分析摘要及完整数值/参数/图形附件 ZIP | REPORT-01 待统一验收；请求数据修订检查，不自动分析或保存项目，旧图身份不可核实则明确列为省略 |

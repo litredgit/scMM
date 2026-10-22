@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from .. import merge_schemas as m
 from .. import schemas as s
 from .projects import Identity, Service
 
@@ -46,3 +47,23 @@ def get_mapping(manager: Service, identity: Identity, source_key: str | None = N
 @router.put("/samples/mapping", response_model=s.WorkspaceView)
 def map_samples(body: s.MapSamples, manager: Service, identity: Identity):
     return manager.map_samples(identity, body.revision, body.source_key, body.mapping)
+
+
+@router.post("/dataset/merge/inspect")
+def merge_inspect(body: m.MergeInspect, manager: Service, identity: Identity):
+    return manager.merge_inspect(identity, body.revision, body.source.model_dump())
+
+
+@router.post("/dataset/merge/preview")
+def merge_preview(body: m.MergePreview, manager: Service, identity: Identity):
+    return manager.merge_preview(identity, body.revision, body.model_dump(exclude={"revision"}))
+
+
+@router.post("/dataset/merge/apply", response_model=s.WorkspaceView)
+def merge_apply(body: m.MergeApply, manager: Service, identity: Identity):
+    return manager.merge_apply(identity, body.revision, body.token)
+
+
+@router.get("/dataset/merge/info")
+def merge_info(manager: Service, identity: Identity):
+    return manager.merge_info(identity)
