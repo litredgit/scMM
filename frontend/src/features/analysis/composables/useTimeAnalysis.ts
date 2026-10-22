@@ -120,6 +120,19 @@ export function useTimeAnalysis() {
         seed: form.seed,
         use_early_cell_as_start: form.use_early_cell_as_start,
       }
+    if (form.mode === 'trend_clusters')
+      return {
+        key: form.key,
+        trend_key: form.trend_key,
+        metric: form.trend_metric,
+        cluster_method: form.trend_cluster_method,
+        top_k: form.top_k,
+        seed: form.cluster_seed,
+        n_clusters: form.trend_n_clusters,
+        n_neighbors: form.trend_n_neighbors,
+        resolution: form.trend_resolution,
+        linkage: form.trend_linkage,
+      }
     if (form.mode === 'trends')
       return {
         key: form.key,

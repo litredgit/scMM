@@ -183,3 +183,10 @@ def test_trends_all_missing_columns_and_constant_time_are_explicit_without_warni
     assert np.isnan(result["rho"]).all()
     assert np.isnan(result["pval"]).all()
     assert np.isnan(result["qval"]).all()
+
+
+def test_single_invalid_trend_is_not_silently_assigned_a_cluster():
+    with pytest.raises(ValueError, match="No valid feature"):
+        trend_cluster(np.full((3, 1), np.nan), metric="euclidean", cluster_method="agglomerative")
+    with pytest.raises(ValueError, match="Unsupported"):
+        trend_cluster(np.ones((3, 1)), cluster_method="missing")

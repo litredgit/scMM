@@ -286,10 +286,14 @@ def _select_and_standardize_trends(result: dict, top_k: int | None) -> np.ndarra
     trends = result["pooled"]
     indices = result["rank_idx"][:top_k] if top_k is not None else np.arange(trends.shape[1])
     selected = trends[:, indices]
-    mean = np.nanmean(selected, axis=0, keepdims=True)
-    std = np.nanstd(selected, axis=0, keepdims=True)
+    defined = (~np.isnan(selected)).any(axis=0)
+    result = np.full_like(selected, np.nan, dtype=float)
+    values = selected[:, defined]
+    mean = np.nanmean(values, axis=0, keepdims=True)
+    std = np.nanstd(values, axis=0, keepdims=True)
     std[std == 0] = 1.0
-    return (selected - mean) / std
+    result[:, defined] = (values - mean) / std
+    return result
 
 
 def _save_trend_cluster_plot(

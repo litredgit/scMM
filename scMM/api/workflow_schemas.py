@@ -323,8 +323,21 @@ class TimeTrends(Controls):
     step_size: int = Field(default=50, ge=1, le=5000)
 
 
+class TimeTrendClusters(Controls):
+    key: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,47}$")
+    trend_key: str = Field(min_length=1)
+    metric: Literal["cosine", "correlation", "euclidean", "sqeuclidean"] = "correlation"
+    cluster_method: Literal["leiden", "louvain", "kmeans", "agglomerative"] = "leiden"
+    top_k: int | None = Field(default=None, ge=1, le=500)
+    seed: int = Field(default=0, ge=0, le=2147483647)
+    n_clusters: int = Field(default=5, ge=1, le=500)
+    n_neighbors: int = Field(default=10, ge=1, le=499)
+    resolution: float = Field(default=1.0, gt=0, allow_inf_nan=False)
+    linkage: Literal["average", "complete", "single", "ward"] = "average"
+
+
 class TimeOperation(RevisionRequest):
-    operation: Literal["palantir", "trajectory", "velocity", "trends"]
+    operation: Literal["palantir", "trajectory", "velocity", "trends", "trend_clusters"]
     options: dict[str, Any]
 
 

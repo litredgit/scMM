@@ -50,7 +50,7 @@ def trends(
     existing = sum(
         sum(np.asarray(item).size for item in data.uns[name].values())
         for name, run in registry(data)["runs"].items()
-        if run["kind"] in {"velocity", "trends"} and not run.get("stale")
+        if run["kind"] in {"velocity", "trends", "trend_clusters"} and not run.get("stale")
     )
     if expected + existing > 5_000_000:
         raise ValueError("趋势窗口结果超过同步工程上限 500 万数值")

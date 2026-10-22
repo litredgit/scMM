@@ -7,9 +7,11 @@ const tableNames: Record<string, string> = {
   cells: '细胞',
   windows: '窗口',
   multiscale: '多尺度坐标',
-  features: '窗口特征速度',
+  features: '特征',
   trends: '窗口特征趋势',
   statistics: '特征趋势统计',
+  curves: '聚类成员完整曲线',
+  distances: '聚类特征距离',
 }
 const {
   store,
@@ -59,6 +61,7 @@ const trendFeatures = computed({
             <option value="trajectory">滑动窗口轨迹</option>
             <option value="velocity">窗口代谢速度</option>
             <option value="trends">代谢物窗口趋势</option>
+            <option value="trend_clusters">趋势聚类</option>
           </select>
         </label>
         <label
@@ -204,7 +207,7 @@ const trendFeatures = computed({
           /></label>
         </div>
       </fieldset>
-      <fieldset v-else :disabled="store.busy">
+      <fieldset v-else-if="form.mode !== 'trend_clusters'" :disabled="store.busy">
         <legend>
           {{
             form.mode === 'velocity'
@@ -358,6 +361,132 @@ const trendFeatures = computed({
           仅作探索排序，细胞数不是生物重复。计算不标准化源矩阵。
         </p>
       </fieldset>
+      <fieldset v-if="form.mode === 'trend_clusters'" :disabled="store.busy">
+        <legend>趋势聚类输入</legend>
+        <p>
+          依赖有效的已计算趋势，不重新计算窗口统计。沿现有方法先标准化曲线；常量保持
+          0，无跨窗口有限趋势的特征标为 -1。分组仅用于探索，不是代谢通路或因果证据。
+        </p>
+        <div class="field-grid">
+          <label
+            ><FieldLabel
+              name="聚类来源趋势"
+              help-key="trend_key"
+              text="只接受当前有效的命名代谢物窗口趋势；来源或依赖失效时聚类也失效。"
+            /><select v-model="form.trend_key" aria-label="聚类来源趋势">
+              <option value="" disabled>明确选择有效趋势</option>
+              <option
+                v-for="row in info?.results.filter((row) => row.kind === 'trends' && row.valid)"
+                :key="row.key"
+                :value="row.key"
+              >
+                {{ row.key }}
+              </option>
+            </select></label
+          >
+          <label
+            ><FieldLabel name="趋势聚类方法" help-key="cluster_method" /><select
+              v-model="form.trend_cluster_method"
+              aria-label="趋势聚类方法"
+            >
+              <option value="leiden">Leiden</option>
+              <option value="louvain">Louvain</option>
+              <option value="kmeans">KMeans</option>
+              <option value="agglomerative">层次聚类</option>
+            </select></label
+          >
+          <label
+            ><FieldLabel
+              name="趋势聚类距离"
+              help-key="metric"
+              text="沿原算法使用标准化曲线；KMeans 的归一化和 Ward 的欧氏空间另在生效参数记录。"
+            /><select v-model="form.trend_metric" aria-label="趋势聚类距离">
+              <option value="correlation">相关距离</option>
+              <option value="cosine">余弦距离</option>
+              <option value="euclidean">欧氏距离</option>
+              <option value="sqeuclidean">平方欧氏距离</option>
+            </select></label
+          >
+          <label
+            ><FieldLabel
+              name="趋势排名前 N 项"
+              help-key="top_k"
+              text="留空按来源特征顺序使用全部；填写时使用既有趋势排名。同步最多 500 特征，不静默截断。" /><input
+              :value="form.top_k ?? ''"
+              @input="
+                form.top_k =
+                  ($event.target as HTMLInputElement).value === ''
+                    ? null
+                    : Number(($event.target as HTMLInputElement).value)
+              "
+              type="number"
+              min="1"
+              max="500"
+              aria-label="趋势排名前 N 项"
+          /></label>
+          <label v-if="form.trend_cluster_method !== 'agglomerative'"
+            ><FieldLabel
+              name="趋势聚类随机种子"
+              help-key="seed"
+              text="0–2³¹−1；随机方法在隔离进程内设置随机源，不影响其他用户。单个有效特征直接成组，不随机拟合。" /><input
+              v-model.number="form.cluster_seed"
+              type="number"
+              min="0"
+              max="2147483647"
+              aria-label="趋势聚类随机种子"
+          /></label>
+          <label v-if="['kmeans', 'agglomerative'].includes(form.trend_cluster_method)"
+            ><FieldLabel
+              name="趋势簇数"
+              help-key="n_clusters"
+              text="1 至有效特征数；KMeans 实际簇数不足时记录警告，不当作请求簇数已达到。" /><input
+              v-model.number="form.trend_n_clusters"
+              type="number"
+              min="1"
+              max="500"
+              aria-label="趋势簇数"
+          /></label>
+          <label v-if="['leiden', 'louvain'].includes(form.trend_cluster_method)"
+            ><FieldLabel
+              name="趋势图近邻数"
+              help-key="n_neighbors"
+              text="沿原算法按有效特征数截断，记录请求值和实际值。" /><input
+              v-model.number="form.trend_n_neighbors"
+              type="number"
+              min="1"
+              max="499"
+              aria-label="趋势图近邻数"
+          /></label>
+          <label v-if="form.trend_cluster_method === 'leiden'"
+            ><FieldLabel
+              name="趋势图分辨率"
+              help-key="resolution"
+              text="正数，仅用于 Leiden，保留原 RBConfiguration 分区。" /><input
+              v-model.number="form.trend_resolution"
+              type="number"
+              min="0"
+              step="0.1"
+              aria-label="趋势图分辨率"
+          /></label>
+          <label v-if="form.trend_cluster_method === 'agglomerative'"
+            ><FieldLabel
+              name="趋势层次连接"
+              help-key="linkage"
+              text="Ward 仅允许欧氏类距离；拟合直接使用标准化曲线的欧氏空间。"
+            /><select v-model="form.trend_linkage" aria-label="趋势层次连接">
+              <option value="average">平均连接</option>
+              <option value="complete">完全连接</option>
+              <option value="single">单连接</option>
+              <option value="ward">Ward</option>
+            </select></label
+          >
+        </div>
+        <p>
+          常量曲线的相关/余弦距离可能未定义，沿原算法以矩阵最大有限距离（含对角线
+          0）替代，结果记录替代数量。趋势聚类最多一个短进程，90
+          秒超时后终止并回收；当前仍在请求内等待，超时不自动重放。
+        </p>
+      </fieldset>
       <button
         class="primary"
         :disabled="
@@ -365,11 +494,13 @@ const trendFeatures = computed({
           !form.key ||
           (form.mode === 'palantir'
             ? !form.root_cell_id || !form.input_representation
-            : (form.mode === 'trajectory' && !form.coordinate_key) ||
-              !form.time_key ||
-              !form.time_kind ||
-              !form.unit ||
-              (form.mode === 'velocity' && form.window_size < 2))
+            : form.mode === 'trend_clusters'
+              ? !form.trend_key
+              : (form.mode === 'trajectory' && !form.coordinate_key) ||
+                !form.time_key ||
+                !form.time_kind ||
+                !form.unit ||
+                (form.mode === 'velocity' && form.window_size < 2))
         "
         @click="calculate"
       >

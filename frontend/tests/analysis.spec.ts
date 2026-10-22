@@ -802,3 +802,67 @@ test('named trends keep exact features and display scaling independent through r
   await expect(page.getByText('图来源结果：trend_browser', { exact: true })).toBeVisible()
   expect(calculations).toBe(1)
 })
+
+test('trend clusters bind their source and retain full curves and groups after reload', async ({
+  page,
+}) => {
+  await importAnalysis(page, '趋势聚类结果', 'time.h5ad')
+  await module(page, '伪时间与轨迹')
+  await page.getByLabel('时间分析方法', { exact: true }).selectOption('trends')
+  await page.getByLabel('时间结果输出键', { exact: true }).fill('trend_input')
+  await page.getByLabel('轨迹时间列', { exact: true }).selectOption('time')
+  await page.getByLabel('轨迹时间含义', { exact: true }).selectOption('normalized_time')
+  await page.getByLabel('时间窗口细胞数', { exact: true }).fill('8')
+  await page.getByLabel('窗口步长细胞数', { exact: true }).fill('4')
+  await page.getByRole('button', { name: '计算并应用时间结果', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: '结果 trend_input 的生效参数', exact: true }),
+  ).toBeVisible()
+  await page.getByLabel('时间分析方法', { exact: true }).selectOption('trend_clusters')
+  await expect(page.getByRole('button', { name: '计算并应用时间结果', exact: true })).toBeDisabled()
+  await page.getByLabel('时间结果输出键', { exact: true }).fill('groups_browser')
+  await page.getByLabel('聚类来源趋势', { exact: true }).selectOption('trend_input')
+  await page.getByLabel('趋势聚类方法', { exact: true }).selectOption('agglomerative')
+  await page.getByLabel('趋势聚类距离', { exact: true }).selectOption('euclidean')
+  await page.getByLabel('趋势簇数', { exact: true }).fill('2')
+  await page.getByLabel('趋势排名前 N 项', { exact: true }).fill('3')
+  let calculations = 0
+  page.on('request', (r) => {
+    if (r.url().endsWith('/analysis/time') && r.method() === 'POST') calculations++
+  })
+  await page.getByRole('button', { name: '计算并应用时间结果', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: '结果 groups_browser 的生效参数', exact: true }),
+  ).toBeVisible()
+  const plotting = page.waitForResponse(
+    (r) => r.url().endsWith('/analysis/plot') && r.request().method() === 'POST',
+  )
+  await page.getByRole('button', { name: '绘制时间结果', exact: true }).click()
+  const body = (await (await plotting).json()).value
+  expect(body.layout.meta.trend_cluster_parent).toBe('trend_input')
+  expect(body.layout.meta.trend_cluster_groups).toHaveLength(2)
+  expect(body.layout.meta.export_tables['features']).toContain('cluster')
+  expect(body.layout.meta.export_tables['curves']).toContain('normalized')
+  expect(body.layout.meta.export_tables['distances']).toContain('source_id')
+  await expect(page.getByText('图来源结果：groups_browser', { exact: true })).toBeVisible()
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: '下载完整时间结果 ZIP', exact: true }).click()
+  expect((await download).suggestedFilename()).toBe('scmm-time-result.zip')
+  for (const width of [700, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true)
+  }
+  await page.getByRole('button', { name: '保存项目', exact: true }).click()
+  await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
+  await page.reload()
+  await expect(page.getByLabel('聚类来源趋势', { exact: true })).toHaveValue('trend_input')
+  await page.getByRole('button', { name: '读取已保存时间图', exact: true }).click()
+  await expect(page.getByText('图来源结果：groups_browser', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '读取时间结果表', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: '结果 groups_browser 的生效参数', exact: true }),
+  ).toBeVisible()
+  expect(calculations).toBe(1)
+})

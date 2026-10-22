@@ -393,3 +393,106 @@ def test_trends_full_export_readonly_reload_and_candidate_failure(workflow, monk
         == 400
     )
     assert current() == before
+
+
+def test_trend_cluster_http_dependency_full_export_roundtrip_and_failure_atomicity(
+    workflow, monkeypatch
+):
+    import_time(workflow, count=234)
+    _, _, _, _, _, _, _, current, post = workflow
+    post(
+        "/analysis/time",
+        {
+            "operation": "trends",
+            "options": dict(
+                key="trend_a",
+                time_key="time",
+                time_kind="normalized_time",
+                unit="unitless",
+                window_size=8,
+                step_size=1,
+            ),
+        },
+    ).raise_for_status()
+    options = dict(
+        key="groups_a",
+        trend_key="trend_a",
+        cluster_method="agglomerative",
+        metric="euclidean",
+        n_clusters=2,
+        top_k=3,
+    )
+    before = current()
+    for change, status in (
+        ({"trend_key": "missing"}, 400),
+        ({"seed": True}, 422),
+        ({"n_clusters": 8}, 400),
+        ({"metric": "correlation", "linkage": "ward"}, 400),
+        ({"top_k": 501}, 422),
+        ({"arbitrary_kwargs": {}}, 422),
+    ):
+        response = post(
+            "/analysis/time", {"operation": "trend_clusters", "options": {**options, **change}}
+        )
+        assert response.status_code == status, response.text
+        assert current() == before
+    response = post("/analysis/time", {"operation": "trend_clusters", "options": options})
+    assert response.status_code == 200, response.text
+    table = get(workflow, "/analysis/time/result?key=groups_a").json()
+    assert table["parameters"]["trend_key"] == "trend_a"
+    assert table["parameters"]["seed"] is None
+    assert table["tables"]["features"]["total"] == 3
+    assert table["tables"]["curves"]["total"] == 681
+    assert len(table["tables"]["curves"]["rows"]) == 200
+    with ZipFile(BytesIO(get(workflow, "/analysis/time/download?key=groups_a").content)) as archive:
+        assert set(archive.namelist()) == {
+            "metadata.json",
+            "features.csv",
+            "curves.csv",
+            "distances.csv",
+            "windows.csv",
+        }
+        assert len(pd.read_csv(BytesIO(archive.read("curves.csv")))) == 681
+        assert len(pd.read_csv(BytesIO(archive.read("distances.csv")))) == 9
+    post("/analysis/plot", {"kind": "time_plot", "options": {"key": "groups_a"}}).raise_for_status()
+    saved = current()["project"]["path"]
+    post("/project/save").raise_for_status()
+    post("/project/close").raise_for_status()
+    post("/project/open", {"path": saved}).raise_for_status()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("read-only reload must not cluster")
+
+    monkeypatch.setattr("scMM.plot._trend_clustering.trend_cluster", forbidden)
+    assert get(workflow, "/analysis/time/result?key=groups_a").json() == table
+    assert get(workflow, "/analysis/figures/time_plot").status_code == 200
+    monkeypatch.undo()
+    before = current()
+    assert (
+        post("/analysis/time", {"operation": "trend_clusters", "options": options}).status_code
+        == 400
+    )
+    assert current() == before
+    from scMM.application import time_analysis
+
+    original = time_analysis.trend_clusters
+
+    def fail(data, **settings):
+        original(data, **settings)
+        data.X[:] = -999
+        raise ValueError("candidate after-fit failure")
+
+    monkeypatch.setattr(time_analysis, "trend_clusters", fail)
+    assert (
+        post(
+            "/analysis/time",
+            {"operation": "trend_clusters", "options": {**options, "key": "failed"}},
+        ).status_code
+        == 400
+    )
+    assert current() == before
+    monkeypatch.undo()
+    post(
+        "/analysis/operation", {"operation": "normalize", "options": {"method": "total"}}
+    ).raise_for_status()
+    assert get(workflow, "/analysis/time/download?key=groups_a").status_code == 400

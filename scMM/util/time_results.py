@@ -56,7 +56,8 @@ def registry(data):
             or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,47}", key)
             or key.startswith("scmm_")
             or not isinstance(run, dict)
-            or run.get("kind") not in {"palantir", "trajectory", "velocity", "trends"}
+            or run.get("kind")
+            not in {"palantir", "trajectory", "velocity", "trends", "trend_clusters"}
             or not isinstance(run.get("parameters"), dict)
             or not isinstance(run.get("identity"), str)
             or not re.fullmatch(r"[0-9a-f]{32}", run["identity"])
@@ -140,10 +141,19 @@ def valid_run(data, run, cache=None):
     ):
         return False
     if (
-        run["kind"] == "trends"
+        run["kind"] in {"trends", "trend_clusters"}
         and run["parameters"].get("feature_axis") != data.var_names.astype(str).tolist()
     ):
         return False
+    if run["kind"] == "trend_clusters":
+        parent = registry(data)["runs"].get(run["parameters"].get("trend_key"))
+        if (
+            parent is None
+            or parent["kind"] != "trends"
+            or parent["identity"] != run["parameters"].get("trend_identity")
+            or not valid_run(data, parent, cache)
+        ):
+            return False
     try:
         for item in [*run["inputs"], *run["outputs"]]:
             key = (item["axis"], item["key"])

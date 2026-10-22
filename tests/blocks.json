@@ -164,6 +164,7 @@
       "tests": [
         "tests/application/test_workbench_state.py",
         "tests/application/test_time_analysis.py",
+        "tests/application/test_time_trend_clusters.py",
         "tests/application/test_result_catalog.py",
         "tests/application/test_maintenance_recovery.py"
       ],
@@ -171,6 +172,7 @@
         "scMM/application/workbench.py",
         "scMM/application/time_analysis.py",
         "scMM/application/time_trends.py",
+        "scMM/application/time_trend_clusters.py",
         "scMM/application/result_catalog.py",
         "scMM/application/cell_spectra.py",
         "scMM/application/recovery.py",

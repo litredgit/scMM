@@ -133,7 +133,7 @@ def _publish(data, key, kind, parameters, inputs, outputs):
     total += sum(
         sum(np.asarray(item).size for item in data.uns[name].values())
         for name, run in value["runs"].items()
-        if run["kind"] in {"velocity", "trends"} and not run.get("stale")
+        if run["kind"] in {"velocity", "trends", "trend_clusters"} and not run.get("stale")
     )
     if total > 5_000_000:
         raise ValueError("时间结果数值超过同步工程上限 500 万，未应用候选")
@@ -426,7 +426,7 @@ def velocity(data, *, key, time_key, time_kind, unit, layer=None, window_size=10
     existing = sum(
         sum(np.asarray(value).size for value in data.uns[name].values())
         for name, run in registry(data)["runs"].items()
-        if run["kind"] in {"velocity", "trends"} and not run.get("stale")
+        if run["kind"] in {"velocity", "trends", "trend_clusters"} and not run.get("stale")
     )
     if expected + existing > 5_000_000:
         raise ValueError("速度窗口结果超过同步工程上限 500 万数值")
@@ -515,6 +515,12 @@ def trends(data, **options):
     return compute(data, **options)
 
 
+def trend_clusters(data, **options):
+    from .time_trend_clusters import trend_clusters as compute
+
+    return compute(data, **options)
+
+
 def info(data):
     cache = {}
     return [
@@ -531,6 +537,10 @@ def info(data):
 
 def result_tables(data, key):
     run = require_run(data, key)
+    if run["kind"] == "trend_clusters":
+        from .time_trend_clusters import cluster_tables
+
+        return cluster_tables(data, key, run)
     if run["kind"] == "trends":
         from .time_trends import trend_tables
 
@@ -665,6 +675,13 @@ def time_figure(data, *, key, coordinate_key=None, plot_top_n=30, display_standa
             xaxis_title=f"{coordinate_key} 1",
             yaxis_title=f"{coordinate_key} 2",
         )
+    elif run["kind"] == "trend_clusters":
+        from .time_trend_clusters import cluster_figure
+
+        if coordinate_key is not None:
+            raise ValueError("趋势聚类图使用时间窗口，不接受嵌入坐标")
+        figure, notes = cluster_figure(data, key, run)
+        inputs = []
     elif run["kind"] == "trends":
         from .time_trends import trend_figure
 

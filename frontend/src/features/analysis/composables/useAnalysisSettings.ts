@@ -81,6 +81,15 @@ export function useAnalysisSettings() {
     kernel_stat: 'median',
     plot_top_n: 30,
     display_standardize: true,
+    trend_key: '',
+    trend_metric: 'correlation',
+    trend_cluster_method: 'leiden',
+    top_k: null as number | null,
+    cluster_seed: 0,
+    trend_n_clusters: 5,
+    trend_n_neighbors: 10,
+    trend_resolution: 1,
+    trend_linkage: 'average',
   })
   const stability = reactive({
     source_key: '',

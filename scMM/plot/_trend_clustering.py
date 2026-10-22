@@ -21,13 +21,13 @@ def trend_cluster(
     if trends.ndim != 2:
         raise ValueError("trends must be a 2D array of shape (n_points, n_features)")
     total_features = trends.shape[1]
-    if total_features < 2:
-        return np.zeros(total_features, dtype=int)
+    metric, cluster_method = _validate_clustering_options(metric, cluster_method)
+    if total_features == 0:
+        return np.zeros(0, dtype=int)
 
     features, valid_rows, early_result = _prepare_feature_trends(trends)
     if early_result is not None:
         return early_result
-    metric, cluster_method = _validate_clustering_options(metric, cluster_method)
     distances = _pairwise_distances(features, metric)
     labels = _cluster_valid_features(features, distances, metric, cluster_method, kwargs)
     result = np.full(total_features, -1, dtype=int)
@@ -100,8 +100,12 @@ def _graph_cluster(distances: np.ndarray, method: str, kwargs: dict) -> np.ndarr
     graph = ig.Graph(n=n_features, edges=edges, directed=False)
     graph.es["weight"] = weights
     if method == "leiden":
-        return _leiden_cluster(graph, float(kwargs.get("resolution", 1.0)))
-    partition = graph.community_multilevel(weights=graph.es["weight"])
+        return _leiden_cluster(
+            graph, float(kwargs.get("resolution", 1.0)), kwargs.get("random_state")
+        )
+    partition = graph.community_multilevel(
+        weights=graph.es["weight"], return_levels=False, resolution=1
+    )
     return np.array(partition.membership, dtype=int)
 
 
@@ -122,7 +126,7 @@ def _distance_weights(distances: np.ndarray, edges: list[tuple[int, int]]) -> li
     return np.exp(-values / scale).tolist()
 
 
-def _leiden_cluster(graph, resolution: float) -> np.ndarray:
+def _leiden_cluster(graph, resolution: float, seed: int | None = None) -> np.ndarray:
     try:
         import leidenalg
     except ImportError as exc:
@@ -132,6 +136,9 @@ def _leiden_cluster(graph, resolution: float) -> np.ndarray:
         leidenalg.RBConfigurationVertexPartition,
         weights=graph.es["weight"],
         resolution_parameter=resolution,
+        n_iterations=2,
+        max_comm_size=0,
+        **({"seed": int(seed)} if seed is not None else {}),
     )
     return np.array(partition.membership, dtype=int)
 

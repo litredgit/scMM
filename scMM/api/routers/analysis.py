@@ -189,6 +189,7 @@ def time_operation(body: s.TimeOperation, manager: Service, identity: Identity):
             "trajectory": s.TimeTrajectory,
             "velocity": s.TimeVelocity,
             "trends": s.TimeTrends,
+            "trend_clusters": s.TimeTrendClusters,
         }[body.operation],
         body.options,
     )

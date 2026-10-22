@@ -63,7 +63,7 @@ class TimeWorkflow:
     def run_time(self, identity, revision, operation, options):
         from .web_projects import project_candidate
 
-        if operation not in {"palantir", "trajectory", "velocity", "trends"}:
+        if operation not in {"palantir", "trajectory", "velocity", "trends", "trend_clusters"}:
             raise ValueError("不支持的时间分析操作")
         with self.access(identity, operation=operation) as workspace:
             workspace.check(revision)

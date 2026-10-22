@@ -293,6 +293,17 @@ adduct,LIPID_CLASS,PC,pos,[M+H]+,5
 没有随机步骤，seed 记录为 null。`plot_top_n=30`（1–500），`display_standardize=true`，均仅控制绘图；
 热图至多 20 万显示值，完整趋势下载不受该限制。NaN/相同时间/统计边界见[代谢趋势](analysis.md#代谢趋势)。
 
+趋势聚类要求显式 `trend_key` 指向有效命名趋势；参数采用该趋势的时间/层/窗口，不从当前草稿重算。
+`metric=correlation`，支持 cosine/euclidean/sqeuclidean；`cluster_method=leiden`，另支持 louvain/kmeans/agglomerative。
+`top_k=null` 使用全部，显式整数为 1–500；最多 500 特征，超过时拒绝，不静默裁剪。
+`seed=0`，范围 0–2³¹−1；无随机拟合时实际 seed 为 null，记录请求值。
+`n_clusters=5`（KMeans/层次，1 至有效特征数），`n_neighbors=10`（图方法，实际截断至有效特征数减 1，单例为 1），
+`resolution=1.0`（仅 Leiden，有限正数），`linkage=average`（层次，另允许 complete/single/ward；Ward 仅欧氏类）。
+记录请求值、生效参数及实际簇数；不开放任意第三方 kwargs。沿用累计 500 万结果数值保护，簇图至多 20 万显示值。
+四种实际拟合共用最多 1 个在途短进程，不排队；繁忙拒绝候选，90 秒超时后终止并回收，不自动重放请求。
+请求等待该短进程；单个有效特征直接成组，不启动拟合。
+此短进程不是可断线查询的持久任务，跨工作区统一任务/队列仍归 M2。
+
 网页固定单计算线程；依赖 Palantir 时按需导入，缺失时明确提示，不替换算法。
 当前同步工程上限为 5000 细胞、当前矩阵和单个输入表示各 500 万数值、64 个命名记录（含失效键），
 累计有效结果及预计单次窗口结果各 500 万数值；为限制请求资源，不是实验推荐阈值或耗时承诺。
