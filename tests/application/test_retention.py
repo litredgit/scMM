@@ -557,6 +557,7 @@ def test_archive_flush_failure_preserves_sources(tmp_path, monkeypatch):
 
 def test_restoration_without_hardlink_support_and_residual_archive_retry(tmp_path, monkeypatch):
     import errno
+
     from scMM.application import retention_cleanup as cleanup
 
     _, project, manager, *_ = setup(tmp_path)
