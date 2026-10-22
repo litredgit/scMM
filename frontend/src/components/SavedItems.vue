@@ -34,6 +34,7 @@ interface RetentionPlan {
   warnings: string[]
   candidate_bytes: number
   selected_bytes: number
+  policy_parameters: { min_age_days: number | null; keep_latest: number | null }
   items: {
     kind: string
     paths: string[]
@@ -49,18 +50,51 @@ interface RetentionPlan {
 const retention = ref<RetentionPlan>()
 const minAgeDays = ref<number | ''>('')
 const keepLatest = ref<number | ''>('')
-const cleanupPlan = ref<{
+const intervalMinutes = ref<number | ''>('')
+const retentionRunLabels: Record<string, string> = {
+  completed: '已归档',
+  retained: '全部保留',
+  skipped: '本轮跳过',
+  failed: '失败并停用',
+  interrupted: '中断待核实',
+  cancelled: '已停止本轮',
+  running: '运行中',
+}
+type PolicyStatus = {
+  policy: {
+    enabled: boolean
+    authorized_by: string
+    interval_minutes: number
+    next_at: number
+    options: { min_age_days: number | null; keep_latest: number | null }
+  } | null
+  runs: { id: string; status: string; started_at: number; message: string }[]
+  error: string | null
+}
+const policyStatus = ref<PolicyStatus>()
+let policyStatusGeneration = 0
+type RetentionPolicyReview = {
+  token: string
+  project: string
+  interval_minutes: number
+  authorization: string
+  advice: RetentionPlan
+}
+const policyReview = ref<RetentionPolicyReview>()
+type CleanupExecutionPlan = {
   token: string
   files: number
   bytes: number
   members: { path: string }[]
-}>()
+}
+const cleanupPlan = ref<CleanupExecutionPlan>()
 let retentionGeneration = 0
 watch(
   [
     selected,
     minAgeDays,
     keepLatest,
+    intervalMinutes,
     () => store.current?.workspace_id,
     () => store.current?.revision,
   ],
@@ -68,12 +102,74 @@ watch(
     retentionGeneration++
     retention.value = undefined
     cleanupPlan.value = undefined
+    policyReview.value = undefined
   },
 )
+watch([selected, () => store.current?.workspace_id], () => {
+  policyStatusGeneration++
+  policyStatus.value = undefined
+  void loadPolicy()
+})
+async function loadPolicy() {
+  if (!auth.admin || !selected.value || !store.current) return
+  const project = selected.value
+  const generation = ++policyStatusGeneration
+  const workspace = store.current.workspace_id
+  const value = await store.read<PolicyStatus>('/saved/retention-policy/status', {
+    revision: store.current.revision,
+    root: '项目结果',
+    path: project,
+  })
+  if (
+    generation === policyStatusGeneration &&
+    selected.value === project &&
+    store.current?.workspace_id === workspace
+  )
+    policyStatus.value = value
+}
+async function reviewPolicy() {
+  const generation = ++retentionGeneration
+  policyReview.value = undefined
+  const value = await store.inspect<RetentionPolicyReview>('/saved/retention-policy/review', {
+    root: '项目结果',
+    path: selected.value,
+    min_age_days: minAgeDays.value === '' ? null : minAgeDays.value,
+    keep_latest: keepLatest.value === '' ? null : keepLatest.value,
+    interval_minutes: intervalMinutes.value,
+  })
+  if (generation === retentionGeneration) {
+    policyReview.value = value
+    retention.value = value?.advice
+    cleanupPlan.value = undefined
+  }
+}
+async function enablePolicy() {
+  if (!policyReview.value) return
+  const token = policyReview.value.token
+  const generation = ++policyStatusGeneration
+  policyReview.value = undefined
+  const result = await store.inspect<PolicyStatus>('/saved/retention-policy/enable', { token })
+  if (result && generation === policyStatusGeneration) {
+    policyStatus.value = result
+    store.notice = '已启用持续自动保留；首轮将在所设间隔后检查，仅移入回收区。'
+  }
+}
+async function disablePolicy() {
+  const generation = ++policyStatusGeneration
+  const result = await store.inspect<PolicyStatus>('/saved/retention-policy/disable', {
+    root: '项目结果',
+    path: selected.value,
+  })
+  if (result && generation === policyStatusGeneration) {
+    policyReview.value = undefined
+    policyStatus.value = result
+    store.notice = '已停用自动保留；当前复制会在安全检查点停止，已归档内容保留。'
+  }
+}
 async function prepareCleanup() {
   const generation = ++retentionGeneration
   cleanupPlan.value = undefined
-  const value = await store.inspect<typeof cleanupPlan.value>('/saved/retention-plan', {
+  const value = await store.inspect<CleanupExecutionPlan>('/saved/retention-plan', {
     root: '项目结果',
     path: selected.value,
     min_age_days: minAgeDays.value === '' ? null : minAgeDays.value,
@@ -245,6 +341,91 @@ async function clear() {
       <button class="preview" :disabled="store.busy || !selected" @click="inspectRetention">
         查看快照与缓存保留计划
       </button>
+      <details v-if="auth.admin" aria-label="持续自动保留">
+        <summary>持续自动保留（默认关闭）</summary>
+        <p>
+          仅针对所选项目，沿用上方显式年龄/数量规则。审阅并启用后，每轮会重新选择未来符合规则的无引用产物；引用、工作区、任务及未知状态保护始终优先。仅移入回收区，不永久清空。服务重启后保留设置。
+        </p>
+        <label
+          ><FieldLabel
+            name="自动保留检查间隔（分钟）"
+            help-key="interval_minutes"
+            text="必须显式填写 1–525600 的整数分钟；首轮在该间隔后运行，错过的周期合并为一轮。"
+          />
+          <input
+            v-model.number="intervalMinutes"
+            aria-label="自动保留检查间隔（分钟）"
+            type="number"
+            min="1"
+            max="525600"
+            step="1"
+            :disabled="store.busy"
+            placeholder="请显式填写"
+          />
+        </label>
+        <button
+          class="preview"
+          :disabled="store.busy || !selected || intervalMinutes === ''"
+          @click="reviewPolicy"
+        >
+          审阅自动保留规则
+        </button>
+        <button class="preview" :disabled="store.busy || !selected" @click="loadPolicy">
+          刷新自动保留状态
+        </button>
+        <div v-if="policyReview" class="alert" aria-label="自动保留规则审阅">
+          <p>{{ policyReview.authorization }}</p>
+          <p>
+            {{ policyReview.project }} · 每 {{ policyReview.interval_minutes }} 分钟检查；最小年龄
+            {{ policyReview.advice.policy_parameters?.min_age_days ?? '不限制' }} 天，每类保留最新
+            {{ policyReview.advice.policy_parameters?.keep_latest ?? '不限制' }} 项。
+          </p>
+          <p>
+            当前建议
+            {{ (policyReview.advice.selected_bytes / 1024 / 1024).toFixed(2) }}
+            MiB；开启后也适用于未来产物，并非只执行这次清单。
+          </p>
+          <button class="primary" :disabled="store.busy" @click="enablePolicy">
+            启用持续自动保留
+          </button>
+        </div>
+        <div v-if="policyStatus" aria-label="自动保留状态">
+          <p>
+            {{ policyStatus.policy?.enabled ? '已启用' : '已停用 / 尚未设置'
+            }}<template v-if="policyStatus.policy?.enabled">
+              · 每 {{ policyStatus.policy.interval_minutes }} 分钟检查；下次检查
+              {{
+                new Date(policyStatus.policy.next_at * 1000).toLocaleString('zh-CN', {
+                  timeZone: 'Asia/Shanghai',
+                })
+              }}（北京时间）</template
+            >
+          </p>
+          <p v-if="policyStatus.policy">
+            启用管理员：{{ policyStatus.policy.authorized_by }}。 已生效规则：最小年龄
+            {{ policyStatus.policy.options.min_age_days ?? '不限制' }} 天，每类保留最新
+            {{ policyStatus.policy.options.keep_latest ?? '不限制' }} 项；上方输入只是待审阅草稿。
+          </p>
+          <p v-if="policyStatus.error">{{ policyStatus.error }}</p>
+          <button
+            class="danger"
+            :disabled="store.busy || !policyStatus.policy?.enabled"
+            @click="disablePolicy"
+          >
+            停用自动保留
+          </button>
+          <ul>
+            <li v-for="run in policyStatus.runs" :key="run.id">
+              {{
+                new Date(run.started_at * 1000).toLocaleString('zh-CN', {
+                  timeZone: 'Asia/Shanghai',
+                })
+              }}
+              · {{ retentionRunLabels[run.status] ?? run.status }}：{{ run.message }}
+            </li>
+          </ul>
+        </div>
+      </details>
       <button
         class="preview"
         :disabled="store.busy || !retention?.selected_bytes"

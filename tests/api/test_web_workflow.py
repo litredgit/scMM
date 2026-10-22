@@ -431,6 +431,105 @@ def test_retention_advice_is_read_only_and_revision_guarded(workflow):
     assert post("/saved/move", {"token": "retention-advice"}).status_code == 400
 
 
+def test_automatic_retention_review_tokens_and_effective_policy(workflow):
+    client, _, _, _, _, _, _, current, post = workflow
+    folder = current()["project"]["path"]
+    options = {"root": "项目结果", "path": folder, "keep_latest": 0, "interval_minutes": 1}
+    assert post("/saved/retention-policy/enable", {"token": "missing"}).status_code == 400
+    assert (
+        post("/saved/retention-policy/review", {**options, "keep_latest": None}).status_code == 400
+    )
+    for value in (True, 0, 1.5, "2", 525601):
+        assert (
+            post(
+                "/saved/retention-policy/review", {**options, "interval_minutes": value}
+            ).status_code
+            == 422
+        )
+    before = current()
+    response = post("/saved/retention-policy/review", options)
+    assert response.status_code == 200, response.text
+    review = response.json()
+    assert "未来" in review["authorization"] and current() == before
+    other = client.post("/api/v1/workspaces").json()["workspace_id"]
+    assert (
+        client.post(
+            "/api/v1/workspace/saved/retention-policy/enable",
+            headers={"X-SCMM-Workspace": other},
+            json={"revision": 0, "token": review["token"]},
+        ).status_code
+        == 400
+    )
+    enabled = post("/saved/retention-policy/enable", {"token": review["token"]})
+    assert enabled.status_code == 200, enabled.text
+    assert enabled.json()["policy"]["enabled"]
+    assert post("/saved/retention-policy/enable", {"token": review["token"]}).status_code == 400
+    status = post("/saved/retention-policy/status", {"root": "项目结果", "path": folder}).json()
+    assert status["policy"]["options"] == {"keep_latest": 0, "min_age_days": None}
+    assert status["policy"]["owner"] == client.app.state.auth.users()[0]["id"]
+    disabled = post("/saved/retention-policy/disable", {"root": "项目结果", "path": folder})
+    assert disabled.status_code == 200 and not disabled.json()["policy"]["enabled"]
+    assert current() == before
+
+
+def test_live_retention_cycle_blocks_checkpoint_and_can_be_disabled_without_waiting(
+    workflow, monkeypatch
+):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from types import SimpleNamespace
+
+    from scMM.application import retention_cleanup as cleanup
+    from scMM.application.recovery import RecoveryStore
+    from scMM.application.retention_scheduler import RetentionScheduler
+
+    client, _, manager, _, _, _, _, current, post = workflow
+    folder = Path(current()["project"]["path"])
+    shared = folder / "processing" / f"shared-{'e' * 64}.npy"
+    np.save(shared, np.array([150.123456789]))
+    shared.with_suffix(".json").write_text("{}", encoding="utf-8")
+    post("/project/close").raise_for_status()
+    manager.retention.stop()
+    clock = [1000.0]
+    manager.retention = RetentionScheduler(manager, client.app.state.auth, clock=lambda: clock[0])
+    review = post(
+        "/saved/retention-policy/review",
+        {"root": "项目结果", "path": str(folder), "keep_latest": 0, "interval_minutes": 1},
+    ).json()
+    post("/saved/retention-policy/enable", {"token": review["token"]}).raise_for_status()
+    copy = cleanup._copy
+    entered, release = threading.Event(), threading.Event()
+
+    def slow(source, target):
+        entered.set()
+        assert release.wait(5)
+        copy(source, target)
+
+    monkeypatch.setattr(cleanup, "_copy", slow)
+    clock[0] += 60
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        pending = executor.submit(manager.retention.tick)
+        try:
+            assert entered.wait(5)
+            snapshot = client.app.state.monitor.snapshot()
+            assert any(
+                t["kind"] == "自动保留" and t["status"] == "running" for t in snapshot["tasks"]
+            )
+            assert snapshot["update_readiness"]["active_tasks"] >= 1
+            recovery = RecoveryStore(SimpleNamespace(path=folder.parent.parent / "dev.json"))
+            with pytest.raises(ValueError, match="自动保留任务仍在执行"):
+                recovery.snapshot(manager)
+            disabled = post(
+                "/saved/retention-policy/disable", {"root": "项目结果", "path": str(folder)}
+            )
+            assert disabled.status_code == 200 and not disabled.json()["policy"]["enabled"]
+        finally:
+            release.set()
+        pending.result(timeout=5)
+    assert shared.exists() and not manager.saved_items().list_trash()
+    assert manager.retention.status(folder)["runs"][0]["status"] == "cancelled"
+
+
 def test_retention_cleanup_requires_review_token_and_restores_pair(workflow):
     client, _, manager, _, _, _, _, current, post = workflow
     folder = Path(current()["project"]["path"])

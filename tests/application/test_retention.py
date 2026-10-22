@@ -511,6 +511,21 @@ def test_cleanup_archive_tampering_prevents_restore(tmp_path):
     assert manager.list_trash()
 
 
+def test_new_cleanup_record_rejects_replacement_project_at_original_path(tmp_path):
+    _, project, manager, *_ = setup(tmp_path)
+    plan = cleanup_plan(manager, project.folder, keep_latest=0)
+    entry = execute_cleanup(manager, plan)
+    original = dict(project.manifest)
+    project.manifest["id"] = "replacement"
+    write_json(project.folder / "project.json", project.manifest)
+    with pytest.raises(PermissionError, match="项目身份已改变"):
+        manager.restore(entry)
+    assert not any((project.folder / member["path"]).exists() for member in plan["members"])
+    write_json(project.folder / "project.json", original)
+    manager.restore(entry)
+    assert not manager.list_trash()
+
+
 def test_pair_second_removal_failure_restores_both_and_all_earlier_members(tmp_path, monkeypatch):
     from scMM.application import retention_cleanup as cleanup
 

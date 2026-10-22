@@ -142,6 +142,7 @@
         "tests/application/test_projects.py",
         "tests/application/test_saved_items.py",
         "tests/application/test_retention.py",
+        "tests/application/test_retention_scheduler.py",
         "tests/application/test_text_encoding.py"
       ],
       "sources": [
@@ -149,6 +150,7 @@
         "scMM/application/trash.py",
         "scMM/application/retention.py",
         "scMM/application/retention_cleanup.py",
+        "scMM/application/retention_scheduler.py",
         "scMM/application/saved_catalog.py",
         "scMM/application/naming.py",
         "scMM/application/storage.py"

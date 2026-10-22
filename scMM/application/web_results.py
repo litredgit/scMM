@@ -28,7 +28,11 @@ class ResultWorkflow:
         folder = Path(path).resolve()
         with self._lock:
             if folder in self._retention_operations or folder in self.active_paths():
-                raise RuntimeError("项目正在打开、仍在工作区使用或正在清理，请先关闭后重试")
+                from .workspace_state import WorkspaceError
+
+                raise WorkspaceError(
+                    "项目正在打开、仍在工作区使用或正在清理，请先关闭后重试", code="retention_busy"
+                )
             self._retention_operations.add(folder)
         try:
             yield

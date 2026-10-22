@@ -3,7 +3,7 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, Response
 
 from .. import workflow_schemas as s
@@ -127,6 +127,56 @@ def restore(body: s.RestoreTrash, manager: Service, identity: Identity):
     with manager.access(identity) as workspace:
         workspace.check(body.revision)
         return {"path": str(manager.restore_saved(body.entry))}
+
+
+@router.post("/workspace/saved/retention-policy/review")
+def review_retention_policy(body: s.RetentionSchedule, manager: Service, identity: Identity):
+    with manager.access(identity) as workspace:
+        workspace.check(body.revision)
+        if body.root != "项目结果":
+            raise ValueError("自动保留仅支持本环境项目根")
+        review = manager.retention.review(
+            body.path,
+            {
+                "min_age_days": body.min_age_days,
+                "keep_latest": body.keep_latest,
+            },
+            body.interval_minutes,
+        )
+        token = uuid4().hex
+        workspace.retention_policy_review = (token, review)
+        return {"token": token, **review}
+
+
+@router.post("/workspace/saved/retention-policy/enable")
+def enable_retention_policy(
+    body: s.ExecutePlan, request: Request, manager: Service, identity: Identity
+):
+    with manager.access(identity) as workspace:
+        workspace.check(body.revision)
+        review = workspace.retention_policy_review
+        if not review or review[0] != body.token:
+            raise ValueError("请先审阅持续自动保留规则")
+        workspace.retention_policy_review = None
+        return manager.retention.enable(review[1], request.state.principal["id"])
+
+
+@router.post("/workspace/saved/retention-policy/status")
+def retention_policy_status(body: s.SavedPlan, manager: Service, identity: Identity):
+    with manager.access(identity) as workspace:
+        workspace.check(body.revision)
+        if body.root != "项目结果":
+            raise ValueError("自动保留仅支持本环境项目根")
+        return manager.retention.status(body.path)
+
+
+@router.post("/workspace/saved/retention-policy/disable")
+def disable_retention_policy(body: s.SavedPlan, manager: Service, identity: Identity):
+    with manager.access(identity) as workspace:
+        workspace.check(body.revision)
+        if body.root != "项目结果":
+            raise ValueError("自动保留仅支持本环境项目根")
+        return manager.retention.disable(body.path)
 
 
 @router.post("/workspace/saved/clear")

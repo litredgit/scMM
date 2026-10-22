@@ -80,8 +80,9 @@ class Maintenance:
         tasks = readiness.get("tasks", [])
         if any(t.get("status") in {"queued", "running"} for t in tasks):
             raise ValueError("仍有任务正在运行。")
-        self.completed = self.recovery.snapshot(self.manager)
-        self.manager.maintenance_frozen = True
+        with self.manager._lock:
+            self.completed = self.recovery.snapshot(self.manager)
+            self.manager.maintenance_frozen = True
         return self.status()
 
     def cancel(self):

@@ -38,6 +38,9 @@ class RecoveryStore:
 
     def snapshot(self, manager):
         with self.lock, manager._lock, ExitStack() as stack:
+            retention = getattr(manager, "retention", None)
+            if retention is not None and retention.runtime()[0]:
+                raise ValueError("自动保留任务仍在执行，请等待本轮结束")
             workspaces = list(manager._workspaces.values())
             for workspace in sorted(workspaces, key=lambda w: w.id):
                 if not workspace.lock.acquire(blocking=False):

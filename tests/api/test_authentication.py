@@ -60,6 +60,28 @@ def test_all_business_reads_require_login(secured, path):
     assert client.get("/api/v1/health").status_code == 200
 
 
+def test_retention_policy_management_requires_admin(secured):
+    app, store, client, initial = secured
+    enter(client, "admin", initial, initialize=True)
+    member = store.create_user("member")
+    enter(client, "member", member["initial_credential"], initialize=True)
+    workspace = client.post("/api/v1/workspaces").json()["workspace_id"]
+    for action in ("status", "review", "enable", "disable"):
+        response = client.post(
+            "/api/v1/workspace/saved/retention-policy/" + action,
+            headers={"X-SCMM-Workspace": workspace},
+            json={
+                "revision": 0,
+                "root": "项目结果",
+                "path": str(app.state.workspaces.store.root),
+                "token": "invalid",
+                "interval_minutes": 1,
+                "keep_latest": 0,
+            },
+        )
+        assert response.status_code == 403, response.text
+
+
 def test_missing_auth_cannot_start(tmp_path):
     with pytest.raises(RuntimeError, match="不支持匿名"):
         create_app([], project_root=tmp_path, static_root=None)

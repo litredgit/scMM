@@ -60,13 +60,18 @@ def create_app(
     from scMM.application.monitor import MonitorService
 
     monitoring = MonitorService(manager, auth_store, server_config)
+    from scMM.application.retention_scheduler import RetentionScheduler
+
+    manager.retention = RetentionScheduler(manager, auth_store)
 
     @asynccontextmanager
     async def lifespan(_app):
         monitoring.start()
+        manager.retention.start()
         try:
             yield
         finally:
+            manager.retention.stop()
             monitoring.stop()
             manager.shutdown()
 
@@ -151,6 +156,7 @@ def create_app(
                         or (path == "/api/v1/preferences" and mutation)
                         or (
                             path == "/api/v1/workspace/saved/clear"
+                            or path.startswith("/api/v1/workspace/saved/retention-policy/")
                             or (path == "/api/v1/workspace/lipids/presets" and mutation)
                         )
                     )

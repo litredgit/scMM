@@ -280,6 +280,11 @@ class MonitorService:
             result = deepcopy(self._snapshot)
             active = list(self._active.values())
         workspaces, incomplete = self.workspaces()
+        if getattr(self.manager, "retention", None) is not None:
+            retention_tasks, retention_error = self.manager.retention.runtime()
+            result["tasks"].extend(retention_tasks)
+            if retention_error:
+                incomplete.append(retention_error)
         now = self.clock()
         users = self.auth.users()
         names = {u["id"]: u["username"] for u in users}

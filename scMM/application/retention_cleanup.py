@@ -38,6 +38,7 @@ def cleanup_plan(manager, value, *, min_age_days=None, keep_latest=None):
         "retention_version": 1,
         "root": str(manager.store.root),
         "path": str(folder),
+        "project_id": manager.store._manifest(folder)["id"],
         "kind": "快照与缓存策略清理",
         "policy_parameters": advice["policy_parameters"],
         "items": selected,
@@ -136,16 +137,19 @@ def _folder(manager, record):
         or folder.parent != manager.store.root
     ):
         raise PermissionError("清理恢复仅支持所属环境项目根中的项目")
-    manager.store._manifest(manager.store._folder(folder))
+    manifest = manager.store._manifest(manager.store._folder(folder))
+    if record.get("project_id") is not None and record["project_id"] != manifest["id"]:
+        raise PermissionError("项目身份已改变，不能将归档恢复到其他项目")
     return folder
 
 
-def execute_cleanup(manager, plan):
+def execute_cleanup(manager, plan, *, check_allowed=lambda: None):
     """Revalidate the frozen selection, archive all members, then remove sources.
 
     Interrupted removal leaves a visible recovery entry. It is never eligible for
     permanent clearing until restoration has resolved the partial operation.
     """
+    check_allowed()
     folder = _folder(manager, plan)
     manager._prepare_trash()
     with ExitStack() as locks:
@@ -156,7 +160,7 @@ def execute_cleanup(manager, plan):
         for project in folders:
             locks.enter_context(project_lock(project))
         current = cleanup_plan(manager, folder, **plan["policy_parameters"])
-        for key in ("root", "path", "items", "members", "files", "bytes"):
+        for key in ("root", "path", "project_id", "items", "members", "files", "bytes"):
             if current[key] != plan[key]:
                 raise RuntimeError("清理清单或产物已改变，请重新查看清理计划")
         entry = manager.trash_root / f"{beijing_time(compact=True)}_{uuid4().hex[:12]}"
@@ -167,6 +171,7 @@ def execute_cleanup(manager, plan):
         published = False
         try:
             for index, member in enumerate(plan["members"]):
+                check_allowed()
                 source = _safe(folder / member["path"])
                 digest = _digest(manager, source)
                 _copy(source, payload / str(index))
@@ -180,7 +185,9 @@ def execute_cleanup(manager, plan):
             write_json(entry / "record.json", record)
             _sync_tree(entry)
             published = True
+            check_allowed()
             for member in record["members"]:
+                check_allowed()
                 source = _safe(folder / member["path"])
                 if _digest(manager, source) != member["digest"]:
                     raise RuntimeError("移走前产物发生变化，恢复副本已保留")

@@ -383,6 +383,44 @@ test('reviewed retention cleanup archives a shared pair and restores it', async 
   await expect(entry).toHaveCount(0)
 })
 
+test('automatic retention rules require review, survive refresh and stop explicitly', async ({
+  page,
+}) => {
+  await create(page, 'Vue 自动保留规则')
+  await page.getByRole('button', { name: '关闭项目', exact: true }).click()
+  await page.getByRole('link', { name: 'scMM 项目首页' }).click()
+  const selectProject = async () => {
+    await page.getByText('管理已保存项目 / 结果', { exact: true }).click()
+    const selected = page.getByLabel('已保存项目', { exact: true })
+    const option = selected.locator('option').filter({ hasText: 'Vue 自动保留规则' })
+    await selected.selectOption((await option.getAttribute('value'))!)
+    await page.getByText('持续自动保留（默认关闭）', { exact: true }).click()
+  }
+  await selectProject()
+  const state = page.locator('[aria-label="自动保留状态"]')
+  await expect(state).toContainText('已停用 / 尚未设置')
+  await page.getByLabel('每类至少保留最新数量', { exact: true }).fill('0')
+  await page.getByLabel('自动保留检查间隔（分钟）', { exact: true }).fill('1')
+  await page.getByRole('button', { name: '审阅自动保留规则', exact: true }).click()
+  const review = page.locator('[aria-label="自动保留规则审阅"]')
+  await expect(review).toContainText('未来符合条件的产物')
+  await expect(page.locator('[aria-label="快照与缓存保留计划"]')).toContainText(
+    '当前没有快照或缓存条目。',
+  )
+  await page.getByLabel('自动保留检查间隔（分钟）', { exact: true }).fill('2')
+  await expect(review).toHaveCount(0)
+  await page.getByRole('button', { name: '审阅自动保留规则', exact: true }).click()
+  await page.getByRole('button', { name: '启用持续自动保留', exact: true }).click()
+  await expect(state).toContainText('已启用 · 每 2 分钟检查')
+  await expect(state).toContainText('每类保留最新 0 项')
+  await page.reload()
+  await selectProject()
+  await expect(state).toContainText('已启用 · 每 2 分钟检查')
+  await page.getByRole('button', { name: '停用自动保留', exact: true }).click()
+  await expect(state).toContainText('已停用 / 尚未设置')
+  await expect(page.getByRole('status')).toContainText('已停用自动保留')
+})
+
 test('latest result preselection, detailed help, stable QC and readable narrow layout', async ({
   page,
 }) => {

@@ -381,6 +381,10 @@ class RetentionPlan(SavedPlan):
     keep_latest: int | None = Field(default=None, ge=0, strict=True)
 
 
+class RetentionSchedule(RetentionPlan):
+    interval_minutes: int = Field(ge=1, le=525600, strict=True)
+
+
 class ExecutePlan(RevisionRequest):
     token: str
 
