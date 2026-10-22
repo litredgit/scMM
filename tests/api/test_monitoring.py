@@ -338,3 +338,43 @@ def test_unload_close_and_workspace_release_can_arrive_in_either_order(monitor, 
         close()
     assert not app.state.workspaces._workspaces
     assert service.snapshot()["update_readiness"]["state"] == "ready"
+
+
+def test_registration_closure_proof_is_idempotent_and_wins_both_arrival_orders(monitor):
+    _, client, service = monitor
+    for closed_first in (True, False):
+        identity, secret = uuid4().hex, secrets.token_hex(32)
+        body = {
+            "id": identity,
+            "route": "/login",
+            "visibility": "visible",
+            "registration_secret": secret,
+        }
+        if not closed_first:
+            first = client.post("/api/v1/presence/register", json=body)
+            assert first.status_code == 200
+            assert client.post("/api/v1/presence/register", json=body).status_code == 200
+        closing = client.post("/api/v1/presence/register", json={**body, "closed": True})
+        assert closing.status_code == 200, closing.text
+        assert client.post("/api/v1/presence/register", json=body).status_code == 409
+        assert (
+            client.post("/api/v1/presence/register", json={**body, "closed": True}).status_code
+            == 200
+        )
+        forged = client.post(
+            "/api/v1/presence/register",
+            json={**body, "closed": True, "registration_secret": secrets.token_hex(32)},
+        )
+        assert forged.status_code == 403
+        assert not service.store.observed(identity)
+    assert not service.store.pages()
+    response = client.post(
+        "/api/v1/presence/register",
+        json={
+            "id": uuid4().hex,
+            "route": "/login",
+            "visibility": "visible",
+            "closed": True,
+        },
+    )
+    assert response.status_code == 422

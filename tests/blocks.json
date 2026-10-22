@@ -175,6 +175,7 @@
         "scMM/application/recovery.py",
         "scMM/application/state_codec.py",
         "scMM/application/maintenance.py",
+        "scMM/application/maintenance_closure.py",
         "scMM/application/maintenance_runner.py"
       ],
       "downstream": ["api", "api-lipids", "plotting"],

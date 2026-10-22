@@ -68,3 +68,118 @@ test('monitor opens without creating a workspace and tracks hidden login pages',
     await page.screenshot({ path: `/tmp/scmm-monitor/dashboard-${width}.png`, fullPage: true })
   }
 })
+
+test('closing during a delayed registration sends a terminal proof before the response', async ({
+  page,
+}) => {
+  let release!: () => void
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let entered!: () => void
+  const registering = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  let first = true
+  await page.route('**/presence/register', async (route) => {
+    if (first && !route.request().postDataJSON().closed) {
+      first = false
+      entered()
+      await held
+    }
+    await route.continue().catch(() => {})
+  })
+  try {
+    await page.goto('/projects')
+    await registering
+    const terminal = page.waitForResponse(
+      (r) => r.url().endsWith('/presence/register') && r.request().postDataJSON().closed,
+    )
+    await page.evaluate(() =>
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false })),
+    )
+    const response = await terminal
+    expect(response.ok()).toBe(true)
+    const proof = response.request().postDataJSON()
+    expect(proof.registration_secret.length).toBeGreaterThanOrEqual(32)
+    await page.goto('about:blank')
+    release()
+    const late = await page.request.post('/api/v1/presence/register', {
+      headers: { 'X-SCMM-Client': 'web' },
+      data: { ...proof, closed: false },
+    })
+    expect(late.status()).toBe(409)
+  } finally {
+    release()
+  }
+})
+
+test('a cached document confirmed closed acquires a new lease on resume', async ({ page }) => {
+  const first = page.waitForResponse((r) => r.url().endsWith('/presence/register') && r.ok())
+  await page.goto('/projects')
+  const original = (await first).request().postDataJSON()
+  await expect(page.getByRole('heading', { name: '创建项目', exact: true })).toBeVisible()
+  const close = await page.request.post('/api/v1/presence/register', {
+    headers: { 'X-SCMM-Client': 'web' },
+    data: { ...original, closed: true },
+  })
+  expect(close.ok()).toBe(true)
+  const renewed = page.waitForResponse(
+    (r) =>
+      r.url().endsWith('/presence/register') &&
+      r.ok() &&
+      r.request().postDataJSON().id !== original.id,
+  )
+  await page.evaluate(() =>
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })),
+  )
+  const fresh = await renewed
+  expect(fresh.request().postDataJSON().registration_secret).not.toBe(original.registration_secret)
+  const stale = await page.request.post('/api/v1/presence/register', {
+    headers: { 'X-SCMM-Client': 'web' },
+    data: original,
+  })
+  expect(stale.status()).toBe(409)
+})
+
+test('administrator closure review clears an orphan without replacing workspace checkpoint', async ({
+  page,
+}) => {
+  await page.goto('/account')
+  await expect(page.getByRole('heading', { name: '服务器资源与更新', exact: true })).toBeVisible()
+  const orphan = await page.request.post('/api/v1/presence/register', {
+    headers: { 'X-SCMM-Client': 'web' },
+    data: { id: crypto.randomUUID().replaceAll('-', ''), route: '/login', visibility: 'suspended' },
+  })
+  expect(orphan.ok()).toBe(true)
+  await page.getByRole('button', { name: '收集全部会话', exact: true }).click()
+  try {
+    await page.getByRole('button', { name: '读取失联页面范围', exact: true }).click()
+    await expect(page.getByText(/本轮失联 1 页/)).toBeVisible()
+    await page.getByLabel('页面关闭依据', { exact: true }).fill('已核实本轮孤立测试页面关闭')
+    await page.getByRole('button', { name: '记录关闭确认并保留工作区', exact: true }).click()
+    await expect(
+      page.getByText('关闭依据已记录；工作区仍保留，请继续验证并暂存会话。', { exact: true }),
+    ).toBeVisible()
+    await expect
+      .poll(async () => {
+        const r = await page.request.get('/api/v1/admin/maintenance/status')
+        return (await r.json()).acknowledged.length
+      })
+      .toBeGreaterThan(0)
+    const checkpoint = page.waitForResponse((r) =>
+      r.url().endsWith('/admin/maintenance/checkpoint'),
+    )
+    await page.getByRole('button', { name: '验证并暂存会话', exact: true }).click()
+    const checked = await checkpoint
+    expect(checked.ok(), await checked.text()).toBe(true)
+    await expect
+      .poll(async () => {
+        const r = await page.request.get('/api/v1/admin/maintenance/status')
+        return Boolean((await r.json()).completed?.verified)
+      })
+      .toBe(true)
+  } finally {
+    await page.getByRole('button', { name: '取消维护', exact: true }).click()
+  }
+})

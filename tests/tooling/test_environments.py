@@ -378,3 +378,34 @@ def test_first_migration_failure_restores_legacy_launcher_and_code(worktrees, mo
     assert launcher.stat().st_mode & 0o777 == 0o640
     assert calls[-1] == ("start", manager.SERVICE)
     assert list(values["state"].glob("pre-auth-launchers-*/manifest.json"))
+
+
+def test_release_reports_unknown_evidence_without_claiming_tabs_still_open(monkeypatch):
+    from io import BytesIO
+
+    from scMM.application.monitor_presence import update_readiness
+
+    class Response(BytesIO):
+        headers: ClassVar[dict] = {"Content-Type": "application/json"}
+
+    decision = update_readiness(pages=[], workspaces=[], tasks=[], sampled_at=manager.time.time())
+    decision.update(state="unknown", unconfirmed_pages=2, unknown=["Missing close receipts"])
+    replies = [
+        {"frontend": "vue"},
+        {
+            "monitor_protocol": 1,
+            "unsaved_workspaces": 0,
+            "busy_workspaces": 0,
+            "update_readiness": decision,
+        },
+    ]
+    monkeypatch.setattr(
+        manager.urllib.request,
+        "urlopen",
+        lambda *_a, **_k: Response(json.dumps(replies.pop(0)).encode()),
+    )
+    with pytest.raises(RuntimeError) as caught:
+        manager.web_idle(5006)
+    assert "Missing close receipts" in str(caught.value)
+    assert "失联记录不等于页面仍打开" in str(caught.value)
+    assert "save and close them first" not in str(caught.value)

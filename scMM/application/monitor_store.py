@@ -71,17 +71,43 @@ class MonitorStore:
                 if db is not self._memory:
                     db.close()
 
-    def register(self, identity, instance, user_id, route, visibility, workspace_id):
-        token = secrets.token_urlsafe(32)
+    def register(
+        self,
+        identity,
+        instance,
+        user_id,
+        route,
+        visibility,
+        workspace_id,
+        *,
+        registration_secret=None,
+        closed=False,
+    ):
+        token = registration_secret or secrets.token_urlsafe(32)
+        if closed and not registration_secret:
+            raise AuthError("关闭登记需要本页面凭据。", 422, "presence_rejected")
         with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            previous = db.execute("SELECT * FROM pages WHERE id=?", (identity,)).fetchone()
+            if previous:
+                if not registration_secret:
+                    raise AuthError("页面已登记，请使用原登记凭据。", 409, "page_exists")
+                if not secrets.compare_digest(previous["secret_hash"], digest(token)):
+                    raise AuthError("页面凭据不匹配。", 403, "presence_rejected")
+                if previous["closed"] is not None and not closed:
+                    raise AuthError("页面登记已关闭。", 409, "page_closed")
+                if closed:
+                    db.execute(
+                        "UPDATE pages SET closed=COALESCE(closed,?) WHERE id=?",
+                        (self.clock(), identity),
+                    )
+                return {"id": identity, "token": token, "instance": instance}
             if db.execute("SELECT COUNT(*) FROM pages WHERE closed IS NULL").fetchone()[0] >= 2048:
                 raise AuthError(
                     "页面登记容量已满，请联系服务器管理员核对。", 503, "presence_capacity"
                 )
-            if db.execute("SELECT 1 FROM pages WHERE id=?", (identity,)).fetchone():
-                raise AuthError("页面已登记，请使用原登记凭据。", 409, "page_exists")
             db.execute(
-                "INSERT INTO pages VALUES(?,?,?,?,?,?,?,?,NULL)",
+                "INSERT INTO pages VALUES(?,?,?,?,?,?,?,?,?)",
                 (
                     identity,
                     digest(token),
@@ -91,6 +117,7 @@ class MonitorStore:
                     route,
                     visibility,
                     workspace_id,
+                    self.clock() if closed else None,
                 ),
             )
         return {"id": identity, "token": token, "instance": instance}

@@ -38,6 +38,11 @@ class Action(Controls):
     version: str | None = None
 
 
+class ClosedPages(Controls):
+    review_id: str
+    reason: str
+
+
 @router.get("/maintenance/status")
 def status(request: Request):
     service = request.app.state.maintenance
@@ -139,6 +144,18 @@ def prepare(request: Request):
 @router.post("/admin/maintenance/checkpoint")
 def checkpoint(request: Request):
     return request.app.state.maintenance.checkpoint()
+
+
+@router.post("/admin/maintenance/closed-pages/review")
+def review_closed_pages(request: Request):
+    return request.app.state.maintenance.review_closed_pages()
+
+
+@router.post("/admin/maintenance/closed-pages/confirm")
+def confirm_closed_pages(body: ClosedPages, request: Request):
+    return request.app.state.maintenance.confirm_closed_pages(
+        body.review_id, body.reason, request.state.principal["id"]
+    )
 
 
 @router.post("/admin/maintenance/cancel")

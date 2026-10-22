@@ -720,6 +720,8 @@ HTTP `/presence/register` 与 `/presence/heartbeat` 为登录页提供受限租�
 
 `application/state_codec.py` 明确编码 AnnData/数组/表/图及受审核模型；`recovery.py` 原子发布并校验恢复包，
 `maintenance.py` 管理页面握手和维护状态，`maintenance_runner.py` 在独立 systemd 任务中执行重启及配置回滚。
+`maintenance_closure.py` 管理维护轮次内的一次性关闭审阅：只对经人工核实的失联记录及历史未登记请求更新证据，
+不删除工作区，不授予只读运维令牌写权限；新活动、过期或审计失败不应用旧确认。
 `api/routers/maintenance.py` 只开放认证管理入口。公开维护状态只含收集 nonce/完成标记，完整状态只给管理员。
 `frontend/src/api/viewState.ts` 注册可恢复页面状态，`maintenance.ts` 收集已访问页面的参数/图及控件；密码、文件输入和账号配置不进入通用草稿采集。
 `plot/export.py` 负责全精度 ZIP 与禁止外部资源/活动内容的 SVG→PDF；`plot/explanations.py` 和 `plot/isotopes.py` 提供可追溯解释图。

@@ -34,6 +34,7 @@ test('project, samples, metadata, save and reopen with no browser errors', async
   const other = await context.newPage()
   await other.goto('/samples')
   await expect(other.getByRole('heading', { name: '先选择一个项目' })).toBeVisible()
+  await other.goto('about:blank')
   await other.close()
 
   await page.reload()

@@ -45,6 +45,7 @@ class MonitorService:
         self._active = {}
         self._requests = deque(maxlen=4096)
         self._legacy_pages = False
+        self._legacy_generation = 0
         self.registration_budget = {}
         self._snapshot = {
             "sampled_at": None,
@@ -132,9 +133,11 @@ class MonitorService:
     def begin(self, principal, path, page_id, *, closing=False):
         identity = uuid4().hex
         # Unsupported browser clients cannot silently become evidence of no open pages.
-        if not self.store.observed(page_id, closing=closing):
-            self._legacy_pages = True
+        observed = self.store.observed(page_id, closing=closing)
         with self._lock:
+            if not observed:
+                self._legacy_pages = True
+                self._legacy_generation += 1
             self._active[identity] = {
                 "user_id": principal["id"],
                 "kind": self.operation(path),

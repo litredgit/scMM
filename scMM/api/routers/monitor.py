@@ -38,6 +38,11 @@ class Heartbeat(Page):
     closed: bool = False
 
 
+class Registration(Page):
+    registration_secret: SecretStr | None = Field(default=None, min_length=32, max_length=128)
+    closed: bool = False
+
+
 def user(request):
     try:
         return request.app.state.auth.authenticate(
@@ -48,7 +53,7 @@ def user(request):
 
 
 @router.post("/presence/register")
-async def register(body: Page, request: Request):
+async def register(body: Registration, request: Request):
     service = request.app.state.monitor
     # Source budget is bounded, without persisting addresses in monitoring records.
     key = request.client.host if request.client else "unknown"
@@ -68,6 +73,10 @@ async def register(body: Page, request: Request):
         body.route,
         body.visibility,
         body.workspace_id,
+        registration_secret=body.registration_secret.get_secret_value()
+        if body.registration_secret
+        else None,
+        closed=body.closed,
     )
 
 

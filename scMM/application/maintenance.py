@@ -3,22 +3,36 @@
 # ruff: noqa: RUF001
 import json
 import subprocess
+import threading
 import time
+from functools import wraps
 from pathlib import Path
 from uuid import uuid4
 
 from .recovery import RecoveryStore
 
 
+def _serialized(method):
+    @wraps(method)
+    def call(self, *args, **kwargs):
+        with self._control_lock:
+            return method(self, *args, **kwargs)
+
+    return call
+
+
 class Maintenance:
     def __init__(self, manager, monitor, config):
+        self._control_lock = threading.RLock()
         self.manager, self.monitor, self.config = manager, monitor, config
         self.recovery = RecoveryStore(config)
         self.request = None
         self.completed = None
         self.acks = {}
+        self.closure_review = None
         self.recovery.restore(manager)
 
+    @_serialized
     def status(self):
         return {
             "request": self.request,
@@ -29,13 +43,28 @@ class Maintenance:
             else None,
         }
 
+    @_serialized
     def prepare(self):
         if self.request:
             return self.status()
         self.request = {"id": uuid4().hex, "started": time.time()}
         self.acks = {}
+        self.closure_review = None
         return self.status()
 
+    @_serialized
+    def review_closed_pages(self):
+        from .maintenance_closure import review_closed_pages
+
+        return review_closed_pages(self)
+
+    @_serialized
+    def confirm_closed_pages(self, review_id, reason, actor):
+        from .maintenance_closure import confirm_closed_pages
+
+        return confirm_closed_pages(self, review_id, reason, actor)
+
+    @_serialized
     def acknowledge(self, page_id, workspace, state, nonce, owner_id=None, tab_id=None):
         if not self.request or nonce != self.request["id"]:
             raise ValueError("维护请求已改变。")
@@ -54,6 +83,7 @@ class Maintenance:
             self.manager.maintenance_pages = pages
         self.acks[page_id] = workspace.id if workspace is not None else "standalone"
 
+    @_serialized
     def checkpoint(self):
         if not self.request:
             raise ValueError("请先发起维护收集。")
@@ -85,18 +115,22 @@ class Maintenance:
             self.manager.maintenance_frozen = True
         return self.status()
 
+    @_serialized
     def cancel(self):
         self.manager.maintenance_frozen = False
         self.request = None
         self.completed = None
         self.acks = {}
+        self.closure_review = None
         (self.recovery.root / "current.json").unlink(missing_ok=True)
 
+    @_serialized
     def verified_checkpoint(self):
         if not self.completed or not getattr(self.manager, "maintenance_frozen", False):
             return False
         return all(p["id"] in self.acks for p in self.monitor.store.pages(include_ids=True))
 
+    @_serialized
     def execute(self, action, version=None):
         if not self.verified_checkpoint():
             raise ValueError("请先完成全部会话暂存验证。")

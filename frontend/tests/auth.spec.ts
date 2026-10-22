@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test'
+import { closeDocument } from './fixtures'
+
+test.afterEach(async ({ page }) => closeDocument(page))
 
 test('login, private workspace, account management, reset and logout', async ({
   page,
@@ -50,5 +53,6 @@ test('login, private workspace, account management, reset and logout', async ({
   expect(
     (await other.request.get(page.url().replace('/account', '/api/v1/projects'))).status(),
   ).toBe(401)
+  await closeDocument(member)
   await other.close()
 })

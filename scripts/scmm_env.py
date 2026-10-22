@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Manage two local worktrees without adding a separate deployment stack."""
+# ruff: noqa: RUF001
 
 from __future__ import annotations
 
@@ -218,9 +219,14 @@ def web_idle(port, token_file=None):
         or status["unsaved_workspaces"]
         or status["busy_workspaces"]
     ):
-        raise RuntimeError(
-            f"{port} has active pages, unsaved or busy workspaces, tasks, or unconfirmed state; save and close them first"
-        )
+        reasons = decision["blockers"] + decision["unknown"]
+        explanation = "；".join(reasons) or "维护证据尚未就绪"
+        if decision["unconfirmed_pages"] or decision["unknown"]:
+            explanation += (
+                "。失联记录不等于页面仍打开；若用户已确认关闭，应处理对应关闭证据并验证全部会话暂存，"
+                "不要重复要求同一关闭确认。旧版本缺少处理入口或维护权限不足，应报告具体能力缺口"
+            )
+        raise RuntimeError(f"{port} 更新检查未通过：{explanation}")
 
 
 def legacy_web_idle():
