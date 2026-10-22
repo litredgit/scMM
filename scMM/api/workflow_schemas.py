@@ -376,6 +376,11 @@ class SavedPlan(RevisionRequest):
     path: str
 
 
+class RetentionPlan(SavedPlan):
+    min_age_days: int | None = Field(default=None, ge=0, strict=True)
+    keep_latest: int | None = Field(default=None, ge=0, strict=True)
+
+
 class ExecutePlan(RevisionRequest):
     token: str
 

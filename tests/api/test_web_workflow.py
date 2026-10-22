@@ -383,6 +383,32 @@ def test_retention_advice_is_read_only_and_revision_guarded(workflow):
     advice = response.json()
     assert advice["read_only"] and "token" not in advice
     assert advice["immediate_freed_bytes"] == 0
+    assert advice["selected_bytes"] == 0
+    policy = post(
+        "/saved/retention",
+        {
+            "root": "项目结果",
+            "path": project_path,
+            "min_age_days": 30,
+            "keep_latest": 2,
+        },
+    )
+    assert policy.status_code == 200, policy.text
+    assert policy.json()["policy_parameters"] == {"min_age_days": 30, "keep_latest": 2}
+    assert policy.json()["selected_bytes"] == 0  # Open workspace remains protected.
+    for key in ("min_age_days", "keep_latest"):
+        for value in (-1, True, 1.5, "2"):
+            assert (
+                post(
+                    "/saved/retention",
+                    {
+                        "root": "项目结果",
+                        "path": project_path,
+                        key: value,
+                    },
+                ).status_code
+                == 422
+            )
     assert current()["revision"] == before["revision"]
     assert snapshot == {
         str(p): p.read_bytes() for p in Path(project_path).rglob("*") if p.is_file()

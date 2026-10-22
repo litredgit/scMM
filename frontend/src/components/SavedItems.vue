@@ -31,6 +31,7 @@ interface RetentionPlan {
   scope: string
   warnings: string[]
   candidate_bytes: number
+  selected_bytes: number
   items: {
     kind: string
     paths: string[]
@@ -38,11 +39,16 @@ interface RetentionPlan {
     reasons: string[]
     files: number | null
     bytes: number | null
+    modified_at: string | null
+    selected_for_cleanup: boolean
+    policy_reasons: string[]
   }[]
 }
 const retention = ref<RetentionPlan>()
+const minAgeDays = ref<number | ''>('')
+const keepLatest = ref<number | ''>('')
 let retentionGeneration = 0
-watch([selected, () => store.current?.workspace_id], () => {
+watch([selected, minAgeDays, keepLatest, () => store.current?.workspace_id], () => {
   retentionGeneration++
   retention.value = undefined
 })
@@ -54,6 +60,8 @@ async function inspectRetention() {
   const value = await store.inspect<RetentionPlan>('/saved/retention', {
     root: '项目结果',
     path: project,
+    min_age_days: minAgeDays.value === '' ? null : minAgeDays.value,
+    keep_latest: keepLatest.value === '' ? null : keepLatest.value,
   })
   if (
     generation === retentionGeneration &&
@@ -151,6 +159,43 @@ async function clear() {
       <button class="danger" :disabled="store.busy || !selected" @click="makePlan(true)">
         查看项目删除计划
       </button>
+      <div class="field-grid">
+        <label>
+          <FieldLabel
+            name="最小年龄（天）"
+            help-key="min_age_days"
+            text="按产物内最新修改时间计算；空白不按年龄筛选。"
+          />
+          <input
+            v-model.number="minAgeDays"
+            aria-label="最小年龄（天）"
+            type="number"
+            min="0"
+            step="1"
+            :disabled="store.busy"
+            placeholder="空白：不按年龄筛选"
+          />
+        </label>
+        <label>
+          <FieldLabel
+            name="每类至少保留最新数量"
+            help-key="keep_latest"
+            text="快照、预览、共同特征缓存分别排序；边界同时间项全部保留。空白不按数量筛选。"
+          />
+          <input
+            v-model.number="keepLatest"
+            aria-label="每类至少保留最新数量"
+            type="number"
+            min="0"
+            step="1"
+            :disabled="store.busy"
+            placeholder="空白：不按数量筛选"
+          />
+        </label>
+      </div>
+      <p class="muted">
+        均空白时全部保留；同时填写时，清理建议须同时满足年龄和数量规则。保护项始终保留，此处不执行删除。
+      </p>
       <button class="preview" :disabled="store.busy || !selected" @click="inspectRetention">
         查看快照与缓存保留计划
       </button>
@@ -166,6 +211,9 @@ async function clear() {
           只读检查，生成后状态仍可能变化。候选逻辑大小
           {{ (retention.candidate_bytes / 1024 / 1024).toFixed(2) }} MiB；本次释放 0 字节。
         </p>
+        <p>
+          其中符合策略的待审阅建议 {{ (retention.selected_bytes / 1024 / 1024).toFixed(2) }} MiB。
+        </p>
         <p v-for="warning in retention.warnings" :key="warning">{{ warning }}</p>
         <div class="data-table">
           <table>
@@ -174,6 +222,7 @@ async function clear() {
                 <th>用途 / 路径</th>
                 <th>结论</th>
                 <th>原因</th>
+                <th>策略判断 / 最新修改时间</th>
                 <th>文件数 / 大小</th>
               </tr>
             </thead>
@@ -193,6 +242,20 @@ async function clear() {
                   }}
                 </td>
                 <td>{{ item.reasons.join('；') }}</td>
+                <td>
+                  {{ item.selected_for_cleanup ? '待审阅清理建议' : '保留' }}：{{
+                    item.policy_reasons.join('；')
+                  }}
+                  <div>
+                    {{
+                      item.modified_at
+                        ? new Date(item.modified_at).toLocaleString('zh-CN', {
+                            timeZone: 'Asia/Shanghai',
+                          })
+                        : '时间未知'
+                    }}
+                  </div>
+                </td>
                 <td>
                   {{ item.files ?? '—' }} /
                   {{ item.bytes === null ? '—' : `${(item.bytes / 1024 / 1024).toFixed(2)} MiB` }}

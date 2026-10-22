@@ -4,6 +4,8 @@
 import json
 import os
 import re
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from anndata import read_h5ad
@@ -140,12 +142,64 @@ def _items(folder):
         yield "共同特征缓存", paths, len(paths) == 2 and all(p.is_file() for p in paths)
 
 
-def retention_plan(manager, value):
+def _policy(rows, *, min_age_days, keep_latest, now_ns):
+    """Apply explicit retention guards independently within each artifact kind."""
+    for name, value in (("min_age_days", min_age_days), ("keep_latest", keep_latest)):
+        if value is not None and (type(value) is not int or value < 0):
+            raise ValueError(f"{name} 必须是非负整数或空值")
+    enabled = min_age_days is not None or keep_latest is not None
+    for kind in {row["kind"] for row in rows}:
+        ordered = sorted(
+            (
+                r
+                for r in rows
+                if r["kind"] == kind
+                and r["complete"]
+                and r["modified_ns"] is not None
+                and r["modified_ns"] <= now_ns
+            ),
+            key=lambda r: (-r["modified_ns"], r["paths"]),
+        )
+        # Keep every tie at the cutoff; path ordering must not decide data retention.
+        cutoff = (
+            ordered[min(keep_latest, len(ordered)) - 1]["modified_ns"]
+            if keep_latest and ordered
+            else None
+        )
+        for row in (r for r in rows if r["kind"] == kind):
+            row["selected_for_cleanup"] = False
+            if row["status"] != "candidate":
+                continue
+            reasons = []
+            if not enabled:
+                reasons.append("未设置保留策略，默认全部保留")
+            if row["modified_ns"] is None or row["modified_ns"] > now_ns:
+                reasons.append("修改时间无法核实或晚于检查时间，继续保留")
+            else:
+                if cutoff is not None and row["modified_ns"] >= cutoff:
+                    reasons.append("属于该类最新保留数量（边界同时间项全部保留）")
+                if (
+                    min_age_days is not None
+                    and now_ns - row["modified_ns"] < min_age_days * 86400 * 10**9
+                ):
+                    reasons.append("尚未达到最小年龄，继续保留")
+            row["selected_for_cleanup"] = not reasons
+            row["policy_reasons"] = reasons or ["满足显式策略，仅列为待审阅清理建议"]
+    for row in rows:
+        row.pop("modified_ns")
+        row.pop("complete")
+        row.setdefault("policy_reasons", ["保护或核实规则优先于保留策略"])
+
+
+def retention_plan(manager, value, *, min_age_days=None, keep_latest=None):
     """Inspect a local project's snapshots/caches; default policy keeps everything.
 
     Unknown references block every recommendation. This advisory has no deletion
     token: later manual removal must obtain a fresh SavedItems plan.
     """
+    # Validate before inspecting storage; a direct Python call has the same boundary as HTTP.
+    _policy([], min_age_days=min_age_days, keep_latest=keep_latest, now_ns=0)
+    now_ns = time.time_ns()
     folder = manager.store._folder(_safe(Path(value).absolute()))
     if folder.parent != manager.store.root:
         raise PermissionError("保留计划仅支持本环境项目根中的项目")
@@ -157,14 +211,24 @@ def retention_plan(manager, value):
     active_before = tuple(manager.active_paths())
     references, tasks, errors, metadata, evidence = _usage(manager)
     rows = []
-    for kind, paths, recognized in _items(folder):
+    inventories = {}
+    items = list(_items(folder))
+    for kind, paths, recognized in items:
         status, reasons = "candidate", []
         files, size = 0, 0
+        modified_ns = None
         try:
             for path in paths:
-                count, amount, _ = manager._inventory(_safe(path))
+                item = manager._inventory(_safe(path))
+                inventories[path] = item
+                count, amount, _ = item
                 files += count
                 size += amount
+                latest = max(
+                    p.stat().st_mtime_ns
+                    for p in ([path, *path.rglob("*")] if path.is_dir() else [path])
+                )
+                modified_ns = max(modified_ns or latest, latest)
             for path in paths:
                 if any(_overlaps(path, Path(ref).resolve()) for ref in active_before if ref):
                     reasons.append("网页工作区仍在使用所属项目或产物")
@@ -194,11 +258,22 @@ def retention_plan(manager, value):
                 "reasons": sorted(set(reasons)),
                 "files": files,
                 "bytes": size,
+                "modified_ns": modified_ns,
+                "complete": recognized and status != "unknown",
+                "modified_at": (
+                    datetime.fromtimestamp(modified_ns / 10**9, UTC).isoformat()
+                    if modified_ns is not None
+                    else None
+                ),
             }
         )
     if tuple(manager.active_paths()) != active_before:
         errors.append("检查期间活动工作区发生变化，请重新生成计划")
     try:
+        if list(_items(folder)) != items:
+            errors.append("检查期间产物清单发生变化，请重新生成计划")
+        if any(manager._inventory(_safe(path)) != item for path, item in inventories.items()):
+            errors.append("检查期间产物发生变化，请重新生成计划")
         if _metadata_paths(manager) != metadata or any(
             file_identity(_safe(path)) != identity for path, identity in evidence.items()
         ):
@@ -209,14 +284,17 @@ def retention_plan(manager, value):
         for row in rows:
             if row["status"] == "candidate":
                 row.update(status="unknown", reasons=["引用或会话状态未完整核实，继续保留"])
+    _policy(rows, min_age_days=min_age_days, keep_latest=keep_latest, now_ns=now_ns)
     return {
         "project": str(folder),
         "generated_at": utc_now(),
         "read_only": True,
-        "policy": "默认全部保留；不按年龄或数量自动删除；回收区仍占用磁盘。",
+        "policy": "默认全部保留；显式策略只生成清理建议，不自动删除；回收区仍占用磁盘。",
+        "policy_parameters": {"min_age_days": min_age_days, "keep_latest": keep_latest},
         "scope": "仅本项目 snapshots 与 processing；不包含导出、回收区及仓库外维护恢复包。",
         "warnings": errors,
         "items": rows,
         "candidate_bytes": sum(row["bytes"] for row in rows if row["status"] == "candidate"),
+        "selected_bytes": sum(row["bytes"] for row in rows if row["selected_for_cleanup"]),
         "immediate_freed_bytes": 0,
     }

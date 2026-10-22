@@ -1,6 +1,7 @@
 """Retention advice protects references, unknown state and unsafe paths without writing."""
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -226,3 +227,96 @@ def test_detached_task_state_output_is_protected_without_request_reference(tmp_p
     write_json(task / "state.json", {"status": "running", "result_path": str(project.folder)})
     write_json(task / "request.json", {})
     assert retention_plan(manager, project.folder)["candidate_bytes"] == 0
+
+
+def test_explicit_policy_age_count_ties_and_protection(tmp_path, monkeypatch):
+    _, project, manager, _, preview, shared = setup(tmp_path)
+    from scMM.application import retention
+
+    day = 86400 * 10**9
+    now = 20000 * day
+    monkeypatch.setattr(retention.time, "time_ns", lambda: now)
+    # Per-kind ordering: two old tied previews and one recent preview.
+    for path in [preview, *preview.iterdir(), shared, shared.with_suffix(".json")]:
+        os.utime(path, ns=(now - 40 * day, now - 40 * day))
+    import shutil
+
+    tied = preview.with_name(f"preview-{'c' * 32}")
+    shutil.copytree(preview, tied)
+    os.utime(tied, ns=(now - 40 * day, now - 40 * day))
+    recent = preview.with_name(f"preview-{'d' * 32}")
+    shutil.copytree(preview, recent)
+    os.utime(recent, ns=(now - day, now - day))
+    before = inventory(tmp_path)
+    default = retention_plan(manager, project.folder)
+    assert default["selected_bytes"] == 0
+    assert not any(row["selected_for_cleanup"] for row in default["items"])
+    plan = retention_plan(manager, project.folder, min_age_days=30, keep_latest=1)
+    assert inventory(tmp_path) == before
+    assert plan["policy_parameters"] == {"min_age_days": 30, "keep_latest": 1}
+    previews = rows(plan, "processing/preview-")
+    assert sum(row["selected_for_cleanup"] for row in previews) == 2
+    # The sole shared pair is the newest of its own kind and is kept.
+    assert not rows(plan, "processing/shared-")[0]["selected_for_cleanup"]
+    boundary = retention_plan(manager, project.folder, keep_latest=2)
+    assert not any(row["selected_for_cleanup"] for row in rows(boundary, "processing/preview-"))
+    # Even an explicit zero count and age never override persisted references.
+    all_old = retention_plan(manager, project.folder, min_age_days=0, keep_latest=0)
+    assert all(
+        not r["selected_for_cleanup"] for r in all_old["items"] if r["status"] != "candidate"
+    )
+    assert rows(all_old, "processing/shared-")[0]["selected_for_cleanup"]
+    assert all_old["selected_bytes"] == sum(
+        r["bytes"] for r in all_old["items"] if r["selected_for_cleanup"]
+    )
+
+
+def test_future_modified_and_unknown_state_never_selected(tmp_path, monkeypatch):
+    _, project, manager, _, preview, _ = setup(tmp_path)
+    from scMM.application import retention
+
+    monkeypatch.setattr(retention.time, "time_ns", lambda: 1)
+    plan = retention_plan(manager, project.folder, min_age_days=0, keep_latest=0)
+    assert plan["selected_bytes"] == 0
+    (preview / "identity.json").unlink()
+    monkeypatch.setattr(retention.time, "time_ns", lambda: 2**62)
+    plan = retention_plan(manager, project.folder, min_age_days=0, keep_latest=0)
+    assert not rows(plan, "processing/preview-")[0]["selected_for_cleanup"]
+
+
+def test_incomplete_newer_cache_does_not_replace_valid_retained_cache(tmp_path):
+    _, project, manager, _, preview, _ = setup(tmp_path)
+    broken = preview.with_name(f"preview-{'f' * 32}")
+    broken.mkdir()
+    (broken / "data.h5ad").write_bytes(b"incomplete")
+    plan = retention_plan(manager, project.folder, keep_latest=1)
+    assert not any(row["selected_for_cleanup"] for row in rows(plan, "processing/preview-"))
+
+
+@pytest.mark.parametrize("change", ["new_item", "content"])
+def test_product_changes_during_plan_disable_policy(tmp_path, monkeypatch, change):
+    _, project, manager, _, preview, _ = setup(tmp_path)
+    original = manager._inventory
+    changed = False
+
+    def changing(path):
+        nonlocal changed
+        result = original(path)
+        if not changed and path == preview:
+            changed = True
+            if change == "new_item":
+                (project.folder / "processing" / "new-product").mkdir()
+            else:
+                (preview / "data.h5ad").write_bytes(b"replacement")
+        return result
+
+    monkeypatch.setattr(manager, "_inventory", changing)
+    plan = retention_plan(manager, project.folder, min_age_days=0, keep_latest=0)
+    assert changed and plan["warnings"] and plan["selected_bytes"] == 0
+
+
+@pytest.mark.parametrize("value", [True, -1, 1.5, "2"])
+@pytest.mark.parametrize("key", ["min_age_days", "keep_latest"])
+def test_policy_requires_nonnegative_integers(tmp_path, key, value):
+    with pytest.raises(ValueError, match=key):
+        retention_plan(None, tmp_path, **{key: value})
