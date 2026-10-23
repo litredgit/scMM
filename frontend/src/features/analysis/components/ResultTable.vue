@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { resultTitles } from '../results'
 import { ref, computed } from 'vue'
 import type { ResultName } from '../types'
 import { useAnalysisContext } from '../composables/useAnalysisContext'
@@ -15,7 +16,7 @@ const shown = computed(() => {
 </script>
 <template>
   <template v-if="has(name) && tables[name]"
-    ><h3 v-if="heading">{{ name }}</h3>
+    ><h3 v-if="heading">{{ resultTitles[name] }}</h3>
     <label v-if="name === 'markers'"
       ><input type="checkbox" v-model="negative" />同时显示负权重</label
     >

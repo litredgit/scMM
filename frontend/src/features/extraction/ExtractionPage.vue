@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime } from '../../help/time'
 import { useViewState } from '../../api/viewState'
 import { serialPolling } from '../../api/polling'
 import { useReadScope } from '../../api/readScope'
@@ -224,8 +225,7 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
         >
           <option value="" disabled>暂无批次</option>
           <option v-for="b in batchList" :key="b.path" :value="b.path">
-            {{ new Date(b.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) }} ·
-            {{ label(b.status) }} · {{ b.path.split('/').at(-2) }}
+            {{ formatTime(b.created_at) }} · {{ label(b.status) }} · {{ b.path.split('/').at(-2) }}
           </option>
         </select></label
       ><template v-if="selected"
@@ -268,11 +268,7 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
           <p class="task-note">
             已耗时 {{ elapsed }} · 最近更新
             {{
-              selected.updated_at
-                ? new Date(selected.updated_at).toLocaleString('zh-CN', {
-                    timeZone: 'Asia/Shanghai',
-                  })
-                : '暂无阶段信息'
+              selected.updated_at ? formatTime(selected.updated_at) : '暂无阶段信息'
             }}。阶段进度不代表剩余时间。
           </p>
         </div>

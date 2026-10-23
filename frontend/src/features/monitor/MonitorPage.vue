@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime } from '../../help/time'
 import { computed, onActivated, onDeactivated, onUnmounted, ref } from 'vue'
 import { request } from '../../api/client'
 import { useAuth } from '../../stores/auth'
@@ -91,7 +92,7 @@ const label = (value?: Decision, unavailable = false) =>
   unavailable
     ? '无法确认'
     : { ready: '实例空闲', blocked: '实例非空闲', unknown: '无法确认' }[value?.state ?? 'unknown']
-const when = (value?: number | null) => (value ? new Date(value * 1000).toLocaleString() : '未记录')
+const when = (value?: number | null) => formatTime(value == null ? null : value * 1000)
 const bytes = (value?: number | null) =>
   value == null ? '不可用' : `${(value / 1024 ** 3).toFixed(2)} GiB`
 const percent = (value?: number | null) => (value == null ? '等待采样' : `${value.toFixed(1)}%`)
@@ -217,7 +218,7 @@ onUnmounted(stop)
         </article>
       </div>
       <p class="muted">
-        此处显示保守空闲诊断，计入前台、后台及未登录页面；失联不等于关闭。正式发布会通知用户并限时保全会话，打开项目、未保存修改或失联记录不再阻止更新；正式写入须安全结束。
+        运行记录与图表统一显示北京时间（UTC+8）。此处显示保守空闲诊断，计入前台、后台及未登录页面；失联不等于关闭。正式发布会通知用户并限时保全会话，打开项目、未保存修改或失联记录不再阻止更新；正式写入须安全结束。
       </p>
       <div class="metric-grid">
         <article class="card">

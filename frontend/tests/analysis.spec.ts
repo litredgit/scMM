@@ -777,6 +777,7 @@ test('named trends keep exact features and display scaling independent through r
   await expect(
     page.getByRole('heading', { name: '结果 trend_browser 的生效参数', exact: true }),
   ).toBeVisible()
+  await page.getByText('趋势热图显示设置', { exact: true }).click()
   await page.getByLabel('趋势显示特征数', { exact: true }).fill('2')
   await page.getByLabel('趋势显示行标准分', { exact: true }).uncheck()
   const plotting = page.waitForResponse(
@@ -883,3 +884,52 @@ test('occupied embedding names block rerun and retain the previous embedding', a
   await expect(page.getByRole('button', { name: '运行降维', exact: true })).toBeEnabled()
   await expect(page.getByLabel('查看嵌入', { exact: true })).toHaveValue('X_pca')
 })
+
+for (const [width, height] of [
+  [1366, 768],
+  [1440, 900],
+]) {
+  test(`supervised results focus one diagnostic in the first view at ${width}x${height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height })
+    await importAnalysis(page, '监督结果优先')
+    await page.getByRole('button', { name: '取消固定参数区', exact: true }).first().click()
+    await module(page, '监督与 SHAP')
+    await page.getByLabel('验证方式', { exact: true }).selectOption('cell')
+    await page.getByLabel('cv', { exact: true }).fill('2')
+    let calculations = 0
+    page.on('request', (r) => {
+      if (r.url().endsWith('/analysis/operation') && r.method() === 'POST') calculations++
+    })
+    await page.getByRole('button', { name: '训练并验证', exact: true }).click()
+    const plot = page.locator('#supervised-results .js-plotly-plot')
+    await expect(plot).toHaveCount(1)
+    await expect(page.getByLabel('model', { exact: true })).not.toBeVisible()
+    await expect(plot.locator('.main-svg').first()).toBeVisible()
+    await expect
+      .poll(() =>
+        plot.evaluate((el) => {
+          const range = (el as HTMLElement & { _fullLayout: { xaxis: { range: number[] } } })
+            ._fullLayout.xaxis.range
+          return range[1]! - range[0]!
+        }),
+      )
+      .toBeLessThanOrEqual(1.2)
+    await expect
+      .poll(async () => {
+        const box = await plot.boundingBox()
+        return (
+          !!box && Math.min(height, box.y + box.height) - Math.max(80, box.y) >= box.height * 0.6
+        )
+      })
+      .toBe(true)
+    await page.screenshot({ path: test.info().outputPath(`supervised-first-${width}.png`) })
+    await page.getByLabel('监督诊断图', { exact: true }).selectOption('confusion')
+    await expect(page.getByLabel('图文件名：confusion', { exact: true })).toBeVisible()
+    await expect(plot).toHaveCount(1)
+    expect(calculations).toBe(1)
+    await page.getByRole('button', { name: '新建训练', exact: true }).click()
+    await expect(page.getByLabel('model', { exact: true })).toBeVisible()
+  })
+}

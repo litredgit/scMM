@@ -12,7 +12,7 @@ import type { Figure } from '../api/types'
 import type { useWorkspace } from '../stores/workspace'
 
 type RenderOptions = {
-  props: { figure: Figure; name: string; selectRange?: boolean }
+  props: { figure: Figure; name: string; selectRange?: boolean; compact?: boolean }
   store: ReturnType<typeof useWorkspace>
   element: Ref<HTMLElement | undefined>
   failure: Ref<string>
@@ -144,6 +144,8 @@ export function usePlotRenderer({
           (value as Record<string, unknown>).automargin = true
       }
       if (['roc', 'pr', 'calibration'].includes(chartKind.value)) {
+        const x = (copy.layout.xaxis ?? {}) as Record<string, unknown>
+        copy.layout.xaxis = { ...x, constrain: 'domain' }
         const y = (copy.layout.yaxis ?? {}) as Record<string, unknown>
         copy.layout.yaxis = { ...y, scaleanchor: 'x', scaleratio: 1, constrain: 'domain' }
       }
@@ -202,20 +204,25 @@ export function usePlotRenderer({
               'editInChartStudio',
               'share',
               'sendChartToCloud',
+              ...(props.compact
+                ? ['select2d', 'lasso2d', 'toggleSpikelines', 'hoverCompareCartesian']
+                : []),
             ],
-            modeBarButtonsToAdd: [
-              {
-                name: '下载论文 SVG',
-                icon: {
-                  width: 24,
-                  height: 24,
-                  path: 'M3 3H21V21H3ZM7 7V17H17V7ZM11 8H13V13H15L12 16L9 13H11Z',
-                },
-                click: () => {
-                  if (!exporting.value && !store.busy && fresh.value) void image('svg')
-                },
-              },
-            ],
+            modeBarButtonsToAdd: props.compact
+              ? []
+              : [
+                  {
+                    name: '下载论文 SVG',
+                    icon: {
+                      width: 24,
+                      height: 24,
+                      path: 'M3 3H21V21H3ZM7 7V17H17V7ZM11 8H13V13H15L12 16L9 13H11Z',
+                    },
+                    click: () => {
+                      if (!exporting.value && !store.busy && fresh.value) void image('svg')
+                    },
+                  },
+                ],
             locale: 'zh-CN',
             scrollZoom: true,
             toImageButtonOptions: {

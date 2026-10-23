@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures'
+import { formatTime } from '../src/help/time'
 
 test('monitor opens without creating a workspace and tracks hidden login pages', async ({
   page,
@@ -219,4 +220,21 @@ test('deployment notice lets the user save and then reloads after maintenance', 
   collecting = false
   await page.waitForEvent('load')
   await expect(page.getByRole('main')).not.toHaveAttribute('inert', '')
+})
+
+test('monitor charts use Beijing time and omit scientific publication tools', async ({ page }) => {
+  await page.goto('/admin/monitor')
+  const plot = page.locator('.js-plotly-plot').first()
+  await expect(plot).toBeVisible()
+  await expect(page.getByText('北京时间（UTC+8）', { exact: true })).toBeVisible()
+  await expect(page.getByText('论文导出设置 · 尺寸、字号与 DPI', { exact: true })).toHaveCount(0)
+  await expect(page.locator('.modebar-btn[data-title="下载论文 SVG"]')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '保存项目', exact: true })).toHaveCount(0)
+})
+
+test('operational timestamps use explicit Beijing time regardless of the host timezone', () => {
+  expect(formatTime('2026-10-23T00:00:00Z')).toBe('2026-10-23 08:00:00')
+  expect(formatTime(0)).toBe('1970-01-01 08:00:00')
+  expect(formatTime(null)).toBe('未记录')
+  expect(formatTime('invalid-time')).toBe('时间未知')
 })

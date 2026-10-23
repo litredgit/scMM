@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime } from '../help/time'
 import { computed, ref, watch } from 'vue'
 import { request } from '../api/client'
 import type { Directory, Root, FileEntry } from '../api/types'
@@ -15,9 +16,7 @@ const path = ref('.')
 const includeInternal = ref(false)
 const selectedInfo = ref<FileEntry>()
 function date(value?: string | null) {
-  return value
-    ? new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
-    : '—'
+  return value ? formatTime(value) : '—'
 }
 const search = ref('')
 const directory = ref<Directory | null>(null)

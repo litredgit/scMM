@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CalculationPanel from '../../components/CalculationPanel.vue'
 import FeaturePicker from '../../components/FeaturePicker.vue'
 import { computed } from 'vue'
 import { displayName } from '../../../../help/labels'
@@ -37,76 +38,88 @@ const violinStale = computed(() => {
 <template>
   <div>
     <div class="card">
-      <h2>比较输入</h2>
-      <div class="field-grid">
-        <label
-          ><FieldLabel name="group_key" /><select
-            aria-label="group_key"
-            v-model="diff.group_key"
-            :disabled="store.busy"
+      <CalculationPanel :has-result="has('differential') || has('markers')">
+        <h2>比较输入</h2>
+        <div class="field-grid">
+          <label
+            ><FieldLabel name="group_key" /><select
+              aria-label="group_key"
+              v-model="diff.group_key"
+              :disabled="store.busy"
+            >
+              <option v-for="v in observed" :key="v" :value="v">{{ displayName(v) }}</option>
+            </select></label
+          ><label
+            ><FieldLabel name="group_a（fold change 分子）" /><select
+              aria-label="group_a（fold change 分子）"
+              v-model="diff.group_a"
+              :disabled="store.busy"
+            >
+              <option v-for="v in groups" :key="v" :value="v">{{ displayName(v) }}</option>
+            </select></label
+          ><label
+            ><FieldLabel name="group_b" /><select
+              aria-label="group_b"
+              v-model="diff.group_b"
+              :disabled="store.busy"
+            >
+              <option v-for="v in groups" :key="v" :value="v">{{ displayName(v) }}</option>
+            </select></label
+          ><label
+            ><FieldLabel name="layer" /><select
+              aria-label="layer"
+              v-model="diff.layer"
+              :disabled="store.busy"
+            >
+              <option :value="null">当前矩阵</option>
+              <option v-for="v in info?.layers" :key="v" :value="v">{{ displayName(v) }}</option>
+            </select></label
+          ><label
+            ><FieldLabel name="differential_method" /><select
+              aria-label="differential_method"
+              v-model="diff.method"
+              :disabled="store.busy"
+            >
+              <option>mannwhitney</option>
+              <option>welch</option>
+            </select></label
           >
-            <option v-for="v in observed" :key="v" :value="v">{{ displayName(v) }}</option>
-          </select></label
-        ><label
-          ><FieldLabel name="group_a（fold change 分子）" /><select
-            aria-label="group_a（fold change 分子）"
-            v-model="diff.group_a"
-            :disabled="store.busy"
+        </div>
+        <p class="page-note">
+          细胞数不等于生物重复。细胞级差异用于探索，来源层面推断须先按重复聚合；精确质量注释只是候选。
+        </p>
+        <div class="actions">
+          <button
+            class="primary"
+            :disabled="
+              store.busy || !diff.group_a || !diff.group_b || diff.group_a === diff.group_b
+            "
+            @click="execute('differential', { ...diff })"
           >
-            <option v-for="v in groups" :key="v" :value="v">{{ displayName(v) }}</option>
-          </select></label
-        ><label
-          ><FieldLabel name="group_b" /><select
-            aria-label="group_b"
-            v-model="diff.group_b"
-            :disabled="store.busy"
-          >
-            <option v-for="v in groups" :key="v" :value="v">{{ displayName(v) }}</option>
-          </select></label
-        ><label
-          ><FieldLabel name="layer" /><select
-            aria-label="layer"
-            v-model="diff.layer"
-            :disabled="store.busy"
-          >
-            <option :value="null">当前矩阵</option>
-            <option v-for="v in info?.layers" :key="v" :value="v">{{ displayName(v) }}</option>
-          </select></label
-        ><label
-          ><FieldLabel name="differential_method" /><select
-            aria-label="differential_method"
-            v-model="diff.method"
-            :disabled="store.busy"
-          >
-            <option>mannwhitney</option>
-            <option>welch</option>
-          </select></label
-        >
-      </div>
-      <p class="page-note">
-        细胞数不等于生物重复。细胞级差异用于探索，来源层面推断须先按重复聚合；精确质量注释只是候选。
-      </p>
+            计算两组差异并绘制火山图
+          </button>
+        </div>
+      </CalculationPanel>
     </div>
     <div class="card">
       <h2>两组差异与火山图</h2>
-      <p class="result-context">
-        比较 {{ displayName(diff.group_a) || '待选 A 组' }} 与
-        {{ displayName(diff.group_b) || '待选 B 组' }}；正 log₂FC 表示前者更高。<br />
-        ① 计算全部特征差异并自动绘制火山图 → ② 选择特征 → ③ 绘制小提琴图。
-      </p>
-      <p class="muted">
-        当前数据层：{{ diff.layer ? displayName(diff.layer) : '当前矩阵' }}；检验：{{
-          diff.method === 'welch' ? 'Welch t 检验' : 'Mann–Whitney U 检验'
-        }}；对全部特征进行 BH-FDR 校正。
-      </p>
+      <details>
+        <summary>
+          比较与检验说明 · {{ displayName(diff.group_a) }} 对 {{ displayName(diff.group_b) }}
+        </summary>
+        <p class="result-context">
+          比较 {{ displayName(diff.group_a) || '待选 A 组' }} 与
+          {{ displayName(diff.group_b) || '待选 B 组' }}；正 log₂FC 表示前者更高。<br />
+          ① 计算全部特征差异并自动绘制火山图 → ② 选择特征 → ③ 绘制小提琴图。
+        </p>
+        <p class="muted">
+          当前数据层：{{ diff.layer ? displayName(diff.layer) : '当前矩阵' }}；检验：{{
+            diff.method === 'welch' ? 'Welch t 检验' : 'Mann–Whitney U 检验'
+          }}；对全部特征进行 BH-FDR 校正。
+        </p>
+      </details>
       <div class="actions">
         <button
-          class="primary"
-          :disabled="store.busy || !diff.group_a || !diff.group_b || diff.group_a === diff.group_b"
-          @click="execute('differential', { ...diff })"
-        >
-          计算两组差异并绘制火山图</button
-        ><button
           class="preview"
           v-if="has('differential')"
           :disabled="store.busy"
@@ -115,47 +128,53 @@ const violinStale = computed(() => {
           读取差异报告
         </button>
       </div>
-      <p class="muted">
-        计算完成后自动显示火山图。若读取报告或绘图失败，可单独重试，无需重复计算。
+      <p v-if="!has('differential')" class="muted">
+        运行两组比较后生成火山图；若仅绘图失败，可单独重试。
       </p>
-      <template v-if="has('differential')"
-        ><div class="field-grid">
-          <label
-            ><FieldLabel name="FDR threshold" /><input
-              aria-label="FDR threshold"
-              v-model.number="volcano.fdr"
-              type="number"
-              min="0"
-              max="1"
-              step="any" /></label
-          ><label
-            ><FieldLabel name="abs(log2FC)" /><input
-              aria-label="abs(log2FC)"
-              v-model.number="volcano.fold_change"
-              type="number"
-              min="0"
-              step="any" /></label
-          ><label
-            ><FieldLabel name="Label count" /><input
-              aria-label="Label count"
-              v-model.number="volcano.labels"
-              type="number"
-              min="0"
-              max="100" /></label
-          ><label
-            ><FieldLabel name="Label order" /><select
-              aria-label="Label order"
-              v-model="volcano.order"
+      <template v-if="has('differential')">
+        <p class="muted">细胞级探索；正 log₂FC 表示前者更高；BH-FDR 针对全部特征。</p>
+        <details>
+          <summary>火山图显示 · 阈值与标签</summary>
+          <div class="field-grid">
+            <label
+              ><FieldLabel name="FDR threshold" /><input
+                aria-label="FDR threshold"
+                v-model.number="volcano.fdr"
+                type="number"
+                min="0"
+                max="1"
+                step="any" /></label
+            ><label
+              ><FieldLabel name="abs(log2FC)" /><input
+                aria-label="abs(log2FC)"
+                v-model.number="volcano.fold_change"
+                type="number"
+                min="0"
+                step="any" /></label
+            ><label
+              ><FieldLabel name="Label count" /><input
+                aria-label="Label count"
+                v-model.number="volcano.labels"
+                type="number"
+                min="0"
+                max="100" /></label
+            ><label
+              ><FieldLabel name="Label order" /><select
+                aria-label="Label order"
+                v-model="volcano.order"
+              >
+                <option>fdr</option>
+                <option>effect</option>
+                <option>p_value</option>
+                <option>intensity</option>
+              </select></label
             >
-              <option>fdr</option>
-              <option>effect</option>
-              <option>p_value</option>
-              <option>intensity</option>
-            </select></label
-          >
-        </div>
-        <button class="primary" :disabled="store.busy" @click="draw('volcano')">更新火山图</button
-        ><PlotView
+          </div>
+          <button class="primary" :disabled="store.busy" @click="draw('volcano')">
+            更新火山图
+          </button>
+        </details>
+        <PlotView
           v-if="figures.volcano && tab === 'differential'"
           :figure="figures.volcano"
           :legend="legend"

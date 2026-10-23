@@ -2205,3 +2205,91 @@ progress {
     z-index: 50;
   }
 }
+
+/* Consistent task sections and compact operational views. */
+.section-nav {
+  margin: 10px 0 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.section-nav button {
+  min-height: 32px;
+  font-size: 14px;
+  padding: 5px 12px;
+}
+.task-section {
+  min-width: 0;
+  scroll-margin-top: 130px;
+  margin-top: 18px;
+}
+.task-section > h3 {
+  margin: 0 0 10px;
+}
+.task-section details > summary {
+  cursor: pointer;
+  margin: 8px 0;
+}
+.mapping-panel > summary h2 {
+  display: inline;
+  margin-right: 12px;
+  font-size: 20px;
+}
+.mapping-panel > summary .muted {
+  font-size: 14px;
+  font-weight: 400;
+}
+.mapping-panel[open] > summary {
+  margin-bottom: 14px;
+}
+.download-reasons {
+  margin: 12px 0;
+  font-size: 14px;
+}
+.download-reasons summary {
+  cursor: pointer;
+}
+.brand small {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.analysis-page .task-section .field-grid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.analysis-page .analysis-module-split > .section-nav {
+  width: 100%;
+}
+.analysis-page .analysis-module-split:has(> .section-nav):has(> .parameters-pinned) {
+  grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.8fr);
+}
+.analysis-module-split > .section-nav {
+  grid-column: 1 / -1;
+}
+@media (max-width: 1099px) {
+  .analysis-page .analysis-module-split:has(> .section-nav):has(> .parameters-pinned) {
+    display: flex;
+  }
+}
+
+@media (min-width: 761px) {
+  th,
+  td {
+    padding: 9px 12px;
+  }
+}
+.overview-grid > details.card {
+  align-self: start;
+}
+.task-section summary h4 {
+  display: inline;
+  font-size: 16px;
+  margin: 0;
+}
+
+.diagnostic-controls {
+  align-items: end;
+  margin: 10px 0;
+}
+.diagnostic-controls .field {
+  flex: 1 1 220px;
+  max-width: 360px;
+}

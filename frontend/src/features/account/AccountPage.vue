@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionNav from '../../components/SectionNav.vue'
+import { formatTime } from '../../help/time'
 import { onMounted, ref } from 'vue'
 import MaintenancePanel from './MaintenancePanel.vue'
 import AISettings from '../assistant/AISettings.vue'
@@ -77,32 +79,50 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
         auth.user?.username
       }}。团队共享全部项目和指定原始数据；退出登录不会自动保存项目。
     </p>
-    <form class="card" @submit.prevent="change">
-      <h2>修改密码</h2>
-      <p>修改后所有设备需要重新登录。请先保存当前项目。</p>
-      <label
-        >当前密码<input
-          v-model="current"
-          type="password"
-          autocomplete="current-password"
-          required
-          maxlength="128"
-      /></label>
-      <label
-        >新密码<input
-          v-model="next"
-          type="password"
-          autocomplete="new-password"
-          required
-          minlength="15"
-          maxlength="128"
-      /></label>
-      <p v-if="auth.error" role="alert">{{ auth.error }}</p>
-      <button class="primary" :disabled="auth.busy || store.busy">修改密码</button>
-    </form>
-    <MaintenancePanel v-if="auth.admin" />
-    <AISettings />
-    <template v-if="auth.admin">
+    <SectionNav
+      :items="[
+        { id: 'personal-settings', label: '个人设置' },
+        { id: 'personal-ai', label: '个人 AI' },
+        ...(auth.admin
+          ? [
+              { id: 'team-management', label: '团队管理' },
+              { id: 'server-maintenance', label: '服务器维护' },
+            ]
+          : []),
+      ]"
+    />
+    <section id="personal-settings" class="task-section" aria-label="个人设置">
+      <h2>个人设置</h2>
+      <form class="card" @submit.prevent="change">
+        <h2>修改密码</h2>
+        <p>修改后所有设备需要重新登录。请先保存当前项目。</p>
+        <label
+          >当前密码<input
+            v-model="current"
+            type="password"
+            autocomplete="current-password"
+            required
+            maxlength="128"
+        /></label>
+        <label
+          >新密码<input
+            v-model="next"
+            type="password"
+            autocomplete="new-password"
+            required
+            minlength="15"
+            maxlength="128"
+        /></label>
+        <p v-if="auth.error" role="alert">{{ auth.error }}</p>
+        <button class="primary" :disabled="auth.busy || store.busy">修改密码</button>
+      </form>
+    </section>
+    <section id="personal-ai" class="task-section" aria-label="个人 AI">
+      <h2>个人 AI</h2>
+      <AISettings />
+    </section>
+    <section v-if="auth.admin" id="team-management" class="task-section" aria-label="团队管理">
+      <h2>团队管理</h2>
       <form class="card" @submit.prevent="create">
         <h2>创建账号</h2>
         <label
@@ -159,7 +179,7 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
         <table>
           <thead>
             <tr>
-              <th>时间</th>
+              <th>时间（北京时间 UTC+8）</th>
               <th>账号</th>
               <th>操作</th>
               <th>范围</th>
@@ -168,7 +188,7 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
           </thead>
           <tbody>
             <tr v-for="(item, i) in audit" :key="i">
-              <td>{{ new Date(item.at * 1000).toLocaleString() }}</td>
+              <td>{{ formatTime(item.at * 1000) }}</td>
               <td>{{ item.username ?? '匿名/离线管理' }}</td>
               <td>{{ item.action }}</td>
               <td>{{ item.resource }}</td>
@@ -177,7 +197,11 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
           </tbody>
         </table>
       </div>
-    </template>
+    </section>
+    <section v-if="auth.admin" id="server-maintenance" class="task-section" aria-label="服务器维护">
+      <h2>服务器维护</h2>
+      <MaintenancePanel />
+    </section>
   </section>
 </template>
 <style scoped>

@@ -16,6 +16,7 @@ const props = withDefaults(
     name?: string
     viewKey?: string
     selectRange?: boolean
+    compact?: boolean
     readonly?: boolean
   }>(),
   {
@@ -501,7 +502,7 @@ async function image(format: string, preview = false) {
       :style="{ height: `${chartHeight}px` }"
       aria-label="交互图表"
     ></div>
-    <div class="plot-actions">
+    <div v-if="!compact" class="plot-actions">
       <label class="field"
         ><FieldLabel name="图例位置" /><select
           :value="position"
@@ -549,7 +550,7 @@ async function image(format: string, preview = false) {
         下载作图数据
       </button>
     </div>
-    <details class="plot-settings">
+    <details v-if="!compact" class="plot-settings">
       <summary>论文导出设置 · 尺寸、字号与 DPI</summary>
       <div class="field-grid">
         <label
@@ -625,12 +626,13 @@ async function image(format: string, preview = false) {
       ><img :src="previewImage" alt="按论文设置生成的导出预览" style="max-width: 100%" />
     </div>
     <LegendOrder
+      v-if="!compact"
       :items="legendItems"
       :disabled="store.busy"
       @move="moveLegend"
       @reset="resetLegend"
     />
-    <details>
+    <details v-if="!compact">
       <summary>导出标题与语言</summary>
       <div class="field-grid">
         <label

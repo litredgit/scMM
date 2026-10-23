@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime } from '../../help/time'
 import { computed, onMounted, ref } from 'vue'
 import SavedItems from '../../components/SavedItems.vue'
 import { useRouter } from 'vue-router'
@@ -62,7 +63,7 @@ async function finishOpen(path: string, save = false) {
   }
 }
 function date(value: string) {
-  return new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
+  return formatTime(value)
 }
 </script>
 
@@ -93,7 +94,8 @@ function date(value: string) {
           创建并添加样本 <span>→</span>
         </button>
       </form>
-      <div class="card workflow-note">
+      <details class="card workflow-note">
+        <summary>查看六步工作流程与保存说明</summary>
         <span class="section-tag">工作流程</span>
         <h2>从原始谱到可追溯的结果</h2>
         <ol>
@@ -102,8 +104,8 @@ function date(value: string) {
           <li>审核提取结果，再进行预处理与分析</li>
           <li>主动保存项目，下载需要的结果</li>
         </ol>
-        <p class="muted">六步工作流共用同一个数据集；提取后人工审核，项目由你主动保存。</p>
-      </div>
+        <p class="muted">提取后人工审核，项目由你主动保存。</p>
+      </details>
     </div>
     <section class="card project-list">
       <div class="section-heading">

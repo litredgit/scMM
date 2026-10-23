@@ -8,3 +8,11 @@ export const operations = contract.operations as Record<
 >
 export const resultPlots = contract.resultPlots as Record<ResultName, PlotKind[]>
 export const resultDownloads: Record<ResultName, string> = contract.resultDownloads
+
+export const resultTitles: Record<ResultName, string> = {
+  differential: '两组差异分析表',
+  markers: '各组标记特征表',
+  network: '特征相关网络表',
+  supervised: '监督模型诊断报告',
+  shap: 'SHAP 特征贡献表',
+}

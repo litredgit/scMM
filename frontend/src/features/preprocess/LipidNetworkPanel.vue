@@ -312,19 +312,26 @@ const { image } = useLipidImageExport({
 <template>
   <section class="card lipid-network-panel">
     <h3>注释分类与相关网络</h3>
-    <div class="field-grid">
-      <label
-        >导出宽度（毫米）<input
-          v-model.number="paperWidth"
-          type="number"
-          min="20"
-          max="600" /></label
-      ><label
-        >导出字号（pt）<input v-model.number="paperFont" type="number" min="4.5" max="24" /></label
-      ><label
-        >导出分辨率（DPI）<input v-model.number="paperDpi" type="number" min="72" max="2400"
-      /></label>
-    </div>
+    <details class="plot-settings">
+      <summary>注释图论文导出设置</summary>
+      <div class="field-grid">
+        <label
+          >导出宽度（毫米）<input
+            v-model.number="paperWidth"
+            type="number"
+            min="20"
+            max="600" /></label
+        ><label
+          >导出字号（pt）<input
+            v-model.number="paperFont"
+            type="number"
+            min="4.5"
+            max="24" /></label
+        ><label
+          >导出分辨率（DPI）<input v-model.number="paperDpi" type="number" min="72" max="2400"
+        /></label>
+      </div>
+    </details>
     <p class="muted">
       仅作 MS1
       候选辅助与共变探索。无支持不扣分；同分子式异构体不能据此区分。跨样本一致性不等于生物重复统计推断。

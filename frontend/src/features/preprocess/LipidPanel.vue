@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import CalculationPanel from '../analysis/components/CalculationPanel.vue'
+import SectionNav from '../../components/SectionNav.vue'
+import { formatTime } from '../../help/time'
 import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
 import LipidNetworkOptions from './LipidNetworkOptions.vue'
@@ -67,250 +70,274 @@ const {
     <p class="muted">
       一级精确质量候选注释。评分只用于排序，同位素命中只作标记；所有特征、强度和候选均保留。
     </p>
-    <fieldset :disabled="store.busy">
-      <legend>数据库与匹配</legend>
-      <p class="lipid-path">数据库目录：{{ info?.database.directory }}</p>
-      <p v-if="info?.database.error" class="muted">
-        {{ info.database.error }}；已有注释仍可查看和导出。
-      </p>
-      <div class="field-grid">
-        <label
-          ><FieldLabel name="数据库文件" /><select
-            aria-label="脂质数据库文件"
-            v-model="options.database"
-          >
-            <option value="">自动选择本地数据库</option>
-            <option
-              v-for="file in info?.database.files"
-              :key="file.filename"
-              :value="file.filename"
+    <SectionNav
+      :items="[
+        { id: 'lipid-compute', label: '新建计算与规则' },
+        { id: 'lipid-view', label: '查看注释版本' },
+        { id: 'lipid-review', label: '人工核对', available: !!results },
+        { id: 'lipid-export', label: '下载结果', available: !!results },
+      ]"
+    />
+    <CalculationPanel result-target="lipid-charts" id="lipid-compute" :has-result="!!results">
+      <fieldset :disabled="store.busy">
+        <legend>数据库与匹配</legend>
+        <p class="lipid-path">数据库目录：{{ info?.database.directory }}</p>
+        <p v-if="info?.database.error" class="muted">
+          {{ info.database.error }}；已有注释仍可查看和导出。
+        </p>
+        <div class="field-grid">
+          <label
+            ><FieldLabel name="数据库文件" /><select
+              aria-label="脂质数据库文件"
+              v-model="options.database"
             >
-              {{ file.filename }}
-            </option>
-          </select></label
-        >
-        <label
-          ><FieldLabel
-            name="polarity"
-            text="与实际采集极性一致；both 同时搜索正负候选，不推断实验极性。"
-          /><select aria-label="脂质 polarity" v-model="options.polarity">
-            <option value="pos">正离子</option>
-            <option value="neg">负离子</option>
-            <option value="both">正负候选</option>
-          </select></label
-        >
-        <label
-          ><FieldLabel
-            name="annotation_ppm"
-            text="实测与理论离子 m/z 的绝对 ppm 误差上限。全部容差内候选保留。" /><input
-            aria-label="annotation_ppm"
-            v-model.number="options.annotation_ppm"
-            type="number"
-            min="0"
-            max="1000"
-            step="any"
-        /></label>
-        <label
-          ><FieldLabel name="版本名称" /><input
-            aria-label="脂质版本名称"
-            v-model="label"
-            placeholder="注释与同位素"
-            maxlength="200"
-        /></label>
-      </div>
-      <div class="lipid-adducts">
-        <label
-          v-for="(spec, name) in info?.adducts"
-          :key="name"
-          v-show="options.polarity === 'both' || spec.polarity === options.polarity"
-          ><input type="checkbox" :value="name" v-model="options.adducts" />{{ name }}</label
-        >
-      </div>
-      <button class="secondary save" @click="prepare">
-        {{ info?.database.available ? '检查本地数据库' : '准备数据库（缺失时官方下载）' }}
-      </button>
-    </fieldset>
-
-    <fieldset :disabled="store.busy">
-      <legend>评分规则与预设</legend>
-      <p class="muted">
-        先按绝对 ppm 的 0–2、&gt;2–5、&gt;5
-        三档排序，档内按类别分＋加合物分排序，同分并列。没有内置评分规则。
-      </p>
-      <div class="field-grid">
-        <label
-          ><FieldLabel
-            name="导入规则"
-            text="支持 JSON 和 CSV；只读取声明式分值，不执行代码。格式见参数文档。" /><input
-            aria-label="导入脂质规则"
-            type="file"
-            accept=".json,.csv"
-            @change="importFile"
-        /></label>
-        <label
-          ><FieldLabel name="规则预设" /><select
-            aria-label="脂质规则预设"
-            v-model="preset"
-            @change="choosePreset"
+              <option value="">自动选择本地数据库</option>
+              <option
+                v-for="file in info?.database.files"
+                :key="file.filename"
+                :value="file.filename"
+              >
+                {{ file.filename }}
+              </option>
+            </select></label
           >
-            <option value="">选择已保存预设</option>
-            <option v-for="(_, name) in info?.presets" :key="name" :value="name">{{ name }}</option>
-          </select></label
-        >
-        <label
-          ><FieldLabel name="预设名称" /><input
-            aria-label="脂质预设名称"
-            v-model="presetName"
-            maxlength="200"
-        /></label>
-      </div>
-      <div class="actions">
-        <button class="secondary save" @click="template">下载空规则模板</button
-        ><button
-          v-if="auth.admin"
-          class="secondary save"
-          :disabled="!presetName.trim()"
-          @click="savePreset"
-        >
-          保存为规则预设</button
-        ><button class="primary" :disabled="!validVersion || !imported" @click="applyRules">
-          应用规则排序
+          <label
+            ><FieldLabel
+              name="polarity"
+              text="与实际采集极性一致；both 同时搜索正负候选，不推断实验极性。"
+            /><select aria-label="脂质 polarity" v-model="options.polarity">
+              <option value="pos">正离子</option>
+              <option value="neg">负离子</option>
+              <option value="both">正负候选</option>
+            </select></label
+          >
+          <label
+            ><FieldLabel
+              name="annotation_ppm"
+              text="实测与理论离子 m/z 的绝对 ppm 误差上限。全部容差内候选保留。" /><input
+              aria-label="annotation_ppm"
+              v-model.number="options.annotation_ppm"
+              type="number"
+              min="0"
+              max="1000"
+              step="any"
+          /></label>
+          <label
+            ><FieldLabel name="版本名称" /><input
+              aria-label="脂质版本名称"
+              v-model="label"
+              placeholder="注释与同位素"
+              maxlength="200"
+          /></label>
+        </div>
+        <div class="lipid-adducts">
+          <label
+            v-for="(spec, name) in info?.adducts"
+            :key="name"
+            v-show="options.polarity === 'both' || spec.polarity === options.polarity"
+            ><input type="checkbox" :value="name" v-model="options.adducts" />{{ name }}</label
+          >
+        </div>
+        <button class="secondary save" @click="prepare">
+          {{ info?.database.available ? '检查本地数据库' : '准备数据库（缺失时官方下载）' }}
         </button>
-      </div>
-      <details class="lipid-rule-preview">
-        <summary>
-          查看规则（{{ rules.rules.length }} 项）{{ imported ? ' · 尚未应用' : '' }}
-        </summary>
-        <DataTableView :table="rulesTable" />
-        <div v-if="rules.rules.length > limit" class="actions">
-          <button
-            :disabled="ruleOffset === 0"
-            @click="ruleOffset = Math.max(0, ruleOffset - limit)"
+      </fieldset>
+
+      <fieldset :disabled="store.busy">
+        <legend>评分规则与预设</legend>
+        <p class="muted">
+          先按绝对 ppm 的 0–2、&gt;2–5、&gt;5
+          三档排序，档内按类别分＋加合物分排序，同分并列。没有内置评分规则。
+        </p>
+        <div class="field-grid">
+          <label
+            ><FieldLabel
+              name="导入规则"
+              text="支持 JSON 和 CSV；只读取声明式分值，不执行代码。格式见参数文档。" /><input
+              aria-label="导入脂质规则"
+              type="file"
+              accept=".json,.csv"
+              @change="importFile"
+          /></label>
+          <label
+            ><FieldLabel name="规则预设" /><select
+              aria-label="脂质规则预设"
+              v-model="preset"
+              @change="choosePreset"
+            >
+              <option value="">选择已保存预设</option>
+              <option v-for="(_, name) in info?.presets" :key="name" :value="name">
+                {{ name }}
+              </option>
+            </select></label
           >
-            规则上一页
-          </button>
-          <span
-            >第 {{ Math.floor(ruleOffset / limit) + 1 }} /
-            {{ Math.ceil(rules.rules.length / limit) }} 页</span
+          <label
+            ><FieldLabel name="预设名称" /><input
+              aria-label="脂质预设名称"
+              v-model="presetName"
+              maxlength="200"
+          /></label>
+        </div>
+        <div class="actions">
+          <button class="secondary save" @click="template">下载空规则模板</button
+          ><button
+            v-if="auth.admin"
+            class="secondary save"
+            :disabled="!presetName.trim()"
+            @click="savePreset"
           >
-          <button :disabled="ruleOffset + limit >= rules.rules.length" @click="ruleOffset += limit">
-            规则下一页
+            保存为规则预设</button
+          ><button class="primary" :disabled="!validVersion || !imported" @click="applyRules">
+            应用规则排序
           </button>
         </div>
-        <p class="muted">
-          类别支持 CATEGORY、MAIN_CLASS、SUB_CLASS、LIPID_CLASS；较具体规则覆盖同项的通用规则。
-        </p>
-      </details>
-    </fieldset>
+        <details class="lipid-rule-preview">
+          <summary>
+            查看规则（{{ rules.rules.length }} 项）{{ imported ? ' · 尚未应用' : '' }}
+          </summary>
+          <DataTableView :table="rulesTable" />
+          <div v-if="rules.rules.length > limit" class="actions">
+            <button
+              :disabled="ruleOffset === 0"
+              @click="ruleOffset = Math.max(0, ruleOffset - limit)"
+            >
+              规则上一页
+            </button>
+            <span
+              >第 {{ Math.floor(ruleOffset / limit) + 1 }} /
+              {{ Math.ceil(rules.rules.length / limit) }} 页</span
+            >
+            <button
+              :disabled="ruleOffset + limit >= rules.rules.length"
+              @click="ruleOffset += limit"
+            >
+              规则下一页
+            </button>
+          </div>
+          <p class="muted">
+            类别支持 CATEGORY、MAIN_CLASS、SUB_CLASS、LIPID_CLASS；较具体规则覆盖同项的通用规则。
+          </p>
+        </details>
+      </fieldset>
 
-    <fieldset :disabled="store.busy">
-      <legend>天然同位素设置</legend>
-      <LipidNetworkOptions v-model="options.network" :info="info" />
-      <div class="field-grid">
-        <label
-          ><FieldLabel
-            name="intensity_layer"
-            text="选择未归一化、未插补的强度层。导入数据的初始层未必是原始强度，请按来源核对。"
-          /><select aria-label="脂质 intensity_layer" v-model="options.intensity_layer">
-            <option v-for="item in info?.layers" :key="item" :value="item">{{ item }}</option>
-          </select></label
-        >
-        <label
-          ><FieldLabel
-            name="isotope_ppm"
-            text="观测特征与预测同位素 m/z 的匹配容差；与仪器能否分开相邻峰的分辨率分开设置。" /><input
-            aria-label="isotope_ppm"
-            v-model.number="options.isotope_ppm"
-            type="number"
-            min="0"
-            max="1000"
-            step="any"
-        /></label>
-        <label
-          ><FieldLabel
-            name="max_isotope_order"
-            text="检查 M+1 至 M+n，默认 3；增加阶数会增加关系证据量。" /><input
-            aria-label="max_isotope_order"
-            v-model.number="options.max_isotope_order"
-            type="number"
-            min="1"
-            max="10"
-        /></label>
-        <label
-          ><FieldLabel
-            name="isotope_tolerance"
-            text="相对理论比例的双侧容差；0.2 表示理论比例的 80%–120%，不是相差 20 个百分点。" /><input
-            aria-label="isotope_tolerance"
-            v-model.number="options.isotope_tolerance"
-            type="number"
-            min="0"
-            max="1"
-            step="0.01"
-        /></label>
-        <label
-          ><FieldLabel
-            name="min_valid_cells"
-            text="每个样本至少有这么多母峰强度为正、子峰强度非负的有限细胞对。子峰的零值参与统计。" /><input
-            aria-label="脂质 min_valid_cells"
-            v-model.number="options.min_valid_cells"
-            type="number"
-            min="1"
-        /></label>
-        <label
-          ><FieldLabel
-            name="resolution"
-            text="m/z 200 处的分辨率，用于估计理论细结构是否合峰；初值来自项目参数，请核对实际采集设置。" /><input
-            aria-label="脂质 resolution"
-            v-model.number="options.resolution"
-            type="number"
-            min="1"
-            step="any"
-        /></label>
-      </div>
-      <button :disabled="!options.adducts.length" @click="run" class="primary">
-        运行注释与同位素标记
-      </button>
-    </fieldset>
-
-    <fieldset :disabled="store.busy">
-      <legend>独立处理版本</legend>
-      <div class="field-grid">
-        <label
-          ><FieldLabel name="查看版本（北京时间）" /><select
-            aria-label="脂质查看版本"
-            v-model="version"
-            @change="changeVersion"
+      <fieldset :disabled="store.busy">
+        <legend>天然同位素设置</legend>
+        <LipidNetworkOptions v-model="options.network" :info="info" />
+        <div class="field-grid">
+          <label
+            ><FieldLabel
+              name="intensity_layer"
+              text="选择未归一化、未插补的强度层。导入数据的初始层未必是原始强度，请按来源核对。"
+            /><select aria-label="脂质 intensity_layer" v-model="options.intensity_layer">
+              <option v-for="item in info?.layers" :key="item" :value="item">{{ item }}</option>
+            </select></label
           >
-            <option value="">未注释状态</option>
-            <option v-for="item in info?.versions" :key="item.id" :value="item.id">
-              {{ item.label }} ·
-              {{
-                new Date(item.created_at).toLocaleString('zh-CN', {
-                  timeZone: 'Asia/Shanghai',
-                  hour12: false,
-                })
-              }}{{ item.valid ? '' : ' · 已过期' }}{{ item.id === info?.active ? ' · 当前' : '' }}
-            </option>
-          </select></label
-        >
-      </div>
-      <div class="actions">
-        <button class="secondary preview" :disabled="!!version && !validVersion" @click="activate">
-          使用此注释版本</button
-        ><button class="secondary preview" :disabled="!validVersion" @click="loadResults(true)">
-          读取注释结果
+          <label
+            ><FieldLabel
+              name="isotope_ppm"
+              text="观测特征与预测同位素 m/z 的匹配容差；与仪器能否分开相邻峰的分辨率分开设置。" /><input
+              aria-label="isotope_ppm"
+              v-model.number="options.isotope_ppm"
+              type="number"
+              min="0"
+              max="1000"
+              step="any"
+          /></label>
+          <label
+            ><FieldLabel
+              name="max_isotope_order"
+              text="检查 M+1 至 M+n，默认 3；增加阶数会增加关系证据量。" /><input
+              aria-label="max_isotope_order"
+              v-model.number="options.max_isotope_order"
+              type="number"
+              min="1"
+              max="10"
+          /></label>
+          <label
+            ><FieldLabel
+              name="isotope_tolerance"
+              text="相对理论比例的双侧容差；0.2 表示理论比例的 80%–120%，不是相差 20 个百分点。" /><input
+              aria-label="isotope_tolerance"
+              v-model.number="options.isotope_tolerance"
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+          /></label>
+          <label
+            ><FieldLabel
+              name="min_valid_cells"
+              text="每个样本至少有这么多母峰强度为正、子峰强度非负的有限细胞对。子峰的零值参与统计。" /><input
+              aria-label="脂质 min_valid_cells"
+              v-model.number="options.min_valid_cells"
+              type="number"
+              min="1"
+          /></label>
+          <label
+            ><FieldLabel
+              name="resolution"
+              text="m/z 200 处的分辨率，用于估计理论细结构是否合峰；初值来自项目参数，请核对实际采集设置。" /><input
+              aria-label="脂质 resolution"
+              v-model.number="options.resolution"
+              type="number"
+              min="1"
+              step="any"
+          /></label>
+        </div>
+        <button :disabled="!options.adducts.length" @click="run" class="primary">
+          运行注释与同位素标记
         </button>
-      </div>
-      <p v-if="version && !validVersion" class="muted">
-        该版本输入已改变，不能作为当前结果下载，请重新运行。
-      </p>
-      <p class="muted">
-        切换只改变注释和标记，不改变矩阵或使数值分析失效。请主动保存项目以保留版本和核对进度。
-      </p>
-    </fieldset>
+      </fieldset>
+    </CalculationPanel>
+    <section id="lipid-view" class="task-section">
+      <fieldset :disabled="store.busy">
+        <legend>独立处理版本</legend>
+        <div class="field-grid">
+          <label
+            ><FieldLabel name="查看版本（北京时间）" /><select
+              aria-label="脂质查看版本"
+              v-model="version"
+              @change="changeVersion"
+            >
+              <option value="">未注释状态</option>
+              <option v-for="item in info?.versions" :key="item.id" :value="item.id">
+                {{ item.label }} · {{ formatTime(item.created_at)
+                }}{{ item.valid ? '' : ' · 已过期' }}{{ item.id === info?.active ? ' · 当前' : '' }}
+              </option>
+            </select></label
+          >
+        </div>
+        <div class="actions">
+          <button
+            class="secondary preview"
+            :disabled="!!version && !validVersion"
+            @click="activate"
+          >
+            使用此注释版本</button
+          ><button class="secondary preview" :disabled="!validVersion" @click="loadResults(true)">
+            读取注释结果
+          </button>
+        </div>
+        <p v-if="version && !validVersion" class="muted">
+          该版本输入已改变，不能作为当前结果下载，请重新运行。
+        </p>
+        <p class="muted">
+          切换只改变注释和标记，不改变矩阵或使数值分析失效。请主动保存项目以保留版本和核对进度。
+        </p>
+      </fieldset>
 
-    <div v-if="results" class="lipid-results">
+      <p class="result-state" role="status">
+        {{
+          !version
+            ? '未注释：选择已有版本或新建计算。'
+            : validVersion
+              ? '有效：可查看、人工核对和下载；所有候选与测量峰保留。'
+              : '已失效：输入或依赖改变，需重新运行；此版本不可下载。'
+        }}
+      </p>
       <LipidNetworkPanel
+        id="lipid-charts"
+        v-if="results"
         :results="results"
         :filters="{
           ...filters,
@@ -319,8 +346,10 @@ const {
         @select="selectFeature"
         @updated="loadResults()"
       />
+    </section>
+    <div v-if="results" class="lipid-results">
       <aside class="lipid-filters">
-        <h3>显示与导出筛选</h3>
+        <h3>显示筛选</h3>
         <fieldset :disabled="store.busy">
           <label
             ><FieldLabel name="搜索" /><input aria-label="脂质结果搜索" v-model="filters.query"
@@ -396,29 +425,9 @@ const {
           >
           <button @click="applyFilters" class="preview">应用显示筛选</button>
         </fieldset>
-        <p class="muted">CSV 使用当前筛选条件，包含全部细胞；不会只导出当前页或选中特征。</p>
-        <div class="lipid-downloads">
-          <button class="save" :disabled="store.busy || !validVersion" @click="download('matrix')">
-            导出筛选矩阵 CSV</button
-          ><button
-            class="save"
-            :disabled="store.busy || !validVersion"
-            @click="download('candidates')"
-          >
-            导出候选明细 CSV</button
-          ><button
-            class="save"
-            :disabled="store.busy || !validVersion"
-            @click="download('isotopes')"
-          >
-            导出完整同位素关系 CSV</button
-          ><button class="secondary save" :disabled="store.busy" @click="download('rules')">
-            导出版本规则 JSON
-          </button>
-        </div>
       </aside>
 
-      <div class="lipid-tables">
+      <div id="lipid-review" class="lipid-tables task-section">
         <h3>结果与人工核对</h3>
         <div class="field-grid table-sorting">
           <label
@@ -778,6 +787,25 @@ const {
         </details>
       </div>
     </div>
+    <section v-if="results" id="lipid-export" class="task-section">
+      <h3>下载注释与核对结果</h3>
+      <p class="muted">CSV 使用当前筛选条件，包含全部细胞；不会只导出当前页或选中特征。</p>
+      <div class="lipid-downloads">
+        <button class="save" :disabled="store.busy || !validVersion" @click="download('matrix')">
+          导出筛选矩阵 CSV</button
+        ><button
+          class="save"
+          :disabled="store.busy || !validVersion"
+          @click="download('candidates')"
+        >
+          导出候选明细 CSV</button
+        ><button class="save" :disabled="store.busy || !validVersion" @click="download('isotopes')">
+          导出完整同位素关系 CSV</button
+        ><button class="secondary save" :disabled="store.busy" @click="download('rules')">
+          导出版本规则 JSON
+        </button>
+      </div>
+    </section>
   </section>
 </template>
 

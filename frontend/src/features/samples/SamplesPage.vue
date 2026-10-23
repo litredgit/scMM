@@ -31,6 +31,12 @@ const description = ref('')
 const mapping = ref<Mapping | null>(null)
 const mappingBusy = ref(false)
 const mappingError = ref('')
+const mappingComplete = computed(
+  () =>
+    !!mapping.value?.rows.length &&
+    mapping.value.rows.every((row) => !!row.sample_id) &&
+    !samples.value.some((row) => row.metadata_unresolved?.length),
+)
 const browser = ref<InstanceType<typeof FileBrowser> | null>(null)
 const previousProject = ref('')
 const imported = ref(false)
@@ -537,13 +543,15 @@ async function applyMapping() {
         </p>
       </div>
     </section>
-    <section v-if="store.project.dataset" class="card mapping-panel">
-      <div class="section-heading">
-        <div>
-          <h2>结果与样本关联</h2>
-          <p>关联不明确时，选择结果中的样本字段并逐项映射到项目样本。</p>
-        </div>
-      </div>
+    <details v-if="store.project.dataset" class="card mapping-panel" :open="!mappingComplete">
+      <summary>
+        <h2>结果与样本关联</h2>
+        <span class="muted">{{
+          mappingComplete
+            ? `${mapping?.rows.length} 项关联已完成 · 展开核对或修改`
+            : '待核对 · 选择来源字段并逐项关联'
+        }}</span>
+      </summary>
       <p v-if="mappingError" role="alert" class="inline-error">{{ mappingError }}</p>
       <label
         ><FieldLabel name="结果样本字段" /><select
@@ -592,7 +600,7 @@ async function applyMapping() {
       >
         应用样本关联
       </button>
-    </section>
+    </details>
     <ProcessedMergePanel />
     <div class="page-note">细胞数不等于生物重复数。同一独立来源的多个样本应填写相同 subject。</div>
   </section>

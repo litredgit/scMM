@@ -343,3 +343,37 @@ test('raw m/z bounds stay paired beside the spectrum at laptop widths', async ({
     })
   }
 })
+
+test('downloads explain missing snapshot and embeddings without changing project data', async ({
+  page,
+}) => {
+  await openAnalysis(page)
+  await page.getByRole('link', { name: /结果与保存/ }).click()
+  await page.getByLabel('下载内容', { exact: true }).selectOption('snapshot')
+  await expect(page.getByRole('button', { name: '下载完整结果', exact: true })).toBeDisabled()
+  await expect(page.getByText(/尚无已保存的数据快照，请先保存项目/)).toBeVisible()
+  await page.getByLabel('下载内容', { exact: true }).selectOption('embedding')
+  await expect(page.getByRole('button', { name: '下载完整结果', exact: true })).toBeDisabled()
+  await expect(page.getByText(/暂无可用嵌入坐标/)).toBeVisible()
+  await page.getByText(/项分析下载尚不可用 · 查看原因/).click()
+  await expect(page.getByText(/两组差异分析表：暂无有效结果/)).toBeVisible()
+  await page.getByRole('button', { name: '保存项目', exact: true }).first().click()
+  await expect(page.locator('.save-state')).toHaveText('已保存')
+  await page.getByLabel('下载内容', { exact: true }).selectOption('snapshot')
+  await expect(page.getByRole('button', { name: '下载完整结果', exact: true })).toBeEnabled()
+})
+
+test('account sections separate personal, AI, team and maintenance settings', async ({ page }) => {
+  await page.goto('/account')
+  for (const name of ['个人设置', '个人 AI', '团队管理', '服务器维护']) {
+    const region = page.getByRole('region', { name, exact: true })
+    await expect(region).toBeAttached()
+    await page
+      .getByRole('navigation', { name: '本页分区', exact: true })
+      .getByRole('button', { name, exact: true })
+      .click()
+    await expect(region.getByRole('heading', { name, exact: true })).toBeInViewport()
+  }
+  await expect(page.getByRole('form', { name: '个人 AI API 配置' })).toBeAttached()
+  await expect(page.getByText('时间（北京时间 UTC+8）', { exact: true })).toBeAttached()
+})

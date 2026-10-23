@@ -3,7 +3,7 @@ import { displayName } from '../../help/labels'
 import { ref, watch, computed } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import type { AnalysisInfo, Figure } from '../../api/types'
-import { resultDownloads } from '../analysis/results'
+import { resultDownloads, resultTitles } from '../analysis/results'
 import SavedItems from '../../components/SavedItems.vue'
 import PlotView from '../../components/PlotView.vue'
 import { useReadScope } from '../../api/readScope'
@@ -59,9 +59,26 @@ const available = computed(() => [
   { value: 'report_zip', label: '当前分析报告 ZIP（含 PDF / 完整表）' },
   ...(info.value?.results ?? [])
     .filter((n) => n in defaults)
-    .map((n) => ({ value: n, label: `${n} ${n === 'supervised' ? 'JSON' : 'CSV'}` })),
+    .map((n) => ({
+      value: n,
+      label: `${resultTitles[n as keyof typeof resultTitles]} ${n === 'supervised' ? 'JSON' : 'CSV'}`,
+    })),
   { value: 'snapshot', label: '上次保存快照 H5AD' },
 ])
+const downloadReason = computed(() => {
+  if (kind.value === 'embedding' && !info.value?.embeddings.includes(embedding.value))
+    return '暂无可用嵌入坐标，请先运行降维或选择有效嵌入。'
+  if (kind.value === 'snapshot' && !artifactRefs.value?.current)
+    return '尚无已保存的数据快照，请先保存项目；该下载始终对应上次保存。'
+  if (['quality_pdf', 'report_zip'].includes(kind.value) && !info.value?.token)
+    return '当前数据状态尚未读取成功，请刷新状态后重试。'
+  if (kind.value in resultTitles && !info.value?.results.includes(kind.value))
+    return '该分析暂无有效结果，可能尚未计算或已失效；请重新计算。'
+  return ''
+})
+const unavailable = computed(() =>
+  Object.entries(resultTitles).filter(([key]) => !info.value?.results.includes(key)),
+)
 async function refresh() {
   const accept = infoScope.begin()
   figureScope.invalidate()
@@ -137,7 +154,7 @@ async function exportH5ad() {
     <div class="card">
       <div class="section-heading">
         <div>
-          <h2>项目快照</h2>
+          <h2>保存项目 · 继续完整工作</h2>
           <p>{{ store.project.unsaved ? '当前工作区有未保存修改。' : '当前修改已保存。' }}</p>
         </div>
         <button
@@ -185,11 +202,7 @@ async function exportH5ad() {
           </div>
           <button
             class="save"
-            :disabled="
-              store.busy ||
-              (kind === 'embedding' && !embedding) ||
-              (['quality_pdf', 'report_zip'].includes(kind) && !info?.token)
-            "
+            :disabled="store.busy || !!downloadReason"
             @click="
               store.download(
                 kind,
@@ -204,6 +217,18 @@ async function exportH5ad() {
           >
             下载完整结果
           </button>
+          <p v-if="downloadReason" class="state-note" role="status">{{ downloadReason }}</p>
+          <details v-if="unavailable.length" class="download-reasons">
+            <summary>{{ unavailable.length }} 项分析下载尚不可用 · 查看原因</summary>
+            <ul>
+              <li v-for="[key, title] in unavailable" :key="key">
+                {{ title }}：暂无有效结果；先运行相应分析，已失效结果须重算。
+              </li>
+            </ul>
+          </details>
+          <p v-if="kind === 'snapshot'" class="state-note">
+            上次保存的快照不含未保存修改；下载不会保存当前项目。
+          </p>
           <p v-if="kind === 'matrix'" class="muted">
             MetaboAnalyst 格式：每行一个细胞，首列 Sample、第二列 Label 来自
             group，其余列为特征强度。请先补齐分组；导出不自动归一化或补值。
@@ -218,7 +243,7 @@ async function exportH5ad() {
           </p>
         </section>
         <section aria-label="导出到服务器">
-          <h3>单独导出当前 H5AD</h3>
+          <h3>导出到服务器 · 独立 H5AD</h3>
           <div class="field-grid">
             <label
               ><FieldLabel name="保存存储" /><select

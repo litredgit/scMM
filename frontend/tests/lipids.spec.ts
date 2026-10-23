@@ -78,6 +78,7 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await page.getByRole('button', { name: '运行注释与同位素标记', exact: true }).dblclick()
   await expect(panel.getByText('4 / 4 特征 · 4 条候选 · 4 条关系证据')).toBeVisible()
   await expect(page.getByLabel('脂质查看版本').locator('option')).toHaveCount(2)
+  await expect(page.getByLabel('annotation_ppm', { exact: true })).not.toBeVisible()
   await expect(
     panel.getByRole('row').filter({ hasText: 'Synthetic lipid A' }).first(),
   ).toBeVisible()
@@ -104,6 +105,7 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   graphDownload = page.waitForEvent('download')
   await network.getByRole('button', { name: '下载饼图 PNG', exact: true }).click()
   expect((await graphDownload).suggestedFilename()).toMatch(/\.png$/)
+  await network.getByText('注释图论文导出设置', { exact: true }).click()
   const widthBefore = await network.getByLabel('导出宽度（毫米）', { exact: true }).inputValue()
   const dpiBefore = await network.getByLabel('导出分辨率（DPI）', { exact: true }).inputValue()
   await network.getByLabel('导出宽度（毫米）', { exact: true }).fill('600')

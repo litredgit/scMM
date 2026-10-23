@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 import { useAnalysisContext } from '../composables/useAnalysisContext'
-const props = defineProps<{ hasResult: boolean }>()
+const props = defineProps<{ hasResult: boolean; resultTarget?: string }>()
 const { parametersPinned, store } = useAnalysisContext()
 const open = ref(!props.hasResult)
 function toggle() {
@@ -24,9 +24,11 @@ watch(
       open.value = false
       await nextTick()
       if (requested && element.value?.getClientRects().length) {
+        const target =
+          (props.resultTarget && document.getElementById(props.resultTarget)) || element.value
         const header = document.querySelector('.topbar')?.getBoundingClientRect().height ?? 0
         window.scrollTo({
-          top: Math.max(0, scrollY + element.value.getBoundingClientRect().top - header - 12),
+          top: Math.max(0, scrollY + target.getBoundingClientRect().top - header - 12),
         })
       }
     }
@@ -48,7 +50,7 @@ watch(
     :class="{ 'parameters-pinned': parametersPinned, 'has-result': hasResult }"
   >
     <div class="calculation-heading actions">
-      <button class="preview" :aria-expanded="open || parametersPinned" @click="toggle">
+      <button :aria-expanded="open || parametersPinned" @click="toggle">
         {{ open || parametersPinned ? '收起计算参数' : '展开计算参数' }}
       </button>
       <button

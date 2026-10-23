@@ -69,11 +69,11 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
   await noError(page)
   await analysisModule(page, 'differential', '差异与 Marker')
   await page.getByRole('button', { name: '计算两组差异并绘制火山图', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'differential', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '两组差异分析表', exact: true })).toBeVisible()
   await page.getByRole('checkbox', { name: '选择小提琴特征 f0', exact: true }).check()
   await page.getByRole('button', { name: '绘制小提琴图', exact: true }).click()
   await page.getByRole('button', { name: '计算全部簇 Marker', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'markers', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '各组标记特征表', exact: true })).toBeVisible()
   await analysisModule(page, 'network', '相关网络')
   await page.getByRole('button', { name: '计算相关网络', exact: true }).click()
   await expect(page.locator('.js-plotly-plot').last()).toBeVisible()
@@ -87,10 +87,10 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
   await expect(validationNotes).toContainText('细胞数不等于生物重复')
   await expect(validationNotes).toContainText('不再是独立测试')
   await expect(
-    page.getByRole('button', { name: '保存潜变量和 train/test 标识', exact: true }),
+    page.getByRole('button', { name: '应用潜变量与训练/测试标识', exact: true }),
   ).toBeEnabled()
   await noError(page)
-  await page.getByRole('button', { name: '保存潜变量和 train/test 标识', exact: true }).click()
+  await page.getByRole('button', { name: '应用潜变量与训练/测试标识', exact: true }).click()
   await page.getByLabel('shap_background', { exact: true }).fill('4')
   await page.getByLabel('shap_samples', { exact: true }).fill('2')
   await page.getByRole('button', { name: '解释当前模型（SHAP）', exact: true }).click()
@@ -130,16 +130,21 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
     page.getByRole('button', { name: '解释当前模型（SHAP）', exact: true }),
   ).toBeDisabled()
   await expect(page.getByRole('combobox', { name: '图例', exact: true })).toHaveValue('hidden')
+  await expect(
+    page.locator('.result-state').filter({ hasText: '监督模型 · 重载只读' }),
+  ).toBeVisible()
   await page.getByRole('button', { name: '读取监督诊断', exact: true }).click()
   await expect(validationNotes).toContainText('细胞数不等于生物重复')
   await noError(page)
   await analysisModule(page, 'differential', '差异与 Marker')
+  await page.getByRole('button', { name: '展开计算参数', exact: true }).first().click()
   const invalidated = page.waitForResponse((response) =>
     response.url().endsWith('/analysis/invalidate'),
   )
   await page.getByRole('combobox', { name: 'layer', exact: true }).selectOption('scmm_input_0')
   const invalidation = await invalidated
   expect(invalidation.status()).toBe(200)
+  await expect(page.locator('.result-state').filter({ hasText: '差异分析 · 需重算' })).toBeVisible()
   expect(invalidation.request().postDataJSON().names.sort()).toEqual(['differential', 'markers'])
   await analysisModule(page, 'network', '相关网络')
   await expect(page.getByRole('combobox', { name: 'layer', exact: true })).toHaveValue('当前矩阵')

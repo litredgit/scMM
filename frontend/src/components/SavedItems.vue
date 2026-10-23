@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime } from '../help/time'
 import { ref, watch } from 'vue'
 import { useReadScope } from '../api/readScope'
 import { useWorkspace } from '../stores/workspace'
@@ -442,11 +443,7 @@ async function clear() {
             {{ policyStatus.policy?.enabled ? '已启用' : '已停用 / 尚未设置'
             }}<template v-if="policyStatus.policy?.enabled">
               · 每 {{ policyStatus.policy.interval_minutes }} 分钟检查；下次检查
-              {{
-                new Date(policyStatus.policy.next_at * 1000).toLocaleString('zh-CN', {
-                  timeZone: 'Asia/Shanghai',
-                })
-              }}（北京时间）</template
+              {{ formatTime(policyStatus.policy.next_at * 1000) }}（北京时间）</template
             >
           </p>
           <p v-if="policyStatus.policy">
@@ -464,11 +461,7 @@ async function clear() {
           </button>
           <ul>
             <li v-for="run in policyStatus.runs" :key="run.id">
-              {{
-                new Date(run.started_at * 1000).toLocaleString('zh-CN', {
-                  timeZone: 'Asia/Shanghai',
-                })
-              }}
+              {{ formatTime(run.started_at * 1000) }}
               · {{ retentionRunLabels[run.status] ?? run.status }}：{{ run.message }}
             </li>
           </ul>
@@ -497,11 +490,7 @@ async function clear() {
       <div v-if="retention" class="alert" aria-label="快照与缓存保留计划">
         <p>{{ retention.policy }}</p>
         <p>{{ retention.scope }}</p>
-        <p>
-          生成时间：{{
-            new Date(retention.generated_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
-          }}（北京时间）
-        </p>
+        <p>生成时间：{{ formatTime(retention.generated_at) }}（北京时间）</p>
         <p>
           只读检查，生成后状态仍可能变化。候选逻辑大小
           {{ (retention.candidate_bytes / 1024 / 1024).toFixed(2) }} MiB；本次释放 0 字节。
@@ -542,13 +531,7 @@ async function clear() {
                     item.policy_reasons.join('；')
                   }}
                   <div>
-                    {{
-                      item.modified_at
-                        ? new Date(item.modified_at).toLocaleString('zh-CN', {
-                            timeZone: 'Asia/Shanghai',
-                          })
-                        : '时间未知'
-                    }}
+                    {{ item.modified_at ? formatTime(item.modified_at) : '时间未知' }}
                   </div>
                 </td>
                 <td>
@@ -635,9 +618,7 @@ async function clear() {
               </td>
               <td>{{ entry.path }}</td>
               <td>
-                {{
-                  new Date(entry.deleted_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
-                }}
+                {{ formatTime(entry.deleted_at) }}
               </td>
               <td>
                 <button class="restore" :disabled="store.busy" @click="restore(entry.entry)">

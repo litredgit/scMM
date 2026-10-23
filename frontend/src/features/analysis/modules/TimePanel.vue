@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CalculationPanel from '../components/CalculationPanel.vue'
+import SectionNav from '../../../components/SectionNav.vue'
 import { computed } from 'vue'
 import { useTimeAnalysis } from '../composables/useTimeAnalysis'
 import PlotView from '../../../components/PlotView.vue'
@@ -43,7 +45,18 @@ const trendFeatures = computed({
 </script>
 <template>
   <div class="card analysis-module-split">
-    <section class="analysis-calculation">
+    <SectionNav
+      :items="[
+        { id: 'time-compute', label: '新建时间计算' },
+        { id: 'time-results', label: '查看命名结果' },
+        { id: 'time-export', label: '下载完整结果' },
+      ]"
+    />
+    <CalculationPanel
+      result-target="time-results"
+      id="time-compute"
+      :has-result="!!info?.results.some((row) => row.valid)"
+    >
       <h2>伪时间与窗口轨迹</h2>
       <p>
         根点依据实验先验明确选择。采集进程、实验时间与伪时间不可混用。每次结果独立命名，不覆盖旧键；改草稿不改已计算结果。
@@ -515,9 +528,18 @@ const trendFeatures = computed({
         同步工程上限为 5000 细胞、500 万当前矩阵/输入表示数值、64 个命名结果和累计 500
         万结果数值；不是实验推荐阈值。当前在请求内计算，超时不自动重放。
       </p>
-    </section>
-    <section class="analysis-visualization">
+    </CalculationPanel>
+    <section id="time-results" class="analysis-visualization task-section">
       <h3>已有时间结果</h3>
+      <p class="result-state" role="status">
+        {{
+          !selected
+            ? '无所选结果：选择已有命名结果，或新建计算。'
+            : selected.valid
+              ? '有效：查看、绘图与下载复用已记录结果，计算草稿另行应用。'
+              : '已失效：数据或依赖已改变，需以新名称重算；该结果不可下载。'
+        }}
+      </p>
       <label
         >选择命名结果<select
           v-model="form.selected_result"
@@ -530,10 +552,7 @@ const trendFeatures = computed({
           </option>
         </select></label
       >
-      <p>
-        读取表、绘图和导出复用有效的已计算数值，不重跑 Palantir
-        或窗口计算。科学输入或依赖改变后过期结果不可下载。
-      </p>
+
       <label v-if="selected?.kind === 'palantir'"
         >时间图绘图坐标<select
           v-model="form.plot_coordinate_key"
@@ -544,29 +563,32 @@ const trendFeatures = computed({
           <option v-for="key in info?.embeddings" :key="key">{{ key }}</option>
         </select></label
       >
-      <fieldset v-if="selected?.kind === 'trends'" :disabled="store.busy">
-        <legend>趋势热图显示</legend>
-        <label
-          ><FieldLabel
-            name="趋势显示特征数"
-            help-key="plot_top_n"
-            text="按已计算的 q 值及相关性排名；只限制热图，不截断完整下载。最多 500 个特征、20 万显示值。" /><input
-            v-model.number="form.plot_top_n"
-            type="number"
-            min="1"
-            max="500"
-            aria-label="趋势显示特征数"
-        /></label>
-        <label
-          ><FieldLabel
-            name="趋势显示行标准分"
-            help-key="display_standardize"
-            text="仅对各特征窗口值做总体标准差的行标准分，常量行显示 0；不修改原趋势值或重新计算。" /><input
-            v-model="form.display_standardize"
-            type="checkbox"
-            aria-label="趋势显示行标准分"
-        /></label>
-      </fieldset>
+      <details v-if="selected?.kind === 'trends'">
+        <summary>趋势热图显示设置</summary>
+        <fieldset :disabled="store.busy">
+          <legend>趋势热图显示</legend>
+          <label
+            ><FieldLabel
+              name="趋势显示特征数"
+              help-key="plot_top_n"
+              text="按已计算的 q 值及相关性排名；只限制热图，不截断完整下载。最多 500 个特征、20 万显示值。" /><input
+              v-model.number="form.plot_top_n"
+              type="number"
+              min="1"
+              max="500"
+              aria-label="趋势显示特征数"
+          /></label>
+          <label
+            ><FieldLabel
+              name="趋势显示行标准分"
+              help-key="display_standardize"
+              text="仅对各特征窗口值做总体标准差的行标准分，常量行显示 0；不修改原趋势值或重新计算。" /><input
+              v-model="form.display_standardize"
+              type="checkbox"
+              aria-label="趋势显示行标准分"
+          /></label>
+        </fieldset>
+      </details>
       <div class="actions">
         <button class="preview" :disabled="store.busy || !selected?.valid" @click="readResult">
           读取时间结果表
@@ -590,23 +612,35 @@ const trendFeatures = computed({
         >
           读取已保存时间图
         </button>
+      </div>
+      <p v-if="figureMeta.time_result_key">图来源结果：{{ figureMeta.time_result_key }}</p>
+      <PlotView v-if="figure" :figure="figure" name="time_plot" />
+      <details v-if="figureMeta.notes?.length">
+        <summary>结果说明与注意事项</summary>
+        <p v-for="note in figureMeta.notes" :key="note">{{ note }}</p>
+      </details>
+      <section id="time-export" class="task-section">
+        <h3>下载完整时间结果</h3>
         <button class="download" :disabled="store.busy || !selected?.valid" @click="download">
           下载完整时间结果 ZIP
         </button>
-      </div>
-      <p v-if="figureMeta.time_result_key">图来源结果：{{ figureMeta.time_result_key }}</p>
-      <p v-for="note in figureMeta.notes ?? []" :key="note">{{ note }}</p>
-      <PlotView v-if="figure" :figure="figure" name="time_plot" />
+        <p class="muted">下载完整表格与参数，不替代保存项目；结果无效或尚未选择时不可下载。</p>
+      </section>
       <template v-if="result"
         ><h4>结果 {{ result.key }} 的生效参数</h4>
-        <pre>{{ JSON.stringify(result.parameters, null, 2) }}</pre>
-        <section v-for="(table, name) in result.tables" :key="name">
-          <h4>
-            {{ tableNames[name] ?? name }}
-            · 共 {{ table.total }} 行（页面至多 200 行）
-          </h4>
+        <details>
+          <summary>查看生效参数</summary>
+          <pre>{{ JSON.stringify(result.parameters, null, 2) }}</pre>
+        </details>
+        <details v-for="(table, name) in result.tables" :key="name">
+          <summary>
+            <h4>
+              {{ tableNames[name] ?? name }}
+              · 共 {{ table.total }} 行（页面至多 200 行）
+            </h4>
+          </summary>
           <DataTable :table="table" />
-        </section>
+        </details>
       </template>
     </section>
   </div>
