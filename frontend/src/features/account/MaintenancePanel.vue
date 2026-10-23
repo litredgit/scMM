@@ -14,50 +14,70 @@ const store = useWorkspace(),
   }>(),
   closureReason = ref('')
 async function load() {
-  await store.run(async () => {
-    const result = await request<{ active: unknown; pending: unknown }>('/admin/resources')
-    resources.value = JSON.stringify(result.pending || result.active, null, 2)
-    status.value = await request('/admin/maintenance/status')
-  })
+  await store.run(
+    async () => {
+      const result = await request<{ active: unknown; pending: unknown }>('/admin/resources')
+      resources.value = JSON.stringify(result.pending || result.active, null, 2)
+      status.value = await request('/admin/maintenance/status')
+    },
+    '',
+    { label: '读取维护状态', phase: 'reading' },
+  )
 }
 async function save() {
   await store.run(
     () => request('/admin/resources', { method: 'PUT', body: JSON.parse(resources.value) }),
     '配置已检查并暂存，将在维护重启后生效。',
+    { label: '暂存服务器配置', phase: 'submitting' },
   )
 }
 async function action(name: string) {
   closure.value = undefined
-  await store.run(async () => {
-    status.value = await request('/admin/maintenance/' + name, {
-      method: 'POST',
-      body: name === 'execute' ? { action: 'restart' } : undefined,
-    })
-  })
+  await store.run(
+    async () => {
+      status.value = await request('/admin/maintenance/' + name, {
+        method: 'POST',
+        body: name === 'execute' ? { action: 'restart' } : undefined,
+      })
+    },
+    '',
+    { label: '执行维护操作', phase: 'submitting' },
+  )
 }
 async function reviewClosure() {
-  await store.run(async () => {
-    closure.value = await request('/admin/maintenance/closed-pages/review', { method: 'POST' })
-  })
+  await store.run(
+    async () => {
+      closure.value = await request('/admin/maintenance/closed-pages/review', { method: 'POST' })
+    },
+    '',
+    { label: '检查关闭证据', phase: 'reading' },
+  )
 }
 async function confirmClosure() {
   const reviewed = closure.value
   closure.value = undefined
   if (!reviewed) return
-  await store.run(async () => {
-    await request('/admin/maintenance/closed-pages/confirm', {
-      method: 'POST',
-      body: { review_id: reviewed.review_id, reason: closureReason.value },
-    })
-    status.value = await request('/admin/maintenance/status')
-  }, '关闭依据已记录；工作区仍保留，请继续验证并暂存会话。')
+  await store.run(
+    async () => {
+      await request('/admin/maintenance/closed-pages/confirm', {
+        method: 'POST',
+        body: { review_id: reviewed.review_id, reason: closureReason.value },
+      })
+      status.value = await request('/admin/maintenance/status')
+    },
+    '关闭依据已记录；工作区仍保留，请继续验证并暂存会话。',
+    { label: '登记关闭依据', phase: 'submitting' },
+  )
 }
 async function update() {
-  await store.run(() =>
-    request('/admin/maintenance/execute', {
-      method: 'POST',
-      body: { action: 'update', version: version.value },
-    }),
+  await store.run(
+    () =>
+      request('/admin/maintenance/execute', {
+        method: 'POST',
+        body: { action: 'update', version: version.value },
+      }),
+    '',
+    { label: '安排服务更新', phase: 'submitting' },
   )
 }
 async function deployment(action: 'restart' | 'update') {
@@ -68,6 +88,7 @@ async function deployment(action: 'restart' | 'update') {
         body: { action, version: action === 'update' ? version.value : undefined },
       }),
     '维护已安排：通知用户后限时暂存会话并更新，临时状态可能无法恢复。',
+    { label: action === 'restart' ? '安排服务重启' : '安排服务更新', phase: 'submitting' },
   )
 }
 onMounted(load)
@@ -95,6 +116,7 @@ onMounted(load)
           store.run(
             () => request('/admin/database/update', { method: 'POST' }),
             '注释数据库已更新，旧版本已保留。',
+            { label: '更新注释数据库', phase: 'running' },
           )
         "
       >

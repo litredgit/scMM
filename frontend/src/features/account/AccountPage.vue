@@ -28,25 +28,38 @@ async function refresh() {
   audit.value = await request<Audit[]>('/admin/audit')
 }
 async function create() {
-  await store.run(async () => {
-    const result = await request<{ initial_credential: string }>('/admin/users', {
-      method: 'POST',
-      body: { username: name.value, role: role.value },
-    })
-    credential.value = result.initial_credential
-    name.value = ''
-    await refresh()
-  })
+  await store.run(
+    async (scope) => {
+      const result = await request<{ initial_credential: string }>('/admin/users', {
+        method: 'POST',
+        body: { username: name.value, role: role.value },
+      })
+      credential.value = result.initial_credential
+      name.value = ''
+      scope.update({ phase: 'refreshing' })
+      await refresh()
+    },
+    '',
+    { label: '创建团队账号', phase: 'submitting' },
+  )
 }
 async function update(user: Account, reset: boolean) {
-  await store.run(async () => {
-    const result = await request<{ initial_credential: string | null }>(`/admin/users/${user.id}`, {
-      method: 'PATCH',
-      body: reset ? { reset_password: true } : { active: !user.active },
-    })
-    credential.value = result.initial_credential ?? ''
-    await refresh()
-  })
+  await store.run(
+    async (scope) => {
+      const result = await request<{ initial_credential: string | null }>(
+        `/admin/users/${user.id}`,
+        {
+          method: 'PATCH',
+          body: reset ? { reset_password: true } : { active: !user.active },
+        },
+      )
+      credential.value = result.initial_credential ?? ''
+      scope.update({ phase: 'refreshing' })
+      await refresh()
+    },
+    '',
+    { label: reset ? '重置账号密码' : '更新账号状态', phase: 'submitting' },
+  )
 }
 async function change() {
   if (await auth.changePassword(current.value, next.value)) {
@@ -54,7 +67,7 @@ async function change() {
     next.value = ''
   }
 }
-onMounted(() => store.run(refresh))
+onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 'reading' }))
 </script>
 <template>
   <section>

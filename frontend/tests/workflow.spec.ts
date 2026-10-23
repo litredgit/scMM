@@ -1,6 +1,7 @@
 import { test, expect, type Page } from './fixtures'
 import { readFile } from 'node:fs/promises'
 import { serialPolling } from '../src/api/polling'
+import type { useWorkspace } from '../src/stores/workspace'
 
 test.use({ actionTimeout: 15000 })
 
@@ -804,4 +805,262 @@ test('stopping before a poll starts prevents the request and stale failures are 
   reject(new Error('停用后的失败'))
   await pending
   expect(errors).toEqual([])
+})
+
+test('duplicate extraction review cannot report success or clear the running phase before the request finishes', async ({
+  page,
+}) => {
+  await page.route('**/workspace/extraction/batches', (route) =>
+    route.fulfill({
+      json: [
+        {
+          path: '/synthetic/batch/state',
+          status: 'completed',
+          created_at: '2026-10-22T00:00:00Z',
+          message: '合成批次',
+          samples: [
+            { id: 'synthetic-a', name: '待审核输入', status: 'succeeded', cells: 2, features: 1 },
+          ],
+        },
+      ],
+    }),
+  )
+  await create(page, '重复审核操作')
+  await page.getByRole('link', { name: /提取与审核/ }).click()
+  await page.getByLabel('待审核输入 · 2 细胞', { exact: true }).check()
+  let release!: () => void
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let entered!: () => void
+  const pending = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  let requests = 0
+  await page.route('**/workspace/extraction/review', async (route) => {
+    requests++
+    entered()
+    await held
+    await route.fulfill({ status: 400, json: { error: { message: '合成审核失败，未建立数据' } } })
+  })
+  try {
+    await page.getByRole('button', { name: '建立当前数据集', exact: true }).evaluate((button) => {
+      // Two already queued events before Vue patches disabled must share the same guard.
+      ;(button as HTMLButtonElement).click()
+      ;(button as HTMLButtonElement).click()
+    })
+    await pending
+    expect(requests).toBe(1)
+    await expect(
+      page.getByText('当前数据集已建立，可进入预处理。项目仍需主动保存。', { exact: true }),
+    ).toHaveCount(0)
+    await expect(page.getByText('正在合并所选样本并建立当前数据集…', { exact: true })).toBeVisible()
+    release()
+    await expect(page.getByRole('alert')).toContainText('合成审核失败，未建立数据')
+    await expect(
+      page.getByText('当前数据集已建立，可进入预处理。项目仍需主动保存。', { exact: true }),
+    ).toHaveCount(0)
+  } finally {
+    release()
+  }
+})
+
+test('a delayed background read cannot overwrite the failure of a later save', async ({ page }) => {
+  let release!: () => void
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let entered!: () => void
+  const pending = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  await page.route('**/workspace/extraction/batches', async (route) => {
+    entered()
+    await held
+    await route.fulfill({ status: 400, json: { error: { message: '旧的后台读取失败' } } })
+  })
+  await page.route('**/workspace/project/save', (route) =>
+    route.fulfill({ status: 400, json: { error: { message: '本次项目保存失败' } } }),
+  )
+  try {
+    await create(page, '操作反馈归属')
+    await pending
+    await page.getByRole('button', { name: '保存项目', exact: true }).click()
+    await expect(page.getByRole('alert')).toContainText('本次项目保存失败')
+    const response = page.waitForResponse((r) => r.url().endsWith('/extraction/batches'))
+    release()
+    await response
+    await page.waitForTimeout(100)
+    await expect(page.getByRole('alert')).toContainText('本次项目保存失败')
+    await expect(page.getByRole('alert')).not.toContainText('旧的后台读取失败')
+  } finally {
+    release()
+  }
+})
+
+test('opening raw data keeps one operation through scan lookup and both initial plots', async ({
+  page,
+}) => {
+  await create(page, '原始打开完整操作链')
+  await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
+  await page.getByRole('button', { name: /extract.mzML/ }).click()
+  await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
+  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  let release!: () => void
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let entered!: () => void
+  const pending = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  let opens = 0
+  page.on('request', (request) => {
+    if (request.url().endsWith('/raw/open')) opens++
+  })
+  await page.route('**/workspace/raw/scans?*', async (route) => {
+    entered()
+    await held
+    await route.continue()
+  })
+  try {
+    const button = page.getByRole('button', { name: '打开原始文件', exact: true })
+    await button.click()
+    await pending
+    await expect(button).toBeDisabled()
+    await expect(
+      page.locator('.task-note').filter({ hasText: '打开原始文件：刷新状态中' }),
+    ).toBeVisible()
+    const navigation = page.getByRole('navigation', { name: '步骤切换', exact: true })
+    await navigation.getByRole('button', { name: /上一步：项目与样本/ }).click()
+    await expect(page).toHaveURL(/\/samples$/)
+    await navigation.getByRole('button', { name: /下一步：原始谱与参数/ }).click()
+    await expect(button).toBeDisabled()
+    await button.evaluate((element) => (element as HTMLButtonElement).click())
+    expect(opens).toBe(1)
+    const plotted = page.waitForResponse(
+      (r) => r.url().endsWith('/raw/plot') && r.request().postDataJSON()?.kind === 'single',
+    )
+    release()
+    await plotted
+    await expect(button).toBeEnabled()
+    await expect(page.locator('.js-plotly-plot')).toBeVisible()
+    await expect(page.getByRole('alert')).toHaveCount(0)
+  } finally {
+    release()
+  }
+})
+
+test('failed clearing of a sample exception keeps the raw plot and unsaved parameter draft', async ({
+  page,
+}) => {
+  await create(page, '例外清除失败')
+  await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
+  await page.getByRole('button', { name: /extract.mzML/ }).click()
+  await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
+  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
+  await expect(page.locator('.js-plotly-plot')).toBeVisible()
+  await page.getByLabel('cell_min_signal', { exact: true }).fill('42')
+  await page.route('**/workspace/parameters/clear', (route) =>
+    route.fulfill({ status: 400, json: { error: { message: '合成例外清除失败' } } }),
+  )
+  await page.getByRole('button', { name: '清除样本例外', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('合成例外清除失败')
+  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('42')
+  await expect(page.locator('.js-plotly-plot')).toBeVisible()
+})
+
+test('operation outcomes distinguish skipped, stale, failed and void success without releasing a newer operation', async ({
+  page,
+}) => {
+  await create(page, '操作返回语义')
+  const result = await page.evaluate(async () => {
+    // Access the running Pinia store to exercise its public action contract.
+    const root = document.getElementById('app') as HTMLElement & {
+      __vue_app__: {
+        config: {
+          globalProperties: { $pinia: { _s: Map<string, ReturnType<typeof useWorkspace>> } }
+        }
+      }
+    }
+    const store = root.__vue_app__.config.globalProperties.$pinia._s.get('workspace')!
+    let releaseOld!: () => void
+    const oldGate = new Promise<void>((resolve) => {
+      releaseOld = resolve
+    })
+    const old = store.run(async (scope) => {
+      await oldGate
+      scope.update({ label: '旧操作不得发布', phase: 'failed' })
+      return '旧值'
+    }, '旧成功不得发布')
+    let submitted = 0
+    const skipped = await store.run(async () => {
+      submitted++
+      return '重复操作'
+    })
+    store.reset()
+    let releaseNew!: () => void
+    const newGate = new Promise<void>((resolve) => {
+      releaseNew = resolve
+    })
+    const newer = store.run(async (scope) => {
+      scope.update({ label: '新操作', phase: 'collecting' })
+      await newGate
+      return '新值'
+    }, '新操作成功')
+    releaseOld()
+    const stale = await old
+    const whileNew = {
+      busy: store.busy,
+      label: store.operation?.label,
+      phase: store.operation?.phase,
+      notice: store.notice,
+      error: store.error,
+    }
+    releaseNew()
+    const succeeded = await newer
+    const successNotice = store.notice
+    const failed = await store.run(async () => {
+      throw new Error('当前操作失败')
+    }, '不得发布的成功')
+    const failure = {
+      busy: store.busy,
+      phase: store.operation?.phase,
+      error: store.error,
+      notice: store.notice,
+    }
+    const empty = await store.run(async () => undefined)
+    return {
+      submitted,
+      skipped,
+      stale,
+      whileNew,
+      succeeded,
+      successNotice,
+      failed,
+      failure,
+      emptyStatus: empty.status,
+    }
+  })
+  expect(result.submitted).toBe(0)
+  expect(result.skipped.status).toBe('skipped')
+  expect(result.stale.status).toBe('stale')
+  expect(result.whileNew).toEqual({
+    busy: true,
+    label: '新操作',
+    phase: 'collecting',
+    notice: '',
+    error: '',
+  })
+  expect(result.succeeded).toEqual({ status: 'succeeded', value: '新值' })
+  expect(result.successNotice).toBe('新操作成功')
+  expect(result.failed).toEqual({ status: 'failed', error: '当前操作失败' })
+  expect(result.failure).toEqual({
+    busy: false,
+    phase: 'failed',
+    error: '当前操作失败',
+    notice: '',
+  })
+  expect(result.emptyStatus).toBe('succeeded')
 })

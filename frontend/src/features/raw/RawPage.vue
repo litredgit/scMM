@@ -12,6 +12,7 @@ import {
 } from 'vue'
 import { request } from '../../api/client'
 import { serialPolling } from '../../api/polling'
+import type { AnalysisTransport } from '../analysis/types'
 import type { Figure, DataTable, Job } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
 import { useAuth } from '../../stores/auth'
@@ -136,10 +137,10 @@ function selectedRange(range: [number, number]) {
   store.notice = '合谱显示范围已选择；切换“合并谱”并更新图形。'
 }
 const scanPosition = computed(() => scanCatalog.value.indices.indexOf(scan.value))
-async function scans() {
+async function scans(api: AnalysisTransport = store) {
   const selected = sample.value
   const level = ms.value
-  const value = await store.read<{ indices: number[]; times: number[] }>(
+  const value = await api.read<{ indices: number[]; times: number[] }>(
     `/raw/scans?sample_id=${selected}&ms_level=${level}`,
   )
   if (value && sample.value === selected && ms.value === level) {
@@ -162,7 +163,7 @@ function seekScan(mode: 'time' | 'index' | 'step', value: number) {
   scanTime.value = catalog.times[pos]!
 }
 watch(ms, () => {
-  if (opened.value) {
+  if (opened.value && !store.busy) {
     plots.value = {}
     void scans()
   }
@@ -196,7 +197,7 @@ function assignParams(value: Record<string, unknown>) {
   }
   refs.value = String(parameters.value.reference_mz || parameters.value.ref_mz || '')
 }
-async function loadParameters() {
+async function loadParameters(api: AnalysisTransport = store) {
   const token = ++parameterGeneration
   opened.value = ''
   summary.value = undefined
@@ -204,7 +205,7 @@ async function loadParameters() {
   job.value = undefined
   editGeneration++
   if (!store.project) return
-  const data = await store.read<Record<string, unknown>>(
+  const data = await api.read<Record<string, unknown>>(
     `/parameters${sample.value ? `?sample_id=${sample.value}` : ''}`,
   )
   if (data && token === parameterGeneration) assignParams(data)
@@ -224,28 +225,35 @@ watch(
 )
 watch(sample, () => void loadParameters())
 async function open() {
-  const value = await store.command<{
-    summary: Record<string, unknown>
-    parameters: Record<string, unknown>
-  }>('/raw/open', { sample_id: sample.value })
-  if (!value) return
-  opened.value = sample.value
-  summary.value = value.summary
-  const levels = value.summary.scans_by_ms_level as number[][]
-  if (!levels.some((level) => level[0] === ms.value)) ms.value = levels[0]?.[0] ?? 1
-  assignParams(value.parameters)
-  mzMin.value = Number(value.parameters.mz_min)
-  mzMax.value = Number(value.parameters.mz_max)
-  scan.value = 0
-  plots.value = {}
-  await scans()
-  await plot('tic')
-  const first = plots.value.tic?.table.rows[0]?.scan_index
-  if (typeof first === 'number') scan.value = first
-  await plot('single')
+  await store.analysisTransaction(async (api) => {
+    const selected = sample.value
+    const value = await api.command<{
+      summary: Record<string, unknown>
+      parameters: Record<string, unknown>
+    }>('/raw/open', { sample_id: sample.value })
+    if (!value || sample.value !== selected) return
+    opened.value = sample.value
+    summary.value = value.summary
+    const levels = value.summary.scans_by_ms_level as number[][]
+    if (!levels.some((level) => level[0] === ms.value)) ms.value = levels[0]?.[0] ?? 1
+    assignParams(value.parameters)
+    mzMin.value = Number(value.parameters.mz_min)
+    mzMax.value = Number(value.parameters.mz_max)
+    scan.value = 0
+    plots.value = {}
+    await scans(api)
+    await plot('tic', api)
+    const first = plots.value.tic?.table.rows[0]?.scan_index
+    if (typeof first === 'number') scan.value = first
+    await plot('single', api)
+  })
 }
-async function plot(selected = kind.value) {
-  if (!opened.value || loading) return
+async function plot(selected = kind.value, api?: AnalysisTransport): Promise<void> {
+  if (!opened.value || loading || (!api && store.busy)) return
+  if (!api) {
+    await store.analysisTransaction((transport) => plot(selected, transport))
+    return
+  }
   loading = true
   const capture = opened.value
   const body = {
@@ -267,16 +275,19 @@ async function plot(selected = kind.value) {
     resolution: Number(parameters.value.resolution),
     points_per_fwhm: Number(parameters.value.resample_points_per_fwhm),
   }
-  await store.run(async () => {
-    const data = await request<{
+  try {
+    const data = await api.read<{
       figure: Figure
       table: DataTable
       detail: Record<string, unknown>
-    }>('/workspace/raw/plot', { method: 'POST', workspace: store.current!.workspace_id, body })
-    if (opened.value === capture) plots.value[selected] = data
-  })
-  loading = false
+    }>('/raw/plot', body)
+    if (data && api.isCurrent?.() !== false && opened.value === capture)
+      plots.value[selected] = data
+  } finally {
+    loading = false
+  }
 }
+
 watch(kind, () => {
   if (kind.value !== 'cells' && opened.value && !plots.value[kind.value]) void plot()
 })
@@ -290,26 +301,37 @@ watch(scan, () => {
   if (opened.value && kind.value === 'single') void plot('single')
 })
 async function apply() {
-  const result = await store.mutate(
-    '/parameters',
-    {
-      parameters: valueParams(),
-      sample_id: applicationScope.value === 'sample' ? sample.value : null,
-      strategy: strategy.value,
-      merge_ppm: mergePpm.value,
-      auto_ranges: autoRanges.value,
-      cell_type: preset.value || null,
-    },
-    'PUT',
-    '提取参数已应用；旧提取结果不会自动更新。',
-  )
-  if (result) {
-    const current = await store.read<Record<string, unknown>>(
-      `/parameters${sample.value ? `?sample_id=${sample.value}` : ''}`,
+  await store.analysisTransaction(async (api) => {
+    await api.mutate(
+      '/parameters',
+      {
+        parameters: valueParams(),
+        sample_id: applicationScope.value === 'sample' ? sample.value : null,
+        strategy: strategy.value,
+        merge_ppm: mergePpm.value,
+        auto_ranges: autoRanges.value,
+        cell_type: preset.value || null,
+      },
+      'PUT',
     )
-    if (current) effectiveParameters.value = current
-    edited()
-  }
+    try {
+      const current = await api.read<Record<string, unknown>>(
+        `/parameters${sample.value ? `?sample_id=${sample.value}` : ''}`,
+      )
+      if (current) effectiveParameters.value = current
+      edited()
+      store.notice = '提取参数已应用；旧提取结果不会自动更新。'
+    } catch (cause) {
+      if (api.isCurrent?.() !== false)
+        store.error = `参数已应用；读取生效值失败，请刷新核对。${cause instanceof Error ? cause.message : String(cause)}`
+    }
+  })
+}
+async function clearParameters() {
+  await store.analysisTransaction(async (api) => {
+    await api.mutate('/parameters/clear', { sample_id: sample.value })
+    await loadParameters(api)
+  })
 }
 async function startPreview() {
   const value = await store.command<Job>('/raw/preview', {
@@ -383,12 +405,16 @@ function usePreset() {
   }
 }
 async function savePresets() {
-  await store.run(async () => {
-    preferences.value = await request('/preferences', {
-      method: 'PUT',
-      body: { presets: JSON.parse(presetText.value), selected: preset.value },
-    })
-  }, '全局预设已保存；已有项目参数由明确应用决定。')
+  await store.run(
+    async () => {
+      preferences.value = await request('/preferences', {
+        method: 'PUT',
+        body: { presets: JSON.parse(presetText.value), selected: preset.value },
+      })
+    },
+    '全局预设已保存；已有项目参数由明确应用决定。',
+    { label: '保存参考预设', phase: 'submitting' },
+  )
 }
 useViewState('raw', {
   sample,
@@ -635,11 +661,7 @@ useViewState('raw', {
             @click="apply"
           >
             应用参数</button
-          ><button
-            class="restore"
-            :disabled="!sample || store.busy"
-            @click="store.mutate('/parameters/clear', { sample_id: sample }).then(loadParameters)"
-          >
+          ><button class="restore" :disabled="!sample || store.busy" @click="clearParameters">
             清除样本例外</button
           ><button
             class="preview"

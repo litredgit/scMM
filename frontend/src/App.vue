@@ -35,11 +35,15 @@ watch(
   },
 )
 async function logout() {
-  await store.run(async () => {
-    store.release()
-    await auth.logout()
-    store.reset()
-  })
+  await store.run(
+    async () => {
+      store.release()
+      await auth.logout()
+      store.reset()
+    },
+    '',
+    { label: '退出登录', phase: 'submitting' },
+  )
 }
 watch(
   () => route.path,
@@ -178,7 +182,9 @@ const nextHelp = computed(() =>
           <i :class="{ connected: store.current }"></i
           >{{ store.current ? '工作区已连接' : '工作区未连接' }}
         </div>
-        <p class="task-note">{{ store.busy ? '正在执行操作…' : store.task }}</p>
+        <p class="task-note" :role="store.busy ? 'status' : undefined" aria-live="polite">
+          {{ store.busy ? `${store.operationMessage}；请等待当前操作完成。` : store.task }}
+        </p>
       </div>
     </aside>
 
@@ -253,18 +259,14 @@ const nextHelp = computed(() =>
             ><KeepAlive><component :is="Component" /></KeepAlive
           ></RouterView>
           <nav v-if="stepIndex >= 0" class="workflow-navigation" aria-label="步骤切换">
-            <button
-              v-if="previousStep"
-              :disabled="store.busy"
-              @click="router.push(previousStep.path)"
-            >
+            <button v-if="previousStep" @click="router.push(previousStep.path)">
               ← 上一步：{{ previousStep.name }}
             </button>
             <span class="muted">{{ stepIndex + 1 }} / {{ workflow.length }}</span>
             <div v-if="nextStep" class="workflow-next">
               <button
                 class="primary"
-                :disabled="store.busy || nextBlocked"
+                :disabled="nextBlocked"
                 :title="nextHelp"
                 :aria-describedby="nextHelp ? 'workflow-next-help' : undefined"
                 @click="router.push(nextStep.path)"

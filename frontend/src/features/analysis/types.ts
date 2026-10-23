@@ -18,8 +18,8 @@ export type PlotKind =
   | 'shap_dependence'
 export interface AnalysisTransport {
   isCurrent?(): boolean
-  read<T>(path: string): Promise<T | undefined>
-  mutate(path: string, body: Record<string, unknown>): Promise<unknown>
+  read<T>(path: string, body?: Record<string, unknown>): Promise<T | undefined>
+  mutate(path: string, body: Record<string, unknown>, method?: string): Promise<unknown>
   command<T>(path: string, body: Record<string, unknown>): Promise<T | undefined>
 }
 export interface AnalysisModule {

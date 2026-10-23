@@ -382,39 +382,44 @@ async function download(kind: string) {
   if (!store.current || !version.value) return
   const workspace = store.current.workspace_id
   const revision = store.current.revision
-  await store.run(async () => {
-    const epoch = sessionVersion()
-    const response = await authenticatedFetch('/api/v1/workspace/lipids/export', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-SCMM-Client': 'web',
-        'X-SCMM-Workspace': workspace,
-      },
-      body: JSON.stringify({
-        revision,
-        version: version.value,
-        filters: {
-          ...filters,
-          adducts: filters.adduct_mode === 'specified' ? filters.adducts : [],
+  await store.run(
+    async (scope) => {
+      const epoch = sessionVersion()
+      const response = await authenticatedFetch('/api/v1/workspace/lipids/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SCMM-Client': 'web',
+          'X-SCMM-Workspace': workspace,
         },
-        kind,
-        sorting: sorting.value,
-      }),
-    })
-    if (!response.ok) {
-      const body = await response.json()
-      throw new Error(body.error?.message ?? '导出失败。')
-    }
-    const blob = await response.blob()
-    ensureSession(epoch)
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `lipid-${kind}.${kind === 'rules' ? 'json' : 'csv'}`
-    link.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-  })
+        body: JSON.stringify({
+          revision,
+          version: version.value,
+          filters: {
+            ...filters,
+            adducts: filters.adduct_mode === 'specified' ? filters.adducts : [],
+          },
+          kind,
+          sorting: sorting.value,
+        }),
+      })
+      if (!response.ok) {
+        const body = await response.json()
+        throw new Error(body.error?.message ?? '导出失败。')
+      }
+      const blob = await response.blob()
+      ensureSession(epoch)
+      if (!scope.isCurrent()) return
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `lipid-${kind}.${kind === 'rules' ? 'json' : 'csv'}`
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    },
+    '',
+    { label: '导出脂质分析结果', phase: 'downloading' },
+  )
 }
 function template() {
   const url = URL.createObjectURL(

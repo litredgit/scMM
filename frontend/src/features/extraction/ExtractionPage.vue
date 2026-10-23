@@ -151,21 +151,22 @@ async function start(retry = false) {
   }
 }
 async function review(compare = false) {
-  reviewPhase.value = compare
-    ? '正在读取所选样本并生成 QC 对比…'
-    : '正在合并所选样本并建立当前数据集…'
-  try {
-    const value = await store.command<{ figures: Figure[] } | null>('/extraction/review', {
-      path: path.value,
-      ids: included.value,
-      compare,
-    })
-    if (compare && value) figures.value = value.figures
-    else if (!compare && !store.error)
-      store.notice = '当前数据集已建立，可进入预处理。项目仍需主动保存。'
-  } finally {
-    reviewPhase.value = ''
-  }
+  await store.analysisTransaction(async (api) => {
+    reviewPhase.value = compare
+      ? '正在读取所选样本并生成 QC 对比…'
+      : '正在合并所选样本并建立当前数据集…'
+    try {
+      const value = await api.command<{ figures: Figure[] } | null>('/extraction/review', {
+        path: path.value,
+        ids: included.value,
+        compare,
+      })
+      if (compare && value) figures.value = value.figures
+      else if (!compare) store.notice = '当前数据集已建立，可进入预处理。项目仍需主动保存。'
+    } finally {
+      reviewPhase.value = ''
+    }
+  })
 }
 const parameterTable = computed<DataTable>(() => {
   const rows = (checked.value?.samples ?? []) as Record<string, unknown>[]

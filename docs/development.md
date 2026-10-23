@@ -752,3 +752,11 @@ HTTP `/presence/register` 与 `/presence/heartbeat` 为登录页提供受限租�
 `frontend/src/api/polling.ts` 的 `serialPolling()` 仅调度只读状态：同一实例最多一个 Promise 在途，刷新请求共享在途 Promise，额外请求最多合并成一个后续轮次；定时器在实际完成后调度。`stop()` 清定时器并递增代次，`start()` 不能在旧请求未结束时另起请求，旧回调的 `isCurrent()` 永远不能因重新启用而恢复为真。停止不 abort 服务计算，也不伪造任务取消。
 
 RawPage 在状态读取及开始收集前核对页面代次；`store.read()` 可传入只读接收条件，与工作区/修订检查同时约束成功和错误。ExtractionPage 停用后不更新局部批次、选中项或任务文案；侧栏仍可通过工作区共享读取更新全局批次。工作区心跳也串行，并绑定启动时工作区及代次，过期 workspace_missing 不能清空后来工作区。原始预览/提取已有任务服务和科学参数不变；操作结果区分、完整冲突矩阵和其他异步读取仍按 M1 后续范围审计。
+
+### 操作返回值与完整互斥链
+
+`frontend/src/api/operation.ts` 定义 `OperationOutcome`（succeeded/value、failed/error、skipped/busy、stale）、阶段及中文操作标签。`store.run()` 返回明确结果，void 成功也有 succeeded；忙时只返回 skipped，不改原操作的阶段或反馈。操作绑定递增代次及登录版本，`reset()` 使旧 scope 失效，旧 finally 不得释放新操作的保护；阶段更新只接受仍有效的 scope。反馈保存于前端，不进入科学项目格式。
+
+兼容的 mutate/command/inspect 仍仅向既有调用方返回成功值或 undefined，并在装载响应前核对工作区、修订及操作 scope；内部操作不能仅凭 undefined 或全局 error 为空推断成功。`analysisTransaction()` 将接收结果、刷新和绘图放在同一保护内，绑定 API 的 read 支持 GET 及只读 POST，mutate 可显式 PUT；RawPage 的打开/参数应用/清除例外及提取审核使用完整链。需要将读取错误归属当前操作的步骤使用绑定 api.read，普通 store.read 是后台通道，只在其反馈代次仍当前、非繁忙且无既有错误时发布失败。
+
+已计算结果与后续展示失败分别解释，不把后续绘图失败改写成计算回滚；重试展示不重算。下载在 blob 完成后再次检查操作/登录及工作区来源，丢弃过期输出。页面导航保留，冲突的修改/保存/计算仍串行；后端修订、候选原子性和保存冲突检查继续兜底。这是前端操作保护，不是 M2 的持久任务、后台取消或全局资源队列。
