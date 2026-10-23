@@ -54,7 +54,8 @@
         "workbench",
         "projects",
         "annotation",
-        "plotting"
+        "plotting",
+        "time"
       ],
       "extras": []
     },
@@ -163,21 +164,16 @@
       "kind": "python",
       "tests": [
         "tests/application/test_workbench_state.py",
-        "tests/application/test_time_analysis.py",
         "tests/application/test_processed_merge.py",
-        "tests/application/test_time_trend_clusters.py",
         "tests/application/test_result_catalog.py",
         "tests/application/test_maintenance_recovery.py"
       ],
       "sources": [
         "scMM/application/workbench.py",
-        "scMM/application/time_analysis.py",
         "scMM/application/processed_merge.py",
         "scMM/application/merge_sources.py",
         "scMM/application/merge_metadata.py",
         "scMM/application/merge_audit.py",
-        "scMM/application/time_trends.py",
-        "scMM/application/time_trend_clusters.py",
         "scMM/application/result_catalog.py",
         "scMM/application/cell_spectra.py",
         "scMM/application/recovery.py",
@@ -188,7 +184,7 @@
         "scMM/application/deployment_maintenance.py",
         "scMM/application/deployment_client.py"
       ],
-      "downstream": ["api", "api-lipids", "plotting"],
+      "downstream": ["api", "api-lipids", "plotting", "time"],
       "extras": []
     },
     "api": {
@@ -196,7 +192,6 @@
       "tests": [
         "tests/api/test_web_api.py",
         "tests/api/test_web_workflow.py",
-        "tests/api/test_time_api.py",
         "tests/api/test_merge_api.py",
         "tests/api/test_web_cli.py",
         "tests/api/test_maintenance.py",
@@ -214,7 +209,12 @@
       "downstream": [
         "browser-projects",
         "browser-workflow",
-        "browser-navigation"
+        "browser-navigation",
+        "browser-preprocessing",
+        "browser-storage",
+        "browser-raw",
+        "browser-operations",
+        "browser-analysis-journey"
       ],
       "extras": ["web", "plot", "cluster", "supervised"]
     },
@@ -226,7 +226,14 @@
         "scMM/api/routers/extraction.py",
         "scMM/application/web_raw.py"
       ],
-      "downstream": ["browser-workflow"],
+      "downstream": [
+        "browser-workflow",
+        "browser-preprocessing",
+        "browser-storage",
+        "browser-raw",
+        "browser-operations",
+        "browser-analysis-journey"
+      ],
       "extras": ["web"]
     },
     "api-lipids": {
@@ -319,7 +326,14 @@
         "frontend/src/features/samples/*",
         "frontend/src/features/projects/*"
       ],
-      "downstream": ["browser-workflow"],
+      "downstream": [
+        "browser-workflow",
+        "browser-preprocessing",
+        "browser-storage",
+        "browser-raw",
+        "browser-operations",
+        "browser-analysis-journey"
+      ],
       "extras": ["web"]
     },
     "browser-workflow": {
@@ -331,9 +345,7 @@
         "frontend/tests/interface.spec.ts"
       ],
       "sources": [
-        "frontend/src/features/raw/*",
         "frontend/src/features/extraction/*",
-        "frontend/src/features/preprocess/*",
         "frontend/src/features/analysis/*",
         "frontend/src/features/results/*"
       ],
@@ -371,7 +383,10 @@
     "browser-lipids": {
       "kind": "browser",
       "tests": ["frontend/tests/lipids.spec.ts"],
-      "sources": ["frontend/src/features/preprocess/*Lipid*"],
+      "sources": [
+        "frontend/src/features/preprocess/*Lipid*",
+        "frontend/src/features/preprocess/useLipid*.ts"
+      ],
       "downstream": [],
       "extras": ["web"]
     },
@@ -388,6 +403,66 @@
       "sources": ["frontend/src/features/assistant/*"],
       "downstream": [],
       "extras": ["web"]
+    },
+    "time": {
+      "kind": "python",
+      "tests": [
+        "tests/application/test_time_analysis.py",
+        "tests/application/test_time_trend_clusters.py",
+        "tests/application/test_time_velocity.py",
+        "tests/application/test_time_trends.py"
+      ],
+      "sources": [
+        "scMM/application/time_analysis.py",
+        "scMM/application/time_trends.py",
+        "scMM/application/time_trend_clusters.py",
+        "scMM/application/time_inputs.py",
+        "scMM/application/time_outputs.py"
+      ],
+      "downstream": ["api-time"],
+      "extras": ["plot", "cluster"]
+    },
+    "api-time": {
+      "kind": "python",
+      "tests": ["tests/api/test_time_api.py"],
+      "sources": ["scMM/application/web_time.py"],
+      "downstream": ["browser-workflow"],
+      "extras": ["web", "plot", "cluster"]
+    },
+    "browser-preprocessing": {
+      "kind": "browser",
+      "tests": ["frontend/tests/preprocessing.spec.ts"],
+      "sources": ["frontend/src/features/preprocess/PreprocessPage.vue"],
+      "downstream": ["browser-operations"],
+      "extras": ["web", "plot", "cluster", "supervised"]
+    },
+    "browser-storage": {
+      "kind": "browser",
+      "tests": ["frontend/tests/storage.spec.ts"],
+      "sources": ["frontend/src/components/SavedItems.vue"],
+      "downstream": [],
+      "extras": ["web", "plot", "cluster", "supervised"]
+    },
+    "browser-raw": {
+      "kind": "browser",
+      "tests": ["frontend/tests/raw.spec.ts"],
+      "sources": ["frontend/src/features/raw/*"],
+      "downstream": ["browser-workflow", "browser-operations"],
+      "extras": ["web", "plot", "cluster", "supervised"]
+    },
+    "browser-operations": {
+      "kind": "browser",
+      "tests": ["frontend/tests/operations.spec.ts"],
+      "sources": [],
+      "downstream": [],
+      "extras": ["web", "plot", "cluster", "supervised"]
+    },
+    "browser-analysis-journey": {
+      "kind": "browser",
+      "tests": ["frontend/tests/analysis-journey.spec.ts"],
+      "sources": ["frontend/src/features/analysis/*"],
+      "downstream": [],
+      "extras": ["web", "plot", "cluster", "supervised"]
     }
   },
   "support": {
@@ -397,7 +472,8 @@
       "api-raw",
       "api-lipids",
       "monitor",
-      "ai"
+      "ai",
+      "api-time"
     ],
     "tests/support/project.py": [
       "processing",
@@ -405,11 +481,18 @@
       "api-raw",
       "api-lipids",
       "projects",
-      "ai"
+      "ai",
+      "api-time"
     ],
     "tests/support/lipids.py": ["annotation", "api-lipids"],
-    "tests/support/workflow.py": ["api", "api-raw", "api-lipids", "ai"],
-    "tests/api/conftest.py": ["api", "api-raw", "api-lipids"],
+    "tests/support/workflow.py": [
+      "api",
+      "api-raw",
+      "api-lipids",
+      "ai",
+      "api-time"
+    ],
+    "tests/api/conftest.py": ["api", "api-raw", "api-lipids", "api-time"],
     "frontend/tests/fixtures.ts": [
       "browser-projects",
       "browser-workflow",
@@ -417,7 +500,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/tests/server.py": [
       "browser-projects",
@@ -426,7 +514,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "tests/conftest.py": [
       "spectra",
@@ -446,7 +539,8 @@
       "docs",
       "notebook"
     ],
-    "tests/support/maintenance.py": ["api"]
+    "tests/support/maintenance.py": ["api"],
+    "tests/support/time_analysis.py": ["time"]
   },
   "shared": {
     "scMM/application/preview_cache.py": ["processing", "projects"],
@@ -464,7 +558,9 @@
       "api-lipids",
       "auth",
       "monitor",
-      "tooling"
+      "tooling",
+      "time",
+      "api-time"
     ],
     "scMM/application/__init__.py": [
       "processing",
@@ -477,14 +573,16 @@
       "monitor",
       "spectra",
       "annotation",
-      "tooling"
+      "tooling",
+      "time",
+      "api-time"
     ],
     "scMM/file/__init__.py": ["spectra", "data"],
     "scMM/util/__init__.py": ["spectra", "data", "annotation"],
     "scMM/util/tool.py": ["spectra", "data", "plotting"],
     "scMM/debug.py": ["spectra", "processing"],
-    "scMM/api/__init__.py": ["api"],
-    "scMM/api/routers/__init__.py": ["api"],
+    "scMM/api/__init__.py": ["api", "api-time"],
+    "scMM/api/routers/__init__.py": ["api", "api-time"],
     "pyproject.toml": [
       "spectra",
       "data",
@@ -509,7 +607,14 @@
       "browser-monitor",
       "browser-lipids",
       "ai",
-      "browser-ai"
+      "browser-ai",
+      "time",
+      "api-time",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "uv.lock": [
       "spectra",
@@ -533,7 +638,14 @@
       "browser-monitor",
       "browser-lipids",
       "ai",
-      "browser-ai"
+      "browser-ai",
+      "time",
+      "api-time",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/package*.json": [
       "browser-projects",
@@ -541,7 +653,12 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/*config*": [
       "browser-projects",
@@ -549,7 +666,12 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/index.html": [
       "browser-projects",
@@ -557,7 +679,12 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "scMM/api/static/*": [
       "browser-projects",
@@ -565,7 +692,12 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/App.vue": [
       "browser-projects",
@@ -574,7 +706,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/main.ts": [
       "browser-projects",
@@ -583,7 +720,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/stores/*": [
       "browser-projects",
@@ -592,7 +734,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/router/*": [
       "browser-projects",
@@ -601,13 +748,77 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
-    "frontend/src/api/readScope.ts": ["browser-projects", "browser-workflow", "browser-navigation", "browser-auth", "browser-monitor", "browser-lipids", "browser-ai"],
-    "frontend/tests/support/project.ts": ["browser-workflow"],
-    "frontend/src/api/workspaceDownload.ts": ["browser-projects", "browser-workflow", "browser-navigation", "browser-auth", "browser-monitor", "browser-lipids", "browser-ai"],
-    "frontend/src/api/operation.ts": ["browser-projects", "browser-workflow", "browser-navigation", "browser-auth", "browser-monitor", "browser-lipids", "browser-ai"],
-    "frontend/src/api/polling.ts": ["browser-projects", "browser-workflow", "browser-navigation", "browser-auth", "browser-monitor", "browser-lipids", "browser-ai"],
+    "frontend/src/api/readScope.ts": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids",
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
+    ],
+    "frontend/tests/support/project.ts": [
+      "browser-workflow",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
+    ],
+    "frontend/src/api/workspaceDownload.ts": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids",
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
+    ],
+    "frontend/src/api/operation.ts": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids",
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
+    ],
+    "frontend/src/api/polling.ts": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-auth",
+      "browser-monitor",
+      "browser-lipids",
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
+    ],
     "frontend/src/api/client.ts": [
       "browser-projects",
       "browser-workflow",
@@ -615,7 +826,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/api/types.ts": [
       "browser-projects",
@@ -624,7 +840,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/components/*": [
       "browser-projects",
@@ -633,7 +854,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/assets/*": [
       "browser-projects",
@@ -642,7 +868,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/styles.css": [
       "browser-projects",
@@ -650,7 +881,12 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/api/presence.ts": [
       "browser-projects",
@@ -659,7 +895,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/api/pageIdentity.ts": [
       "browser-projects",
@@ -668,7 +909,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/plotly.d.ts": [
       "browser-projects",
@@ -676,7 +922,12 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/help/*": [
       "browser-projects",
@@ -685,7 +936,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "scMM/api/app.py": [
       "api",
@@ -694,7 +950,8 @@
       "auth",
       "monitor",
       "tooling",
-      "ai"
+      "ai",
+      "api-time"
     ],
     "scMM/api/dependencies.py": [
       "api",
@@ -703,7 +960,8 @@
       "auth",
       "monitor",
       "tooling",
-      "ai"
+      "ai",
+      "api-time"
     ],
     "scMM/api/schemas.py": [
       "api",
@@ -711,7 +969,8 @@
       "api-lipids",
       "auth",
       "monitor",
-      "tooling"
+      "tooling",
+      "api-time"
     ],
     "scMM/api/workflow_schemas.py": [
       "api",
@@ -719,7 +978,8 @@
       "api-lipids",
       "auth",
       "monitor",
-      "tooling"
+      "tooling",
+      "api-time"
     ],
     "scMM/application/web_workspace.py": [
       "api",
@@ -728,7 +988,8 @@
       "auth",
       "monitor",
       "tooling",
-      "ai"
+      "ai",
+      "api-time"
     ],
     "scMM/application/web_projects.py": [
       "api",
@@ -737,7 +998,8 @@
       "auth",
       "monitor",
       "tooling",
-      "ai"
+      "ai",
+      "api-time"
     ],
     "scMM/application/web_ai.py": [
       "api",
@@ -746,7 +1008,8 @@
       "auth",
       "monitor",
       "tooling",
-      "ai"
+      "ai",
+      "api-time"
     ],
     "scMM/application/workspace_state.py": [
       "api",
@@ -755,7 +1018,8 @@
       "auth",
       "monitor",
       "tooling",
-      "ai"
+      "ai",
+      "api-time"
     ],
     "scMM/application/web_support.py": [
       "api",
@@ -763,16 +1027,43 @@
       "api-lipids",
       "auth",
       "monitor",
-      "tooling"
+      "tooling",
+      "api-time"
     ],
-    "scMM/api/routers/analysis.py": ["api", "api-raw", "api-lipids"],
-    "scMM/api/routers/results.py": ["api", "api-raw", "api-lipids"],
-    "scMM/api/routers/projects.py": ["api", "api-raw", "api-lipids"],
-    "scMM/application/web_analysis.py": ["api", "api-raw", "api-lipids", "ai"],
-    "scMM/application/web_merge.py": ["api", "api-raw", "api-lipids", "ai"],
-    "scMM/api/merge_schemas.py": ["api", "api-raw", "api-lipids"],
-    "scMM/application/web_time.py": ["api", "api-raw", "api-lipids", "ai"],
-    "scMM/application/web_results.py": ["api", "api-raw", "api-lipids"],
+    "scMM/api/routers/analysis.py": [
+      "api",
+      "api-raw",
+      "api-lipids",
+      "api-time"
+    ],
+    "scMM/api/routers/results.py": ["api", "api-raw", "api-lipids", "api-time"],
+    "scMM/api/routers/projects.py": [
+      "api",
+      "api-raw",
+      "api-lipids",
+      "api-time"
+    ],
+    "scMM/application/web_analysis.py": [
+      "api",
+      "api-raw",
+      "api-lipids",
+      "ai",
+      "api-time"
+    ],
+    "scMM/application/web_merge.py": [
+      "api",
+      "api-raw",
+      "api-lipids",
+      "ai",
+      "api-time"
+    ],
+    "scMM/api/merge_schemas.py": ["api", "api-raw", "api-lipids", "api-time"],
+    "scMM/application/web_results.py": [
+      "api",
+      "api-raw",
+      "api-lipids",
+      "api-time"
+    ],
     "frontend/src/api/maintenance.ts": [
       "browser-projects",
       "browser-workflow",
@@ -780,7 +1071,12 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/src/api/viewState.ts": [
       "browser-projects",
@@ -789,8 +1085,15 @@
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
-      "browser-ai"
-    ]
+      "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
+    ],
+    "frontend/src/features/extraction/*": ["browser-operations"],
+    "frontend/src/features/results/*": ["browser-operations"]
   },
   "package_sources": [
     "scMM/*",
@@ -819,7 +1122,12 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "frontend/tests/": [
       "browser-projects",
@@ -827,11 +1135,23 @@
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
-      "browser-lipids"
+      "browser-lipids",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
     ],
     "tests/domain/": ["spectra", "data", "analysis", "annotation", "plotting"],
-    "tests/application/": ["processing", "projects", "workbench"],
-    "tests/api/": ["api", "api-raw", "api-lipids", "auth", "monitor"],
+    "tests/application/": ["processing", "projects", "workbench", "time"],
+    "tests/api/": [
+      "api",
+      "api-raw",
+      "api-lipids",
+      "auth",
+      "monitor",
+      "api-time"
+    ],
     "tests/tooling/": ["tooling", "docs", "notebook"],
     "tests/support/": [
       "spectra",
@@ -847,7 +1167,9 @@
       "api-lipids",
       "auth",
       "monitor",
-      "tooling"
+      "tooling",
+      "time",
+      "api-time"
     ],
     "scMM/": [
       "spectra",
@@ -863,7 +1185,9 @@
       "api-lipids",
       "auth",
       "monitor",
-      "tooling"
+      "tooling",
+      "time",
+      "api-time"
     ]
   },
   "format_sources": ["frontend/.prettierignore", "frontend/.prettierrc.json"]

@@ -15,7 +15,7 @@ import pandas as pd
 
 from scMM.util.time_results import binding, registry, require_run
 
-from .time_analysis import _new_key, _publish, check_size
+from .time_inputs import _new_key, _publish, check_size
 
 _CLUSTER_SLOT = BoundedSemaphore(1)
 _CLUSTER_TIMEOUT_SECONDS = 90

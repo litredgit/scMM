@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -15,7 +16,7 @@ from anndata import AnnData
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 
-from scMM.api.app import STATIC_ROOT, create_app
+from scMM.api.app import create_app
 from scMM.application.auth import AuthStore
 from scMM.application.storage import StorageRoot
 
@@ -23,6 +24,26 @@ from scMM.application.storage import StorageRoot
 def main():
     with TemporaryDirectory(prefix="scmm-vue-e2e-") as temporary:
         root = Path(temporary)
+        static = os.environ.get("SCMM_TEST_STATIC_ROOT")
+        if not static:
+            # Standalone specs must not silently consume a previous local build.
+            static = str(root / "static")
+            subprocess.run(
+                [
+                    "npm",
+                    "--prefix",
+                    str(Path(__file__).resolve().parents[1]),
+                    "exec",
+                    "--",
+                    "vite",
+                    "build",
+                    "--outDir",
+                    static,
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
         raw, results, projects = (root / name for name in ("raw", "results", "projects"))
         for directory in (raw, results, projects):
             directory.mkdir()
@@ -175,7 +196,7 @@ def main():
             [StorageRoot("Raw", raw)],
             [StorageRoot("Results", results)],
             project_root=projects,
-            static_root=os.environ.get("SCMM_TEST_STATIC_ROOT") or STATIC_ROOT,
+            static_root=static,
             auth_store=auth,
             server_config=ServerConfig(values, private_config).validate(),
         )

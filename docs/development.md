@@ -2,10 +2,9 @@
 
 [返回文档索引](README.md) · [安装说明](installation.md)
 
-本页负责模块分工、扩展方式、兼容性回归、检查与发布流程。主要设计和协作规则见
-[AGENTS.md](../AGENTS.md)，环境安装见安装说明；实现进展不在本页维护。
-2026-10-18 的改进依据与实施建议见[审阅交接](improvement-review.md)，任务当前状态见
-[roadmap](roadmap.md#已验收的工程与交互改进)；建议中的模块拆分不代表本页所述现有结构已经改变。
+本页维护架构职责及跨模块契约。按[任务导航](README.md#按任务阅读)选择代码、必读主题和测试；
+检查入口见[测试指南](testing.md)，发布与上游来源见[发布指南](release.md)，新增能力见[功能接入](feature-development.md)。
+默认只读根规则和任务相关主题，跨模块时沿调用和状态依赖追查；历史不作为每次任务的必读材料。
 
 ## 代码结构
 
@@ -126,12 +125,6 @@ scMM/
 | 峰重建与秩一分解 | `util.denoise.peak_recon()` / `r1_decomposition()` | 无应用/HTTP/Vue 工作流 | TOOL-01，工具级输入/科学定义/验证先于界面，不能替换现有提取算法 |
 | 互操作/元数据/绘图辅助 | AnnData/H5AD、assign_source_metadata、EIC/质谱 Matplotlib、configure_plotting | Vue 已有保存重载、稳定样本元数据、Plotly 原始谱及导出 | 保留 Python 专用辅助接口，功能等价覆盖不要求逐函数建立控件；恢复原始输入和方法默认值分别管理 |
 
-当前优先审阅入口：`frontend/src/stores/workspace.ts` 的 run/read 与任务状态，
-RawPage/ExtractionPage 的 KeepAlive 轮询，AnalysisPage 的计算→刷新→绘图，
-`application/web_workspace.py` 的工作区锁与 `web_projects.py` 的候选复制，`web_analysis.py` 的同步操作，
-`web_results.py` 的保存/导出。它们是 M1/M2 的代码审阅起点，不能仅凭文件较长认定性能瓶颈。
-当前层次继续保持，复杂页面可随交互修复拆分组件；性能优化须有输入规模、实际参数与测量证据。
-
 新增能力按领域算法→应用层候选/结果管理→HTTP 契约→Vue 交互→保存/下载与重载的顺序接入。
 当前 Operation/结果类型白名单不会因新增 Python 方法自动扩展；须逐项检查工作区修订、
 矩阵/特征/参数依赖、可下载状态及旧快照兼容。数值、应用失败恢复、HTTP 和浏览器交互分别验证，
@@ -154,179 +147,6 @@ uv sync --locked --all-extras --dev
 ```
 
 依赖升级应单独执行 `uv lock --upgrade`，避免普通环境同步意外改变已验证版本。
-
-## 完整验证
-
-日常本地检查与 CI **只运行修改或受影响的块**。先看计划，再执行；没有修改且不受影响的块跳过。
-逐块整理时先对准备修改的块建立基线，修改后验证该块与受影响部分；已经通过且后续未受影响的块不重复运行，
-不在结束时默认再跑全量。`-W error` 继续将警告作为错误。
-
-```bash
-# 默认比较 HEAD 与暂存区/工作区，并纳入未跟踪文件；只输出计划
-uv run --no-sync python scripts/test_blocks.py
-# 执行计划中的检查（使用已同步的开发环境）
-uv run --no-sync python scripts/test_blocks.py --run
-# 比较完整提交范围；本地 feature 分支可将 --base 指向共同祖先
-uv run --no-sync python scripts/test_blocks.py --base origin/dev --head HEAD
-# 显式指定块，不混入当前工作区的其他改动；适用于逐块基线与验证
-uv run --no-sync python scripts/test_blocks.py --block spectra --phase python --run
-# 只查看指定文件的影响，不需要实际修改文件
-uv run --no-sync python scripts/test_blocks.py --files frontend/src/features/monitor/MonitorPage.vue
-```
-
-唯一映射为 [`tests/blocks.json`](../tests/blocks.json)，选择器为
-[`scripts/test_blocks.py`](../scripts/test_blocks.py)。每次输出选择、原因和跳过的块；
-`--write-plan` 保存计划，`--plan` 复用同一份计划，`--phase` 只执行其中一个阶段。
-`--files` 可提供明确的文件集合，`--block` 可重复。移动文件同时检查旧/新路径，不能只看重命名后的路径。
-选择器使用目录/文件列表与显式依赖关系，不使用全局 `-k`。
-
-### 测试目录与块
-
-```text
-tests/
-  support/       # 显式导入的小型谱、项目、脂质与认证/HTTP 构造
-  domain/        # 数值定义、数据容器、RAW/XML、统计、注释与绘图
-  application/   # 参数、预览/提取、持久任务、项目、回收和结果生命周期
-  api/           # HTTP 请求、权限、修订、下载及必要贯通检查；局部 conftest
-  tooling/       # 发布/回滚、扫描、快照、选择器、文档与 Notebook
-  blocks.json    # 本地/CI 共用的文件 → 块及依赖方映射
-frontend/tests/  # fixtures.ts、server.py 和按交互划分的 spec
-```
-
-| 块 | 保障范围 |
-|---|---|
-| `spectra` | 谱 I/O、峰/细胞、SNR、ppm、RAW 协议/资源回收与 RAW/XML 等价 |
-| `data` | 矩阵/元数据、合并、H5AD/旧目录、原子写入、归一化及零分母 |
-| `analysis` | 统计、分组验证、监督诊断、统一降维 |
-| `annotation` | 质量候选、同位素、规则、数据库下载/完整性 |
-| `plotting` | Notebook 绘图、轨迹、趋势及网页显示精度 |
-| `processing` | 原始预览、参数、缓存、持久 worker、提取审核、质量产物及处理 CLI |
-| `projects` | 项目/快照、恢复起点、修订冲突、路径与回收保护、UTF-8 持久边界 |
-| `workbench` | 变换事务、结果失效、历史层与潜变量持久化 |
-| `api` / `api-raw` / `api-lipids` | 工作区/样本/分析/保存下载、原始谱与提取、脂质 HTTP 契约 |
-| `auth` / `monitor` | 认证/服务器配置及管理员监控 |
-| `tooling` | 发布阻塞与回滚、扫描、上游快照、跨平台导入与分块选择 |
-| `docs` / `notebook` | 受影响文档的链接/锚点与 Python 示例；Notebook 清洁及语法 |
-| `browser-*` | 项目、工作流/分析、导航、登录/普通 HTTP、监控、脂质及 AI；实际 spec 与影响范围以 blocks.json 为准 |
-
-数值断言集中领域层，应用层验证失败/恢复和生命周期，API 验证边界/序列化/状态，浏览器保留真实交互。
-不同边界不能只因功能同名而删除；共享构造从 `support` 导入，不从另一个测试文件导入。
-根目录不放通用重型 fixture，HTTP 工作流 fixture 只在 `tests/api/conftest.py` 注册。
-
-### 选择规则与 CI
-
-- 测试文件变化只运行其所属块；共享 fixture 变化只运行实际使用它的块，不扩展到业务依赖方。
-- 业务源码变化按映射扩展到使用者；公共数据层、接口/工作区契约、依赖锁文件会扩大范围，并输出原因。
-- 纯前端变化不运行 Python 测试；按功能选浏览器 spec。共享组件、路由、状态/客户端及前端依赖会影响全部浏览器块。
-  Prettier 配置单独变化只检查前端格式，不运行构建或浏览器测试；格式规则/前端依赖变化时检查全部前端格式输入。
-- 文档变化只检查相关文档；链接目标变化同时检查引用它的文档。文档检查器本身改变时检查全部维护文档。
-  Notebook 独立成块，普通 Markdown 改动不执行 Notebook 检查，更不执行其中的实验代码。
-- 已知目录中的新文件若缺少细分映射，明确报告 `UNMAPPED` 并选择该区域的保守范围；其他未知路径报错，须补映射。
-  不能静默当作无影响，也不把每次常规改动都退回全量。
-
-CI 保留 dev/main/refined push 与 pull request 触发；手动 `workflow_dispatch` 可显式运行全部测试。`changes` 只计算一次计划：PR 使用目标分支与 PR head 的
-共同祖先到 head；push 使用事件的 before→after，包含本次所有提交；新分支首次 push 检查该分支全部文件。
-比较失败会使 CI 失败，不能解释为空差异。Python job 保留 3.11/3.12，只运行选中的 Python 块；
-checks job 在 3.12 执行相关文档、改动 Python 文件的 Ruff 与源码扫描，按需安装 Node、格式检查、类型检查和构建一次前端，
-再运行选中的浏览器 spec、构建相关发行包及扫描产物。源码只扫描改动文件一次，产物扫描不再重扫源码；
-独立的完整源码/历史审计仍保留。测试依赖取所选块的 extras 并使用锁文件，不安装 Notebook 工具链或升级依赖。
-发行包包含静态资源，相关包输入变化时前端构建是必要前置；测试或 Markdown 单独变化不构建发行包。
-
-浏览器自动启动 5117 的隔离服务，使用临时项目和合成数据，不访问开发或生产实验。
-通用夹具在同一 worker 内复用合成账号认证，避免大套件耗尽地址登录预算；每例仍新建浏览器上下文和工作区。
-显式退出/撤销后重新登录，认证与不安全 HTTP 专项保留独立真实登录流程，不更改服务认证限制。
-`SCMM_E2E_PORT`、`SCMM_TEST_PYTHON`、`SCMM_CHROMIUM` 可指定端口、解释器与已有浏览器；
-`SCMM_TEST_STATIC_ROOT` 可指向暂存 Vite 资源。首次浏览器执行前安装依赖及 Chromium：
-
-```bash
-npm --prefix frontend ci
-npm --prefix frontend exec -- playwright install chromium
-```
-
-截图、trace 和报告保留在被忽略的测试输出目录。合成检查不替代真实实验、用户验收或远端 CI。
-原始预览使用独立进程、提取使用持久 worker；其余 HTTP 计算持有工作区锁。
-`/api/v1/runtime` 的未保存/繁忙工作区与页面活动证据继续约束发布，不因测试分块而放松。
-
-### 手动全量入口
-
-仅在明确需要完整检查时执行；日常修改和本轮整理不默认执行：
-
-```bash
-uv run --no-sync python scripts/test_blocks.py --all --run
-# 只运行全部 Python 测试并统计覆盖率
-uv run --no-sync python -m pytest -W error --cov=scMM --cov-report=term-missing
-```
-
-单文件诊断仍可使用 `uv run --no-sync python -m pytest tests/domain/test_data.py -q -W error`。
-从仓库根使用 `python -m pytest`，确保本地 `scripts` 与 `tests.support` 可导入。
-依赖同步、真实 RAW 对照及规模检查按实际改动单独执行，不作为每次运行的隐含前置。
-
-## 脂质注释规模检查
-
-网页领域计算在 `util/lipid_annotation.py` / `lipid_isotopes.py`，声明式规则在 `lipid_rules.py`；
-数据库下载、摘要及加载在 `application/lipid_database.py`，事务/版本/审阅/导出在 `web_lipids.py`，
-严格 HTTP 契约在 `api/lipid_schemas.py`，页面组件在 `frontend/src/features/preprocess/LipidPanel.vue`。
-不通过任意函数执行接口，不改变 `CyESIData.deisotope()` 的原有算法或默认值。
-
-质量搜索对数据库排序索引二分查找，仅对匹配的母峰/理论同位素/观测特征计算关系；
-质量/同位素搜索不构造特征平方矩阵。相关网络在 `util/lipid_network.py` 按样本使用临时特征平方相关矩阵，
-只对绘图阈值以上或化学关系对计算共同检出相关；审阅感知的饼图/分子映射/显示投影在 `lipid_network_views.py`。
-节点显示上限不减少辅助证据计算，完整候选包括同质量异构记录，公式分布缓存复用，不以截断候选节省资源。
-按用户确认，本轮限于 ≤500 特征的同步请求，不开展 M1/M2；不能据此宣称其他重任务已后台化。
-
-合成规模报告可在数据库已准备的环境复现：
-
-```sh
-python tools/benchmark_lipid_annotation.py --cells 3000 --samples 10 --features 500 --output /tmp/lipid-3000.json
-python tools/benchmark_lipid_annotation.py --cells 10000 --samples 10 --features 500 --output /tmp/lipid-10000.json
-```
-
-输出仅为参数/规模/耗时/进程峰值内存与数量，不保存矩阵。实际报告见
-[3,000 × 500](validation/lipid-annotation-synthetic-3000x500.json)和
-[10,000 × 500](validation/lipid-annotation-synthetic-10000x500.json)。耗时分开记录数据库首次加载与领域计算，
-峰值内存包含解释器、数据库、矩阵和工作区输入副本，不等于单个算法数组占用；尚不包含完整 HTTP 保存流程峰值。
-用户选择手动验收，不以这些合成结果声明真实样本准确率。
-
-相关网络的当前合成规模证据另见
-[3,000 × 500 网络报告](validation/lipid-network-synthetic-3000x500.json)和
-[10,000 × 500 网络报告](validation/lipid-network-synthetic-10000x500.json)。复用上述命令并更换输出文件名可复现；
-本次领域总耗时包含相关网络，报告新增两层边对数、化学关系数和注释版本 JSON 大小。
-图表/网络模块在安装包内，版本数据随 H5AD/项目保存；前端不持有矩阵或执行化学判定。
-
-专项检查为 `tests/domain/test_lipid_annotation.py`、`tests/api/test_web_lipids.py` 和 `frontend/tests/lipids.spec.ts`，
-覆盖双侧比例边界、加合物组成、并列/重复质量、失败原子性、版本/预设、过期下载及保存重载；
-浏览器使用本地合成 SDF，不访问或下载真实数据库，也不打开用户项目。
-
-## Notebook 检查
-
-通用 notebook 应满足：
-
-- 所有用户路径和实验参数集中在参数单元。
-- 不包含个人主目录绝对路径。
-- 提交前清除大量执行输出和临时图。
-- 参数单元带 `parameters` 标签，便于 Papermill 等工具注入配置。
-- 示例默认值不执行不可逆或高风险步骤。
-- 文档中说明无法仅凭示例默认值确定的实验参数，尤其是 `REF_MZ`。
-
-基本结构和语法检查可以在没有科学计算依赖时完成：
-
-```bash
-uv run --locked python -m json.tool scMM_workflow.ipynb >/dev/null
-uv run --locked python - <<'PY'
-import ast
-import json
-
-with open("scMM_workflow.ipynb", encoding="utf-8") as handle:
-    notebook = json.load(handle)
-
-for number, cell in enumerate(notebook["cells"]):
-    if cell["cell_type"] == "code":
-        ast.parse("".join(cell["source"]), filename=f"cell-{number}")
-print("notebook syntax OK")
-PY
-```
-
-这不能代替在 uv 管理的项目环境中使用代表性 mzML 执行整个流程。
 
 ## API 设计约定
 
@@ -356,269 +176,6 @@ PY
   任务完成后释放工作进程；工作进程重新读取原始文件，页面已加载的原始谱仍保留，需计入额外内存。
   每会话只运行一个预览，跨会话与提取批次的资源限制尚未统一。
   原始文件打开、单扫描、分析与保存仍同步，剩余后台化见[待办清单](roadmap.md)。
-
-## 兼容性回归边界
-
-以下编号用于相关修改及上游移植的回归审阅，不表示未完成缺陷：
-
-- **REG-01**：保留 group_key holdout/CV、SMOTE 最小样本及非有限输入检查，失败必须报错。
-- **REG-02**：保留旧目录兼容、H5AD raw/层/嵌入保真、原子发布和默认防覆盖，不整体替换数据容器。
-- **REG-03**：保留 XML 完整性、RAW 超时/协议/资源回收、归一化零值、SDF、reference ppm 与 SNR 定义；直接 reader 失败不隐式转换。
-- **REG-04**：保留 frame_id/ms_level/native_id 已验证的元数据路径。
-- **REG-05**：保留持久任务、审核合并、主动保存及存储目录边界。
-- **VAL-04**：holdout PR/AP、校准和 Brier 不可在反复调参后继续解释为独立测试；细胞数不等于生物重复数。
-
-## 分析功能接入指南
-
-本节是网页分析扩展的主要接入说明，示例全部来自已有四类分析，不增加演示算法。
-先核对实际代码与分支；能力限制见[能力覆盖](#前后端能力覆盖)，科学解释见[分析说明](analysis.md)。
-下文 `frontend/` 相对仓库根，Python 路径带 `scMM/`。不要仅凭注册导航就声明后端能力已经接通。
-
-### 先判断扩展类型
-
-| 类型 | 修改位置与边界 | 验证重点 |
-|---|---|---|
-| 已有参数扩展 | 对应 `modules/*/*Panel.vue`；`useAnalysisSettings` 的默认值、序列化、恢复；计算参数再检查 `workflow_schemas.py` 对应模型、`parameters.py` 帮助/预设与领域函数 | 默认值、非法值、旧设置恢复、参数归属及依赖失效；纯提示修改无需重走算法流程 |
-| 新图形或展示 | 模块模板、既有 `PlotView`/`DataTable`；只有新增服务端图时修改 `Plot.kind`、`PLOTS`、`analysis_plot`、`plot/workbench.py`、`PlotKind` 和结果图映射 | 绘图失败重试、展示不重算检验、保存只读图、过期图不能下载、响应式布局 |
-| 完整分析能力 | 按下述领域 → 应用 → API → Vue → 保存重载与导出逐层接入；按需创建模块 | 数值、原子性、依赖生命周期、严格接口、交互、保存导出贯通 |
-
-例如调整现有网络 `top_features` 的表单，不要求再造一个算法或导航模块；火山图的 `labels` 是展示参数，
-不能因此重新跑差异检验或清除 Marker。`network` 是完整能力的现有参考。
-已有 `plot/embedding.py::register_dim` 只扩展该 Python 绘图入口，**不会自动开放网页降维方法**；
-网页使用 `analysis/embedding.py::reduce_dimension` 和严格的 `Reduction.method`，需要分别接通。
-
-### 前端入口与职责
-
-| 文件/符号（均在 `frontend/src/`） | 职责 |
-|---|---|
-| `features/analysis/AnalysisPage.vue` | 页面标题、公共图例/设置、宽屏导航与窄屏选择；提供页面级上下文；不放领域表单 |
-| `features/analysis/registry.ts::analysisModules` | 稳定 ID、中文名称、分组、组件入口及输入要求说明 |
-| `features/analysis/types.ts` | 操作/结果/图形类型、模块与传输接口、`analysisKey` |
-| `features/analysis/composables/useAnalysisSettings.ts::useAnalysisSettings` | 表单默认值、`settings` 序列化、`resetSettings` 和 `restoreSettings` 旧设置兼容 |
-| `features/analysis/composables/useAnalysis.ts::useAnalysis` | 草稿、项目/数据身份、摘要刷新、依赖失效、公共执行、报告与绘图；不持有矩阵/模型 |
-| `features/analysis/composables/useAnalysisContext.ts::useAnalysisContext` | 模块取得页面上下文；只能在分析页下使用 |
-| `features/analysis/results.ts` | `operations` 操作→结果/默认图；`resultPlots` 结果→所有关联图；`resultDownloads` 完整报告文件名，结果页复用 |
-| `features/analysis/modules/{embedding,differential,network,supervised}/` | 四类真实表单、输入提示、运行按钮及图表报告布局 |
-| `features/analysis/components/ResultTable.vue` | 仅显示后端仍认可的表格；复用全站 `components/DataTable.vue` |
-| `stores/workspace.ts::analysisTransaction` | 整条分析执行链持有 `busy`，带工作区修订写入，核对响应身份与预期修订 |
-
-模块按“输入与参数 → 运行操作 → 图表与报告”组织；复杂表单留在模块，高级参数折叠。
-参数用英文名称，帮助用中文 `FieldLabel`/`HelpTip` 悬停展示。复用 `PlotView` 的图例、缩放和下载，
-不要再实现一套格式化或图形下载；实际重复的分析报告用 `ResultTable`，不为假想复用建立万能表单。
-
-创建面板后在 `analysisModules` 注册，现有网络条目为：
-
-```ts
-{ id: 'network', name: '相关网络', group: '探索',
-  component: NetworkPanel, requires: ['matrix'] }
-```
-
-`requires` 当前是可审阅的声明，**不是自动校验引擎**。模块仍需根据 `info.layers`、`observations`、
-`embeddings`、`live_results` 禁用不适用操作并说明原因，后端最终验证真实输入。
-页面通过 `v-show` 保留模块状态，模块须有单个根节点；切换导航只改 `tab`，不启动计算或重绘。
-现有图在模块不可见时卸载 Plotly 展示，图形描述仍在公共状态中；这不等于保存到磁盘。
-
-网络面板使用下述现有调用方式：
-
-```ts
-const { network, store, info, execute, has, loadWithPlot } = useAnalysisContext()
-// 按钮禁用条件包含 store.busy；layer 选项来自 info.value?.layers。
-await execute('network', { ...network })
-if (has('network')) await loadWithPlot('network', 'network_plot')
-```
-
-`execute` 负责计算→更新工作区→刷新有效结果→读取报告→绘图。独立读取用 `loadResult`，
-独立重绘用 `draw`，组合读取/重绘用 `loadWithPlot`；这些都复用事务锁，不能在模块中自行拼接
-多个各自释放 `busy` 的 `store.mutate/read/command`。计算失败保留先前已提交状态；成功替换的结果
-清理对应旧展示，后续失败提示“计算已完成，结果已保留”，可读取/重绘。公共“重新读取分析状态”
-用于恢复摘要读取；请求超时不会自动重放写操作，须先读取实际状态。
-
-### 参数、草稿与恢复
-
-| 所属模块 | 自有参数 | 明确共享的依赖 |
-|---|---|---|
-| 降维 / 聚类独立板块 | `reduction`、`usePca`、`cluster`；嵌入/着色选择 | 聚类使用独立的 `cluster.use_rep/n_neighbors/random_state` |
-| 差异与 Marker | `diff`；`volcano`、`selectedFeatures`、`hideZero` 为显示状态 | Marker 使用 `diff.group_key/method/layer`，不依赖两组选择 |
-| 相关网络 | `network.method/min_abs_correlation/top_features/layer` | 不依赖差异分组或后续 layer 编辑 |
-| 监督与 SHAP | `train`、`validation`、`ldaSolver`、`latentKey`、`shap` | SHAP 使用 `train.random_state` 作为 seed，并依赖当前可执行监督结果 |
-| 页面公共 | `legend` | 图例只改变展示，不使统计结果失效 |
-
-恢复顺序为：清空全部表单和展示选择 → 配置默认值 → 当前项目设置（同项目草稿优先）→ 校正失效输入选择。
-`restoreSettings` 对旧项目中缺失的 `train.random_state` 使用旧 `reduction.random_state`，
-缺失的 `network.layer` 使用旧 `diff.layer`；迁移后分别管理。更早的 `views.settings` 字段由
-`web_analysis.py::analysis_settings` 转为当前分组设置。不要因新增默认值覆盖已有项目的显式选择。
-
-新增字段应同时检查四处：初始默认值、`settings` 输出、`restoreSettings` 的类型/缺失兼容、
-`resetSettings` 的项目切换恢复；计算参数还要更新对应依赖 watcher。表单草稿放 `store.analysisDraft`，
-绑定项目路径；切换项目清除草稿。切换数据身份重置面板，正常新增嵌入或修改元数据时只刷新有效性。
-页面维护草稿的表单及待恢复视图按用户、工作区和项目隔离；任一身份切换清空缓存并使排队恢复失效。
-读取草稿期间有新输入或工作区修订变化时，不再应用迟到草稿；延迟恢复控件同样保留用户刚输入的值。
-“应用视图设置”只写内存项目设置；“保存项目”由 `store.mutate('/project/save')` 先写当前分析草稿，
-再执行项目快照保存。模块不得自动保存项目。搜索/分页等临时选择不必持久化，也不应成为科学参数。
-
-### 领域、应用与严格 API
-
-1. **领域算法**：数值函数放 `scMM/analysis/`，需要容器能力时通过稳定门面接入。
-   网络参考 `statistics.py::feature_correlation_network`；验证矩阵/layer、有限值、维度、参数范围、
-   空输入和零分母。可选依赖在对应功能调用时导入并提供明确缺失提示，不增加全站启动依赖。
-2. **应用编排**：`application/workbench.py::AnalysisWorkspace`承载数据 token、
-   输出与溯源；现有方法为 `network`、`differential`、`train` 等。网页通过
-   `web_analysis.py::AnalysisWorkflow.run_operation` 使用 `web_projects.py::project_candidate`，执行成功后一次发布。
-   失败不得修改原项目；会修改已有模型的操作参考 `explain_shap` 对结果的额外深复制。
-   输出嵌入/obs 键须验证合法性和冲突，参考 `reduce/cluster/save_latent`，不能覆盖已有键。
-3. **严格 API**：`api/workflow_schemas.py` 增加/调整 `Controls` 子类及 `OPERATIONS`，并核对
-   `Operation.operation` Literal；`options_for` 校验 options。图形对应 `Plot.kind`、`PLOTS`。
-   `api/routers/analysis.py` 只处理请求和返回，不写数值计算；应用层 `ANALYSES` 也须明确允许。
-   注册 Vue 或加入任意 Python 函数不会获得 HTTP 执行能力；保持禁止额外字段和操作白名单。
-   `Train.model_params` 使用逐模型字段白名单和组合/训练折约束，不能作为任意函数调用入口。
-4. **Vue**：补齐 `results.contract.json`、`PlotKind` 与模块；`AnalysisOperation/ResultName` 从前端显式契约的键推导，对应模块调用公共流程；
-   仅新能力需要独立导航时才注册新模块。配置帮助/预设入口在 `application/parameters.py`、`preferences.py`。
-5. **保存重载与导出**：`workbench.py::save_h5ad` 经 `result_catalog.py::serialize_reports` 组装 `reports_json`，
-   `projects.py::ProjectStore` 管理快照和视图，`web_analysis.py::result_value/result_view/analysis_plot`
-   读取实时或只读结果；`web_results.py::ResultWorkflow.download_content` 导出完整内容。
-   在结果目录注册名称/关联图/元数据依赖/下载和序列化规则，同步前端显式 JSON 映射及 API 白名单；默认分页表不是完整导出。
-   不保存可执行模型，不在 JSON 中舍入科学值，不把 Graph/模型塞进前端或快照。
-
-现有操作示例：`Network` API 模型约束 threshold 0～1、top_features 1～1000；应用层只在
-候选中调用 `network`；领域函数返回图和相关矩阵；网页只读边表与 Plotly 图描述，完整边表按 CSV 下载。
-前端注册、API 类型和 Python 映射有意保持显式，尚无自动生成的跨语言协议或动态插件加载器。
-
-### 输入、输出及生命周期声明
-
-接入 PR/变更说明必须写清下表；它是审阅模板，当前没有自动读取该模板的依赖引擎。
-
-| 声明项 | 现有示例与必须核对内容 |
-|---|---|
-| 输入 | 网络：当前 X 或 `network.layer`；差异：矩阵/layer + group 列和两组；降维：X/指定 obsm；监督：矩阵/layer + label/group；SHAP：实时监督模型 |
-| 参数与随机性 | 参数归属、默认值、单位、范围、seed；降维/聚类记录 history，报告记录各自 parameters/分组信息；不要宣称所有结果已有统一溯源模式 |
-| 输出 | 降维写 `obsm[store_key]`，聚类写 `obs[key]`；统计写 `results[name]`，监督写内存 analyzer；图写 `views.figures[kind]`；说明新键及冲突策略 |
-| 依赖与失效 | 矩阵变换清下游结果；元数据仅按使用的字段清理；train 重算清 SHAP；参数编辑按对应 watcher 清结果；纯显示编辑不清统计 |
-| 保存与重载 | 数据/嵌入/元数据、起点、报告与已生成只读图可保存；模型不保存；重载后 SHAP 新计算和潜变量输出须重训；网络/监督图的重载依赖已保存图，不能承诺重建任意图 |
-| 导出 | 指定完整表/JSON/嵌入与图的下载方式，检查后端有效性；界面分页和格式化不能截断导出或降低精度 |
-
-**工作区修订与数据修订不同**：`BrowserWorkspace.revision` 每次成功写入（包括绘图、设置）递增，
-用于防止过时页面写入；`AnalysisWorkspace.token` 是 `(dataset_id, revision)`，表示数据身份与数据变更。
-绘图不改变数据 token。新增嵌入/聚类会增加数据修订，但 `_commit(clear_derived=False)` 重绑定无关结果，
-不能见到数据修订变化就删除全部展示。矩阵变换则清除派生结果。
-
-后端有效性入口为 `AnalysisWorkspace.result`、`AnalysisWorkflow.result_value`；
-`sync_sample_metadata` 和 `web_workspace.py::sync_metadata` 按依赖字段同步实时/已保存报告和图，
-`result_catalog.py` 的关联图与后继结果规则清理；新增结果须补齐目录、前端契约及下游依赖。
-`analysis_info.results` 用于页面可用性，`live_results` 区分可执行对象；页面隐藏按钮不能代替下载校验。
-`download_content` 必须继续通过有效性入口。纯图例、标签数量、特征显示等变更不清除统计结果。
-
-前端摘要/特征读取使用请求代次及项目/数据身份，报告和图在同一事务中核对工作区身份与预期修订。
-不要在未核对身份时应用迟到的成功或错误响应。`useReadScope` 同步递增本地输入/停用代次，
-覆盖同修订内 A→B→A 的选择和 KeepAlive 恢复；恢复读取放在其回调内，避免嵌套组件的激活钩子顺序使合法读取被拒绝。
-恢复回调只重新读取必要摘要，不重放写入。
-结果图、搜索、摘要、原始参数/预设、提取信号及保存管理各自接收当前来源的响应；草稿另按发起读取时的编辑值复核。
-`readResource` 仅合并同一登录/操作代次内并发的全局元数据 GET（项目列表、全局预设），结束即移除，返回各调用者独立副本；
-它不缓存科学工作区响应，不跨写操作复用旧快照。`inspect` 的可选接收谓词仅用于只读信号/计划，过期成功与错误不发布；
-正式变更及已发出的前台计算仍按原工作区事务完成，不因页面停用伪装取消。
-`requires` 声明和 watcher 不代替后端有效性。
-现有依赖并非通用 DAG；新增依赖要显式补齐保存、重载和失效处理，不能只改前端映射。
-分析仍在同步 HTTP 内完成，锁不等于后台任务、取消计算或可断线恢复的任务协议；后台化见 roadmap。
-
-### 按风险选择接入检查
-
-- **算法/输入变化**：小型合成数值对照、边界/非有限值、缺可选依赖、seed 重现；真实实验另记，不能以浏览器成功代替。
-- **状态/输出变化**：非法输入与计算失败保留旧状态、图失败保留新结果并可重试、输出键冲突、矩阵变更清理及无关元数据保留。
-- **API 变化**：额外字段/非法操作拒绝、参数类型/范围、工作区修订冲突、越权身份与候选原子性。
-- **前端流程变化**：四模块切换不计算、草稿与旧设置恢复、项目/数据切换重置；重复点击、报告/绘图等待期间互斥、旧成功/旧失败响应；宽屏与 700/390px，控制台无运行错误。
-- **生命周期/存储变化**：主动保存后重载报告/图、模型只读限制、旧结果与图下载拒绝；完整 CSV/JSON/H5AD 精度，分页不影响导出；依赖字段和纯展示变化分别覆盖。
-- **文档**：使用行为改 `workflow.md`，默认值/单位改 `parameters.md`，科学解释改 `analysis.md`，持久化改 `data-output.md`；本节保持唯一主指南，更新 CHANGELOG/roadmap 的验证与待验收状态。
-
-现有定位：`tests/domain/test_analysis.py`、`test_analysis_views.py` 验证算法/图；
-`tests/application/test_workbench_state.py` 验证生命周期；`tests/api/test_web_api.py`、`test_web_workflow.py`
-覆盖严格契约、事务、保存重载/下载；`frontend/tests/analysis.spec.ts` 覆盖设置、导航、互斥、失败重试与迟到响应，
-`workflow.spec.ts` 贯通四类分析、保存重载和完整导出。共享 store 改动还要选择导航/认证/其他读请求的受影响回归。
-类型/构建为 `npm --prefix frontend run build`，文档链接/锚点为
-`uv run --no-sync python -m pytest tests/tooling/test_documentation.py -q -W error`。
-按[分块验证](#完整验证)选择受影响检查；仅改帮助文案或已有显示参数时，不机械重跑全部算法和真实实验。
-
-## 添加归一化方法
-
-归一化方法通过注册表扩展：
-
-```python
-from scMM.util.normalize import register_norm
-
-
-@register_norm("custom")
-def norm_custom(X, params):
-    scale = params.get("scale", 1.0)
-    return X * scale
-```
-
-新方法应验证二维输入、零分母、NaN/Inf 和参数类型，并在 `tests/domain/test_normalize.py` 添加测试。
-
-## 添加降维方法
-
-轻量接口使用 `register_dim`：
-
-```python
-from scMM.plot.embedding import register_dim
-
-
-@register_dim("custom")
-def run_custom(X, params):
-    model = CustomModel(**params)
-    return model.fit_transform(X)
-```
-
-输出必须是每个细胞一行、至少两列的二维数组。
-
-## 数据与 Git
-
-- 不提交原始 mzML/mzXML、处理矩阵、H5AD 或大体积执行输出，除非仓库策略明确允许。
-- 测试数据应尽量使用代码构造的小型合成谱和矩阵。
-- 不在 notebook 或源码中写个人绝对路径。
-- 提交信息建议使用项目现有风格，例如 `docs: ...`、`refactor: ...`、`test: ...`。
-- 提交前查看 `git status` 和 `git diff --check`，避免把无关本地修改带入提交。
-
-## 发布前检查
-
-完成相关开发检查后，更新 5007 开发服务供用户验收，保留工作区修改。用户明确验收通过后，
-再提交、推送并部署生产；执行顺序见 [发布、更新与回滚](installation.md#发布更新与回滚)。
-
-先完成本次改动涉及的[分块验证](#完整验证)；包输入改变时构建发行包，再用本次 wheel 检查独立安装入口。
-核对 dist 中选中的文件确为本次产物：
-
-```bash
-uv run --isolated --no-project \
-  --with "$(find dist -maxdepth 1 -name '*.whl' -print -quit)" \
-  scmm-process --help
-```
-
-提取/读取链改变时，还应在受支持的 Python 版本和代表性 mzML/mzXML 文件上完成相关端到端验证。
-
-## 上游源码快照
-
-外部交付单独保存在 `.upstream-snapshots.git/` 裸仓库的 `snapshots` 分支及 `snapshot/<名称>` 标签，
-主仓库 `vendor/snapshots` 同步对象。交付提交只代表接收顺序，不伪造作者开发历史。
-已收录 `scMM-new`（`bdce317`，2026-09-21）和 `SCMM-GUI-0.2.0-source`（`f961809`，2026-09-22）。
-
-从仓库根目录导入，重复使用目录时指定新名称：
-
-```sh
-uv run --locked python scripts/import_upstream_snapshot.py 新交付目录 --name 新版本名称 --received-date YYYY-MM-DD
-git log --oneline vendor/snapshots
-git diff dev vendor/snapshots -- scMM/
-git --git-dir=.upstream-snapshots.git show snapshots:.snapshot.json
-```
-
-脚本保留交付源码、PDF、配置及可执行位，跳过 Git/缓存目录，拒绝软链接；`.snapshot.json`
-记录来源、排除项与 SHA-256。同名同内容不重复导入，同名异内容拒绝；新交付删除的文件仍可从旧标签找回。
-只含包源码的交付统一映射到 `scMM/`，完整项目保留布局。原目录不自动随修改更新快照。
-脚本不执行交付代码、不切换当前分支或改暂存区，但需要 Git 对象/引用与 `.git/info/exclude` 写权限。
-按功能审阅移植，不直接整体合并快照分支。
-
-快照标签留在本地裸仓库，普通推送 dev 不会备份它们。使用新的文件名导出并另存到其他磁盘：
-
-```sh
-git --git-dir=.upstream-snapshots.git bundle create /tmp/scmm-upstream-备份日期.bundle --all
-git clone --bare /tmp/scmm-upstream-备份日期.bundle /tmp/scmm-upstream-restored.git
-```
 
 ## 文档维护与历史追溯
 
@@ -653,36 +210,6 @@ git show bc3e35d:docs/16-thermo-raw.md
 认证专项运行 `PYTHONUTF8=1 .venv/bin/python -m pytest tests/api/test_authentication.py tests/api/test_server_config.py -q -W error`。
 原有 HTTP 回归使用真实临时数据库及登录，不绕过中间件；浏览器使用隔离合成账号，不读取线上凭据。
 同账号重新登录可继续仍有效的内存工作区，不保证恢复过期工作区或服务重启前的草稿。
-
-## 开源敏感信息检查与历史清理计划
-
-当前文件检查：`python scripts/check_sensitive.py`；全部本地可达历史审计：
-`python scripts/check_sensitive.py --history --report /tmp/scmm-security-audit.json`。
-检查代码、文档、CHANGELOG、Notebook 输出、验证报告，以及 `dist/`、`build/` 和服务静态资源；
-zip/wheel/sdist 在内存中检查，不解压到工作区。规则覆盖个人目录、内网地址、常见凭据格式、私钥、带凭据 URL、
-字面量密码/密钥赋值及凭据文件名；超过扫描上限的压缩包报未完成检查，不当作通过。
-输出只有类别、文件、行号和历史对象摘要，不输出命中值。模式扫描无法证明不存在未知格式的敏感信息，发布前仍须审阅。
-CI 检查本次变更源码和按需构建的产物；历史单独记录，不能把既有历史问题隐藏成当前源码通过。
-
-本轮按用户确认只审计历史并准备计划，不改写提交、不更新远端；脱敏摘要见
-[开源审计报告](validation/open-source-audit.json)。历史仍含个人路径、内网地址及带输出的旧 Notebook。
-当前文件脱敏不会移除这些 Git 对象；GitHub 旧提交、引用、克隆和缓存也不会因此消失。
-当前未命中所扫描的凭据模式，不能扩展为不存在凭据的结论；未来发现真实凭据必须先撤销或轮换，再处理历史。
-
-后续历史处理需单独审阅以下范围：
-
-1. 冻结协作写入，核对远端分支/标签、本地旧分支、备份 refs 和所有 worktree，创建仓库外私有备份及隔离 mirror。
-2. 对拟公开引用执行路径/地址替换，清空历史 Notebook 输出及执行计数，审阅代码单元中的真实路径。
-   保留科学定义和数值报告；旧源码快照及归档逐项核对。
-3. 在隔离镜像重新扫描全部可达对象，执行文档/Notebook/构建检查，产出旧新提交映射和受影响引用清单。
-4. 审阅并另行授权后协调远端引用更新和必要强推，按 GitHub 要求处理旧 PR/缓存引用，通知协作者重新克隆。
-   重写本地分支不能清除远端、备份、reflog 或第三方克隆，不承诺彻底删除已公开数据。
-5. 用户确认迁移可用后再评估本地旧 refs、reflog、备份和对象回收，不自动删除恢复材料。
-
-依据 [GitHub 敏感数据移除说明](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)。
-认证参考 [Argon2-cffi](https://argon2-cffi.readthedocs.io/en/stable/howto.html) 及
-[OWASP 会话管理](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)。
-
 
 ## AI 助手边界
 
@@ -784,3 +311,17 @@ RawPage 保留原 DOM、参数键、视图键和展示入口，只组装 `featur
 | `preprocess/composables/useLipidImageExport` | 脂质图像的统一操作范围、冻结显示参数、SVG/PDF/PNG 与错误反馈；画布和临时 URL 在一个生命周期内 |
 
 分析页原有模块注册、设置及执行组合函数继续管理分析事务，不为文件拆分重复创建控制器。脂质版本/筛选/审核和提取批次仍保留各自状态所有者；后续交互审计按 roadmap 收敛。模块化不作为速度或内存改善的证据，实际性能测量归 PERF-01。
+
+## 本轮模块状态所有权
+
+| 模块 | 唯一管理职责 | 调用与失败边界 |
+|---|---|---|
+| `features/preprocess/useLipidPanel.ts` | 版本、匹配参数、筛选/分页、请求身份、人工审核与结果 | LipidPanel 每实例只创建一次；规则模块接收当前版本 getter 和刷新回调，不重复读配置或创建 store |
+| `features/preprocess/useLipidRules.ts` | 规则草稿、预设、校验导入与规则分页 | 共享同一组 refs；来源重置由面板控制器更新，应用仍走原修订与版本检查 |
+| `components/usePlotRenderer.ts` | Plotly 实例、渲染队列/代次、DOM 观察、激活清理、选择事件 | 接收面板已有 refs；导出通过 getter 使用已加载实例，不另建渲染控制器 |
+| `components/PlotView.vue` | 展示/论文设置、图例次序、视口和导出生命周期 | 原 `useViewState` 只注册一次；结果身份检查和下载契约保持，预览 URL 由组件清理 |
+| `application/time_inputs.py` | 输入/时间/数值检查、依赖展开及候选结果登记 | 接收候选 AnnData，不创建第二个工作区；现有应用事务负责验证后发布 |
+| `application/time_analysis.py` | Palantir/窗口/速度编排及稳定兼容门面 | 保留原函数签名/导出，趋势适配器直接依赖 inputs，避免反向导入门面 |
+| `application/time_outputs.py` | 经身份验证的表、metadata 与图 | 只读，不重新拟合；所有读取继续 require_run 和绘图输入身份校验 |
+
+前端路径相对 `frontend/src/`；Python 路径相对 `scMM/`。局部回归入口见[测试职责](testing.md#场景隔离与失败归属)。

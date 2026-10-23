@@ -1,6 +1,7 @@
 # scMM 代理工作指南
 
-本文只维护项目主要设计和长期协作约定。日常实现、测试、验收及部署进展查
+本文只维护项目主要设计和长期协作约定。按[任务导航](docs/README.md#按任务阅读)只读相关主题，跨模块再追依赖；无需每次通读历史、全部开发指南或历史审阅。
+日常实现、测试、验收及部署进展查
 [CHANGELOG.md](CHANGELOG.md)，未完成事项查 [docs/roadmap.md](docs/roadmap.md)。
 开始任务核对实际分支、工作区和相关代码；历史记录不代表本次验证或服务状态。
 仅在主要设计或协作约定改变时修改本文，不随每次提交、测试或验收更新。
@@ -45,17 +46,8 @@ scMM 从 CyESI 单细胞质谱原始谱构建“细胞 × m/z 特征”矩阵，
 
 交付代码在 `scMM/`；`scMM-new/`、`SCMM-GUI-0.2.0-source/` 为上游参考，不能整体替换当前实现。
 
-| 层 | 主要职责与入口 |
-|---|---|
-| Vue 前端 | 仓库根 `frontend/src/features/` 按功能组织页面，`components/` 提供共享控件；前端持有表单/展示状态，不持有计算矩阵或模型 |
-| HTTP 边界 | `api/cli.py` 启动 `scmm-web`；`api/app.py` 提供同源静态页面和版本化接口，`api/routers/` 按功能拆分，`api/schemas.py` 管理请求/响应契约 |
-| 应用 | `application/projects.py` 管理项目与快照；`project_batch.py` 管理提取与审核；`workbench.py` 管理数据/结果生命周期；`preview_cache.py` 管理复用 |
-| 参数与边界 | `application/parameters.py`/`preferences.py` 管理默认值与预设；`storage.py` 校验路径；`tasks.py`/`worker.py` 管理持久任务 |
-| 数据与算法 | `file/data.py` 组合装载/处理/互操作能力；相邻私有模块负责数值流程，`file/io.py`/`readers/` 负责原始读取；`util/` 负责峰、归一化和注释 |
-| 分析与绘图 | `analysis/` 负责统计、监督与统一降维；`plot/` 负责 Notebook 绘图、轨迹与趋势 |
-| 外部 reader | 仓库根 `tools/thermo_raw_reader/` 为 C# helper；`tools/validate_thermo_*.py` 与 `docs/validation/` 保存真实对照工具和报告 |
-
-除标明仓库根的行外，模块路径相对 `scMM/`，省略前缀的文件承接所在目录。
+详细模块入口和状态所有者见[架构职责](docs/development.md)及[任务导航](docs/README.md#按任务阅读)。
+公开 `CyESIData`、应用门面和分层保持稳定，前端只持表单/展示状态，不持计算矩阵或模型。
 数值计算留在领域模块，Vue 页面和 HTTP 路由只负责边界、会话和展示。
 Vue 工作区由 `application/web_workspace.py` 隔离管理，写入检查工作区修订，保存另检查项目磁盘修订；
 首版仅支持单个 API 服务进程，不能用多个 ASGI worker 分割内存工作区。高层门面保持稳定；
@@ -101,7 +93,7 @@ AI 助手仅解释与建议：个人 API 凭据在仓库外按用户加密隔离
 - 使用 uv 管理项目环境与锁文件；Python 支持范围以 `pyproject.toml` 为准。
   普通同步不升级依赖，.NET/Thermo reader 独立部署。
 - 按改动运行相关测试；数值、存储和任务改动覆盖失败/恢复语义。合成测试、真实实验、用户验收和远端 CI 分别记录。
-  完整检查命令见 [开发指南](docs/development.md#完整验证)，使用 `python -m pytest`。
+  完整检查命令见 [开发指南](docs/testing.md#完整验证)，使用 `python -m pytest`。
 - 不提交原始谱、处理矩阵、H5AD、大体积输出或临时截图；Notebook 保持参数集中、无执行输出，测试优先小型合成数据。
 - `main` 为生产分支，worktree 位于 `~/scMM-prod`；`dev` 为开发分支，位于 `~/scMM`，
   各自使用独立 `.venv`。生产为 **5006** 的用户级 `scmm-ui.service`，开发为 **5007** 的 `scmm-dev.service`，
@@ -125,28 +117,33 @@ AI 助手仅解释与建议：个人 API 凭据在仓库外按用户加密隔离
 | [README.md](README.md) | 项目概览、支持范围、最短入口 | 核心能力、支持范围或上手入口改变；不记录阶段回归/部署快照 |
 | [docs/README.md](docs/README.md) | 阅读路径和主题导航 | 文档增删、改名、合并或职责/阅读顺序改变 |
 | [AGENTS.md](AGENTS.md) | 主要设计、协作规则、文档维护规则 | 设计边界、协作约定或文档职责改变；日常进展不更新 |
-| [CHANGELOG.md](CHANGELOG.md) | 实现进展、验证/用户验收/部署证据、历史环境记录 | 完成有实质结果的实现、修复、文档整理、验收或部署里程碑 |
+| [CHANGELOG.md](CHANGELOG.md) | 实现进展、验证/用户验收/部署证据、阶段总结 | 完成有实质结果的实现、修复、文档整理、验收或部署里程碑 |
 | [workflow.md](docs/workflow.md) | 网页/Notebook 的操作顺序及交互行为 | 操作步骤、确认/审核/保存流程、交互或下载入口改变 |
 | [installation.md](docs/installation.md) | 安装依赖、启动配置、服务管理 | 支持环境、依赖安装、启动参数、挂载/网络配置或服务管理方式改变 |
 | [parameters.md](docs/parameters.md) | 各入口默认值、单位、阈值含义和配置优先级 | 参数新增/移除、默认值、单位、范围、算法含义或配置规则改变 |
 | [python-api.md](docs/python-api.md) | 提取/变换/合并/保存/CLI 调用示例 | 公开 API、CLI 调用或批处理行为改变；不复制完整文件格式 |
-| [analysis.md](docs/analysis.md) | 分析方法、统计解释、不同接口、轨迹及绘图 | 分析输入/输出、算法/指标含义、模型诊断或方法决策依据改变 |
+| [analysis.md](docs/analysis.md) | 统计/监督/降维、不同接口及通用绘图 | 分析输入/输出、算法/指标含义、模型诊断或方法决策依据改变 |
 | [data-output.md](docs/data-output.md) | 数据结构、文件格式、AnnData/H5AD、快照与恢复边界 | 元数据、层/嵌入、持久化布局、保存/重载语义或兼容性改变 |
 | [thermo-raw.md](docs/thermo-raw.md) | 外部 reader、协议、精度边界、对照报告与复现 | reader 构建/协议/精度/资源行为改变，或新增有原始报告的 RAW 对照 |
 | [troubleshooting.md](docs/troubleshooting.md) | 按症状诊断、修复和调参 | 新故障、诊断方式或处置方法改变；已解决故障保留适用的诊断提示 |
-| [development.md](docs/development.md) | 详细模块分工、扩展、回归边界、检查/发布、上游快照 | 代码职责、开发工具、检查/发布流程或快照管理方式改变 |
+| [development.md](docs/development.md) | 架构职责、共享边界与状态所有者 | 模块职责或跨模块契约改变 |
+| [testing.md](docs/testing.md) | 分层测试、影响映射、本地与 CI 检查入口 | 测试职责、选择或 CI 范围改变 |
+| [feature-development.md](docs/feature-development.md) | 功能接入与兼容回归 | 新能力接入或扩展契约改变 |
+| [release.md](docs/release.md) | 发布、回滚、来源与上游快照 | 运维或来源管理方式改变 |
+| [lipid-analysis.md](docs/lipid-analysis.md) / [time-analysis.md](docs/time-analysis.md) | 脂质与时间方法、科学依据 | 对应方法的输入、输出或解释改变 |
 | [roadmap.md](docs/roadmap.md) | 未完成事项、待用户验收、暂缓与恢复条件 | 新待办、范围/优先级/验收条件变化，或取得足以改变状态的验收证据 |
 
 `docs/validation/` 的机器报告保存原始证据，主题文档解释条件与结论，CHANGELOG 记录验收发生的时间和范围。
-历史步骤/临时地址归 CHANGELOG 或 Git 历史；科学定义、限制及可复现报告保留在负责的主题文档。
+详细过程从 Git 追溯，不在其他目录复制长日志；临时地址、PID 及失效操作步骤不进入新记录；科学定义、限制及可复现报告保留在负责的主题文档。
 
 ## 任务结束时的文档更新规则
 
 1. 对照上表选择受影响的文档，只更新变化涉及的正文；实现有使用行为变化时，同一任务中同步使用说明。
    纯内部修复且不影响契约时，不强制修改使用文档，但检查对应描述仍成立。
-2. 有实质结果的任务在 CHANGELOG 记录问题/变化、验证命令与结果、仍未验收的边界、部署状态。
-   将本机检查、远端 CI、合成验收、真实实验及用户确认分开；未执行的检查不写成通过。
-   同一里程碑合并记录，不逐命令记流水账，不为查询或无变化任务制造条目。
+2. 每个独立实质里程碑在 CHANGELOG 记录一条，通常 3～5 个短要点，只说明变化、相关验证结论、
+   剩余边界、验收与发布状态。测试保留范围、必要命令入口与结果，不逐轮记录调试流水或重复累计数量。
+   重要未解决失败及影响结论的限制必须保留，常规修正压缩为最终结论；区分本机、远端 CI、合成、真实实验和用户验收。
+   历史只在 CHANGELOG 维护，主题文档维护当前行为，roadmap 维护未来事项；查询或小编辑不另增记录。
 3. 涉及待办时更新 roadmap。代码完成但用户未验收的项保留待验收；只按用户反馈更新验收状态，
    其他事项满足验收条件后移出活动待办，结论保留在 CHANGELOG 与主题文档。
 4. 入口/能力变化检查 README；文档增删或结构变化更新 docs/README 及全部引用链接。

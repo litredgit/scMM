@@ -1,153 +1,48 @@
 """Explicit adapters for existing Palantir and window-trajectory definitions."""
 # ruff: noqa: RUF001
 
-import json
-import re
 from importlib.metadata import version
-from uuid import uuid4
 
 import numpy as np
 import pandas as pd
 from anndata import AnnData
 from threadpoolctl import threadpool_limits
 
-from scMM.util.time_results import (
-    binding,
-    cell_identity,
-    registry,
-    require_run,
-    valid_run,
-    write_registry,
+from scMM.util.time_results import binding, registry, valid_run
+
+from .time_inputs import (
+    _dependency_fields as _dependency_fields,
 )
-
-
-def check_size(data):
-    if data.n_obs > 5000 or data.n_obs * data.n_vars > 5_000_000:
-        raise ValueError("时间分析同步工程上限：5000 细胞、500 万矩阵值；更大输入等待后台任务接入")
-    if not data.obs_names.astype(str).is_unique or not data.var_names.astype(str).is_unique:
-        raise ValueError("时间分析需要唯一稳定细胞/特征 ID")
-
-
-def _new_key(data, key, names):
-    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,47}", key) or key.startswith("scmm_"):
-        raise ValueError("输出键须为字母开头、至多 48 位的字母/数字/下划线，不得使用 scmm_ 前缀")
-    previous = registry(data)
-    if len(previous["runs"]) >= 64:
-        raise ValueError("本数据时间分析记录已达同步工程上限 64 项")
-    if key in previous["runs"] or any(
-        name in mapping for name in [key, *names] for mapping in (data.obs, data.obsm, data.uns)
-    ):
-        raise ValueError("输出键已存在或曾使用，请指定新键；不会覆盖旧结果")
-
-
-def _numeric(values, name):
-    if hasattr(values, "toarray"):
-        values = values.toarray()
-    try:
-        result = np.asarray(values, dtype=np.float64)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} 必须是数值") from exc
-    if not np.isfinite(result).all():
-        raise ValueError(f"{name} 含非有限值")
-    return result
-
-
-def _dependency_fields(data, inputs):
-    fields = {item["key"] for item in inputs if item["axis"] == "obs"}
-    rules = json.loads(data.uns.get("scmm_workbench", {}).get("latent_dependencies_json", "{}"))
-    for item in inputs:
-        if item["axis"] == "obsm":
-            fields.update(rules.get(item["key"]) or [])
-            for entry in reversed(
-                json.loads(data.uns.get("scmm_workbench", {}).get("history_json", "[]"))
-            ):
-                if (
-                    entry.get("operation") in {"latent", "reduce"}
-                    and entry.get("parameters", {}).get("store_key") == item["key"]
-                ):
-                    if entry["operation"] == "latent":
-                        fields.update(
-                            entry["parameters"].get("observation_dependencies")
-                            or list(data.obs.columns)
-                        )
-                    break
-    for run in registry(data)["runs"].values():
-        if any(
-            (item["axis"], item["key"]) == (output["axis"], output["key"])
-            for item in inputs
-            for output in run["outputs"]
-        ):
-            if not valid_run(data, run):
-                raise ValueError("输入依赖已过期的时间结果，请重新计算")
-            fields.update(run["observation_dependencies"])
-    return sorted(fields)
-
-
-def expanded_inputs(data, inputs):
-    selected = {(item["axis"], item["key"]): item for item in [binding(data, "X", "X"), *inputs]}
-    pending = [item["key"] for item in inputs if item["axis"] == "obsm"]
-    visited = set()
-    while pending:
-        key = pending.pop()
-        if key in visited:
-            continue
-        visited.add(key)
-        params = f"{key}_params"
-        if params in data.uns:
-            selected[("uns", params)] = binding(data, "uns", params)
-            source = data.uns[params].get("source", "")
-            if isinstance(source, str) and source.startswith("obsm:"):
-                parent = source.removeprefix("obsm:")
-                selected[("obsm", parent)] = binding(data, "obsm", parent)
-                pending.append(parent)
-    return list(selected.values())
-
-
-def _publish(data, key, kind, parameters, inputs, outputs):
-    value = registry(data)
-    record = {
-        "kind": kind,
-        "identity": uuid4().hex,
-        "parameters": parameters,
-        "inputs": inputs,
-        "outputs": outputs,
-        "cell_identity": cell_identity(data),
-        "observation_dependencies": _dependency_fields(data, inputs),
-        "implementation": "scmm-time-v1",
-        "stale": False,
-    }
-    value["runs"][key] = record
-    total = sum(
-        np.asarray(getattr(data, out["axis"])[out["key"]]).size
-        for run in value["runs"].values()
-        if not run.get("stale")
-        for out in run["outputs"]
-        if out["axis"] in {"obs", "obsm"}
-    )
-    total += sum(
-        np.asarray(data.uns[name]).size
-        + sum(np.asarray(item).size for item in data.uns[f"{name}_metadata"].values())
-        for name, run in value["runs"].items()
-        if run["kind"] == "trajectory" and not run.get("stale")
-    )
-    total += sum(
-        sum(np.asarray(item).size for item in data.uns[name].values())
-        for name, run in value["runs"].items()
-        if run["kind"] in {"velocity", "trends", "trend_clusters"} and not run.get("stale")
-    )
-    if total > 5_000_000:
-        raise ValueError("时间结果数值超过同步工程上限 500 万，未应用候选")
-    write_registry(data, value)
-    metadata = data.uns.setdefault("scmm_workbench", {})
-    metadata["derived_obs"] = list(
-        dict.fromkeys(
-            [
-                *metadata.get("derived_obs", []),
-                *(out["key"] for out in outputs if out["axis"] == "obs"),
-            ]
-        )
-    )
-    return record
+from .time_inputs import (
+    _new_key as _new_key,
+)
+from .time_inputs import (
+    _numeric as _numeric,
+)
+from .time_inputs import (
+    _probabilities as _probabilities,
+)
+from .time_inputs import (
+    _publish as _publish,
+)
+from .time_inputs import (
+    _validated_time as _validated_time,
+)
+from .time_inputs import (
+    check_size as check_size,
+)
+from .time_inputs import (
+    expanded_inputs as expanded_inputs,
+)
+from .time_outputs import (
+    result_metadata as result_metadata,
+)
+from .time_outputs import (
+    result_tables as result_tables,
+)
+from .time_outputs import (
+    time_figure as time_figure,
+)
 
 
 def palantir(
@@ -274,22 +169,6 @@ def palantir(
     return _publish(data, key, "palantir", parameters, inputs, outputs)
 
 
-def _probabilities(values, count):
-    tolerance = (
-        64 * np.finfo(np.float64).eps * max(1, count, values.shape[1] if values.ndim == 2 else 1)
-    )
-    if (
-        values.ndim != 2
-        or values.shape[0] != count
-        or not values.shape[1]
-        or (values < 0).any()
-        or (values > 1 + tolerance).any()
-        or not np.allclose(values.sum(axis=1), 1, rtol=0, atol=tolerance)
-    ):
-        raise ValueError("分支概率须每细胞一行、有限、在 0–1 内且每行和为 1；不会自动归一化")
-    return float(tolerance)
-
-
 def trajectory(
     data,
     *,
@@ -387,33 +266,6 @@ def trajectory(
     return _publish(data, key, "trajectory", parameters, inputs, outputs)
 
 
-def _validated_time(data, time_key, time_kind, unit):
-    time = _numeric(data.obs[time_key], "参数化时间")
-    if time_kind == "normalized_time" and ((time < 0).any() or (time > 1).any()):
-        raise ValueError("归一化采集时间须在 0–1 内")
-    if time_kind in {"normalized_time", "pseudotime"} and unit != "unitless":
-        raise ValueError("归一化/伪时间单位须为 unitless")
-    if time_kind == "acquisition_seconds" and unit != "s":
-        raise ValueError("采集秒数的单位须为 s")
-    if not unit.strip():
-        raise ValueError("须显式声明时间单位")
-    for parent_key, parent in registry(data)["runs"].items():
-        if (
-            parent["kind"] == "palantir"
-            and time_key == f"{parent_key}_pseudotime"
-            and time_kind != "pseudotime"
-        ):
-            raise ValueError("该列由 Palantir 产生，须声明为伪时间")
-    if time_kind not in {
-        "acquisition_seconds",
-        "normalized_time",
-        "experimental_time",
-        "pseudotime",
-    }:
-        raise ValueError("须明确声明时间含义")
-    return time
-
-
 def velocity(data, *, key, time_key, time_kind, unit, layer=None, window_size=100, step_size=50):
     from scMM.plot._trajectory import _window_starts, metabolic_velocity_field
 
@@ -480,35 +332,6 @@ def velocity(data, *, key, time_key, time_kind, unit, layer=None, window_size=10
     )
 
 
-def _velocity_tables(data, key, run):
-    values = data.uns[key]
-    windows = pd.DataFrame(
-        {
-            "window_index": np.arange(len(values["speeds"])),
-            "window_start": values["window_starts"],
-            "time_center": values["time_centers"],
-            "valid_cells": values["counts"],
-            "speed": values["speeds"],
-        }
-    )
-    features = pd.DataFrame(
-        {
-            "window_index": np.repeat(windows.window_index.to_numpy(), data.n_vars),
-            "feature_id": np.tile(data.var_names.astype(str), len(windows)),
-            "state_center": np.asarray(values["state_centers"]).ravel(),
-            "velocity": np.asarray(values["velocity_field"]).ravel(),
-        }
-    )
-    cells = pd.DataFrame(
-        {
-            "cell_id": data.obs_names.astype(str),
-            "time": data.obs[run["parameters"]["time_key"]].to_numpy(),
-            "sorted_position": np.argsort(values["sorted_obs_order"]),
-        }
-    )
-    return {"windows": windows, "features": features, "cells": cells}
-
-
 def trends(data, **options):
     from .time_trends import trends as compute
 
@@ -533,234 +356,3 @@ def info(data):
         }
         for key, run in registry(data)["runs"].items()
     ]
-
-
-def result_tables(data, key):
-    run = require_run(data, key)
-    if run["kind"] == "trend_clusters":
-        from .time_trend_clusters import cluster_tables
-
-        return cluster_tables(data, key, run)
-    if run["kind"] == "trends":
-        from .time_trends import trend_tables
-
-        return trend_tables(data, key, run)
-    if run["kind"] == "velocity":
-        return _velocity_tables(data, key, run)
-    if run["kind"] == "palantir":
-        frame = pd.DataFrame(
-            {
-                "cell_id": data.obs_names.astype(str),
-                "pseudotime": data.obs[f"{key}_pseudotime"].to_numpy(),
-            }
-        )
-        if f"{key}_entropy" in data.obs:
-            frame["entropy"] = data.obs[f"{key}_entropy"].to_numpy()
-        probabilities = np.asarray(data.obsm[f"{key}_branch_probs"])
-        for column in range(probabilities.shape[1]):
-            frame[f"branch_{column}"] = probabilities[:, column]
-        multiscale = pd.DataFrame(
-            np.asarray(data.obsm[f"{key}_ms_data"]), index=data.obs_names.astype(str)
-        )
-        multiscale.index = multiscale.index.copy()
-        multiscale.index.name = "cell_id"
-        return {"cells": frame, "multiscale": multiscale.reset_index()}
-    values = np.asarray(data.uns[key])
-    meta = data.uns[f"{key}_metadata"]
-    rows = []
-    for branch in range(values.shape[0]):
-        for window in range(values.shape[1]):
-            row = {
-                "branch_index": branch,
-                "branch_name": run["parameters"]["branch_names"][branch],
-                "window_index": window,
-                "window_start": int(meta["window_starts"][window]),
-                "time_center": meta["time"][branch, window],
-                "valid_cells": meta["counts"][branch, window],
-                "weight_sum": meta["weight_sum"][branch, window],
-            }
-            row.update({f"coordinate_{j}": value for j, value in enumerate(values[branch, window])})
-            rows.append(row)
-    cells = pd.DataFrame(
-        {
-            "cell_id": data.obs_names.astype(str),
-            "time": data.obs[run["parameters"]["time_key"]].to_numpy(),
-        }
-    )
-    coordinates = data.obsm[run["parameters"]["coordinate_key"]]
-    coordinates = np.asarray(
-        coordinates.toarray() if hasattr(coordinates, "toarray") else coordinates
-    )
-    for column in range(coordinates.shape[1]):
-        cells[f"coordinate_{column}"] = coordinates[:, column]
-    branch_key = run["parameters"]["branch_probability_key"]
-    if branch_key:
-        probabilities = data.obsm[branch_key]
-        probabilities = (
-            probabilities.toarray() if hasattr(probabilities, "toarray") else probabilities
-        )
-        for column, values in enumerate(np.asarray(probabilities).T):
-            cells[f"branch_{column}"] = values
-    cells["sorted_position"] = np.argsort(np.asarray(meta["sorted_obs_order"]))
-    return {"windows": pd.DataFrame(rows), "cells": cells}
-
-
-def result_metadata(data, key):
-    from plotly.utils import PlotlyJSONEncoder
-
-    from scMM.util.time_results import _plain
-
-    run = require_run(data, key)
-    metadata = {
-        "key": key,
-        **run,
-        "output_metadata": {
-            item["key"]: data.uns[item["key"]] for item in run["outputs"] if item["axis"] == "uns"
-        },
-    }
-    # Undefined numeric outputs remain explicit nulls; CSV retains empty windows.
-    return json.loads(json.dumps(_plain(metadata), cls=PlotlyJSONEncoder))
-
-
-def time_figure(data, *, key, coordinate_key=None, plot_top_n=30, display_standardize=True):
-    import plotly.graph_objects as go
-
-    run = require_run(data, key)
-    tables = result_tables(data, key)
-    if run["kind"] == "palantir":
-        if not coordinate_key:
-            raise ValueError("请明确选择绘图坐标，计算输入与绘图坐标独立")
-        coordinates = _numeric(data.obsm[coordinate_key], "绘图坐标")
-        if coordinates.ndim != 2 or coordinates.shape[1] < 2:
-            raise ValueError("绘图坐标须至少二维")
-        inputs = expanded_inputs(data, [binding(data, "obsm", coordinate_key)])
-        cells = tables["cells"].copy()
-        for column in range(coordinates.shape[1]):
-            cells[f"plot_coordinate_{column}"] = coordinates[:, column]
-        tables["cells"] = cells
-        figure = go.Figure(
-            go.Scatter(
-                x=coordinates[:, 0],
-                y=coordinates[:, 1],
-                mode="markers",
-                marker={
-                    "color": cells["pseudotime"],
-                    "colorscale": "Viridis",
-                    "showscale": True,
-                    "colorbar": {"title": "伪时间"},
-                },
-                customdata=np.column_stack([cells["cell_id"], cells["pseudotime"]]),
-                hovertemplate="细胞 %{customdata[0]}<br>伪时间 %{customdata[1]}<extra></extra>",
-                name="细胞",
-            )
-        )
-        root = data.obs_names.get_loc(run["parameters"]["root_cell_id"])
-        figure.add_trace(
-            go.Scatter(
-                x=[coordinates[root, 0]],
-                y=[coordinates[root, 1]],
-                mode="markers",
-                marker={"symbol": "star", "size": 14, "color": "red"},
-                name="所选根点",
-                customdata=[[str(data.obs_names[root])]],
-                hovertemplate="所选根点 %{customdata[0]}<extra></extra>",
-            )
-        )
-        notes = [
-            "伪时间是算法尺度，不是采集秒数或生物实验时间。起点须依据实验先验选择。",
-            "分支概率与熵是模型输出，不代表已验证的细胞命运。",
-        ]
-        figure.update_layout(
-            title=f"Palantir · {key}",
-            xaxis_title=f"{coordinate_key} 1",
-            yaxis_title=f"{coordinate_key} 2",
-        )
-    elif run["kind"] == "trend_clusters":
-        from .time_trend_clusters import cluster_figure
-
-        if coordinate_key is not None:
-            raise ValueError("趋势聚类图使用时间窗口，不接受嵌入坐标")
-        figure, notes = cluster_figure(data, key, run)
-        inputs = []
-    elif run["kind"] == "trends":
-        from .time_trends import trend_figure
-
-        if coordinate_key is not None:
-            raise ValueError("趋势热图使用时间窗口，不接受嵌入坐标")
-        figure, notes = trend_figure(data, key, run, plot_top_n, display_standardize)
-        inputs = []
-    elif run["kind"] == "velocity":
-        if coordinate_key is not None:
-            raise ValueError("速度图使用参数化时间，不接受嵌入坐标")
-        inputs = []
-        windows = tables["windows"]
-        figure = go.Figure(
-            go.Scatter(
-                x=windows["time_center"],
-                y=windows["speed"],
-                mode="lines+markers",
-                connectgaps=False,
-                name="速度范数",
-                customdata=windows[["window_index", "valid_cells"]].to_numpy(),
-                hovertemplate="窗口 %{customdata[0]}<br>有效细胞 %{customdata[1]}<br>速度 %{y}<extra></extra>",
-            )
-        )
-        notes = [
-            "各特征强度对递增时间的局部回归斜率组成向量，图为其欧氏范数；符号方向见完整特征表。",
-            "不是同位素示踪代谢通量；输入层、强度尺度和时间单位影响数值，不可跨尺度直接比较。",
-            "相同时间或不足两个细胞的窗口无有效回归，保留为空；窗口和步长单位为细胞数。",
-            f"时间含义：{run['parameters']['time_kind']}；单位：{run['parameters']['unit']}。伪时间和归一化时间不是物理时间。",
-        ]
-        figure.update_layout(
-            title=f"窗口代谢速度 · {key}",
-            xaxis_title=f"时间 ({run['parameters']['unit']})",
-            yaxis_title=run["parameters"]["velocity_unit"],
-        )
-    else:
-        if coordinate_key is not None and coordinate_key != run["parameters"]["coordinate_key"]:
-            raise ValueError("窗口轨迹使用计算时的坐标；改变坐标须另算新结果")
-        inputs = []
-        windows = tables["windows"]
-        figure = go.Figure()
-        for branch in windows["branch_index"].unique():
-            frame = windows[windows["branch_index"] == branch]
-            figure.add_trace(
-                go.Scatter(
-                    x=frame["coordinate_0"],
-                    y=frame["coordinate_1"],
-                    mode="lines+markers",
-                    connectgaps=False,
-                    name=str(frame["branch_name"].iloc[0]),
-                    customdata=frame[
-                        ["window_index", "time_center", "valid_cells", "weight_sum"]
-                    ].to_numpy(),
-                    hovertemplate="窗口 %{customdata[0]}<br>时间中心 %{customdata[1]}<br>有效细胞 %{customdata[2]}<br>权重和 %{customdata[3]}<extra></extra>",
-                )
-            )
-        valid = int(np.isfinite(windows["coordinate_0"]).sum())
-        notes = [
-            f"{valid}/{len(windows)} 个分支窗口有效；无效窗口保留为空，不跨空窗口连线。",
-            f"时间含义：{run['parameters']['time_kind']}；单位：{run['parameters']['unit']}。窗口和步长单位是细胞数。",
-            "轨迹为排序窗口的加权坐标中心，不是细胞命运或流形分支推断；坐标分离不证明独立生物分支。",
-        ]
-        figure.update_layout(
-            title=f"滑动窗口轨迹 · {key}",
-            xaxis_title=f"{run['parameters']['coordinate_key']} 1",
-            yaxis_title=f"{run['parameters']['coordinate_key']} 2",
-        )
-    figure.update_layout(
-        meta={
-            **(figure.layout.meta or {}),
-            "time_result_key": key,
-            "time_result_identity": run["identity"],
-            "time_plot_inputs": inputs,
-            "observation_dependencies": sorted(
-                set(run["observation_dependencies"]) | set(_dependency_fields(data, inputs))
-            ),
-            "point_kind": "cell" if run["kind"] == "palantir" else "window",
-            "notes": notes,
-            "time_parameters": run["parameters"],
-            "export_tables": {name: frame.to_csv(index=False) for name, frame in tables.items()},
-        }
-    )
-    return figure

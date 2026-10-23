@@ -4,6 +4,16 @@ import { test, expect } from '@playwright/test'
 test.use({
   launchOptions: {
     ...(process.env.SCMM_CHROMIUM ? { executablePath: process.env.SCMM_CHROMIUM } : {}),
+    // The synthetic origin must bypass inherited host proxy settings as well.
+    env: {
+      ...process.env,
+      HTTP_PROXY: '',
+      HTTPS_PROXY: '',
+      ALL_PROXY: '',
+      http_proxy: '',
+      https_proxy: '',
+      all_proxy: '',
+    },
     args: ['--no-proxy-server', '--host-resolver-rules=MAP scmm.test 127.0.0.1'],
   },
 })

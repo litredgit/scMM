@@ -7,7 +7,7 @@ from anndata import AnnData
 
 from scMM.util.time_results import binding, registry
 
-from .time_analysis import (
+from .time_inputs import (
     _dependency_fields,
     _new_key,
     _publish,

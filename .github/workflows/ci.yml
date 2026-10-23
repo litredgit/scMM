@@ -2,48 +2,66 @@ name: CI
 
 on:
   push:
-    branches: [dev, main, refined]
+    branches: [dev, main]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      python: ${{ steps.plan.outputs.python }}
-      docs: ${{ steps.plan.outputs.docs }}
-      frontend: ${{ steps.plan.outputs.frontend }}
-      package: ${{ steps.plan.outputs.package }}
+      run: ${{ steps.plan.outputs.run }}
       node: ${{ steps.plan.outputs.node }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Select affected blocks (PR merge base / push before-to-after)
+      - name: Select local/full or automatic lightweight plan
         id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+          # A main fast-forward containing only commits already on dev adds no new code.
+          # Unique main commits, initial pushes and PRs still receive checks.
+          if [ "$EVENT_NAME" = push ] && [ "$REF_NAME" = main ]; then
+            before=$(python -c 'import json,os; print(json.load(open(os.environ["GITHUB_EVENT_PATH"]))["before"])')
+            if [ "$before" != 0000000000000000000000000000000000000000 ] && git show-ref --verify --quiet refs/remotes/origin/dev; then
+              novel=$(git rev-list "$before..$GITHUB_SHA" --not origin/dev)
+              if [ -z "$novel" ]; then
+                echo 'run=false' >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+          fi
+          echo 'run=true' >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
             python scripts/test_blocks.py --all --write-plan /tmp/test-plan.json --github-output "$GITHUB_OUTPUT"
           else
-            python scripts/test_blocks.py --ci-event "$GITHUB_EVENT_PATH" --write-plan /tmp/test-plan.json --github-output "$GITHUB_OUTPUT"
+            python scripts/test_blocks.py --ci-event "$GITHUB_EVENT_PATH" --lightweight --write-plan /tmp/test-plan.json --github-output "$GITHUB_OUTPUT"
           fi
       - uses: actions/upload-artifact@v4
+        if: steps.plan.outputs.run == 'true'
         with:
           name: test-plan
           path: /tmp/test-plan.json
 
-  python:
+  checks:
     needs: changes
-    if: needs.changes.outputs.python == 'true'
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '["3.11", "3.12"]' || '["3.12"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,56 +75,17 @@ jobs:
           version: "0.12.3"
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-      - name: Install only the selected blocks' locked dependencies
-        run: |
-          python - <<'PY'
-          import json, subprocess
-          plan = json.load(open('/tmp/test-plan.json'))
-          command = ['uv', 'sync', '--locked', '--dev']
-          for extra in plan['extras']:
-              command += ['--extra', extra]
-          subprocess.run(command, check=True)
-          PY
-      - name: Selected Python blocks (warnings are errors)
-        run: uv run --no-sync python scripts/test_blocks.py --plan /tmp/test-plan.json --phase python --run
-
-  checks:
-    needs: changes
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-plan
-          path: /tmp
-      - uses: astral-sh/setup-uv@v10.0.0
-        with:
-          version: "0.12.3"
-          python-version: "3.12"
-          enable-cache: true
-      - name: Install checks or browser dependencies without notebook tools
+      - name: Install locked plan dependencies
         run: |
           python - <<'PY'
           import json, subprocess
           plan = json.load(open('/tmp/test-plan.json'))
           command = ['uv', 'sync', '--locked']
-          if plan['browser_paths']:
-              command += ['--dev']
-              for extra in plan['browser_extras']:
-                  command += ['--extra', extra]
-          else:
-              command += ['--only-group', 'dev']
+          command += ['--dev'] if plan['python_paths'] or plan['browser_paths'] else ['--only-group', 'dev']
+          for extra in sorted(set(plan['extras'] + plan['browser_extras'])):
+              command += ['--extra', extra]
           subprocess.run(command, check=True)
           PY
-      - name: Changed Python formatting and lint
-        run: uv run --no-sync python scripts/test_blocks.py --plan /tmp/test-plan.json --phase lint --run
-      - name: Changed sources scan (once)
-        run: python scripts/test_blocks.py --plan /tmp/test-plan.json --phase scan --run
-      - name: Related documentation / notebook contracts
-        if: needs.changes.outputs.docs == 'true'
-        run: uv run --no-sync python scripts/test_blocks.py --plan /tmp/test-plan.json --phase docs --run
       - uses: actions/setup-node@v4
         if: needs.changes.outputs.node == 'true'
         with:
@@ -116,21 +95,8 @@ jobs:
       - name: Install frontend dependencies
         if: needs.changes.outputs.node == 'true'
         run: npm --prefix frontend ci
-      - name: Frontend formatting, typecheck and single build
-        if: needs.changes.outputs.node == 'true'
-        run: uv run --no-sync python scripts/test_blocks.py --plan /tmp/test-plan.json --phase frontend --run
-      - name: Selected browser specs
-        if: needs.changes.outputs.frontend == 'true'
-        run: |
-          python - <<'PY'
-          import json, subprocess
-          if json.load(open('/tmp/test-plan.json'))['browser_paths']:
-              subprocess.run(['npm', '--prefix', 'frontend', 'exec', '--', 'playwright', 'install', '--with-deps', 'chromium'], check=True)
-              subprocess.run(['uv', 'run', '--no-sync', 'python', 'scripts/test_blocks.py', '--plan', '/tmp/test-plan.json', '--phase', 'browser', '--run'], check=True)
-          PY
-      - name: Build relevant distributions
-        if: needs.changes.outputs.package == 'true'
-        run: uv run --no-sync python scripts/test_blocks.py --plan /tmp/test-plan.json --phase package --run
-      - name: Built artifacts scan (once, without rescanning sources)
-        if: needs.changes.outputs.frontend == 'true'
-        run: python scripts/test_blocks.py --plan /tmp/test-plan.json --phase artifacts --run
+      - name: Install Chromium for manual full checks
+        if: github.event_name == 'workflow_dispatch'
+        run: npm --prefix frontend exec -- playwright install --with-deps chromium
+      - name: Run the shared check entry
+        run: uv run --no-sync python scripts/test_blocks.py --plan /tmp/test-plan.json --run

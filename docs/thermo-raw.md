@@ -112,7 +112,7 @@ reader 是单次上下文；数组为只读 bytes 视图，退出后仍有效，
 
 [网页报告](validation/thermo-wt-1-web.json)记录同参数预览与 Python 正式处理的窗口、峰顶帧、RT
 及参考信号精确一致，结果为 307 × 622；首/中/末扫描均可读，Chromium 页面脚本错误 0。
-运行环境及部署验收记录见 [CHANGELOG](../CHANGELOG.md#thermo-raw-网页入口--2026-09-29)。
+运行环境及部署验收记录见 [CHANGELOG](../CHANGELOG.md#第一至第二节点工程化与完整工作台迁移)。
 该单样本对照不代表多真实 RAW 压力测试、更多仪器或 Windows 已验收。
 
 ### 复现
@@ -133,4 +133,4 @@ uv run --locked --with psutil==7.2.2 python tools/validate_thermo_pipeline.py \
 - RAW：`f604eeb601b3db97e947bc398ebeb2e0ad258d2322a873b0e9d5e95f1a38bff5`
 - mzML：`fd2f7a7250b7c90b52c2aa9c51af9bb7f07e995a4f42de994d569373a267fa6f`
 
-验证不作生产自动放行依据，也不扩大为跨仪器、批量负载或环境支持结论；真实验证类待办已取消，见[当前规划](roadmap.md#已取消的真实验证事项)。
+验证不作生产自动放行依据，也不扩大为跨仪器、批量负载或环境支持结论；真实验证类待办已取消，见[当前规划](roadmap.md)。

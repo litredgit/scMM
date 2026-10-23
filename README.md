@@ -20,7 +20,7 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | 已处理 H5AD/旧 CSV 矩阵 union/ref 合并、来源映射和完整起点 | [合并流程](docs/workflow.md#合并已处理矩阵) |
 | H5AD、预处理起点恢复、结果失效管理、只读报告与图表重载 | [数据与输出](docs/data-output.md) |
 | 统一降维、双特征散点/特征距离嵌入、差异/Marker/相关网络、监督模型诊断和 SHAP | [分析说明](docs/analysis.md) |
-| 网页 Palantir 稳定 ID 根点、滑动窗口轨迹/代谢速度/代谢物趋势及趋势聚类、命名结果和完整导出 | [伪时间与轨迹](docs/analysis.md#palantir-伪时间) |
+| 网页 Palantir 稳定 ID 根点、滑动窗口轨迹/代谢速度/代谢物趋势及趋势聚类、命名结果和完整导出 | [伪时间与轨迹](docs/time-analysis.md#palantir-伪时间) |
 | 独立 TIC/EIC 信号重构、残差与噪声对照，不改提取算法 | [原始信号诊断](docs/analysis.md#独立原始信号诊断) |
 | 热图组别／样本筛选与排序、Nature／Cell 图形及 MetaboAnalyst 矩阵 CSV 导出 | [图形操作](docs/workflow.md#论文图细胞联动与热图) · [矩阵格式](docs/data-output.md#面向-metaboanalyst-的矩阵下载) |
 | 当前数据 QC PDF、当前分析报告及完整参数/数值附件 ZIP | [报告说明](docs/analysis.md#统计解释与网页分析) |
@@ -29,7 +29,7 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 后续工作与暂缓决策统一见 [roadmap](docs/roadmap.md)。
 网页覆盖范围与全部 Python 能力不同：网页注释与同位素功能保留全部峰和候选，只在显示/导出时筛选；
 Python 原有删峰/求和去同位素接口与部分时间/趋势分析继续保留，边界见[分析说明](docs/analysis.md)。
-当前交付与后续范围见 [发展计划](docs/roadmap.md#当前交付与后续边界)。
+当前交付与后续范围见 [发展计划](docs/roadmap.md)。
 
 同行复核提取方法可直接阅读[细胞事件与特征峰确认流程](docs/cell-feature-identification.md)。
 

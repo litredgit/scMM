@@ -278,7 +278,7 @@ adduct,LIPID_CLASS,PC,pos,[M+H]+,5
 | `n_diff_components` / `knn` / `num_waypoints` | `10` / `30` / `500` | 成分 2–100 且小于细胞数减 1；近邻至少 3 且小于细胞数；路标至少为 3 和成分数、不超过细胞数；少细胞须显式调整 |
 | `scale_components` / `max_iterations` | `true` / `25` | 多尺度成分缩放及迭代次数（1–1000） |
 | `seed` / `use_early_cell_as_start` | `42` / `true` | seed 为 0–2³²−1 整数；默认固定根点，关闭时记录算法实际最早细胞 |
-| `coordinate_key` / `time_key` / `time_kind` | 空 | 至少二维坐标、有限数值时间列、显式时间含义；见[算法说明](analysis.md#滑动窗口轨迹) |
+| `coordinate_key` / `time_key` / `time_kind` | 空 | 至少二维坐标、有限数值时间列、显式时间含义；见[算法说明](time-analysis.md#滑动窗口轨迹) |
 | `unit` | 随含义填写 | 归一化/伪时间 `unitless`，采集秒数 `s`，实验时间显式自定义 |
 | `branch_probability_key` | `null` | 单分支等权；指定键须存在且为合法概率，不静默回退 |
 | `window_size` / `step_size` / `min_cells_per_window` | `100` / `50` / `5` | 均为 1–5000 整数，单位细胞；窗口超总数截断并记录，空窗保留 |
@@ -291,7 +291,7 @@ adduct,LIPID_CLASS,PC,pos,[M+H]+,5
 `features=[]` 使用全部稳定特征 ID，显式列表须非空 ID、唯一且存在；不做最近 m/z 匹配。
 `feature_name_key=null` 使用 ID，指定列缺失则拒绝，列内缺失/空白名称回退 ID；`kernel_stat=median`，只允许 median/mean/sum。
 没有随机步骤，seed 记录为 null。`plot_top_n=30`（1–500），`display_standardize=true`，均仅控制绘图；
-热图至多 20 万显示值，完整趋势下载不受该限制。NaN/相同时间/统计边界见[代谢趋势](analysis.md#代谢趋势)。
+热图至多 20 万显示值，完整趋势下载不受该限制。NaN/相同时间/统计边界见[代谢趋势](time-analysis.md#代谢趋势)。
 
 趋势聚类要求显式 `trend_key` 指向有效命名趋势；参数采用该趋势的时间/层/窗口，不从当前草稿重算。
 `metric=correlation`，支持 cosine/euclidean/sqeuclidean；`cluster_method=leiden`，另支持 louvain/kmeans/agglomerative。
@@ -421,7 +421,7 @@ DBSCAN 与层次聚类的距离白名单为 euclidean/manhattan/cosine，不开�
 所有数值须有限，整数不接受布尔值/小数；方法不适用的表单草稿不参与计算。
 历史 `effective_parameters` 仅记录该算法实际生效的参数；修改表单不计算，点击“运行聚类”后才生成新列。
 聚类仍共享降维面板的 `use_rep`、`n_neighbors` 和 `random_state`。旧项目缺独立字段时保留原先借用值，
-恢复/保存操作见[分析流程](workflow.md#分析显示与导出)，开发兼容规则见[接入指南](development.md#参数草稿与恢复)。
+恢复/保存操作见[分析流程](workflow.md#分析显示与导出)，开发兼容规则见[接入指南](feature-development.md#参数草稿与恢复)。
 
 报告下载只读取当前 X，不另选强度层或执行分析；下载请求 `key` 必须是当前 `/analysis` 返回的 token 的 JSON，缺失/过期拒绝。
 工程边界：最多 10 万细胞、500 万当前矩阵数值、累计 500 万嵌入数值和 64 MiB 作图表文本；超限明确提示逐项导出，不自动抽样。
@@ -594,3 +594,12 @@ ppm 默认 10，MS 级别默认 1，RT 秒范围留空为全部选中级别扫�
 网页需显式选择参考输入、union/ref、各输入质量来源、样本分组及目标样本名；质量来源可以是指定 var 列或明确的数值 var ID。ppm_tol 初值 5，沿用已有 alignwith/concat 默认参考 ppm，允许有限的 0～1000000；这不是实验容差建议。歧义默认 reject，用户可明确选择 legacy 沿用原一对一贪心规则。common_observations 初始为空，最多 100 个显式共同细胞字段，不推断单位或缩放。group/subject/batch 空值保留原值，非空覆盖，目标样本名相同表示主动合并。
 
 同步工程门限：2～8 个输入、最多 2000 个来源样本映射；每个输入和输出最多 2 万细胞、1 万特征、500 万 X 值，输入当前/完整起点及层/raw/归档元数据累计最多 2000 万存储值；输出也检查同样的总值限制。单文件最多 256 MiB，所选文件累计最多 512 MiB，H5AD 解码前核对存储值，候选匹配比较最多 20 万。超限明确拒绝，不静默截断数据。预览列表最多显示 200 行，完整 ZIP 不截断；预览凭据有效期 300 秒并绑定用户工作区、修订和输入身份。它仍是受限同步请求，不是 M2 持久后台任务。
+
+## 数值回归依据
+
+quantile 的并列值处理必须与细胞排列无关。反例输入 `[[0, 1], [0, 4], [0, 9]]`
+曾因两次 argsort 给相同零值分配不同排名，得到 `[0.5, 2, 4.5]`；当前按并列排名区间平均，
+零值仍参与分位数，不能据此推导保零或改变按特征列计算的方向。
+PQN 的同值列表与 NumPy 参考向量须一致，检查形状、有限值、零分母和调用方数组不变。
+KNN 等插补须保留全空特征轴，不借修复轴长度统一不同入口默认方法。
+这些性质由[归一化测试](../tests/domain/test_normalize.py)和[数据测试](../tests/domain/test_data.py)维护。

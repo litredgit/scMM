@@ -252,7 +252,13 @@ def commands(plan, phase):
                 *[f"frontend/{p}" for p in plan["format_paths"]],
             ]
         if plan["frontend"]:
-            yield ["npm", "--prefix", "frontend", "run", "build"]
+            yield [
+                "npm",
+                "--prefix",
+                "frontend",
+                "run",
+                "typecheck" if plan.get("typecheck_only") else "build",
+            ]
     if phase == "browser" and plan["browser_paths"]:
         yield [
             "npm",
@@ -267,8 +273,34 @@ def commands(plan, phase):
         yield ["uv", "build", "--no-sources"]
     if phase == "scan" and plan["files"]:
         yield [sys.executable, "scripts/check_sensitive.py", "--files", *plan["files"]]
-    if phase == "artifacts" and plan["frontend"]:
+    if phase == "artifacts" and plan["frontend"] and not plan.get("typecheck_only"):
         yield [sys.executable, "scripts/check_sensitive.py", "--artifacts-only"]
+
+
+def lightweight(plan):
+    """Automatic CI checks contracts in a clean tree; full plan remains local/manual."""
+    plan = dict(plan)
+    # Packaging implies a frontend build locally, but automatic CI does not package.
+    # Retain typechecking only for actual frontend inputs, using the same mapping.
+    config = json.loads(CONFIG.read_text(encoding="utf-8"))
+    plan["frontend"] = any(matches(p, config["frontend_sources"]) for p in plan["files"])
+    plan["node"] = plan["frontend"] or bool(plan["format_paths"])
+    plan["python_paths"] = (
+        [
+            "tests/tooling/test_test_blocks.py",
+            "tests/api/test_server_config.py",
+        ]
+        if plan["python"] or plan["frontend"]
+        else []
+    )
+    plan["python"] = bool(plan["python_paths"])
+    plan["extras"] = ["web"] if plan["python_paths"] else []
+    plan["browser_paths"] = []
+    plan["browser_extras"] = []
+    plan["package"] = False
+    plan["typecheck_only"] = True
+    plan["profile"] = "lightweight"
+    return plan
 
 
 def main(argv=None):
@@ -279,6 +311,9 @@ def main(argv=None):
     parser.add_argument("--files", nargs="*")
     parser.add_argument("--block", action="append", default=[])
     parser.add_argument("--all", action="store_true")
+    parser.add_argument(
+        "--lightweight", action="store_true", help="Automatic CI contract smoke profile"
+    )
     parser.add_argument("--run", action="store_true")
     parser.add_argument(
         "--phase",
@@ -321,6 +356,9 @@ def main(argv=None):
                 )
                 plan["reasons"]["docs"] = ["changed file is a Markdown link target"]
             plan["documents"] = documents
+        if args.lightweight:
+            plan = lightweight(plan)
+        print("Execution profile: " + plan.get("profile", "affected/full"))
         print("Selected blocks:")
         for name in plan["selected"]:
             print(f"  {name}: " + "; ".join(plan["reasons"][name]))
@@ -361,6 +399,13 @@ def main(argv=None):
                 for command in commands(plan, phase):
                     print("Run: " + repr(command), flush=True)
                     subprocess.run(command, cwd=ROOT, check=True)
+                    if phase == "frontend" and plan["frontend"] and not plan.get("typecheck_only"):
+                        # The shared entry just built these assets; standalone browser
+                        # runs otherwise build their own isolated assets in server.py.
+                        os.environ.setdefault(
+                            "SCMM_TEST_STATIC_ROOT", str(ROOT / "scMM/api/static")
+                        )
+
     except (ValueError, subprocess.CalledProcessError) as exc:
         print(str(exc), file=sys.stderr)
         return 1

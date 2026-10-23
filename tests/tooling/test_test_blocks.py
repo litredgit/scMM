@@ -13,6 +13,7 @@ from scripts.test_blocks import (
     ci_range,
     commands,
     document_inputs,
+    lightweight,
     main,
     select,
 )
@@ -87,8 +88,14 @@ def test_source_dependencies_expand_but_tests_and_fixtures_do_not():
         "api",
         "api-raw",
         "api-lipids",
+        "api-time",
     }
-    assert set(plan("tests/api/conftest.py")["selected"]) == {"api", "api-raw", "api-lipids"}
+    assert set(plan("tests/api/conftest.py")["selected"]) == {
+        "api",
+        "api-raw",
+        "api-lipids",
+        "api-time",
+    }
     assert not plan("tests/conftest.py")["browser_paths"]
     locked = plan("uv.lock")
     assert set(locked["selected"]) == {
@@ -265,3 +272,32 @@ def test_format_configuration_needs_only_formatter_and_all_tracked_inputs_are_ma
     # The old flat tests are aliases during this migration. All tracked paths,
     # including formatter metadata, must work on a branch's first push.
     assert select(names, CONFIGURATION)["selected"]
+
+
+def test_lightweight_ci_keeps_clean_tree_smoke_but_no_browser_or_package():
+    selected = lightweight(plan("scMM/application/time_analysis.py"))
+    assert selected["python_paths"] == [
+        "tests/tooling/test_test_blocks.py",
+        "tests/api/test_server_config.py",
+    ]
+    assert not selected["browser_paths"] and not selected["package"]
+    assert selected["extras"] == ["web"]
+    assert list(commands(selected, "browser")) == list(commands(selected, "package")) == []
+    assert list(commands(selected, "artifacts")) == []
+    assert list(commands(selected, "frontend")) == []
+    frontend = lightweight(plan("frontend/src/components/PlotView.vue"))
+    assert list(commands(frontend, "frontend"))[-1][-1] == "typecheck"
+    assert frontend["node"]
+    assert not lightweight(plan("docs/parameters.md"))["python_paths"]
+    # The same local plan retains the full affected regression and build.
+    assert plan("scMM/application/time_analysis.py")["package"]
+
+
+def test_lipid_controller_and_time_adapters_do_not_select_unrelated_features():
+    assert plan("frontend/src/features/preprocess/useLipidRules.ts")["selected"] == [
+        "browser-lipids"
+    ]
+    selected = plan("scMM/application/time_inputs.py")
+    assert {"time", "api-time"} <= set(selected["selected"])
+    assert not {"auth", "monitor", "api-lipids", "workbench"} & set(selected["selected"])
+    assert "api-time" in plan("scMM/application/web_workspace.py")["selected"]
