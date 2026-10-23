@@ -5,10 +5,11 @@ async function openAnalysis(page: Page) {
   await page.getByRole('button', { name: '创建并添加样本' }).click()
   await page.getByRole('button', { name: '导入独立结果', exact: true }).click()
   await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
-  await page.getByRole('button', { name: /^▤ analysis.h5ad/ }).click()
+  await page.getByRole('button', { name: /^(?:▤ )?analysis[.]h5ad\s/ }).click()
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
   await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await page.getByRole('button', { name: '固定参数区', exact: true }).first().click()
 }
 test('legend reorder persists, selection is manual and six steps fit narrow screens', async ({
   page,
@@ -265,5 +266,80 @@ test('a delayed batch summary cannot label the next project as awaiting review',
     await expect(page.getByRole('alert')).toHaveCount(0)
   } finally {
     release()
+  }
+})
+
+for (const [width, height] of [
+  [1366, 768],
+  [1440, 900],
+  [1920, 1080],
+  [390, 844],
+]) {
+  test(`result-first layout preserves plot width and main view at ${width}x${height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height })
+    await openAnalysis(page)
+    // This helper pins controls for the pre-existing parameter editing regressions.
+    await page.getByRole('button', { name: '取消固定参数区', exact: true }).first().click()
+    await page.getByRole('button', { name: '运行降维', exact: true }).click()
+    const plot = page.locator('.analysis-visualization .js-plotly-plot').first()
+    await expect(plot).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: '展开计算参数', exact: true }).first(),
+    ).toBeVisible()
+    await expect(page.getByLabel('store_key', { exact: true })).not.toBeVisible()
+    await page.screenshot({ path: test.info().outputPath(`result-first-viewport-${width}.png`) })
+    if (width >= 1000) {
+      await expect
+        .poll(async () => {
+          const box = await plot.boundingBox()
+          return (
+            !!box && Math.min(height, box.y + box.height) - Math.max(80, box.y) >= box.height * 0.6
+          )
+        })
+        .toBe(true)
+      const before = (await plot.boundingBox())!.width
+      await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+      await expect
+        .poll(async () => (await plot.boundingBox())!.width)
+        .toBeGreaterThan(width < 1800 ? before - 2 : 600)
+      await page.getByRole('button', { name: '收起 AI 助手', exact: true }).click()
+    }
+    await page.getByRole('button', { name: '固定参数区', exact: true }).first().click()
+    await expect(page.getByLabel('store_key', { exact: true })).toBeVisible()
+    await page.getByLabel('store_key', { exact: true }).fill('X_tuning_draft')
+    await page.getByRole('button', { name: '取消固定参数区', exact: true }).first().click()
+    await page.getByRole('button', { name: '展开计算参数', exact: true }).first().click()
+    await expect(page.getByLabel('store_key', { exact: true })).toHaveValue('X_tuning_draft')
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true)
+    await page.screenshot({
+      path: test.info().outputPath(`result-first-${width}.png`),
+      fullPage: true,
+    })
+  })
+}
+
+test('raw m/z bounds stay paired beside the spectrum at laptop widths', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('项目名称', { exact: true }).fill('原始参数笔记本布局')
+  await page.getByRole('button', { name: '创建并添加样本' }).click()
+  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await expect(page.getByLabel('mz_min', { exact: true })).toBeVisible()
+  for (const width of [1366, 1440, 1920, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    const min = (await page.getByLabel('mz_min', { exact: true }).boundingBox())!
+    const max = (await page.getByLabel('mz_max', { exact: true }).boundingBox())!
+    expect(Math.abs(min.y - max.y)).toBeLessThan(2)
+    expect(max.x).toBeGreaterThan(min.x)
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true)
+    await page.screenshot({
+      path: test.info().outputPath(`raw-paired-${width}.png`),
+      fullPage: true,
+    })
   }
 })

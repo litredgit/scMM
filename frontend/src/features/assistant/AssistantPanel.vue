@@ -125,7 +125,7 @@ const questions = ['当前进行到哪一步了？', '当前结果说明什么�
   border-radius: 14px;
   box-shadow: 0 8px 35px #0002;
 }
-@media (min-width: 1200px) {
+@media (min-width: 1800px) {
   .ai-assistant.open {
     top: 1rem;
     width: 430px;
@@ -205,5 +205,26 @@ textarea {
   width: 100%;
   box-sizing: border-box;
   margin: 0.5rem 0;
+}
+</style>
+
+<style scoped>
+@media (min-width: 761px) and (max-width: 1799px) {
+  .ai-assistant.open {
+    width: 360px;
+    top: 90px;
+    bottom: 16px;
+    display: flex;
+    flex-direction: column;
+  }
+  .ai-body {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+  }
+  .ai-toggle {
+    align-self: flex-end;
+    margin-bottom: 8px;
+  }
 }
 </style>

@@ -132,6 +132,7 @@ const {
           此项目或样本仍保存 legacy 参数。当前表单已切换为
           snr，请检查并应用参数后启动新提取；旧产物保留原算法记录。
         </p>
+        <h3>当前表单 · 按应用范围生效</h3>
         <div class="reference-preset">
           <label
             ><FieldLabel name="Cell type" /><select
@@ -220,6 +221,9 @@ const {
                 </select></label
               >
             </div>
+            <p v-if="['merge', 'reference'].includes(parameterCategory)" class="muted">
+              自动范围、样本合并策略及合并容差为项目级设置；不受仅当前样本的应用范围限制。
+            </p>
             <div v-if="parameterCategory === 'merge'" class="parameter-controls">
               <label class="parameter-field"
                 ><FieldLabel name="feature_strategy" /><select

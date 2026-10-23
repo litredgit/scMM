@@ -2069,3 +2069,139 @@ progress {
 .state-note button {
   margin-left: 8px;
 }
+
+/* Laptop workspace: results have the full content width unless parameters are pinned. */
+@media (min-width: 761px) {
+  .sidebar {
+    width: 210px;
+    padding: 20px 12px;
+  }
+  .main-shell main {
+    padding: 20px 24px;
+  }
+  .topbar {
+    padding: 12px 24px;
+  }
+}
+.analysis-page .page-title {
+  margin-bottom: 10px;
+}
+.analysis-page .page-title h1 {
+  margin: 0;
+  font-size: 26px;
+}
+.analysis-page .page-title p {
+  display: none;
+}
+.analysis-page .analysis-toolbar {
+  margin-bottom: 8px;
+  padding: 6px 10px;
+}
+.analysis-page > .state-note {
+  margin: 6px 0;
+  padding: 5px 10px;
+}
+.analysis-page .analysis-module-split {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.analysis-page .analysis-calculation {
+  width: 100%;
+  border: 0;
+  padding: 0;
+}
+.analysis-page .analysis-visualization {
+  width: 100%;
+  margin: 0;
+}
+.calculation-heading {
+  margin-bottom: 8px;
+}
+.calculation-heading button {
+  font-size: 14px;
+  min-height: 30px;
+  padding: 4px 10px;
+}
+.calculation-heading .selected {
+  color: var(--blue);
+  border-color: var(--blue);
+}
+.analysis-visualization > h3,
+.embedding-view > h3 {
+  margin: 0 0 8px;
+}
+.analysis-page .field-grid {
+  margin-bottom: 10px;
+  gap: 8px 14px;
+}
+.analysis-page .plot-shell {
+  padding-top: 6px;
+}
+.display-settings {
+  margin: 6px 0;
+}
+.display-settings > summary {
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--muted);
+}
+.parameter-range {
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.parameter-range .parameter-field {
+  width: auto;
+  min-width: 0;
+}
+.parameter-range input {
+  width: 100%;
+  min-width: 0;
+}
+@media (min-width: 1100px) {
+  .analysis-page .analysis-module-split:has(> .parameters-pinned) {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.8fr);
+    align-items: start;
+  }
+  .parameters-pinned .field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1200px) and (max-width: 1799px) {
+  .assistant-expanded {
+    padding-right: 0;
+  }
+}
+@media (min-width: 1800px) {
+  .assistant-expanded {
+    padding-right: 460px;
+  }
+}
+.qc-plots.comparing {
+  gap: 16px;
+}
+@media (min-width: 1100px) {
+  .qc-plots.comparing {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.analysis-calculation {
+  scroll-margin-top: 95px;
+}
+
+@media (min-width: 1100px) and (max-width: 1799px) {
+  .raw-workflow {
+    grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1.65fr);
+  }
+}
+
+@media (min-width: 761px) {
+  .topbar {
+    z-index: 50;
+  }
+}

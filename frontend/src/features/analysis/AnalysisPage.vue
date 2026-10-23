@@ -17,6 +17,7 @@ const {
   recovery,
   retryPresentation,
 } = analysis
+const moduleGroups = [...new Set(analysisModules.map((entry) => entry.group))]
 const names: Record<string, string> = {
   differential: '差异分析',
   markers: 'Marker',
@@ -53,7 +54,7 @@ const resultStates = computed(() => {
 })
 </script>
 <template>
-  <section v-if="store.project?.dataset">
+  <section v-if="store.project?.dataset" class="analysis-page">
     <div class="page-title">
       <div>
         <p class="eyebrow">STEP 05 / 分析</p>
@@ -105,16 +106,21 @@ const resultStates = computed(() => {
     <p v-if="!info" role="status">正在读取当前数据的分析状态…</p>
     <div v-else class="analysis-layout">
       <nav class="analysis-navigation" aria-label="分析功能">
-        <button
-          v-for="entry in analysisModules"
-          :key="entry.id"
-          :aria-label="entry.name"
-          :class="{ selected: tab === entry.id }"
-          :aria-current="tab === entry.id ? 'page' : undefined"
-          @click="tab = entry.id"
-        >
-          {{ entry.name }}<small>{{ entry.group }}</small>
-        </button>
+        <div v-for="group in moduleGroups" :key="group" class="analysis-group">
+          <span class="analysis-group-name">{{ group }}</span>
+          <div class="actions">
+            <button
+              v-for="entry in analysisModules.filter((entry) => entry.group === group)"
+              :key="entry.id"
+              :aria-label="entry.name"
+              :class="{ selected: tab === entry.id }"
+              :aria-current="tab === entry.id ? 'page' : undefined"
+              @click="tab = entry.id"
+            >
+              {{ entry.name }}
+            </button>
+          </div>
+        </div>
       </nav>
       <label class="analysis-mobile field"
         >分析功能<select aria-label="分析功能" v-model="tab">
@@ -142,30 +148,35 @@ const resultStates = computed(() => {
 <style scoped>
 .analysis-layout {
   display: grid;
-  grid-template-columns: 170px minmax(0, 1fr);
-  gap: 1rem;
-  align-items: start;
+  gap: 12px;
 }
 .analysis-navigation {
-  display: grid;
-  gap: 0.5rem;
-  position: sticky;
-  top: 7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  position: static;
+}
+.analysis-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.analysis-group-name {
+  color: var(--muted);
+  font-size: 12px;
+}
+.analysis-group .actions {
+  gap: 4px;
 }
 .analysis-navigation button {
-  text-align: left;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  min-height: 30px;
+  padding: 4px 9px;
+  font-size: 14px;
 }
 .analysis-navigation .selected {
   color: var(--blue);
   border-color: var(--blue);
   background: #eff6ff;
-}
-.analysis-navigation small {
-  display: block;
-  color: var(--muted);
 }
 .analysis-content {
   min-width: 0;
@@ -174,9 +185,6 @@ const resultStates = computed(() => {
   display: none;
 }
 @media (max-width: 800px) {
-  .analysis-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .analysis-navigation {
     display: none;
   }

@@ -54,7 +54,10 @@ function dimensions(key: string) {
       v-for="group in groups"
       :key="group[0]"
       class="parameter-group"
-      :class="{ 'parameter-group-wide': group.includes('reference_mz') }"
+      :class="{
+        'parameter-group-wide': group.includes('reference_mz'),
+        'parameter-range': group.includes('mz_min'),
+      }"
     >
       <label v-for="key in group" :key="key" class="parameter-field" :style="dimensions(key)">
         <FieldLabel :name="key" :text="help(key)" />

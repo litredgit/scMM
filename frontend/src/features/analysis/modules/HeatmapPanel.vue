@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CalculationPanel from '../components/CalculationPanel.vue'
 import { displayName } from '../../../help/labels'
 import { useViewState } from '../../../api/viewState'
 import { useReadScope } from '../../../api/readScope'
@@ -162,7 +163,7 @@ useViewState('heatmap', {
 </script>
 <template>
   <div class="card analysis-module-split">
-    <section class="analysis-calculation">
+    <CalculationPanel :has-result="!!figure">
       <h2>特征热图</h2>
       <p>每行一个特征；标准分只用于展示。分组均值可选择细胞等权或样本等权。</p>
       <PlotScope
@@ -272,7 +273,7 @@ useViewState('heatmap', {
       >
         读取已保存热图
       </button>
-    </section>
+    </CalculationPanel>
     <section class="analysis-visualization">
       <h3>图形</h3>
       <p v-if="figure && signature !== applied" role="status">

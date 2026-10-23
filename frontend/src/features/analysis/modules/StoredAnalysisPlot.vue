@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CalculationPanel from '../components/CalculationPanel.vue'
 import { computed, ref, watch } from 'vue'
 import { useAnalysisContext } from '../composables/useAnalysisContext'
 import { useViewState } from '../../../api/viewState'
@@ -60,7 +61,7 @@ useViewState(props.kind, { figure, reloaded })
 </script>
 <template>
   <div class="card analysis-module-split">
-    <section class="analysis-calculation">
+    <CalculationPanel :has-result="!!figure">
       <h2>{{ title }}</h2>
       <slot />
       <div class="actions">
@@ -79,7 +80,7 @@ useViewState(props.kind, { figure, reloaded })
       <p class="muted">
         编辑草稿不自动重算。主动保存保留只读图及完整导出表；相关输入改变后须重新计算。
       </p>
-    </section>
+    </CalculationPanel>
     <section class="analysis-visualization">
       <h3>图形与说明</h3>
       <p class="result-state" role="status">

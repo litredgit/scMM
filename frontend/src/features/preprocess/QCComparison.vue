@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { DataTable } from '../../api/types'
 const props = defineProps<{ before: DataTable; after: DataTable }>()
 const statistics = [
@@ -9,6 +9,8 @@ const statistics = [
   ['min', '最小值'],
   ['max', '最大值'],
 ] as const
+const showAll = ref(false)
+const visibleStatistics = computed(() => (showAll.value ? statistics : statistics.slice(0, 1)))
 const rows = computed(() => {
   const identity = (row: Record<string, unknown>) => JSON.stringify([row.source_path, row.metric])
   const after = new Map(props.after.rows.map((row) => [identity(row), row]))
@@ -31,6 +33,9 @@ function change(before: unknown, after: unknown) {
     按来源文件与指标逐项对照；检出特征数最多显示 1
     位小数，强度使用科学计数法。无候选细胞或无法估计时显示 —。
   </p>
+  <button class="preview" :aria-expanded="showAll" @click="showAll = !showAll">
+    {{ showAll ? '收起其余统计量' : '展开中位数、标准差与极值' }}
+  </button>
   <div class="data-table">
     <table aria-label="操作前后 QC 对比">
       <thead>
@@ -45,15 +50,15 @@ function change(before: unknown, after: unknown) {
       </thead>
       <tbody>
         <template v-for="(row, i) in rows" :key="i">
-          <tr v-for="([key, label], j) in statistics" :key="key">
-            <td v-if="j === 0" :rowspan="statistics.length">
+          <tr v-for="([key, label], j) in visibleStatistics" :key="key">
+            <td v-if="j === 0" :rowspan="visibleStatistics.length">
               {{ row.before.source_file
               }}<HelpTip
                 :text="String(row.before.source_path ?? row.before.source_file)"
                 label="完整路径"
               />
             </td>
-            <td v-if="j === 0" :rowspan="statistics.length">{{ row.before.metric }}</td>
+            <td v-if="j === 0" :rowspan="visibleStatistics.length">{{ row.before.metric }}</td>
             <td>{{ label }}</td>
             <td>{{ format(row.before[key], row.before.metric) }}</td>
             <td>{{ format(row.after?.[key], row.before.metric) }}</td>

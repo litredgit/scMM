@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CalculationPanel from '../../components/CalculationPanel.vue'
 import OperationFeedback from '../../../../components/OperationFeedback.vue'
 import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
@@ -9,7 +10,7 @@ const { network, legend, store, info, tab, figures, has, execute, loadWithPlot }
 </script>
 <template>
   <div class="card analysis-module-split">
-    <section class="analysis-calculation">
+    <CalculationPanel :has-result="!!figures.network_plot">
       <h2>特征相关网络</h2>
       <h3>输入与参数</h3>
       <div class="field-grid">
@@ -66,7 +67,7 @@ const { network, legend, store, info, tab, figures, has, execute, loadWithPlot }
         </button>
       </div>
       <OperationFeedback :labels="['相关网络', '绘制图形']" />
-    </section>
+    </CalculationPanel>
     <section class="analysis-visualization">
       <h3>图表与报告</h3>
       <PlotView

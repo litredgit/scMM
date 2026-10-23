@@ -460,10 +460,6 @@ useViewState('preprocess', {
           <summary>各样本细胞数</summary>
           <DataTableView :table="countTables.samples" />
         </details>
-        <details class="qc-details" open>
-          <summary>来源文件 QC 指标</summary>
-          <QCComparison v-if="qc" :before="qc.files" :after="impact.qc.files" />
-        </details>
       </template>
       <template v-else>
         <p class="muted">
@@ -486,6 +482,11 @@ useViewState('preprocess', {
           <p v-for="note in impact.qc.notes" :key="note" class="page-note">{{ note }}</p>
         </div>
       </div>
+      <template v-if="impact">
+        <details class="qc-details" open>
+          <summary>来源文件 QC 指标</summary>
+          <QCComparison v-if="qc" :before="qc.files" :after="impact.qc.files" /></details
+      ></template>
     </div>
     <details
       ref="historyPanel"

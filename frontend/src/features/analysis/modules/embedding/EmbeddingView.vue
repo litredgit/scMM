@@ -37,26 +37,6 @@ const scopeEdited = computed(() => {
 <template>
   <div class="embedding-view">
     <h3>图形与显示</h3>
-    <PlotScope
-      v-model="plotScope"
-      :observations="info?.observations ?? {}"
-      :disabled="store.busy"
-    />
-    <div class="field-grid">
-      <label
-        >显示维度<select v-model="projection.threeD">
-          <option :value="false">二维</option>
-          <option :value="true">三维</option>
-        </select></label
-      >
-      <label v-for="axis in projection.threeD ? ['x', 'y', 'z'] : ['x', 'y']" :key="axis"
-        >{{ axis.toUpperCase() }} 轴<input
-          v-model.number="projection[axis as 'x' | 'y' | 'z']"
-          type="number"
-          min="1"
-          :max="info?.embedding_dimensions?.[embedding] || 2"
-      /></label>
-    </div>
 
     <div class="field-grid">
       <label
@@ -119,6 +99,29 @@ const scopeEdited = computed(() => {
         更新嵌入图
       </button>
     </div>
+    <details class="display-settings">
+      <summary>高级显示 · 范围与坐标轴</summary>
+      <PlotScope
+        v-model="plotScope"
+        :observations="info?.observations ?? {}"
+        :disabled="store.busy"
+      />
+      <div class="field-grid">
+        <label
+          >显示维度<select v-model="projection.threeD">
+            <option :value="false">二维</option>
+            <option :value="true">三维</option>
+          </select></label
+        >
+        <label v-for="axis in projection.threeD ? ['x', 'y', 'z'] : ['x', 'y']" :key="axis"
+          >{{ axis.toUpperCase() }} 轴<input
+            v-model.number="projection[axis as 'x' | 'y' | 'z']"
+            type="number"
+            min="1"
+            :max="info?.embedding_dimensions?.[embedding] || 2"
+        /></label>
+      </div>
+    </details>
     <p v-if="scopeEdited" role="status">
       作图范围已编辑，点击“更新嵌入图”生效；当前图与下载仍使用上次成功的范围。
     </p>
@@ -132,7 +135,8 @@ const scopeEdited = computed(() => {
       :name="embedding"
       view-key="analysis.embedding_plot"
     />
-    <div class="embedding-variance">
+    <details class="embedding-variance">
+      <summary>主成分解释率</summary>
       <table v-if="info?.embedding_variance?.[embedding]?.length">
         <thead>
           <tr>
@@ -156,6 +160,6 @@ const scopeEdited = computed(() => {
           </tr>
         </tbody>
       </table>
-    </div>
+    </details>
   </div>
 </template>

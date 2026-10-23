@@ -32,6 +32,7 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
     '已恢复完整预处理起点。',
   )
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await page.getByRole('button', { name: '固定参数区', exact: true }).first().click()
   await page.getByRole('button', { name: '运行降维', exact: true }).click()
   await expect(page.getByLabel('查看嵌入', { exact: true })).toHaveValue('X_pca')
   await expect(page.locator('.js-plotly-plot').first()).toBeVisible()

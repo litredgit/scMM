@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CalculationPanel from '../components/CalculationPanel.vue'
 import { computed, ref, watch } from 'vue'
 import { useAnalysisContext } from '../composables/useAnalysisContext'
 import { useViewState } from '../../../api/viewState'
@@ -81,7 +82,7 @@ useViewState('feature_scatter', { figure })
 </script>
 <template>
   <div class="card analysis-module-split">
-    <section class="analysis-calculation">
+    <CalculationPanel :has-result="!!figure">
       <h2>双特征散点</h2>
       <PlotScope
         v-model="plotScope"
@@ -188,7 +189,7 @@ useViewState('feature_scatter', { figure })
       <p class="muted">
         编辑草稿不重画。图形和完整数据随主动保存保留；常量或非有限数值的处理见图形说明及导出表。
       </p>
-    </section>
+    </CalculationPanel>
     <section class="analysis-visualization">
       <h3>图形与说明</h3>
       <p v-if="edited">参数已编辑，点击“绘制双特征散点”更新图形。</p>

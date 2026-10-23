@@ -22,6 +22,8 @@ async function importAnalysis(page: Page, name: string, filename = 'analysis.h5a
   await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await expect(page.getByLabel('group_key', { exact: true }).first()).toBeAttached()
+  if (await page.getByRole('button', { name: '固定参数区', exact: true }).count())
+    await page.getByRole('button', { name: '固定参数区', exact: true }).first().click()
 }
 async function module(page: Page, name: string) {
   await page.getByRole('button', { name, exact: true }).click()
@@ -296,6 +298,7 @@ test('PCA axes, stable cell clicks, paper exports and complete heatmap data', as
   await page.getByLabel('n_components', { exact: true }).fill('4')
   await page.getByRole('button', { name: '运行降维', exact: true }).click()
   await expect(page.getByLabel('查看嵌入', { exact: true })).toHaveValue('X_pca')
+  await page.getByText('高级显示 · 范围与坐标轴', { exact: true }).first().click()
   await page
     .getByRole('combobox', { name: '显示维度', exact: true })
     .selectOption({ label: '三维' })
@@ -306,6 +309,7 @@ test('PCA axes, stable cell clicks, paper exports and complete heatmap data', as
   )
   await page.getByLabel('Z 轴', { exact: true }).fill('4')
   expect((await projected).ok()).toBe(true)
+  await page.getByText('主成分解释率', { exact: true }).first().click()
   await expect(page.getByRole('cell', { name: 'PC4', exact: true })).toBeVisible()
   await page
     .locator('.js-plotly-plot')

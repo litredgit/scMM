@@ -85,7 +85,7 @@ const chartHeight = computed(() => {
   if (['tic', 'eic', 'sum', 'single', 'cells'].includes(chartKind.value))
     return Math.max(320, Math.min(600, width / 2.2))
   if (['roc', 'pr', 'calibration'].includes(chartKind.value))
-    return Math.max(360, Math.min(820, width * 0.9))
+    return Math.max(360, Math.min(460, width * 0.9))
   if (chartKind.value === 'violin') return Math.max(380, Number(props.figure.layout.height) || 380)
   if (chartKind.value === 'shap') {
     const traces = props.figure.data as { y?: unknown[] }[]
@@ -94,7 +94,7 @@ const chartHeight = computed(() => {
       Math.min(1200, 140 + 28 * Math.max(0, ...traces.map((t) => t.y?.length ?? 0))),
     )
   }
-  return Math.max(360, Math.min(800, width * (chartKind.value === 'network' ? 0.9 : 0.7)))
+  return Math.max(360, Math.min(460, width * (chartKind.value === 'network' ? 0.9 : 0.7)))
 })
 const localPosition = ref(props.legend)
 const position = computed(() =>

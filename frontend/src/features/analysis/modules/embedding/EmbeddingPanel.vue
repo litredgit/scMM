@@ -1,13 +1,15 @@
 <script setup lang="ts">
+import CalculationPanel from '../../components/CalculationPanel.vue'
 import OperationFeedback from '../../../../components/OperationFeedback.vue'
 import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
 import EmbeddingView from './EmbeddingView.vue'
-const { reduction, usePca, store, info, tab, reduce, reductionConflict } = useAnalysisContext()
+const { reduction, usePca, store, info, tab, figures, reduce, reductionConflict } =
+  useAnalysisContext()
 </script>
 <template>
   <div class="card analysis-module-split">
-    <section class="analysis-calculation">
+    <CalculationPanel :has-result="!!figures.embedding">
       <h2>降维</h2>
       <h3>输入与参数</h3>
       <div class="field-grid">
@@ -142,7 +144,7 @@ const { reduction, usePca, store, info, tab, reduce, reductionConflict } = useAn
         运行降维
       </button>
       <OperationFeedback :labels="['降维', '绘制图形']" />
-    </section>
+    </CalculationPanel>
     <section class="analysis-visualization">
       <EmbeddingView v-if="tab === 'embedding'" panel="embedding" />
     </section>

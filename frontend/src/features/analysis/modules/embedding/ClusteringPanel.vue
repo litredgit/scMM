@@ -1,13 +1,14 @@
 <script setup lang="ts">
+import CalculationPanel from '../../components/CalculationPanel.vue'
 import OperationFeedback from '../../../../components/OperationFeedback.vue'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
 import { displayName } from '../../../../help/labels'
 import EmbeddingView from './EmbeddingView.vue'
-const { cluster, info, tab, store, execute, clusterConflict } = useAnalysisContext()
+const { cluster, info, tab, store, figures, execute, clusterConflict } = useAnalysisContext()
 </script>
 <template>
   <div class="card analysis-module-split">
-    <section class="analysis-calculation">
+    <CalculationPanel :has-result="!!figures.embedding">
       <h2>聚类</h2>
       <div class="field-grid">
         <label
@@ -202,7 +203,7 @@ const { cluster, info, tab, store, execute, clusterConflict } = useAnalysisConte
         迭代次数为 -1 或正整数。已有聚类列不能覆盖。
       </p>
       <OperationFeedback :labels="['聚类', '绘制图形']" />
-    </section>
+    </CalculationPanel>
     <section class="analysis-visualization">
       <EmbeddingView v-if="tab === 'clustering'" panel="clustering" />
     </section>

@@ -10,6 +10,7 @@ export function useAnalysis() {
   const store = useWorkspace(),
     info = ref<AnalysisInfo>()
   const tab = ref('embedding')
+  const parametersPinned = ref(false)
   const active = ref(true)
   onActivated(() => {
     active.value = true
@@ -575,6 +576,7 @@ export function useAnalysis() {
   useViewState('analysis', {
     plotScope,
     tab,
+    parametersPinned,
     figures,
     tables,
     modelReport,
@@ -589,6 +591,7 @@ export function useAnalysis() {
     legend,
   })
   return {
+    parametersPinned,
     invalidated,
     recovery,
     retryPresentation,
