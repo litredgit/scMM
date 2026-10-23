@@ -90,6 +90,7 @@ def test_app_uses_explicit_local_retention_database(resources):
     app = create_app(
         [StorageRoot("Raw", folders["raw"])],
         project_root=folders["project"],
+        static_root=None,  # This API/config test also runs before any frontend build.
         auth_store=AuthStore(values["auth_db"]),
         server_config=cfg,
     )
