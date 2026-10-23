@@ -1,7 +1,8 @@
-import { ref, computed, watch, onMounted, nextTick, type Ref } from 'vue'
+import { ref, computed, watch, onMounted, onDeactivated, nextTick, type Ref } from 'vue'
 import { useWorkspace } from '../../../stores/workspace'
 import { request } from '../../../api/client'
 import type { AnalysisTransport } from '../../analysis/types'
+import { useReadScope } from '../../../api/readScope'
 
 type Binding = {
   reset(): void
@@ -42,6 +43,15 @@ export function useRawParameters(sample: Ref<string>) {
   const preferences = ref<{ presets: Record<string, number>; selected: string }>(),
     preset = ref(''),
     presetText = ref('')
+  const preferencesError = ref('')
+  const preferencesLoading = ref(false)
+  const preferenceScope = useReadScope(
+    () => store.current?.workspace_id,
+    () => {
+      if (!preferences.value && !store.busy) void loadPreferences()
+    },
+  )
+  let preferenceRead: { accept: () => boolean; promise: Promise<void> } | undefined
   const strategy = ref('shared'),
     mergePpm = ref(10),
     autoRanges = ref(true)
@@ -120,14 +130,36 @@ export function useRawParameters(sample: Ref<string>) {
     }
     binding?.assigned(parameters.value)
   }
-  async function loadParameters(api: AnalysisTransport = store) {
+  let parameterLoaded = false
+  let parameterDraft = parameterSignature(parameters.value)
+  const parameterReads = useReadScope(
+    () => [store.current?.workspace_id, store.project?.path, sample.value],
+    () => {
+      if (!parameterLoaded) void readParameters()
+    },
+  )
+  async function readParameters(api: AnalysisTransport = store) {
     const token = ++parameterGeneration
+    const ticket = parameterReads.begin()
+    const accept = () => ticket() && token === parameterGeneration
+    if (!store.project || !accept()) return
+    const draft = parameterDraft
+    const path = `/parameters${sample.value ? `?sample_id=${sample.value}` : ''}`
+    const data =
+      api === store
+        ? await store.read<Record<string, unknown>>(path, undefined, accept)
+        : await api.read<Record<string, unknown>>(path)
+    if (!data || !accept()) return
+    effectiveParameters.value = { ...data }
+    parameterLoaded = true
+    if (draft === parameterSignature(parameters.value)) assignParams(data)
+  }
+  async function loadParameters(api: AnalysisTransport = store) {
     binding?.reset()
-    if (!store.project) return
-    const data = await api.read<Record<string, unknown>>(
-      `/parameters${sample.value ? `?sample_id=${sample.value}` : ''}`,
-    )
-    if (data && token === parameterGeneration) assignParams(data)
+    parameterLoaded = false
+    parameterDraft = parameterSignature(parameters.value)
+    effectiveParameters.value = {}
+    await readParameters(api)
   }
   async function apply() {
     await store.analysisTransaction(async (api) => {
@@ -147,7 +179,10 @@ export function useRawParameters(sample: Ref<string>) {
         const current = await api.read<Record<string, unknown>>(
           `/parameters${sample.value ? `?sample_id=${sample.value}` : ''}`,
         )
-        if (current) effectiveParameters.value = current
+        if (current) {
+          effectiveParameters.value = current
+          parameterLoaded = true
+        }
         edited()
         store.notice = '提取参数已应用；旧提取结果不会自动更新。'
       } catch (cause) {
@@ -162,11 +197,49 @@ export function useRawParameters(sample: Ref<string>) {
       await loadParameters(api)
     })
   }
-  onMounted(async () => {
-    preferences.value = await request('/preferences')
-    preset.value = String(store.project?.manifest.cell_type ?? preferences.value?.selected ?? '')
-    presetText.value = JSON.stringify(preferences.value?.presets, null, 2)
+  async function loadPreferences() {
+    if (preferenceRead?.accept()) return preferenceRead.promise
+    const accept = preferenceScope.begin()
+    if (!accept()) return
+    preferencesLoading.value = true
+    preferencesError.value = ''
+    const promise = (async () => {
+      try {
+        const value = await store.readResource<NonNullable<typeof preferences.value>>(
+          '/preferences',
+          {
+            accept,
+            onError(cause) {
+              preferencesError.value = `读取参考预设失败：${cause instanceof Error ? cause.message : String(cause)}`
+            },
+          },
+        )
+        if (!accept() || !value) return
+        preferences.value = value
+        if (!preset.value)
+          preset.value = String(store.project?.manifest.cell_type ?? value.selected ?? '')
+        if (!presetText.value) presetText.value = JSON.stringify(value.presets, null, 2)
+      } finally {
+        if (accept()) preferencesLoading.value = false
+      }
+    })()
+    preferenceRead = { accept, promise }
+    try {
+      await promise
+    } finally {
+      if (preferenceRead?.promise === promise) preferenceRead = undefined
+    }
+  }
+  onMounted(() => void loadPreferences())
+  onDeactivated(() => {
+    preferencesLoading.value = false
   })
+  watch(
+    () => store.busy,
+    (busy) => {
+      if (!busy && !preferences.value && preferenceScope.isActive()) void loadPreferences()
+    },
+  )
   function usePreset() {
     const mass = preferences.value?.presets[preset.value]
     if (mass) {
@@ -177,6 +250,9 @@ export function useRawParameters(sample: Ref<string>) {
   async function savePresets() {
     await store.run(
       async () => {
+        preferenceScope.invalidate()
+        preferencesLoading.value = false
+        preferencesError.value = ''
         preferences.value = await request('/preferences', {
           method: 'PUT',
           body: { presets: JSON.parse(presetText.value), selected: preset.value },
@@ -197,6 +273,9 @@ export function useRawParameters(sample: Ref<string>) {
         strategy.value = store.project?.manifest.feature_strategy ?? 'shared'
         mergePpm.value = Number(store.project?.manifest.feature_merge_ppm ?? 10)
         autoRanges.value = Boolean(store.project?.manifest.auto_ranges ?? true)
+        preset.value = String(
+          store.project?.manifest.cell_type ?? preferences.value?.selected ?? '',
+        )
         void loadParameters()
       },
       { immediate: true },
@@ -211,6 +290,9 @@ export function useRawParameters(sample: Ref<string>) {
     differsFromCurrent,
     unapplied,
     preferences,
+    preferencesError,
+    preferencesLoading,
+    loadPreferences,
     preset,
     presetText,
     strategy,

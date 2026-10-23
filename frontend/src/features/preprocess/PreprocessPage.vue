@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useViewState } from '../../api/viewState'
+import { useReadScope } from '../../api/readScope'
 import { displayName } from '../../help/labels'
 import { ref, computed, watch, nextTick } from 'vue'
 import { normalizationHelp } from '../../help/fields'
@@ -65,18 +66,30 @@ const signature = computed(() =>
   ]),
 )
 watch(signature, () => (impact.value = undefined))
+const reads = useReadScope(
+  () => [
+    store.current?.workspace_id,
+    store.project?.path,
+    store.project?.dataset?.id,
+    store.project?.dataset?.revision,
+  ],
+  () => void refresh(),
+)
 let generation = 0
 async function refresh() {
   const token = ++generation
+  const ticket = reads.begin()
+  const accept = () => ticket() && token === generation
+  if (!accept()) return
   qc.value = undefined
   info.value = undefined
   impact.value = undefined
   if (!store.project?.dataset) return
   const values = await Promise.all([
-    store.read<QC>('/analysis/qc'),
-    store.read<AnalysisInfo>('/analysis'),
+    store.read<QC>('/analysis/qc', undefined, accept),
+    store.read<AnalysisInfo>('/analysis', undefined, accept),
   ])
-  if (token !== generation) return
+  if (!accept()) return
   qc.value = values[0]
   info.value = values[1]
   layer.value = info.value?.layers[0] ?? ''

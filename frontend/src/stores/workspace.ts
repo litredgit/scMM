@@ -38,6 +38,7 @@ export const useWorkspace = defineStore('workspace', () => {
   }
   const task = ref('暂无活动任务')
   const batches = ref<Batch[] | null>(null)
+  const resourceReads = new Map<string, Promise<unknown>>()
   let batchesRequest: { key: string; promise: Promise<Batch[] | undefined> } | undefined
   async function refreshBatches() {
     if (!current.value || !project.value) return
@@ -358,11 +359,12 @@ export const useWorkspace = defineStore('workspace', () => {
   ): Promise<T | undefined> {
     if (!current.value) return
     const snapshot = current.value
-    const feedback = operationGeneration
+    const feedback = busy.value ? undefined : operationGeneration
     const valid = () =>
       accept() &&
       current.value?.workspace_id === snapshot.workspace_id &&
       current.value?.revision === snapshot.revision
+    if (!valid()) return
     try {
       const value = await request<T>(`/workspace${path}`, {
         workspace: snapshot.workspace_id,
@@ -372,6 +374,40 @@ export const useWorkspace = defineStore('workspace', () => {
       if (valid()) return value
     } catch (cause) {
       if (valid() && feedback === operationGeneration && !busy.value && !error.value)
+        error.value = cause instanceof Error ? cause.message : String(cause)
+    }
+  }
+
+  // These resources have no scientific workspace payload. Share concurrent network
+  // reads, then give each caller its own copy and its own publication condition.
+  async function readResource<T>(
+    path: string,
+    options: { accept?: () => boolean; onError?: (cause: unknown) => void } = {},
+  ): Promise<T | undefined> {
+    const session = sessionVersion()
+    const workspace = current.value?.workspace_id
+    const feedback = busy.value ? undefined : operationGeneration
+    const valid = () =>
+      sessionVersion() === session &&
+      current.value?.workspace_id === workspace &&
+      (options.accept?.() ?? true)
+    if (!valid()) return
+    const key = JSON.stringify([session, operationGeneration, path])
+    let pending = resourceReads.get(key)
+    if (!pending) {
+      const loading = request<unknown>(path).finally(() => {
+        if (resourceReads.get(key) === loading) resourceReads.delete(key)
+      })
+      pending = loading
+      resourceReads.set(key, loading)
+    }
+    try {
+      const value = await pending
+      if (valid()) return structuredClone(value) as T
+    } catch (cause) {
+      if (!valid()) return
+      if (options.onError) options.onError(cause)
+      else if (feedback === operationGeneration && !busy.value && !error.value)
         error.value = cause instanceof Error ? cause.message : String(cause)
     }
   }
@@ -412,18 +448,28 @@ export const useWorkspace = defineStore('workspace', () => {
   async function inspect<T>(
     path: string,
     body: Record<string, unknown> = {},
+    accept: () => boolean = () => true,
   ): Promise<T | undefined> {
     if (!current.value) return
+    if (!accept()) return
     const original = current.value
     return operationValue(
       await run(
         async (scope) => {
-          const value = await request<T>(`/workspace${path}`, {
-            workspace: original.workspace_id,
-            method: 'POST',
-            body: { ...body, revision: original.revision },
-          })
+          let value: T
+          try {
+            value = await request<T>(`/workspace${path}`, {
+              workspace: original.workspace_id,
+              method: 'POST',
+              body: { ...body, revision: original.revision },
+            })
+          } catch (cause) {
+            if (!accept())
+              throw new ApiError('查询输入已改变，旧请求已丢弃。', 'operation_stale', 409)
+            throw cause
+          }
           if (
+            !accept() ||
             !scope.isCurrent() ||
             current.value?.workspace_id !== original.workspace_id ||
             current.value?.revision !== original.revision
@@ -500,6 +546,7 @@ export const useWorkspace = defineStore('workspace', () => {
     release,
     reset,
     read,
+    readResource,
     command,
     inspect,
     download,

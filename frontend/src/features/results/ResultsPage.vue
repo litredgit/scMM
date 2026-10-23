@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { displayName } from '../../help/labels'
-import { ref, watch, computed, onActivated } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import type { AnalysisInfo, Figure } from '../../api/types'
 import { resultDownloads } from '../analysis/results'
 import SavedItems from '../../components/SavedItems.vue'
 import PlotView from '../../components/PlotView.vue'
+import { useReadScope } from '../../api/readScope'
 const store = useWorkspace(),
   info = ref<AnalysisInfo>()
 const root = ref('项目结果'),
@@ -21,6 +22,21 @@ watch(root, (value) => {
 })
 const figureKey = ref(''),
   figure = ref<Figure>()
+const context = () => [
+  store.current?.workspace_id,
+  store.project?.path,
+  store.project?.dataset?.id,
+  store.project?.dataset?.revision,
+]
+const infoScope = useReadScope(context, () => void refresh())
+const figureScope = useReadScope(() => [context(), figureKey.value])
+watch(
+  figureKey,
+  () => {
+    figure.value = undefined
+  },
+  { flush: 'sync' },
+)
 const artifactRefs = computed(
   () => store.project?.manifest.artifacts as Record<string, string> | undefined,
 )
@@ -46,9 +62,9 @@ const available = computed(() => [
     .map((n) => ({ value: n, label: `${n} ${n === 'supervised' ? 'JSON' : 'CSV'}` })),
   { value: 'snapshot', label: '上次保存快照 H5AD' },
 ])
-let generation = 0
 async function refresh() {
-  const token = ++generation
+  const accept = infoScope.begin()
+  figureScope.invalidate()
   info.value = undefined
   figure.value = undefined
   exported.value = ''
@@ -68,8 +84,8 @@ async function refresh() {
     .replace(/[-: ]/g, '')
   filename.value = `${store.project.manifest.name.replace(/[^\p{L}\p{N}_-]/gu, '_')}_${time}.h5ad`
   if (store.project.dataset) {
-    const value = await store.read<AnalysisInfo>('/analysis')
-    if (token !== generation) return
+    const value = await store.read<AnalysisInfo>('/analysis', undefined, accept)
+    if (!accept()) return
     info.value = value
     embedding.value = value?.embeddings[0] ?? ''
     figureKey.value = value?.figures[0] ?? ''
@@ -85,13 +101,17 @@ watch(
   { immediate: true },
 )
 async function showFigure() {
-  if (figureKey.value)
-    figure.value = await store.read<Figure>(
-      `/analysis/figures/${encodeURIComponent(figureKey.value)}`,
-    )
+  if (!figureKey.value) return
+  const key = figureKey.value
+  const accept = figureScope.begin()
+  const value = await store.read<Figure>(
+    `/analysis/figures/${encodeURIComponent(key)}`,
+    undefined,
+    accept,
+  )
+  if (accept() && value) figure.value = value
 }
 watch(kind, () => (downloadName.value = defaults[kind.value] ?? 'result.csv'), { immediate: true })
-onActivated(() => void refresh())
 async function exportH5ad() {
   const result = await store.command<{ path: string }>('/results/export', {
     root: root.value,

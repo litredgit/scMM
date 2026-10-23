@@ -1,5 +1,6 @@
-import { ref, computed, watch, onActivated } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { request } from '../../../api/client'
+import { useReadScope } from '../../../api/readScope'
 import { useViewState } from '../../../api/viewState'
 import type { Figure, DataTable } from '../../../api/types'
 import { useAnalysisContext } from './useAnalysisContext'
@@ -33,6 +34,10 @@ export function useTimeAnalysis() {
   let generation = 0
   const context = () =>
     JSON.stringify([store.current?.workspace_id, store.project?.path, store.project?.dataset?.id])
+  const infoReads = useReadScope(
+    () => [context(), store.project?.dataset?.revision, search.value],
+    () => void load(),
+  )
   const selected = computed(() =>
     info.value?.results.find((row) => row.key === form.selected_result),
   )
@@ -43,13 +48,18 @@ export function useTimeAnalysis() {
     if (!store.current || !store.project?.dataset) return
     const version = `${context()}|${store.project.dataset.revision}`
     const token = ++generation
+    const ticket = infoReads.begin()
+    const accept = () =>
+      ticket() &&
+      token === generation &&
+      version === `${context()}|${store.project?.dataset?.revision}`
+    if (!accept()) return
     try {
       const value = await request<TimeInfo>(
         `/workspace/analysis/time?query=${encodeURIComponent(search.value)}`,
         { workspace: store.current.workspace_id },
       )
-      if (token !== generation || version !== `${context()}|${store.project?.dataset?.revision}`)
-        return
+      if (!accept()) return
       info.value = value
       readError.value = ''
       if (!value.results.some((row) => row.key === form.selected_result && row.valid)) {
@@ -57,8 +67,7 @@ export function useTimeAnalysis() {
         figure.value = undefined
       }
     } catch (cause) {
-      if (token === generation && version === `${context()}|${store.project?.dataset?.revision}`)
-        readError.value = cause instanceof Error ? cause.message : String(cause)
+      if (accept()) readError.value = cause instanceof Error ? cause.message : String(cause)
     }
   }
   watch(
@@ -102,7 +111,6 @@ export function useTimeAnalysis() {
       else form.unit = ''
     },
   )
-  onActivated(() => void load())
   function options() {
     if (form.mode === 'palantir')
       return {

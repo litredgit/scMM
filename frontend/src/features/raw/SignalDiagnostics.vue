@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { restoringViews, useViewState } from '../../api/viewState'
 import { useWorkspace } from '../../stores/workspace'
+import { useReadScope } from '../../api/readScope'
 import type { Figure, DataTable } from '../../api/types'
 import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
@@ -27,6 +28,18 @@ const options = ref({ ...initialOptions })
 const result = ref<{ figure: Figure; table: DataTable }>()
 const identity = computed(() =>
   JSON.stringify([store.current?.workspace_id, store.project?.path, props.sample, props.opened]),
+)
+let savedRequest: { identity: string; draft: string } | undefined
+const savedScope = useReadScope(
+  () => identity.value,
+  () => {
+    if (
+      !result.value &&
+      savedRequest?.identity === identity.value &&
+      savedRequest?.draft === JSON.stringify(options.value)
+    )
+      void loadSaved()
+  },
 )
 let generation = 0
 let hydrating = false
@@ -92,38 +105,38 @@ async function diagnose() {
     return
   }
   const value = await store.command<{ figure: Figure; table: DataTable }>('/raw/diagnostic', body)
-  if (capture === identity.value && token === generation) result.value = value
+  if (value && capture === identity.value && token === generation) result.value = value
 }
-watch(
-  () => JSON.stringify([store.project?.path, props.sample]),
-  async () => {
-    if (!store.project || !props.sample || restoringViews) return
-    const capture = identity.value,
-      token = generation
-    const saved = await store.read<{
-      figure: Figure
-      table: DataTable
-      request: Record<string, unknown>
-    }>(`/raw/diagnostic?sample_id=${encodeURIComponent(props.sample)}`)
-    if (!saved || capture !== identity.value || token !== generation) return
-    const v = saved.request
-    hydrating = true
-    try {
-      options.value = {
-        ...initialOptions,
-        ...v,
-        references: (v.references as number[]).join(','),
-        rt_min: (v.rt_range as number[] | null)?.[0]?.toString() ?? '',
-        rt_max: (v.rt_range as number[] | null)?.[1]?.toString() ?? '',
-      } as typeof initialOptions
-      await nextTick()
-      if (capture === identity.value) result.value = saved
-    } finally {
-      hydrating = false
-    }
-  },
-  { immediate: true },
-)
+async function loadSaved() {
+  if (!store.project || !props.sample || restoringViews) return
+  savedRequest = { identity: identity.value, draft: JSON.stringify(options.value) }
+  const capture = identity.value,
+    token = generation
+  const ticket = savedScope.begin()
+  const accept = () => ticket() && capture === identity.value && token === generation
+  const saved = await store.read<{
+    figure: Figure
+    table: DataTable
+    request: Record<string, unknown>
+  }>(`/raw/diagnostic?sample_id=${encodeURIComponent(props.sample)}`, undefined, accept)
+  if (!saved || !accept()) return
+  const v = saved.request
+  hydrating = true
+  try {
+    options.value = {
+      ...initialOptions,
+      ...v,
+      references: (v.references as number[]).join(','),
+      rt_min: (v.rt_range as number[] | null)?.[0]?.toString() ?? '',
+      rt_max: (v.rt_range as number[] | null)?.[1]?.toString() ?? '',
+    } as typeof initialOptions
+    await nextTick()
+    if (ticket() && capture === identity.value) result.value = saved
+  } finally {
+    hydrating = false
+  }
+}
+watch(identity, () => void loadSaved(), { immediate: true })
 useViewState('rawDiagnostic', { options, result })
 </script>
 <template>

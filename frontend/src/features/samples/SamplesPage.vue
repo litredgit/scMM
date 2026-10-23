@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import FileBrowser from '../../components/FileBrowser.vue'
 import ProcessedMergePanel from './ProcessedMergePanel.vue'
 import { request } from '../../api/client'
+import { useReadScope } from '../../api/readScope'
 import type { Mapping, Sample } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
 
@@ -38,10 +39,19 @@ const visibleSamples = computed(() =>
     ),
   ),
 )
+const pageContext = () => [
+  store.current?.workspace_id,
+  store.project?.manifest.id,
+  store.current?.revision,
+]
+const mappingReads = useReadScope(pageContext, () => void loadMapping())
 let mappingGeneration = 0
 
 async function loadMapping(sourceKey?: string) {
   const ticket = ++mappingGeneration
+  const owned = mappingReads.begin()
+  const accept = () => owned() && ticket === mappingGeneration
+  if (!accept()) return
   if (!store.current || !store.project?.dataset) {
     mapping.value = null
     mappingBusy.value = false
@@ -57,12 +67,11 @@ async function loadMapping(sourceKey?: string) {
       `/workspace/samples/mapping${sourceKey ? `?${new URLSearchParams({ source_key: sourceKey })}` : ''}`,
       { workspace },
     )
-    if (ticket === mappingGeneration && revision === store.current?.revision) mapping.value = result
+    if (accept() && revision === store.current?.revision) mapping.value = result
   } catch (cause) {
-    if (ticket === mappingGeneration)
-      mappingError.value = cause instanceof Error ? cause.message : String(cause)
+    if (accept()) mappingError.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
-    if (ticket === mappingGeneration) mappingBusy.value = false
+    if (accept()) mappingBusy.value = false
   }
 }
 watch(
@@ -113,14 +122,19 @@ watch(
     inspectedPath.value = ''
   },
 )
+const inspectionReads = useReadScope(() => [pageContext(), fileRoot.value, chosen.value[0]])
 async function inspect() {
   const path = chosen.value[0]
   if (!path) return
+  const accept = inspectionReads.begin()
   const source = JSON.stringify([fileRoot.value, path, store.project?.manifest.id])
   const value = await store.read<NonNullable<typeof inspected.value>>(
     `/dataset/inspect?${new URLSearchParams({ root: fileRoot.value, path })}`,
+    undefined,
+    accept,
   )
   if (
+    accept() &&
     source === JSON.stringify([fileRoot.value, chosen.value[0], store.project?.manifest.id]) &&
     value
   ) {

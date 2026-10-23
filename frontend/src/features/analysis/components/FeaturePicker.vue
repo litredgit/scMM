@@ -2,6 +2,7 @@
 import { ref, watch, computed } from 'vue'
 import { useWorkspace } from '../../../stores/workspace'
 import { useViewState } from '../../../api/viewState'
+import { useReadScope } from '../../../api/readScope'
 const selected = defineModel<string[]>({ required: true })
 const store = useWorkspace()
 const query = ref(''),
@@ -21,9 +22,16 @@ const context = computed(() =>
     store.project?.dataset?.revision,
   ]),
 )
+const reads = useReadScope(
+  () => [context.value, query.value, sort.value, descending.value, offset.value],
+  () => void load(),
+)
 async function load() {
   const token = ++generation,
     identity = context.value
+  const ticket = reads.begin()
+  const accept = () => ticket() && token === generation && identity === context.value
+  if (!accept()) return
   loading.value = true
   try {
     const params = new URLSearchParams({
@@ -35,14 +43,16 @@ async function load() {
     })
     const result = await store.read<{ rows: typeof rows.value; total: number }>(
       `/analysis/features?${params}`,
+      undefined,
+      accept,
     )
-    if (result && token === generation && identity === context.value) {
+    if (result && accept()) {
       rows.value = result.rows
       total.value = result.total
       for (const row of result.rows) labels.value[row.value] = row.label
     }
   } finally {
-    if (token === generation) loading.value = false
+    if (accept()) loading.value = false
   }
 }
 watch(

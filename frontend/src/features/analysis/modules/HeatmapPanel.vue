@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { displayName } from '../../../help/labels'
 import { useViewState } from '../../../api/viewState'
+import { useReadScope } from '../../../api/readScope'
 import { ref, computed, watch } from 'vue'
 import PlotScope, { type Scope } from '../components/PlotScope.vue'
 import { useAnalysisContext } from '../composables/useAnalysisContext'
@@ -37,15 +38,29 @@ const features = ref(''),
   columns = ref(false),
   layer = ref<string | null>(null),
   figure = ref<Figure>()
+const featureReads = useReadScope(() => [
+  store.current?.workspace_id,
+  store.project?.dataset?.id,
+  store.project?.dataset?.revision,
+  features.value,
+])
 async function useAnnotated() {
-  const value = await store.read<{ features: string[] }>('/analysis/annotated-features')
-  if (value) features.value = value.features.join('\n')
+  const accept = featureReads.begin()
+  const value = await store.read<{ features: string[] }>(
+    '/analysis/annotated-features',
+    undefined,
+    accept,
+  )
+  if (accept() && value) features.value = value.features.join('\n')
 }
 async function useMarkers() {
+  const accept = featureReads.begin()
   const result = await store.read<{ table: { rows: Record<string, unknown>[] } }>(
     '/analysis/results/markers?limit=1000',
+    undefined,
+    accept,
   )
-  if (result)
+  if (accept() && result)
     features.value = [
       ...new Set(
         result.table.rows

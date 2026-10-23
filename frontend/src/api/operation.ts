@@ -70,6 +70,7 @@ export function operationDetails(
   if (path.endsWith('/collect')) return { label: '接收计算结果', phase: 'collecting' }
   if (path === '/extraction/review')
     return { label: body.compare ? '比较提取 QC' : '建立当前数据集', phase: 'collecting' }
+  if (path === '/extraction/signal') return { label: '读取提取信号', phase: 'reading' }
   if (path === '/extraction/start') return { label: '启动后台提取', phase: 'submitting' }
   if (path === '/extraction/stop') return { label: '停止后续样本', phase: 'submitting' }
   if (path === '/raw/preview') return { label: '启动细胞预览', phase: 'submitting' }

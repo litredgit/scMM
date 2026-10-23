@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useViewState } from '../../api/viewState'
+import { useReadScope } from '../../api/readScope'
 import PlotView from '../../components/PlotView.vue'
 import type { Figure } from '../../api/types'
 import { computed, reactive, ref, watch } from 'vue'
@@ -158,15 +159,26 @@ const featureIndex = computed(
 const validVersion = computed(
   () => info.value?.versions.find((v) => v.id === version.value)?.valid ?? false,
 )
+const infoReads = useReadScope(
+  () => [
+    store.current?.workspace_id,
+    store.project?.path,
+    store.project?.dataset?.id,
+    store.project?.dataset?.revision,
+  ],
+  () => void refresh(),
+)
 let generation = 0
 let queryGeneration = 0
 let restoredVersion = ''
 
 async function refresh(reset = false) {
   const token = ++generation
+  const ticket = infoReads.begin()
+  const accept = () => ticket() && token === generation
   const workspace = store.current?.workspace_id
-  const value = await store.read<LipidInfo>('/lipids')
-  if (!value || token !== generation || workspace !== store.current?.workspace_id) return
+  const value = await store.read<LipidInfo>('/lipids', undefined, accept)
+  if (!value || !accept() || workspace !== store.current?.workspace_id) return
   info.value = value
   if (reset) {
     version.value = value.active

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onActivated, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import SavedItems from '../../components/SavedItems.vue'
 import { useRouter } from 'vue-router'
-import { request } from '../../api/client'
+import { useReadScope } from '../../api/readScope'
 import type { SavedProject } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
 
@@ -17,17 +17,22 @@ const filtered = computed(() =>
     item.name.toLocaleLowerCase().includes(search.value.toLocaleLowerCase()),
   ),
 )
+const listScope = useReadScope(
+  () => store.current?.workspace_id,
+  () => void load(),
+)
 async function load() {
+  const accept = listScope.begin()
+  if (!accept()) return
   loading.value = true
   try {
-    projects.value = await request<SavedProject[]>('/projects')
-  } catch (cause) {
-    store.error = cause instanceof Error ? cause.message : String(cause)
+    const value = await store.readResource<SavedProject[]>('/projects', { accept })
+    if (accept() && value) projects.value = value
   } finally {
-    loading.value = false
+    if (accept()) loading.value = false
   }
 }
-onActivated(load)
+onMounted(load)
 async function create() {
   const result = await store.mutate(
     '/project',

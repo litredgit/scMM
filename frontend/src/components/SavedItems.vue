@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, onActivated } from 'vue'
-import { request } from '../api/client'
+import { ref, watch } from 'vue'
+import { useReadScope } from '../api/readScope'
 import { useWorkspace } from '../stores/workspace'
 import { useAuth } from '../stores/auth'
 import FileBrowser from './FileBrowser.vue'
@@ -80,6 +80,24 @@ type RetentionPolicyReview = {
   authorization: string
   advice: RetentionPlan
 }
+const listScope = useReadScope(
+  () => store.current?.workspace_id,
+  () => void refresh(),
+)
+const policyScope = useReadScope(() => [store.current?.workspace_id, selected.value])
+const planScope = useReadScope(() => [
+  store.current?.workspace_id,
+  selected.value,
+  root.value,
+  path.value,
+])
+const retentionScope = useReadScope(() => [
+  store.current?.workspace_id,
+  selected.value,
+  minAgeDays.value,
+  keepLatest.value,
+  intervalMinutes.value,
+])
 const policyReview = ref<RetentionPolicyReview>()
 type CleanupExecutionPlan = {
   token: string
@@ -114,13 +132,20 @@ async function loadPolicy() {
   if (!auth.admin || !selected.value || !store.current) return
   const project = selected.value
   const generation = ++policyStatusGeneration
+  const ticket = policyScope.begin()
+  const accept = () => ticket() && generation === policyStatusGeneration
   const workspace = store.current.workspace_id
-  const value = await store.read<PolicyStatus>('/saved/retention-policy/status', {
-    revision: store.current.revision,
-    root: '项目结果',
-    path: project,
-  })
+  const value = await store.read<PolicyStatus>(
+    '/saved/retention-policy/status',
+    {
+      revision: store.current.revision,
+      root: '项目结果',
+      path: project,
+    },
+    accept,
+  )
   if (
+    accept() &&
     generation === policyStatusGeneration &&
     selected.value === project &&
     store.current?.workspace_id === workspace
@@ -129,15 +154,21 @@ async function loadPolicy() {
 }
 async function reviewPolicy() {
   const generation = ++retentionGeneration
+  const ticket = retentionScope.begin()
+  const accept = () => ticket() && generation === retentionGeneration
   policyReview.value = undefined
-  const value = await store.inspect<RetentionPolicyReview>('/saved/retention-policy/review', {
-    root: '项目结果',
-    path: selected.value,
-    min_age_days: minAgeDays.value === '' ? null : minAgeDays.value,
-    keep_latest: keepLatest.value === '' ? null : keepLatest.value,
-    interval_minutes: intervalMinutes.value,
-  })
-  if (generation === retentionGeneration) {
+  const value = await store.inspect<RetentionPolicyReview>(
+    '/saved/retention-policy/review',
+    {
+      root: '项目结果',
+      path: selected.value,
+      min_age_days: minAgeDays.value === '' ? null : minAgeDays.value,
+      keep_latest: keepLatest.value === '' ? null : keepLatest.value,
+      interval_minutes: intervalMinutes.value,
+    },
+    accept,
+  )
+  if (accept()) {
     policyReview.value = value
     retention.value = value?.advice
     cleanupPlan.value = undefined
@@ -168,14 +199,20 @@ async function disablePolicy() {
 }
 async function prepareCleanup() {
   const generation = ++retentionGeneration
+  const ticket = retentionScope.begin()
+  const accept = () => ticket() && generation === retentionGeneration
   cleanupPlan.value = undefined
-  const value = await store.inspect<CleanupExecutionPlan>('/saved/retention-plan', {
-    root: '项目结果',
-    path: selected.value,
-    min_age_days: minAgeDays.value === '' ? null : minAgeDays.value,
-    keep_latest: keepLatest.value === '' ? null : keepLatest.value,
-  })
-  if (generation === retentionGeneration) cleanupPlan.value = value
+  const value = await store.inspect<CleanupExecutionPlan>(
+    '/saved/retention-plan',
+    {
+      root: '项目结果',
+      path: selected.value,
+      min_age_days: minAgeDays.value === '' ? null : minAgeDays.value,
+      keep_latest: keepLatest.value === '' ? null : keepLatest.value,
+    },
+    accept,
+  )
+  if (accept()) cleanupPlan.value = value
 }
 async function executeCleanup() {
   if (!cleanupPlan.value) return
@@ -193,17 +230,24 @@ async function executeCleanup() {
 }
 async function inspectRetention() {
   const generation = ++retentionGeneration
+  const ticket = retentionScope.begin()
+  const accept = () => ticket() && generation === retentionGeneration
   const project = selected.value
   const workspace = store.current?.workspace_id
   retention.value = undefined
   cleanupPlan.value = undefined
-  const value = await store.inspect<RetentionPlan>('/saved/retention', {
-    root: '项目结果',
-    path: project,
-    min_age_days: minAgeDays.value === '' ? null : minAgeDays.value,
-    keep_latest: keepLatest.value === '' ? null : keepLatest.value,
-  })
+  const value = await store.inspect<RetentionPlan>(
+    '/saved/retention',
+    {
+      root: '项目结果',
+      path: project,
+      min_age_days: minAgeDays.value === '' ? null : minAgeDays.value,
+      keep_latest: keepLatest.value === '' ? null : keepLatest.value,
+    },
+    accept,
+  )
   if (
+    accept() &&
     generation === retentionGeneration &&
     project === selected.value &&
     workspace === store.current?.workspace_id
@@ -221,15 +265,13 @@ function downloadRetention() {
   link.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
-onActivated(() => void refresh())
 async function refresh() {
-  try {
-    projects.value = await request('/projects')
-  } catch (cause) {
-    store.error = String(cause)
-  }
-  const value = await store.read<typeof trash.value>('/saved/trash')
-  if (value) trash.value = value
+  const accept = listScope.begin()
+  const value = await store.readResource<SavedProject[]>('/projects', { accept })
+  if (!accept()) return
+  if (value) projects.value = value
+  const entries = await store.read<typeof trash.value>('/saved/trash', undefined, accept)
+  if (accept() && entries) trash.value = entries
 }
 watch(
   () => store.current?.workspace_id,
@@ -238,10 +280,16 @@ watch(
 )
 watch([selected, root, path], () => (plan.value = undefined))
 async function makePlan(project = false) {
-  plan.value = await store.inspect('/saved/plan', {
-    root: project ? '项目结果' : root.value,
-    path: project ? selected.value : path.value,
-  })
+  const accept = planScope.begin()
+  const value = await store.inspect<NonNullable<typeof plan.value>>(
+    '/saved/plan',
+    {
+      root: project ? '项目结果' : root.value,
+      path: project ? selected.value : path.value,
+    },
+    accept,
+  )
+  if (accept()) plan.value = value
 }
 async function move() {
   if (!plan.value) return

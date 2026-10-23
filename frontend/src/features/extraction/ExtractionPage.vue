@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useViewState } from '../../api/viewState'
 import { serialPolling } from '../../api/polling'
+import { useReadScope } from '../../api/readScope'
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import type { Batch, Figure, DataTable } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
@@ -39,11 +40,16 @@ const elapsed = computed(() => {
 const signalSample = ref(''),
   signalFigure = ref<Figure>()
 async function loadSignal() {
-  const result = await store.command<{ figure: Figure }>('/extraction/signal', {
-    path: path.value,
-    sample_id: signalSample.value,
-  })
-  if (result) signalFigure.value = result.figure
+  const accept = signalScope.begin()
+  const result = await store.inspect<{ value: { figure: Figure } }>(
+    '/extraction/signal',
+    {
+      path: path.value,
+      sample_id: signalSample.value,
+    },
+    accept,
+  )
+  if (accept() && result) signalFigure.value = result.value.figure
 }
 
 const batchList = ref<Batch[]>([]),
@@ -51,6 +57,19 @@ const batchList = ref<Batch[]>([]),
   included = ref<string[]>([]),
   checked = ref<Record<string, unknown>>(),
   figures = ref<Figure[]>([])
+const signalScope = useReadScope(() => [
+  store.current?.workspace_id,
+  store.project?.path,
+  path.value,
+  signalSample.value,
+])
+watch(
+  signalSample,
+  () => {
+    signalFigure.value = undefined
+  },
+  { flush: 'sync' },
+)
 const selected = computed(() => batchList.value.find((b) => b.path === path.value))
 const active = computed(() => batchList.value.some((b) => ['queued', 'running'].includes(b.status)))
 const table = computed<DataTable>(() => ({

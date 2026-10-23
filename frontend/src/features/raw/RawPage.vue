@@ -31,6 +31,9 @@ const {
   jobNote,
   cellCount,
   preferences,
+  preferencesError,
+  preferencesLoading,
+  loadPreferences,
   preset,
   presetText,
   strategy,
@@ -144,6 +147,16 @@ const {
 
           <button :disabled="store.busy" @click="usePreset">使用所选参考离子</button>
         </div>
+        <p v-if="preferencesError" class="alert" role="alert">
+          {{ preferencesError }}
+          <button
+            class="preview"
+            :disabled="preferencesLoading || store.busy"
+            @click="loadPreferences"
+          >
+            重试读取预设
+          </button>
+        </p>
         <ProcessingFields
           v-model="parameters"
           :fields="basic"

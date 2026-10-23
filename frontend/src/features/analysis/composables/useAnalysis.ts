@@ -1,3 +1,4 @@
+import { useReadScope } from '../../../api/readScope'
 import { useViewState, restoringViews } from '../../../api/viewState'
 import { ref, computed, watch, nextTick, onActivated, onDeactivated } from 'vue'
 import { useWorkspace } from '../../../stores/workspace'
@@ -67,6 +68,7 @@ export function useAnalysis() {
   const context = () =>
     JSON.stringify([store.current?.workspace_id, store.project?.path, store.project?.dataset?.id])
   const dataContext = () => JSON.stringify([context(), store.project?.dataset?.revision])
+  const infoReads = useReadScope(dataContext, () => void refresh())
   const observed = computed(() => Object.keys(info.value?.observations ?? {}))
   const groups = computed(() => info.value?.observations[diff.group_key] ?? [])
   const colors = computed(() =>
@@ -97,8 +99,14 @@ export function useAnalysis() {
     return store.configuration?.analysis.find((p) => p.name === name)?.help ?? ''
   }
   async function refresh(api: AnalysisTransport = store) {
+    if (api === store && (!active.value || store.busy)) return
     const identity = dataContext()
     const token = ++generation
+    const ticket = infoReads.begin()
+    const accept = () =>
+      token === generation &&
+      identity === dataContext() &&
+      (api === store ? ticket() : api.isCurrent?.() !== false)
     if (!store.project?.dataset) {
       info.value = undefined
       requestedEmbedding = ''
@@ -106,8 +114,11 @@ export function useAnalysis() {
       tables.value = {}
       return
     }
-    const value = await api.read<AnalysisInfo>('/analysis')
-    if (!value || token !== generation || identity !== dataContext()) return
+    const value =
+      api === store
+        ? await store.read<AnalysisInfo>('/analysis', undefined, accept)
+        : await api.read<AnalysisInfo>('/analysis')
+    if (!value || !accept()) return
     hydrating = true
     info.value = value
     if (initializedPath !== store.project.path) {
@@ -263,9 +274,23 @@ export function useAnalysis() {
       if (!hydrating) void invalidate(['shap'])
     },
   )
+  const featureReads = useReadScope(
+    () => [
+      dataContext(),
+      search.value,
+      sort.value,
+      descending.value,
+      featureOffset.value,
+      colorSource.value,
+    ],
+    () => void loadFeatures(),
+  )
   async function loadFeatures() {
+    if (!store.project?.dataset || !featureReads.isActive()) return
     const identity = dataContext()
     const token = ++featureGeneration
+    const ticket = featureReads.begin()
+    const accept = () => ticket() && token === featureGeneration && identity === dataContext()
     const query = new URLSearchParams({
       query: search.value,
       sort: sort.value,
@@ -275,8 +300,10 @@ export function useAnalysis() {
     })
     const result = await store.read<{ rows: { value: string; label: string }[]; total: number }>(
       `/analysis/features?${query}`,
+      undefined,
+      accept,
     )
-    if (result && token === featureGeneration && identity === dataContext()) {
+    if (result && accept()) {
       featureOptions.value = result.rows
       featureTotal.value = result.total
     }

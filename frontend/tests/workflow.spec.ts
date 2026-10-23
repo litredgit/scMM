@@ -1,25 +1,11 @@
 import { test, expect, type Page } from './fixtures'
 import { readFile } from 'node:fs/promises'
+import { createProject as create, importDataset as importData } from './support/project'
 import { serialPolling } from '../src/api/polling'
 import type { useWorkspace } from '../src/stores/workspace'
 
 test.use({ actionTimeout: 15000 })
 
-async function create(page: Page, name: string) {
-  await page.goto('/')
-  await page.getByLabel('项目名称', { exact: true }).fill(name)
-  await page.getByRole('button', { name: '创建并添加样本' }).click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
-}
-async function importData(page: Page, name: string) {
-  await create(page, name)
-  await page.getByRole('button', { name: '导入独立结果', exact: true }).click()
-  await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
-  await page.getByRole('button', { name: /^▤ analysis.h5ad/ }).click()
-  await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
-  await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '结果与样本关联' })).toBeVisible()
-}
 async function noError(page: Page) {
   await expect(page.getByRole('alert')).toHaveCount(0)
 }
@@ -618,6 +604,16 @@ test('raw signal diagnostic stays independent and exports full numeric compariso
   await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('100000')
   const panel = page.locator('details.card').filter({ hasText: '独立原始信号诊断' })
   await expect(panel.locator('.js-plotly-plot')).toBeVisible()
+  await page.route('**/workspace/raw/diagnostic', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ status: 400, json: { error: { message: '同参数重算失败' } } })
+      : route.continue(),
+  )
+  await run.click()
+  await expect(page.getByRole('alert')).toContainText('同参数重算失败')
+  await expect(panel.locator('.js-plotly-plot')).toBeVisible()
+  await page.unroute('**/workspace/raw/diagnostic')
+  await page.getByRole('button', { name: '清除错误', exact: true }).click()
   const download = page.waitForEvent('download')
   await panel.getByRole('button', { name: '下载作图数据', exact: true }).click()
   expect((await download).suggestedFilename()).toMatch(/\.zip$/)

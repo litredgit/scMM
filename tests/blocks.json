@@ -326,6 +326,7 @@
       "kind": "browser",
       "tests": [
         "frontend/tests/workflow.spec.ts",
+        "frontend/tests/reads.spec.ts",
         "frontend/tests/analysis.spec.ts",
         "frontend/tests/interface.spec.ts"
       ],
@@ -602,6 +603,8 @@
       "browser-lipids",
       "browser-ai"
     ],
+    "frontend/src/api/readScope.ts": ["browser-projects", "browser-workflow", "browser-navigation", "browser-auth", "browser-monitor", "browser-lipids", "browser-ai"],
+    "frontend/tests/support/project.ts": ["browser-workflow"],
     "frontend/src/api/workspaceDownload.ts": ["browser-projects", "browser-workflow", "browser-navigation", "browser-auth", "browser-monitor", "browser-lipids", "browser-ai"],
     "frontend/src/api/operation.ts": ["browser-projects", "browser-workflow", "browser-navigation", "browser-auth", "browser-monitor", "browser-lipids", "browser-ai"],
     "frontend/src/api/polling.ts": ["browser-projects", "browser-workflow", "browser-navigation", "browser-auth", "browser-monitor", "browser-lipids", "browser-ai"],

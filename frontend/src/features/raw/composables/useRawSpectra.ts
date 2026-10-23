@@ -1,5 +1,6 @@
 import { ref, computed, watch, type Ref } from 'vue'
 import { useWorkspace } from '../../../stores/workspace'
+import { useReadScope } from '../../../api/readScope'
 import type { AnalysisTransport } from '../../analysis/types'
 import type { Figure, DataTable } from '../../../api/types'
 
@@ -37,13 +38,24 @@ export function useRawSpectra(options: Options) {
     store.notice = '合谱显示范围已选择；切换“合并谱”并更新图形。'
   }
   const scanPosition = computed(() => scanCatalog.value.indices.indexOf(scan.value))
+  const scanReads = useReadScope(
+    () => [store.current?.workspace_id, options.sample.value, opened.value, ms.value],
+    () => {
+      if (opened.value && opened.value === options.sample.value) void scans()
+    },
+  )
   async function scans(api: AnalysisTransport = store) {
     const selected = options.sample.value
     const level = ms.value
-    const value = await api.read<{ indices: number[]; times: number[] }>(
-      `/raw/scans?sample_id=${selected}&ms_level=${level}`,
-    )
-    if (value && options.sample.value === selected && ms.value === level) {
+    const ticket = scanReads.begin()
+    const sourceMatches = () => options.sample.value === selected && ms.value === level
+    const accept = () => sourceMatches() && (api === store ? ticket() : api.isCurrent?.() !== false)
+    const path = `/raw/scans?sample_id=${selected}&ms_level=${level}`
+    const value =
+      api === store
+        ? await store.read<{ indices: number[]; times: number[] }>(path, undefined, accept)
+        : await api.read<{ indices: number[]; times: number[] }>(path)
+    if (value && accept()) {
       scanCatalog.value = value
       seekScan('index', scan.value)
     }
