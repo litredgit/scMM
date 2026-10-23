@@ -54,4 +54,3 @@ m/z 网络每个稳定 feature ID 一个节点，显示候选/类别/审核状�
 [3,000 × 500](validation/lipid-annotation-synthetic-3000x500.json)和
 [10,000 × 500](validation/lipid-annotation-synthetic-10000x500.json)，复现命令见[开发指南](testing.md#脂质注释规模检查)。
 这些报告不表示实验准确率或用户验收；用户已选择自行手动验证。
-
