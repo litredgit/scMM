@@ -307,5 +307,5 @@ export function usePlotRenderer({
     if (element.value) plotly?.purge(element.value)
   })
 
-  return { plotly: () => plotly }
+  return { plotly: () => plotly, retry: draw }
 }

@@ -644,7 +644,12 @@ async function image(format: string, preview = false) {
       </div>
     </details>
     <p v-if="!fresh" role="status">该图对应的数据已改变，请重新绘图后下载或选择细胞。</p>
-    <p v-if="failure" role="alert">{{ failure }}</p>
+    <div v-if="failure" role="alert" class="state-note">
+      {{ failure
+      }}<button class="preview" :disabled="store.busy || exporting" @click="renderer.retry()">
+        仅重试图形渲染
+      </button>
+    </div>
   </div>
 </template>
 

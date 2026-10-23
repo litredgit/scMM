@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import OperationFeedback from '../../../../components/OperationFeedback.vue'
 import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
 import EmbeddingView from './EmbeddingView.vue'
-const { reduction, usePca, store, info, tab, reduce } = useAnalysisContext()
+const { reduction, usePca, store, info, tab, reduce, reductionConflict } = useAnalysisContext()
 </script>
 <template>
   <div class="card analysis-module-split">
@@ -136,7 +137,11 @@ const { reduction, usePca, store, info, tab, reduce } = useAnalysisContext()
           ></template>
         </div>
       </details>
-      <button class="primary" :disabled="store.busy" @click="reduce">运行降维</button>
+      <p v-if="reductionConflict" role="status" class="state-note">{{ reductionConflict }}</p>
+      <button class="primary" :disabled="store.busy || !!reductionConflict" @click="reduce">
+        运行降维
+      </button>
+      <OperationFeedback :labels="['降维', '绘制图形']" />
     </section>
     <section class="analysis-visualization">
       <EmbeddingView v-if="tab === 'embedding'" panel="embedding" />

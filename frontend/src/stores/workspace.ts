@@ -32,6 +32,8 @@ export const useWorkspace = defineStore('workspace', () => {
     analysis: Record<string, unknown>
     legend: string
   } | null>(null)
+  const drafts = ref<Record<string, boolean>>({})
+  const draftNames = computed(() => Object.keys(drafts.value).filter((key) => drafts.value[key]))
   const selectedCells = ref<string[]>([])
   function selectCell(cell: string) {
     selectedCells.value = [...selectedCells.value.filter((c) => c !== cell), cell].slice(-2)
@@ -73,6 +75,7 @@ export const useWorkspace = defineStore('workspace', () => {
   watch(
     () => project.value?.path,
     () => {
+      drafts.value = {}
       analysisDraft.value = null
       batches.value = null
       task.value = '暂无活动任务'
@@ -514,6 +517,7 @@ export const useWorkspace = defineStore('workspace', () => {
   }
 
   function reset() {
+    drafts.value = {}
     operationGeneration++
     busy.value = false
     operation.value = undefined
@@ -528,6 +532,8 @@ export const useWorkspace = defineStore('workspace', () => {
   }
 
   return {
+    drafts,
+    draftNames,
     selectedCells,
     selectCell,
     maintenancePaused,

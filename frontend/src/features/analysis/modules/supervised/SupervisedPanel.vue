@@ -29,6 +29,7 @@ const {
   draw,
   loadWithPlot,
 } = useAnalysisContext()
+const latentConflict = computed(() => info.value?.embeddings.includes(latentKey.value))
 const validationWarnings = computed(() => {
   const audit = modelReport.value?.validation_audit as { warnings?: string[] } | undefined
   return audit?.warnings ?? []
@@ -230,9 +231,12 @@ async function showShap(kind: string) {
           :disabled="store.busy"
       /></label>
     </div>
+    <p v-if="latentConflict" class="state-note" role="status">
+      结果名称 {{ latentKey }} 已占用，请换一个名称；旧结果保留。
+    </p>
     <button
       class="save"
-      :disabled="store.busy || !info?.latent_supported"
+      :disabled="store.busy || !info?.latent_supported || latentConflict"
       @click="execute('save_latent', { key: latentKey })"
     >
       保存潜变量和 train/test 标识

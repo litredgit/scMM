@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { resetScrollPositions } from './router'
 import { useRoute, useRouter } from 'vue-router'
 import { useWorkspace } from './stores/workspace'
 import { useAuth } from './stores/auth'
@@ -98,6 +99,7 @@ watch(
 watch(
   () => store.project?.path,
   () => {
+    resetScrollPositions()
     if (!standalone.value) void store.refreshBatches()
   },
 )
@@ -207,8 +209,11 @@ const nextHelp = computed(() =>
             </div>
           </details>
           <span v-if="store.project" class="save-state" :class="{ dirty: store.project.unsaved }">{{
-            store.project.unsaved ? '有未保存修改' : '已保存'
+            store.project.unsaved ? '已应用未保存' : '已保存'
           }}</span>
+          <span v-if="store.draftNames.length" class="draft-state" role="status">
+            未应用草稿：{{ store.draftNames.join('、') }}
+          </span>
           <button
             v-if="store.project"
             class="save"

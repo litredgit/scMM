@@ -30,6 +30,7 @@ const {
   draw,
   download,
 } = useTimeAnalysis()
+const nameConflict = computed(() => info.value?.results.some((row) => row.key === form.key))
 const trendFeatures = computed({
   get: () => form.features.join('\n'),
   set: (value: string) => {
@@ -487,10 +488,14 @@ const trendFeatures = computed({
           秒超时后终止并回收；当前仍在请求内等待，超时不自动重放。
         </p>
       </fieldset>
+      <p v-if="nameConflict" class="state-note" role="status">
+        结果名称 {{ form.key }} 已占用，请换一个名称；旧结果保留。
+      </p>
       <button
         class="primary"
         :disabled="
           store.busy ||
+          nameConflict ||
           !form.key ||
           (form.mode === 'palantir'
             ? !form.root_cell_id || !form.input_representation

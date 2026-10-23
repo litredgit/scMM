@@ -2052,3 +2052,20 @@ progress {
 .plot-shell > .plot {
   margin-bottom: 12px;
 }
+
+.draft-state {
+  color: #996c17;
+  font-size: 13px;
+  max-width: 240px;
+}
+.state-note,
+.result-state {
+  padding: 8px 12px;
+  background: #f4f7fb;
+  border-left: 3px solid #a9bdd4;
+  margin: 8px 0;
+  font-size: 14px;
+}
+.state-note button {
+  margin-left: 8px;
+}

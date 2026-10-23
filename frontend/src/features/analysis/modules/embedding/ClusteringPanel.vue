@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import OperationFeedback from '../../../../components/OperationFeedback.vue'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
 import { displayName } from '../../../../help/labels'
 import EmbeddingView from './EmbeddingView.vue'
-const { cluster, info, tab, store, execute } = useAnalysisContext()
+const { cluster, info, tab, store, execute, clusterConflict } = useAnalysisContext()
 </script>
 <template>
   <div class="card analysis-module-split">
@@ -183,9 +184,10 @@ const { cluster, info, tab, store, execute } = useAnalysisContext()
             :disabled="store.busy"
         /></label>
       </div>
+      <p v-if="clusterConflict" role="status" class="state-note">{{ clusterConflict }}</p>
       <button
         class="primary"
-        :disabled="store.busy"
+        :disabled="store.busy || !!clusterConflict"
         @click="
           execute('cluster', {
             ...cluster,
@@ -199,6 +201,7 @@ const { cluster, info, tab, store, execute } = useAnalysisContext()
         表示噪声；过大的最小邻域样本数可能使全部细胞成为噪声。 Ward 仅支持欧氏距离；Leiden
         迭代次数为 -1 或正整数。已有聚类列不能覆盖。
       </p>
+      <OperationFeedback :labels="['聚类', '绘制图形']" />
     </section>
     <section class="analysis-visualization">
       <EmbeddingView v-if="tab === 'clustering'" panel="clustering" />

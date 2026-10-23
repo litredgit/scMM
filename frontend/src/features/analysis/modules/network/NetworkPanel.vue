@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OperationFeedback from '../../../../components/OperationFeedback.vue'
 import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
 import PlotView from '../../../../components/PlotView.vue'
@@ -64,6 +65,7 @@ const { network, legend, store, info, tab, figures, has, execute, loadWithPlot }
           读取相关网络
         </button>
       </div>
+      <OperationFeedback :labels="['相关网络', '绘制图形']" />
     </section>
     <section class="analysis-visualization">
       <h3>图表与报告</h3>

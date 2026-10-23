@@ -259,7 +259,13 @@ const {
           </div>
         </section>
         <div class="parameter-state" :class="{ pending: unapplied }" aria-label="参数生效状态">
-          <strong>{{ unapplied ? '与所选范围的生效配置不同' : '与所选范围的生效配置一致' }}</strong>
+          <strong>{{
+            unapplied
+              ? '未应用草稿 · 与所选范围的生效配置不同'
+              : store.project?.unsaved
+                ? '已应用未保存 · 与所选范围的生效配置一致'
+                : '已保存 · 与所选范围的生效配置一致'
+          }}</strong>
           <p>
             当前样本使用{{
               samples.find((s) => s.id === sample)?.parameters ? '样本例外' : '项目默认及自动范围'

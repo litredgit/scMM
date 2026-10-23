@@ -194,7 +194,7 @@ test('deployment notice lets the user save and then reloads after maintenance', 
   await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
   await page.getByRole('button', { name: /alpha.mzML/ }).click()
   await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
-  await expect(page.getByText('有未保存修改', { exact: true })).toBeVisible()
+  await expect(page.getByText('已应用未保存', { exact: true })).toBeVisible()
   let collecting = true
   await page.route('**/api/v1/maintenance/status', (route) =>
     route.fulfill({

@@ -23,10 +23,14 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
   await page.getByRole('link', { name: /预处理/ }).click()
   await page.getByRole('button', { name: '检查影响', exact: true }).click()
   await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('预处理已应用，下游分析结果已失效。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText(
+    '预处理已应用，下游分析结果已失效。',
+  )
   await page.getByRole('button', { name: '历史与恢复', exact: true }).click()
   await page.getByRole('button', { name: '恢复到预处理起点', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('已恢复完整预处理起点。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText(
+    '已恢复完整预处理起点。',
+  )
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await page.getByRole('button', { name: '运行降维', exact: true }).click()
   await expect(page.getByLabel('查看嵌入', { exact: true })).toHaveValue('X_pca')

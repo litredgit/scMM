@@ -40,6 +40,14 @@ export function useRawParameters(sample: Ref<string>) {
       autoRanges.value !== Boolean(store.project?.manifest.auto_ranges ?? true)
     )
   })
+  watch(
+    [unapplied, effectiveParameters],
+    () => {
+      store.drafts['提取参数'] =
+        Object.keys(effectiveParameters.value).length > 0 && unapplied.value
+    },
+    { deep: true },
+  )
   const preferences = ref<{ presets: Record<string, number>; selected: string }>(),
     preset = ref(''),
     presetText = ref('')

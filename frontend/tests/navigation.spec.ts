@@ -35,3 +35,53 @@ test('six workflow steps navigate in both directions and guard missing data', as
   await expect(navigation).toHaveCount(0)
   expect(errors).toEqual([])
 })
+
+test('each workflow page restores its own scroll and first visits start at top', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.goto('/')
+  await page.getByLabel('项目名称', { exact: true }).fill('逐页滚动')
+  await page.getByRole('button', { name: '创建并添加样本' }).click()
+  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await expect(page.getByRole('heading', { name: '原始谱与参数', exact: true })).toBeVisible()
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            window.scrollTo(0, 400)
+            resolve()
+          }),
+        ),
+      ),
+  )
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100)
+  const rawPosition = await page.evaluate(() => scrollY)
+  // DOM clicks avoid Playwright first scrolling the sidebar link into view.
+  await page
+    .getByRole('link', { name: /提取与审核/ })
+    .evaluate((el: HTMLAnchorElement) => el.click())
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0)
+  await page
+    .getByRole('link', { name: /原始谱与参数/ })
+    .evaluate((el: HTMLAnchorElement) => el.click())
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(rawPosition)
+})
+
+test('project drafts survive workspace refresh and saving does not apply them', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByLabel('项目名称', { exact: true }).fill('草稿状态')
+  await page.getByRole('button', { name: '创建并添加样本' }).click()
+  await page.getByLabel('项目说明', { exact: true }).fill('尚未应用的说明')
+  await expect(page.locator('.draft-state')).toContainText('项目信息')
+  await page.getByRole('button', { name: '保存项目', exact: true }).click()
+  await expect(page.getByLabel('项目说明', { exact: true })).toHaveValue('尚未应用的说明')
+  await expect(page.locator('.draft-state')).toContainText('项目信息')
+  await expect(page.locator('.save-state')).toHaveText('已保存')
+  await page.getByRole('button', { name: '应用项目信息', exact: true }).click()
+  await expect(page.locator('.save-state')).toHaveText('已应用未保存')
+  await expect(page.locator('.draft-state')).toHaveCount(0)
+})

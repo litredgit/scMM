@@ -42,11 +42,13 @@ test('saved item plan, protected active project, recycle and restore', async ({ 
   await expect(option).toBeAttached()
   await page.getByRole('button', { name: '查看项目删除计划', exact: true }).click()
   await page.getByRole('button', { name: '移入回收区', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('所选内容已移入共享回收区。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText(
+    '所选内容已移入共享回收区。',
+  )
   await expect(retention).toHaveCount(0)
   await page.getByText('共享回收区（1）', { exact: true }).click()
   await page.getByRole('button', { name: '恢复', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('已恢复到原位置。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText('已恢复到原位置。')
   await expect(page.getByRole('row').filter({ hasText: 'Vue 回收恢复' })).toBeVisible()
   await noError(page)
 })
@@ -75,13 +77,15 @@ test('reviewed retention cleanup archives a shared pair and restores it', async 
   await page.getByRole('button', { name: '查看快照与缓存保留计划', exact: true }).click()
   await page.getByRole('button', { name: '查看策略清理执行计划', exact: true }).click()
   await page.getByRole('button', { name: '将策略清单移入回收区', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('策略清单已移入共享回收区，尚未释放磁盘空间。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText(
+    '策略清单已移入共享回收区，尚未释放磁盘空间。',
+  )
   await page.getByRole('button', { name: '查看快照与缓存保留计划', exact: true }).click()
   await expect(retention).toContainText('当前没有快照或缓存条目。')
   await page.getByText(/^共享回收区（/).click()
   const entry = page.getByRole('row').filter({ hasText: '快照与缓存策略清理' })
   await entry.getByRole('button', { name: '恢复', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('已恢复到原位置。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText('已恢复到原位置。')
   await page.getByRole('button', { name: '查看快照与缓存保留计划', exact: true }).click()
   await expect(retention).toContainText('共同特征缓存')
   await expect(entry).toHaveCount(0)
@@ -122,7 +126,7 @@ test('automatic retention rules require review, survive refresh and stop explici
   await expect(state).toContainText('已启用 · 每 2 分钟检查')
   await page.getByRole('button', { name: '停用自动保留', exact: true }).click()
   await expect(state).toContainText('已停用 / 尚未设置')
-  await expect(page.getByRole('status')).toContainText('已停用自动保留')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toContainText('已停用自动保留')
 })
 
 test('current report downloads contain a PDF and portable numeric attachments', async ({

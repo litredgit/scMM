@@ -1,12 +1,56 @@
 <script setup lang="ts">
 import CellSpectraPanel from './components/CellSpectraPanel.vue'
-import { provide } from 'vue'
+import { computed, provide } from 'vue'
 import { useAnalysis } from './composables/useAnalysis'
 import { analysisKey } from './types'
 import { analysisModules } from './registry'
 const analysis = useAnalysis()
 provide(analysisKey, analysis)
-const { store, info, tab, legend, saveSettings, reloadAnalysis } = analysis
+const {
+  store,
+  info,
+  tab,
+  legend,
+  saveSettings,
+  reloadAnalysis,
+  invalidated,
+  recovery,
+  retryPresentation,
+} = analysis
+const names: Record<string, string> = {
+  differential: '差异分析',
+  markers: 'Marker',
+  network: '相关网络',
+  supervised: '监督模型',
+  shap: 'SHAP',
+}
+const resultStates = computed(() => {
+  const relevant =
+    tab.value === 'differential'
+      ? ['differential', 'markers']
+      : tab.value === 'supervised'
+        ? ['supervised', 'shap']
+        : tab.value === 'network'
+          ? ['network']
+          : []
+  return relevant.map((name) => ({
+    name: names[name],
+    state: invalidated.value[name]
+      ? '需重算 · 已失效'
+      : !info.value?.results.includes(name)
+        ? '无结果'
+        : info.value.live_results.includes(name)
+          ? '有效'
+          : '重载只读',
+    reason:
+      invalidated.value[name] ??
+      (!info.value?.results.includes(name)
+        ? '设置输入后运行计算。'
+        : info.value.live_results.includes(name)
+          ? '当前结果可查看及下载。'
+          : '已保存报告可查看及下载；模型与 SHAP 扩展需重新训练。'),
+  }))
+})
 </script>
 <template>
   <section v-if="store.project?.dataset">
@@ -38,6 +82,25 @@ const { store, info, tab, legend, saveSettings, reloadAnalysis } = analysis
       <button :disabled="store.busy" @click="reloadAnalysis" class="preview">
         重新读取分析状态
       </button>
+    </div>
+    <p class="state-note" role="status">
+      {{
+        store.drafts['分析设置']
+          ? '未应用草稿：点击“应用视图设置”记入工作区；保存项目也会纳入当前分析设置，但不启动计算。'
+          : store.project.unsaved
+            ? '已应用未保存：请主动保存项目。'
+            : '已保存：分析设置已写入项目。'
+      }}
+    </p>
+    <div v-if="recovery" class="state-note" role="status">
+      {{ recovery.message
+      }}<button class="preview" :disabled="store.busy" @click="retryPresentation">
+        仅重试读取与绘图
+      </button>
+    </div>
+    <p v-if="store.busy" role="status" class="state-note">{{ store.operationMessage }}</p>
+    <div v-for="state in resultStates" :key="state.name" class="result-state" role="status">
+      <strong>{{ state.name }} · {{ state.state }}</strong> · {{ state.reason }}
     </div>
     <p v-if="!info" role="status">正在读取当前数据的分析状态…</p>
     <div v-else class="analysis-layout">

@@ -63,11 +63,13 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
     mimeType: 'application/json',
     buffer: Buffer.from(content),
   })
-  await expect(page.getByRole('status')).toHaveText('规则已校验，可保存预设或应用排序。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText(
+    '规则已校验，可保存预设或应用排序。',
+  )
   await expect(rulePreview.getByRole('row')).toHaveCount(3)
   await page.getByLabel('脂质预设名称', { exact: true }).fill('浏览器规则')
   await page.getByRole('button', { name: '保存为规则预设', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('规则已保存为预设。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText('规则已保存为预设。')
   await page.getByLabel('脂质规则预设', { exact: true }).selectOption('浏览器规则')
   await expect(page.getByLabel('脂质规则预设', { exact: true }).locator('option')).toHaveCount(7)
   await panel.getByText('相关性辅助注释与网络 · 高级参数', { exact: true }).click()
@@ -158,7 +160,7 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await panel.getByLabel('指定 LMGP01010002 [M+H]+', { exact: true }).uncheck()
   await expect(panel.getByLabel('指定 LMGP01010002 [M+H]+', { exact: true })).not.toBeChecked()
   await page.getByRole('button', { name: '保存人工指定', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('人工指定已保存。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText('人工指定已保存。')
   await expect(panel.getByLabel('指定 LMGP01010002 [M+H]+', { exact: true })).not.toBeChecked()
   await panel.getByRole('button', { name: '接受', exact: true }).first().click()
   await expect(panel.getByRole('cell', { name: '接受', exact: true }).first()).toBeVisible()
@@ -170,7 +172,9 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await expect(network.getByLabel('representative_feature', { exact: true })).toBeVisible()
   await network.getByRole('button', { name: '指定代表离子', exact: true }).click()
   await network.getByRole('button', { name: '保存图表设置', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('图表显示设置已加入工作区，请主动保存项目。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText(
+    '图表显示设置已加入工作区，请主动保存项目。',
+  )
   await page.getByRole('button', { name: '保存项目', exact: true }).first().click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
   await page.reload()

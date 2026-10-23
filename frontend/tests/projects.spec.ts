@@ -22,11 +22,11 @@ test('project, samples, metadata, save and reopen with no browser errors', async
   await expect(page.getByLabel('alpha group', { exact: true })).toBeVisible()
   await page.getByLabel('alpha group', { exact: true }).fill('对照')
   await page.getByLabel('alpha group', { exact: true }).press('Tab')
-  await expect(page.getByRole('status')).toHaveText('样本信息已更新。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText('样本信息已更新。')
   await page.getByLabel('alpha subject', { exact: true }).fill('animal-1')
   await page.getByLabel('alpha subject', { exact: true }).press('Tab')
-  await expect(page.getByRole('status')).toHaveText('样本信息已更新。')
-  await expect(page.getByText('有未保存修改', { exact: true })).toBeVisible()
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText('样本信息已更新。')
+  await expect(page.getByText('已应用未保存', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
 
@@ -107,10 +107,18 @@ test('invalid sample edit leaves saved data unchanged and allows retry', async (
   await page.getByLabel('alpha name', { exact: true }).last().press('Tab')
   await expect(page.getByRole('alert')).toBeVisible()
   await page.getByRole('button', { name: '刷新状态', exact: true }).click()
-  await expect(page.getByLabel('beta name', { exact: true })).toHaveValue('beta')
-  await page.getByLabel('beta name', { exact: true }).fill('beta-renamed')
+  await expect(page.getByLabel('alpha name', { exact: true }).last()).toHaveValue('alpha')
+  await expect(page.locator('.draft-state')).toContainText('样本信息')
+  const workspace = await page.evaluate(() => sessionStorage.getItem('scmm-workspace')!)
+  const response = await page.request.get('/api/v1/workspace', {
+    headers: { 'X-SCMM-Workspace': workspace },
+  })
+  expect(
+    (await response.json()).project.manifest.samples.map((sample: { name: string }) => sample.name),
+  ).toEqual(['alpha', 'beta'])
+  await page.getByLabel('alpha name', { exact: true }).last().fill('beta-renamed')
   await page.getByLabel('beta-renamed name', { exact: true }).press('Tab')
-  await expect(page.getByRole('status')).toHaveText('样本信息已更新。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText('样本信息已更新。')
 })
 
 test('processed merge explicitly maps sources, previews ref and restores the full union baseline', async ({

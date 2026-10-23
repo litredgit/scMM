@@ -15,6 +15,7 @@ const props = withDefaults(
 )
 const { store, info, refreshAnalysis } = useAnalysisContext()
 const figure = ref<Figure>()
+const reloaded = ref(false)
 let generation = 0
 const identity = () =>
   JSON.stringify([store.current?.workspace_id, store.project?.path, store.project?.dataset?.id])
@@ -50,11 +51,12 @@ async function draw(saved = false) {
       : await api.command<Figure>('/analysis/plot', { kind: props.kind, options: props.options })
     if (value && target === identity() && token === generation && api.isCurrent?.() !== false) {
       figure.value = value
+      reloaded.value = saved
       await refreshAnalysis(api)
     }
   })
 }
-useViewState(props.kind, { figure })
+useViewState(props.kind, { figure, reloaded })
 </script>
 <template>
   <div class="card analysis-module-split">
@@ -80,7 +82,17 @@ useViewState(props.kind, { figure })
     </section>
     <section class="analysis-visualization">
       <h3>图形与说明</h3>
-      <p v-if="edited">参数已编辑，重新生成后生效。</p>
+      <p class="result-state" role="status">
+        {{
+          edited
+            ? '需重算：显示设置草稿与当前图不同；当前图及下载仍对应上次成功设置。'
+            : figure
+              ? reloaded
+                ? '重载只读：已保存图可查看及导出；重新生成需有效输入。'
+                : '有效：图形对应上次成功的输入与设置。'
+              : '无结果：设置输入后生成，或读取已保存图。'
+        }}
+      </p>
       <p v-for="note in metadata.notes ?? []" :key="note">{{ note }}</p>
       <PlotView v-if="figure" :figure="figure" :name="kind" />
       <p v-else class="empty-state">设置输入后生成，或读取已保存的只读图。</p>

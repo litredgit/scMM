@@ -50,10 +50,14 @@ test('preprocessing preview applies and restores the full origin', async ({ page
   await page.setViewportSize({ width: 1440, height: 1000 })
   await noError(page)
   await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('预处理已应用，下游分析结果已失效。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText(
+    '预处理已应用，下游分析结果已失效。',
+  )
   await page.getByRole('button', { name: '历史与恢复', exact: true }).click()
   await page.getByRole('button', { name: '恢复到预处理起点', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('已恢复完整预处理起点。')
+  await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText(
+    '已恢复完整预处理起点。',
+  )
   expect(errors).toEqual([])
 })
 

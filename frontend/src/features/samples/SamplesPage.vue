@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import FileBrowser from '../../components/FileBrowser.vue'
 import ProcessedMergePanel from './ProcessedMergePanel.vue'
 import { request } from '../../api/client'
@@ -8,6 +9,7 @@ import type { Mapping, Sample } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
 
 const store = useWorkspace()
+const router = useRouter()
 const picker = ref<'raw' | 'results' | null>(null)
 const fileRoot = ref('')
 const paths = ref<string[]>([])
@@ -31,6 +33,7 @@ const mappingBusy = ref(false)
 const mappingError = ref('')
 const browser = ref<InstanceType<typeof FileBrowser> | null>(null)
 const previousProject = ref('')
+const imported = ref(false)
 const sampleSearch = ref('')
 const visibleSamples = computed(() =>
   samples.value.filter((sample) =>
@@ -39,6 +42,27 @@ const visibleSamples = computed(() =>
     ),
   ),
 )
+const projectEdited = computed(
+  () =>
+    !!store.project &&
+    (name.value !== store.project.manifest.name ||
+      description.value !== store.project.manifest.description),
+)
+const sampleEdited = computed(() =>
+  samples.value.some((sample) => {
+    const saved = store.project?.manifest.samples.find((row) => row.id === sample.id)
+    return (
+      saved &&
+      ['name', 'group', 'subject', 'batch'].some(
+        (key) => sample[key as keyof Sample] !== saved[key as keyof Sample],
+      )
+    )
+  }),
+)
+watch([projectEdited, sampleEdited], ([project, samples]) => {
+  store.drafts['项目信息'] = project
+  store.drafts['样本信息'] = samples
+})
 const pageContext = () => [
   store.current?.workspace_id,
   store.project?.manifest.id,
@@ -76,14 +100,30 @@ async function loadMapping(sourceKey?: string) {
 }
 watch(
   () => store.current,
-  () => {
+  (_current, previous) => {
     const project = store.project
-    name.value = project?.manifest.name ?? ''
-    description.value = project?.manifest.description ?? ''
-    samples.value = project?.manifest.samples.map((sample) => ({ ...sample })) ?? []
+    const same = previous?.project?.manifest.id === project?.manifest.id
+    const old = previous?.project?.manifest
+    if (!same || (name.value === old?.name && description.value === old?.description)) {
+      name.value = project?.manifest.name ?? ''
+      description.value = project?.manifest.description ?? ''
+    }
+    samples.value =
+      project?.manifest.samples.map((sample) => {
+        const draft = same && samples.value.find((row) => row.id === sample.id)
+        const saved = old?.samples.find((row) => row.id === sample.id)
+        return draft &&
+          saved &&
+          ['name', 'group', 'subject', 'batch'].some(
+            (key) => draft[key as keyof Sample] !== saved[key as keyof Sample],
+          )
+          ? draft
+          : { ...sample }
+      }) ?? []
     selected.value = selected.value.filter((id) => samples.value.some((sample) => sample.id === id))
     if (previousProject.value !== project?.manifest.id) {
       previousProject.value = project?.manifest.id ?? ''
+      imported.value = false
       picker.value = null
       paths.value = []
       selected.value = []
@@ -172,6 +212,7 @@ async function importDataset() {
     '结果已导入，请核对样本关联。',
   )
   if (result) {
+    imported.value = true
     picker.value = null
     paths.value = []
     manual.value = ''
@@ -179,12 +220,16 @@ async function importDataset() {
 }
 async function saveSample(sample: Sample) {
   const { id, name, group, subject, batch } = sample
-  await store.mutate(
+  const result = await store.mutate(
     '/samples',
     { samples: [{ id, name, group, subject, batch }] },
     'PATCH',
     '样本信息已更新。',
   )
+  if (result)
+    samples.value = samples.value.map((row) =>
+      row.id === id ? { ...result.project!.manifest.samples.find((item) => item.id === id)! } : row,
+    )
 }
 async function importCSV(event: Event) {
   const input = event.target as HTMLInputElement
@@ -388,6 +433,18 @@ async function applyMapping() {
           应用项目信息
         </button>
       </form>
+      <p class="state-note" role="status">
+        {{
+          projectEdited || sampleEdited
+            ? '未应用草稿：项目信息需点击应用；样本字段离开输入框后自动应用。'
+            : store.project.unsaved
+              ? '已应用未保存：请主动保存项目。'
+              : '已保存：当前项目信息与样本信息已写入项目。'
+        }}
+      </p>
+      <button v-if="imported" @click="router.push('/preprocess')" class="primary">
+        导入完成，进入预处理 →
+      </button>
       <div class="sample-toolbar">
         <p class="muted">group：实验分组 · subject：独立生物来源 · batch：采集批次</p>
         <input v-model="sampleSearch" aria-label="搜索样本" placeholder="搜索样本或分组" />

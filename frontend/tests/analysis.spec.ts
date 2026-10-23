@@ -230,7 +230,8 @@ test('whole execution chain stays locked, plot retry and calculation failure ret
   await expect(page.getByRole('alert')).toContainText('计算已完成，结果已保留')
   await expect(page.locator('.js-plotly-plot')).toHaveCount(0)
   await expect(page.getByRole('button', { name: '读取相关网络', exact: true })).toBeEnabled()
-  await page.getByRole('button', { name: '读取相关网络', exact: true }).click()
+  await page.getByRole('button', { name: '仅重试读取与绘图', exact: true }).click()
+  expect(calculations).toBe(1)
   await expect(page.locator('.js-plotly-plot')).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
   failCalculation = true
@@ -865,4 +866,16 @@ test('trend clusters bind their source and retain full curves and groups after r
     page.getByRole('heading', { name: '结果 groups_browser 的生效参数', exact: true }),
   ).toBeVisible()
   expect(calculations).toBe(1)
+})
+
+test('occupied embedding names block rerun and retain the previous embedding', async ({ page }) => {
+  await importAnalysis(page, '结果名保护')
+  await page.getByRole('button', { name: '运行降维', exact: true }).click()
+  await expect(page.getByRole('button', { name: '运行降维', exact: true })).toBeDisabled()
+  await expect(
+    page.getByText('结果名称 X_pca 已占用，请换一个名称；旧结果保留。', { exact: true }),
+  ).toBeVisible()
+  await page.getByLabel('store_key', { exact: true }).fill('X_second')
+  await expect(page.getByRole('button', { name: '运行降维', exact: true })).toBeEnabled()
+  await expect(page.getByLabel('查看嵌入', { exact: true })).toHaveValue('X_pca')
 })

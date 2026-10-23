@@ -64,6 +64,37 @@ export function useAnalysis() {
     initializedPath = '',
     hydrating = false,
     requestedEmbedding = ''
+  const settingsBaseline = ref('')
+  const invalidated = ref<Record<string, string>>({})
+  const recovery = ref<{ message: string; plots: PlotKind[]; result?: ResultName }>()
+  const settingsSignature = () => JSON.stringify([settings.value, legend.value])
+  watch(
+    [settings, legend],
+    () => {
+      if (!hydrating && settingsBaseline.value)
+        store.drafts['分析设置'] = settingsSignature() !== settingsBaseline.value
+    },
+    { deep: true },
+  )
+  const reductionConflict = computed(() =>
+    info.value?.embeddings.includes(reduction.store_key)
+      ? `结果名称 ${reduction.store_key} 已占用，请换一个名称；旧结果保留。`
+      : '',
+  )
+  const clusterConflict = computed(() =>
+    observed.value.includes(cluster.key)
+      ? `结果名称 ${cluster.key} 已占用，请换一个名称；旧结果保留。`
+      : '',
+  )
+  watch(
+    () => store.project?.manifest.saved_at,
+    () => {
+      if (initializedPath === store.project?.path && !store.project?.unsaved) {
+        settingsBaseline.value = settingsSignature()
+        store.drafts['分析设置'] = false
+      }
+    },
+  )
   const pendingInvalidations = new Set<string>()
   const context = () =>
     JSON.stringify([store.current?.workspace_id, store.project?.path, store.project?.dataset?.id])
@@ -120,7 +151,12 @@ export function useAnalysis() {
         : await api.read<AnalysisInfo>('/analysis')
     if (!value || !accept()) return
     hydrating = true
+    for (const name of info.value?.results ?? []) {
+      if (!value.results.includes(name))
+        invalidated.value[name] ??= '数据、依赖字段或计算设置已改变，旧结果已失效，须重新计算。'
+    }
     info.value = value
+    for (const name of value.results) delete invalidated.value[name]
     if (initializedPath !== store.project.path) {
       resetSettings()
       initializedPath = store.project!.path
@@ -163,6 +199,7 @@ export function useAnalysis() {
     if (!value.embeddings.length) delete figures.value.embedding
     await Promise.resolve()
     hydrating = false
+    if (!settingsBaseline.value) settingsBaseline.value = settingsSignature()
     void autoDrawEmbedding()
     void loadFeatures()
   }
@@ -184,6 +221,9 @@ export function useAnalysis() {
         modelReport.value = undefined
         info.value = undefined
         pendingInvalidations.clear()
+        invalidated.value = {}
+        recovery.value = undefined
+        settingsBaseline.value = ''
         hydrating = false
       }
       if (!store.busy) void refresh()
@@ -222,6 +262,7 @@ export function useAnalysis() {
   function invalidate(names: string[]) {
     if (restoringViews || hydrating || !info.value) return
     for (const n of names.filter(has)) {
+      invalidated.value[n] = '计算设置已改变，需重算；旧结果与下载已失效。'
       pendingInvalidations.add(n)
     }
     void flushInvalidations()
@@ -347,6 +388,17 @@ export function useAnalysis() {
   }
   watch([embeddingSignature, () => store.busy], () => void autoDrawEmbedding())
   async function execute(operation: AnalysisOperation, options: Record<string, unknown>) {
+    const conflict =
+      operation === 'reduce'
+        ? reductionConflict.value
+        : operation === 'cluster'
+          ? clusterConflict.value
+          : ''
+    if (conflict) {
+      store.error = conflict
+      return
+    }
+    recovery.value = undefined
     await store.analysisTransaction(async (api) => {
       await api.mutate('/analysis/operation', { operation, options })
       const entry = operations[operation]
@@ -374,8 +426,23 @@ export function useAnalysis() {
       } catch (cause) {
         if (api.isCurrent?.() === false) return
         requestedEmbedding = embeddingSignature.value
-        store.error = `计算已完成，结果已保留；读取报告或绘图失败，可使用读取报告或更新图形按钮重试。${cause instanceof Error ? cause.message : String(cause)}`
+        recovery.value = {
+          message: `计算已完成，结果已保留；读取报告或绘图失败：${cause instanceof Error ? cause.message : String(cause)}`,
+          plots: entry.plots,
+          result: entry.result,
+        }
+        store.error = recovery.value.message
       }
+    })
+  }
+  async function retryPresentation() {
+    const retry = recovery.value
+    if (!retry) return
+    await store.analysisTransaction(async (api) => {
+      await refresh(api)
+      if (retry.result) await loadResult(retry.result, 0, api)
+      for (const kind of retry.plots) await draw(kind, api)
+      recovery.value = undefined
     })
   }
   function reduce() {
@@ -493,12 +560,16 @@ export function useAnalysis() {
     await store.analysisTransaction((api) => refresh(api))
   }
   async function saveSettings() {
-    await store.mutate(
+    const result = await store.mutate(
       '/analysis/settings',
       { analysis: settings.value, legend: legend.value },
       'PUT',
       '视图与分析参数已记入当前项目；请主动保存项目。',
     )
+    if (result) {
+      settingsBaseline.value = settingsSignature()
+      store.drafts['分析设置'] = false
+    }
   }
 
   useViewState('analysis', {
@@ -518,6 +589,11 @@ export function useAnalysis() {
     legend,
   })
   return {
+    invalidated,
+    recovery,
+    retryPresentation,
+    reductionConflict,
+    clusterConflict,
     plotScope,
     projection,
     reduction,
