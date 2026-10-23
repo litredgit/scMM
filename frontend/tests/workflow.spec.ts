@@ -1064,3 +1064,142 @@ test('operation outcomes distinguish skipped, stale, failed and void success wit
   })
   expect(result.emptyStatus).toBe('succeeded')
 })
+
+test('changing the raw sample clears counts and messages belonging to the previous preview', async ({
+  page,
+}) => {
+  await create(page, '预览来源切换')
+  await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
+  await page.getByRole('button', { name: /extract.mzML/ }).click()
+  await page.getByRole('button', { name: /alpha.mzML/ }).click()
+  await page.getByRole('button', { name: '添加 2 个文件', exact: true }).click()
+  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
+  await expect(page.locator('.js-plotly-plot')).toBeVisible()
+  let revision = 0
+  await page.route('**/workspace/raw/preview', async (route) => {
+    if (route.request().method() === 'POST') {
+      const response = await page.request.get('/api/v1/workspace', {
+        headers: route.request().headers(),
+      })
+      const workspace = await response.json()
+      revision = workspace.revision
+      await route.fulfill({
+        json: {
+          workspace,
+          value: { id: 'scope-preview', revision, status: 'running', message: '合成预览' },
+        },
+      })
+    } else
+      await route.fulfill({
+        json: { id: 'scope-preview', revision, status: 'ready', message: '可收集' },
+      })
+  })
+  await page.route('**/workspace/raw/preview/collect', async (route) => {
+    const headers = route.request().headers()
+    const [current, parameters] = await Promise.all([
+      page.request.get('/api/v1/workspace', { headers }),
+      page.request.get('/api/v1/workspace/parameters', { headers }),
+    ])
+    await route.fulfill({
+      json: {
+        workspace: await current.json(),
+        value: {
+          parameters: await parameters.json(),
+          figure: { data: [], layout: {} },
+          table: { columns: [], rows: [], total: 0 },
+          cell_count: 7,
+          reused: false,
+        },
+      },
+    })
+  })
+  await page.getByRole('button', { name: '预览细胞窗口', exact: true }).click()
+  await expect(
+    page.getByText('检出 7 个细胞；预览不会直接建立当前数据。', { exact: true }),
+  ).toBeVisible()
+  await page.getByLabel('当前样本', { exact: true }).selectOption({ label: 'alpha' })
+  await expect(
+    page.getByText('检出 7 个细胞；预览不会直接建立当前数据。', { exact: true }),
+  ).toHaveCount(0)
+  await expect(page.getByText(/预览完成，7 个细胞/)).toHaveCount(0)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
+for (const waitAt of ['response', 'blob'] as const) {
+  test(`a previous workspace download cannot publish after reset while waiting for ${waitAt}`, async ({
+    page,
+  }) => {
+    await create(page, `下载来源-${waitAt}`)
+    let entered!: () => void
+    const pending = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let downloads = 0
+    page.on('download', () => {
+      downloads++
+    })
+    if (waitAt === 'blob') {
+      await page.exposeFunction('scmmTestBlobRead', () => entered())
+      await page.evaluate(() => {
+        const original = Response.prototype.blob
+        Response.prototype.blob = async function () {
+          if (this.url.includes('/workspace/results/download')) {
+            const continued = new Promise<void>((resolve) =>
+              window.addEventListener('scmm-test-continue-blob', () => resolve(), { once: true }),
+            )
+            await (window as unknown as { scmmTestBlobRead(): Promise<void> }).scmmTestBlobRead()
+            await continued
+          }
+          return original.call(this)
+        }
+      })
+    }
+    await page.route('**/workspace/results/download?*', async (route) => {
+      if (waitAt === 'response') {
+        entered()
+        await held
+      }
+      await route.fulfill({
+        contentType: 'text/csv',
+        body: 'feature,value\nf0,1.123456789012345\n',
+      })
+    })
+    const result = page.evaluate(async () => {
+      const root = document.getElementById('app') as HTMLElement & {
+        __vue_app__: {
+          config: {
+            globalProperties: { $pinia: { _s: Map<string, ReturnType<typeof useWorkspace>> } }
+          }
+        }
+      }
+      return root.__vue_app__.config.globalProperties.$pinia._s
+        .get('workspace')!
+        .download('matrix', 'late.csv')
+    })
+    try {
+      await pending
+      await page.evaluate(() => {
+        const root = document.getElementById('app') as HTMLElement & {
+          __vue_app__: {
+            config: {
+              globalProperties: { $pinia: { _s: Map<string, ReturnType<typeof useWorkspace>> } }
+            }
+          }
+        }
+        root.__vue_app__.config.globalProperties.$pinia._s.get('workspace')!.reset()
+        window.dispatchEvent(new Event('scmm-test-continue-blob'))
+      })
+      release()
+      expect((await result)?.status).toBe('stale')
+      expect(downloads).toBe(0)
+      await expect(page.getByRole('alert')).toHaveCount(0)
+    } finally {
+      release()
+    }
+  })
+}

@@ -186,7 +186,7 @@ FE 编号是 M1 的具体执行切面，不另建相互竞争的交互规划。
 [RawPage](../frontend/src/features/raw/RawPage.vue)、[ExtractionPage](../frontend/src/features/extraction/ExtractionPage.vue)、
 [SavedItems](../frontend/src/components/SavedItems.vue)、[分析执行组合函数](../frontend/src/features/analysis/composables/useAnalysis.ts)。
 
-代码审阅看到 `run()` 忙时直接返回，异常也被内部处理；调用方可能把未执行当成链路已结束。
+2026-10-18 审阅时，`run()` 忙时直接返回，异常也被内部处理，调用方可能把未执行当成链路已结束；这是历史问题定位，当前执行结果与保护范围以[roadmap](roadmap.md#m1繁忙交互与误操作)和[开发契约](development.md#操作返回值与完整互斥链)为准。
 原始谱 open→扫描列表→TIC→单扫描、审核→刷新和参数应用→展示失效应作为完整逻辑操作检查。
 此处是竞态风险定位，不是已完成浏览器压力复现。
 
@@ -199,8 +199,8 @@ FE 编号是 M1 的具体执行切面，不另建相互竞争的交互规划。
 
 ### FE-02：串行轮询、请求身份和页面生命周期
 
-对应 UX-03。入口：RawPage 的 poll、ExtractionPage 的 refresh、store 心跳和
-[请求客户端](../frontend/src/api/client.ts)。当前异步 setInterval 及仅卸载清理须逐项核对。
+对应 UX-03。入口：[预览任务所有者](../frontend/src/features/raw/composables/useCellPreview.ts)、ExtractionPage 的 refresh、store 心跳、
+[统一轮询调度](../frontend/src/api/polling.ts)和[请求客户端](../frontend/src/api/client.ts)。原审阅中的异步 setInterval/仅卸载清理已纳入该调度范围；当前契约见[开发指南](development.md#前端轮询调度与页面代次)，其他异步入口继续按以下条件审计。
 
 建议上一轮完成后再调度，合并重复状态读取；成功与失败都核对工作区/项目/数据身份及请求代次。
 同一修订下的先后请求仍可能乱序，不能只比较 revision。定义 KeepAlive 停用、恢复和项目切换的行为，

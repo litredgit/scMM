@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import LegendOrder from '../../components/LegendOrder.vue'
 import { useLegendOrder } from '../../components/useLegendOrder'
-import { pngWithDpi } from '../../components/plotExport'
 import { computed, reactive, ref, watch } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
-import { authenticatedFetch, ensureSession, sessionVersion, request } from '../../api/client'
+import { request } from '../../api/client'
+import { workspaceBlob, saveBlob } from '../../api/workspaceDownload'
+import { useLipidImageExport } from './composables/useLipidImageExport'
 import DataTableView from '../../components/DataTable.vue'
 import type { LipidCharts, LipidChartView, LipidNode, LipidResults } from './lipids'
 
@@ -285,103 +286,28 @@ async function download(kind: string) {
   const revision = store.current.revision
   await store.run(
     async (scope) => {
-      const epoch = sessionVersion()
-      const response = await authenticatedFetch('/api/v1/workspace/lipids/export', {
+      const blob = await workspaceBlob('/lipids/export', {
+        workspace,
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-SCMM-Client': 'web',
-          'X-SCMM-Workspace': workspace,
-        },
-        body: JSON.stringify({
-          revision,
-          version: props.results.version,
-          filters: props.filters,
-          view,
-          kind,
-        }),
+        body: { revision, version: props.results.version, filters: props.filters, view, kind },
+        isCurrent: () =>
+          scope.isCurrent() &&
+          store.current?.workspace_id === workspace &&
+          store.current?.revision === revision,
       })
-      if (!response.ok) {
-        const body = await response.json()
-        throw new Error(body.error?.message ?? '导出失败。')
-      }
-      const blob = await response.blob()
-      ensureSession(epoch)
-      if (!scope.isCurrent()) return
       saveBlob(blob, `lipid-${kind}.${kind === 'charts' ? 'json' : 'csv'}`)
     },
     '',
     { label: '导出脂质分析结果', phase: 'downloading' },
   )
 }
-function saveBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-async function image(kind: 'pie' | 'network', format: 'svg' | 'png' | 'pdf') {
-  const svg = kind === 'pie' ? pieSvg.value : graphSvg.value
-  if (!svg) return
-  const clone = svg.cloneNode(true) as SVGSVGElement
-  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
-  clone.setAttribute('width', `${paperWidth.value}mm`)
-  const heightMm = (paperWidth.value * svg.viewBox.baseVal.height) / svg.viewBox.baseVal.width
-  clone.setAttribute('height', `${heightMm}mm`)
-  const size = (paperFont.value * svg.viewBox.baseVal.width) / ((paperWidth.value * 72) / 25.4)
-  for (const text of clone.querySelectorAll('text')) {
-    text.setAttribute('font-size', String(size))
-    text.setAttribute('font-family', 'Arial, Helvetica, sans-serif')
-  }
-  const content = new XMLSerializer().serializeToString(clone)
-  const blob = new Blob([content], { type: 'image/svg+xml;charset=utf-8' })
-  const name = `lipid-${kind}-${props.results.version}`
-  if (format === 'svg') return saveBlob(blob, `${name}.svg`)
-  if (format === 'pdf') {
-    const response = await authenticatedFetch('/api/v1/workspace/figures/pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ svg: content, width_mm: paperWidth.value, height_mm: heightMm }),
-    })
-    if (!response.ok) throw new Error('PDF 导出失败')
-    return saveBlob(await response.blob(), `${name}.pdf`)
-  }
-  const url = URL.createObjectURL(blob)
-  try {
-    const img = new Image()
-    img.src = url
-    await img.decode()
-    const canvas = document.createElement('canvas')
-    if (
-      paperWidth.value < 20 ||
-      paperWidth.value > 600 ||
-      paperDpi.value < 72 ||
-      paperDpi.value > 2400 ||
-      paperFont.value < 4.5 ||
-      paperFont.value > 24
-    )
-      throw new Error('请检查尺寸、字号和 DPI。')
-    if (
-      (((paperWidth.value / 25.4) * paperDpi.value * heightMm) / 25.4) * paperDpi.value >
-      60000000
-    )
-      throw new Error('请减小成图尺寸或 DPI。')
-    canvas.width = Math.round((paperWidth.value / 25.4) * paperDpi.value)
-    canvas.height = Math.round((heightMm / 25.4) * paperDpi.value)
-    const ctx = canvas.getContext('2d')!
-    ctx.fillStyle = 'white'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-    const value = await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob((v) => (v ? resolve(v) : reject(new Error('PNG 导出失败'))), 'image/png'),
-    )
-    saveBlob(await pngWithDpi(value, paperDpi.value), `${name}.png`)
-  } finally {
-    URL.revokeObjectURL(url)
-  }
-}
+const { image } = useLipidImageExport({
+  svg: (kind) => (kind === 'pie' ? pieSvg.value : graphSvg.value),
+  width: () => paperWidth.value,
+  dpi: () => paperDpi.value,
+  font: () => paperFont.value,
+  version: () => props.results.version,
+})
 </script>
 <template>
   <section class="card lipid-network-panel">

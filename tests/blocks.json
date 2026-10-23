@@ -602,6 +602,7 @@
       "browser-lipids",
       "browser-ai"
     ],
+    "frontend/src/api/workspaceDownload.ts": ["browser-projects", "browser-workflow", "browser-navigation", "browser-auth", "browser-monitor", "browser-lipids", "browser-ai"],
     "frontend/src/api/operation.ts": ["browser-projects", "browser-workflow", "browser-navigation", "browser-auth", "browser-monitor", "browser-lipids", "browser-ai"],
     "frontend/src/api/polling.ts": ["browser-projects", "browser-workflow", "browser-navigation", "browser-auth", "browser-monitor", "browser-lipids", "browser-ai"],
     "frontend/src/api/client.ts": [

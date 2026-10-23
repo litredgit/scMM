@@ -5,7 +5,7 @@ import type { Figure } from '../../api/types'
 import { computed, reactive, ref, watch } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import { useAuth } from '../../stores/auth'
-import { authenticatedFetch, sessionVersion, ensureSession } from '../../api/client'
+import { workspaceBlob, saveBlob } from '../../api/workspaceDownload'
 import DataTableView from '../../components/DataTable.vue'
 import LipidNetworkOptions from './LipidNetworkOptions.vue'
 import LipidNetworkPanel from './LipidNetworkPanel.vue'
@@ -384,15 +384,10 @@ async function download(kind: string) {
   const revision = store.current.revision
   await store.run(
     async (scope) => {
-      const epoch = sessionVersion()
-      const response = await authenticatedFetch('/api/v1/workspace/lipids/export', {
+      const blob = await workspaceBlob('/lipids/export', {
+        workspace,
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-SCMM-Client': 'web',
-          'X-SCMM-Workspace': workspace,
-        },
-        body: JSON.stringify({
+        body: {
           revision,
           version: version.value,
           filters: {
@@ -401,21 +396,13 @@ async function download(kind: string) {
           },
           kind,
           sorting: sorting.value,
-        }),
+        },
+        isCurrent: () =>
+          scope.isCurrent() &&
+          store.current?.workspace_id === workspace &&
+          store.current?.revision === revision,
       })
-      if (!response.ok) {
-        const body = await response.json()
-        throw new Error(body.error?.message ?? '导出失败。')
-      }
-      const blob = await response.blob()
-      ensureSession(epoch)
-      if (!scope.isCurrent()) return
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `lipid-${kind}.${kind === 'rules' ? 'json' : 'csv'}`
-      link.click()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      saveBlob(blob, `lipid-${kind}.${kind === 'rules' ? 'json' : 'csv'}`)
     },
     '',
     { label: '导出脂质分析结果', phase: 'downloading' },

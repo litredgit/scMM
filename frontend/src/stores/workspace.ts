@@ -1,6 +1,7 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { serialPolling } from '../api/polling'
+import { workspaceBlob, saveBlob } from '../api/workspaceDownload'
 import { operationDetails, operationValue, phaseLabels } from '../api/operation'
 import type {
   OperationDetails,
@@ -8,14 +9,7 @@ import type {
   OperationScope,
   OperationState,
 } from '../api/operation'
-import {
-  ApiError,
-  request,
-  authenticatedFetch,
-  sessionHeaders,
-  sessionVersion,
-  ensureSession,
-} from '../api/client'
+import { ApiError, request, sessionHeaders, sessionVersion } from '../api/client'
 import type { AnalysisTransport } from '../features/analysis/types'
 import type { Batch, Configuration, WorkspaceView } from '../api/types'
 
@@ -448,30 +442,15 @@ export const useWorkspace = defineStore('workspace', () => {
     const snapshot = current.value
     return run(
       async (scope) => {
-        const version = sessionVersion()
         const query = new URLSearchParams({ kind, filename, key })
-        const response = await authenticatedFetch(`/api/v1/workspace/results/download?${query}`, {
-          headers: { 'X-SCMM-Workspace': current.value!.workspace_id },
-          cache: 'no-store',
+        const blob = await workspaceBlob(`/results/download?${query}`, {
+          workspace: snapshot.workspace_id,
+          isCurrent: () =>
+            scope.isCurrent() &&
+            current.value?.workspace_id === snapshot.workspace_id &&
+            current.value?.revision === snapshot.revision,
         })
-        if (!response.ok) {
-          const value = await response.json()
-          throw new Error(value.error?.message ?? '下载失败。')
-        }
-        const blob = await response.blob()
-        ensureSession(version)
-        if (
-          !scope.isCurrent() ||
-          current.value?.workspace_id !== snapshot.workspace_id ||
-          current.value?.revision !== snapshot.revision
-        )
-          throw new ApiError('工作区已改变，旧下载已丢弃。', 'operation_stale', 409)
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = filename
-        link.click()
-        setTimeout(() => URL.revokeObjectURL(url), 1000)
+        saveBlob(blob, filename)
       },
       '',
       { label: '下载结果', phase: 'downloading' },

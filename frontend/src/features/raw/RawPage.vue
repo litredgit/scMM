@@ -1,426 +1,19 @@
 <script setup lang="ts">
-import { useViewState } from '../../api/viewState'
-import {
-  ref,
-  computed,
-  watch,
-  onMounted,
-  onUnmounted,
-  onActivated,
-  onDeactivated,
-  nextTick,
-} from 'vue'
-import { request } from '../../api/client'
-import { serialPolling } from '../../api/polling'
-import type { AnalysisTransport } from '../analysis/types'
-import type { Figure, DataTable, Job } from '../../api/types'
-import { useWorkspace } from '../../stores/workspace'
-import { useAuth } from '../../stores/auth'
+import { useRawWorkbench } from './composables/useRawWorkbench'
 import PlotView from '../../components/PlotView.vue'
-import DataTableView from '../../components/DataTable.vue'
 import ProcessingFields from './ProcessingFields.vue'
 import SignalDiagnostics from './SignalDiagnostics.vue'
-const store = useWorkspace()
-const auth = useAuth()
-const sample = ref(''),
-  opened = ref(''),
-  summary = ref<Record<string, unknown>>()
-const parameters = ref<Record<string, unknown>>({})
-const effectiveParameters = ref<Record<string, unknown>>({})
-const applicationScope = ref('project')
-function parameterSignature(value: Record<string, unknown>) {
-  return JSON.stringify(
-    Object.keys(value)
-      .sort()
-      .map((key) => [key, value[key]]),
-  )
-}
-const differsFromCurrent = computed(
-  () => parameterSignature(valueParams()) !== parameterSignature(effectiveParameters.value),
-)
-const unapplied = computed(() => {
-  const target =
-    applicationScope.value === 'sample'
-      ? effectiveParameters.value
-      : (store.project?.manifest.parameters ?? {})
-  return (
-    parameterSignature(valueParams()) !== parameterSignature(target) ||
-    strategy.value !== store.project?.manifest.feature_strategy ||
-    mergePpm.value !== Number(store.project?.manifest.feature_merge_ppm ?? 10) ||
-    autoRanges.value !== Boolean(store.project?.manifest.auto_ranges ?? true)
-  )
-})
-const kind = ref('tic'),
-  ms = ref(1),
-  scan = ref(0),
-  rtMin = ref(''),
-  rtMax = ref(''),
-  mzMin = ref(100),
-  mzMax = ref(1000),
-  refs = ref(''),
-  ppm = ref(10),
-  fast = ref(true),
-  normalize = ref(false),
-  bins = ref(20000)
-const plots = ref<
-  Record<string, { figure: Figure; table: DataTable; detail?: Record<string, unknown> }>
->({})
-const job = ref<Job>(),
-  jobNote = ref(''),
-  cellCount = ref<number>()
-const preferences = ref<{ presets: Record<string, number>; selected: string }>(),
-  preset = ref(''),
-  presetText = ref('')
-const strategy = ref('shared'),
-  mergePpm = ref(10),
-  autoRanges = ref(true)
-let parameterGeneration = 0
-let editGeneration = 0,
-  jobGeneration = 0,
-  loading = false
-const legacyParameters = computed(() => {
-  const item = samples.value.find((s) => s.id === sample.value)
-  return (item?.parameters ?? store.project?.manifest.parameters)?.extraction_method === 'legacy'
-})
-const samples = computed(() => store.project?.manifest.samples ?? [])
-const basic = [
-  'ref_mz',
-  'mz_min',
-  'mz_max',
-  'cell_snr',
-  'cell_min_signal',
-  'feature_snr_threshold',
-  'max_zero_frac',
-]
-const expanded = ref(false)
-const parameterCategory = ref('reference')
-const categories = [
-  {
-    key: 'reference',
-    label: '参考与范围',
-    fields: ['reference_mz', 'reference_mode', 'reference_ppm_tol'],
-  },
-  { key: 'noise', label: '细胞与噪声', fields: ['baseline_filter_size', 'noise_window'] },
-  {
-    key: 'spectrum',
-    label: '合谱与对齐',
-    fields: ['ppm_tol', 'resolution', 'resample_points_per_fwhm', 'ms_peak_snr_threshold'],
-  },
-  { key: 'merge', label: '样本合并', fields: [] },
-  { key: 'resources', label: '计算资源', fields: ['n_jobs', 'feature_block_size'] },
-  { key: 'presets', label: '参考预设', fields: [] },
-]
-const category = computed(() => categories.find((item) => item.key === parameterCategory.value)!)
-function navigateCategory(event: KeyboardEvent) {
-  const index = categories.findIndex((item) => item.key === parameterCategory.value)
-  const target =
-    event.key === 'ArrowRight'
-      ? (index + 1) % categories.length
-      : event.key === 'ArrowLeft'
-        ? (index + categories.length - 1) % categories.length
-        : event.key === 'Home'
-          ? 0
-          : event.key === 'End'
-            ? categories.length - 1
-            : -1
-  if (target < 0) return
-  event.preventDefault()
-  parameterCategory.value = categories[target]!.key
-  void nextTick(() => document.getElementById(`parameter-tab-${parameterCategory.value}`)?.focus())
-}
-const scanCatalog = ref<{ indices: number[]; times: number[] }>({ indices: [], times: [] })
-const scanTime = ref(0)
-const selectRange = ref(false)
-function selectedRange(range: [number, number]) {
-  rtMin.value = String(Math.min(...range))
-  rtMax.value = String(Math.max(...range))
-  store.notice = '合谱显示范围已选择；切换“合并谱”并更新图形。'
-}
-const scanPosition = computed(() => scanCatalog.value.indices.indexOf(scan.value))
-async function scans(api: AnalysisTransport = store) {
-  const selected = sample.value
-  const level = ms.value
-  const value = await api.read<{ indices: number[]; times: number[] }>(
-    `/raw/scans?sample_id=${selected}&ms_level=${level}`,
-  )
-  if (value && sample.value === selected && ms.value === level) {
-    scanCatalog.value = value
-    seekScan('index', scan.value)
-  }
-}
-function seekScan(mode: 'time' | 'index' | 'step', value: number) {
-  const catalog = scanCatalog.value
-  if (!catalog.indices.length) return
-  let pos = 0
-  if (mode === 'step')
-    pos = Math.max(0, Math.min(catalog.indices.length - 1, scanPosition.value + value))
-  else {
-    const values = mode === 'time' ? catalog.times : catalog.indices
-    for (let i = 1; i < values.length; i++)
-      if (Math.abs(values[i]! - value) < Math.abs(values[pos]! - value)) pos = i
-  }
-  scan.value = catalog.indices[pos]!
-  scanTime.value = catalog.times[pos]!
-}
-watch(ms, () => {
-  if (opened.value && !store.busy) {
-    plots.value = {}
-    void scans()
-  }
-})
-const currentPlot = computed(() => plots.value[kind.value])
-function edited() {
-  editGeneration++
-  delete plots.value.cells
-  cellCount.value = undefined
-  if (job.value) jobNote.value = '参数已编辑；运行中的旧预览完成后不会应用。'
-}
-function valueParams() {
-  const result = { ...parameters.value }
-  result.reference_mz =
-    typeof result.reference_mz === 'string'
-      ? String(result.reference_mz)
-          .split(/[,，\s]+/)
-          .filter(Boolean)
-          .map(Number)
-      : result.reference_mz
-  return result
-}
-function assignParams(value: Record<string, unknown>) {
-  effectiveParameters.value = { ...value }
-  parameters.value = {
-    ...value,
-    extraction_method: 'snr_v1',
-    reference_mz: Array.isArray(value.reference_mz)
-      ? value.reference_mz.join(', ')
-      : value.reference_mz,
-  }
-  refs.value = String(parameters.value.reference_mz || parameters.value.ref_mz || '')
-}
-async function loadParameters(api: AnalysisTransport = store) {
-  const token = ++parameterGeneration
-  opened.value = ''
-  summary.value = undefined
-  plots.value = {}
-  job.value = undefined
-  editGeneration++
-  if (!store.project) return
-  const data = await api.read<Record<string, unknown>>(
-    `/parameters${sample.value ? `?sample_id=${sample.value}` : ''}`,
-  )
-  if (data && token === parameterGeneration) assignParams(data)
-}
-watch(
-  () => store.project?.path,
-  () => {
-    expanded.value = false
-    parameterCategory.value = 'reference'
-    sample.value = samples.value[0]?.id ?? ''
-    strategy.value = store.project?.manifest.feature_strategy ?? 'shared'
-    mergePpm.value = Number(store.project?.manifest.feature_merge_ppm ?? 10)
-    autoRanges.value = Boolean(store.project?.manifest.auto_ranges ?? true)
-    void loadParameters()
-  },
-  { immediate: true },
-)
-watch(sample, () => void loadParameters())
-async function open() {
-  await store.analysisTransaction(async (api) => {
-    const selected = sample.value
-    const value = await api.command<{
-      summary: Record<string, unknown>
-      parameters: Record<string, unknown>
-    }>('/raw/open', { sample_id: sample.value })
-    if (!value || sample.value !== selected) return
-    opened.value = sample.value
-    summary.value = value.summary
-    const levels = value.summary.scans_by_ms_level as number[][]
-    if (!levels.some((level) => level[0] === ms.value)) ms.value = levels[0]?.[0] ?? 1
-    assignParams(value.parameters)
-    mzMin.value = Number(value.parameters.mz_min)
-    mzMax.value = Number(value.parameters.mz_max)
-    scan.value = 0
-    plots.value = {}
-    await scans(api)
-    await plot('tic', api)
-    const first = plots.value.tic?.table.rows[0]?.scan_index
-    if (typeof first === 'number') scan.value = first
-    await plot('single', api)
-  })
-}
-async function plot(selected = kind.value, api?: AnalysisTransport): Promise<void> {
-  if (!opened.value || loading || (!api && store.busy)) return
-  if (!api) {
-    await store.analysisTransaction((transport) => plot(selected, transport))
-    return
-  }
-  loading = true
-  const capture = opened.value
-  const body = {
-    sample_id: sample.value,
-    kind: selected,
-    ms_level: ms.value,
-    scan_index: scan.value,
-    references: refs.value
-      .split(/[,，\s]+/)
-      .filter(Boolean)
-      .map(Number),
-    ppm: ppm.value,
-    mz_range: [mzMin.value, mzMax.value],
-    rt_range:
-      rtMin.value !== '' && rtMax.value !== '' ? [Number(rtMin.value), Number(rtMax.value)] : null,
-    fast: fast.value,
-    bins: bins.value,
-    normalize: normalize.value,
-    resolution: Number(parameters.value.resolution),
-    points_per_fwhm: Number(parameters.value.resample_points_per_fwhm),
-  }
-  try {
-    const data = await api.read<{
-      figure: Figure
-      table: DataTable
-      detail: Record<string, unknown>
-    }>('/raw/plot', body)
-    if (data && api.isCurrent?.() !== false && opened.value === capture)
-      plots.value[selected] = data
-  } finally {
-    loading = false
-  }
-}
-
-watch(kind, () => {
-  if (kind.value !== 'cells' && opened.value && !plots.value[kind.value]) void plot()
-})
-watch(scan, () => {
-  const pos = scanCatalog.value.indices.indexOf(scan.value)
-  if (pos < 0 && scanCatalog.value.indices.length) {
-    seekScan('index', scan.value)
-    return
-  }
-  if (pos >= 0) scanTime.value = scanCatalog.value.times[pos]!
-  if (opened.value && kind.value === 'single') void plot('single')
-})
-async function apply() {
-  await store.analysisTransaction(async (api) => {
-    await api.mutate(
-      '/parameters',
-      {
-        parameters: valueParams(),
-        sample_id: applicationScope.value === 'sample' ? sample.value : null,
-        strategy: strategy.value,
-        merge_ppm: mergePpm.value,
-        auto_ranges: autoRanges.value,
-        cell_type: preset.value || null,
-      },
-      'PUT',
-    )
-    try {
-      const current = await api.read<Record<string, unknown>>(
-        `/parameters${sample.value ? `?sample_id=${sample.value}` : ''}`,
-      )
-      if (current) effectiveParameters.value = current
-      edited()
-      store.notice = '提取参数已应用；旧提取结果不会自动更新。'
-    } catch (cause) {
-      if (api.isCurrent?.() !== false)
-        store.error = `参数已应用；读取生效值失败，请刷新核对。${cause instanceof Error ? cause.message : String(cause)}`
-    }
-  })
-}
-async function clearParameters() {
-  await store.analysisTransaction(async (api) => {
-    await api.mutate('/parameters/clear', { sample_id: sample.value })
-    await loadParameters(api)
-  })
-}
-async function startPreview() {
-  const value = await store.command<Job>('/raw/preview', {
-    sample_id: sample.value,
-    parameters: valueParams(),
-  })
-  if (value) {
-    job.value = value
-    jobGeneration = editGeneration
-    jobNote.value = '细胞预览已启动，可继续操作其他步骤。'
-  }
-}
-async function poll(isCurrent: () => boolean) {
-  if (!job.value || !store.project) return
-  const status = await store.read<Job | null>('/raw/preview', undefined, isCurrent)
-  if (!isCurrent() || !status || !job.value || status.id !== job.value.id) return
-  job.value = status
-  if (status.status === 'failed') {
-    jobNote.value = status.message
-    store.task = `细胞预览：${status.message}`
-    job.value = undefined
-    return
-  }
-  if (status.status !== 'ready') {
-    jobNote.value = status.message
-    store.task = `细胞预览：${status.message}`
-    return
-  }
-  if (store.busy) return
-  if (jobGeneration !== editGeneration || status.revision !== store.current?.revision) {
-    jobNote.value = '样本或参数已改变，旧预览未应用，请重新预览。'
-    job.value = undefined
-    return
-  }
-  const value = await store.command<{
-    figure: Figure
-    table: DataTable
-    parameters: Record<string, unknown>
-    cell_count: number
-    reused: boolean
-  }>('/raw/preview/collect', { job_id: status.id })
-  job.value = undefined
-  if (value) {
-    assignParams(value.parameters)
-    plots.value.cells = value
-    cellCount.value = value.cell_count
-    kind.value = 'cells'
-    jobNote.value = `预览完成，${value.cell_count} 个细胞${value.reused ? '，已复用有效缓存' : ''}。项目仍需主动保存。`
-  }
-}
-onMounted(async () => {
-  preferences.value = await request('/preferences')
-  preset.value = String(store.project?.manifest.cell_type ?? preferences.value?.selected ?? '')
-  presetText.value = JSON.stringify(preferences.value?.presets, null, 2)
-})
-const polling = serialPolling(poll, 1500, (cause) => {
-  store.error = cause instanceof Error ? cause.message : String(cause)
-})
-function startPolling() {
-  polling.start(false)
-}
-onMounted(startPolling)
-onActivated(startPolling)
-onDeactivated(polling.stop)
-onUnmounted(polling.stop)
-function usePreset() {
-  const mass = preferences.value?.presets[preset.value]
-  if (mass) {
-    parameters.value.ref_mz = mass
-    edited()
-  }
-}
-async function savePresets() {
-  await store.run(
-    async () => {
-      preferences.value = await request('/preferences', {
-        method: 'PUT',
-        body: { presets: JSON.parse(presetText.value), selected: preset.value },
-      })
-    },
-    '全局预设已保存；已有项目参数由明确应用决定。',
-    { label: '保存参考预设', phase: 'submitting' },
-  )
-}
-useViewState('raw', {
+const {
+  store,
+  auth,
   sample,
   opened,
   summary,
   parameters,
+  effectiveParameters,
+  applicationScope,
+  differsFromCurrent,
+  unapplied,
   kind,
   ms,
   scan,
@@ -434,15 +27,39 @@ useViewState('raw', {
   normalize,
   bins,
   plots,
+  job,
   jobNote,
   cellCount,
-  effectiveParameters,
-  applicationScope,
+  preferences,
+  preset,
+  presetText,
   strategy,
   mergePpm,
   autoRanges,
-  preset,
-})
+  legacyParameters,
+  samples,
+  basic,
+  expanded,
+  parameterCategory,
+  categories,
+  category,
+  navigateCategory,
+  scanCatalog,
+  scanTime,
+  selectRange,
+  selectedRange,
+  scanPosition,
+  currentPlot,
+  seekScan,
+  edited,
+  open,
+  plot,
+  apply,
+  clearParameters,
+  startPreview,
+  usePreset,
+  savePresets,
+} = useRawWorkbench()
 </script>
 <template>
   <section v-if="store.project">
