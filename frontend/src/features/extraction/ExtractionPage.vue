@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useViewState } from '../../api/viewState'
+import { serialPolling } from '../../api/polling'
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import type { Batch, Figure, DataTable } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
@@ -50,7 +51,6 @@ const batchList = ref<Batch[]>([]),
   included = ref<string[]>([]),
   checked = ref<Record<string, unknown>>(),
   figures = ref<Figure[]>([])
-let timer: ReturnType<typeof setTimeout> | undefined
 const selected = computed(() => batchList.value.find((b) => b.path === path.value))
 const active = computed(() => batchList.value.some((b) => ['queued', 'running'].includes(b.status)))
 const table = computed<DataTable>(() => ({
@@ -81,11 +81,11 @@ function label(status: string) {
     )[status] ?? status
   )
 }
-async function refresh() {
+async function refresh(isCurrent: () => boolean) {
   now.value = Date.now()
   if (!store.project) return
   const result = await store.refreshBatches()
-  if (result) {
+  if (result && isCurrent()) {
     batchList.value = result
     const running = result.find((b) => ['queued', 'running'].includes(b.status))
     if (running) store.task = `提取：${running.message}`
@@ -96,6 +96,9 @@ async function refresh() {
     )
   }
 }
+const polling = serialPolling(refresh, 2000, (cause) => {
+  store.error = cause instanceof Error ? cause.message : String(cause)
+})
 watch(
   () => store.project?.path,
   () => {
@@ -104,7 +107,7 @@ watch(
     checked.value = undefined
     figures.value = []
     batchList.value = []
-    void refresh()
+    void polling.refresh()
   },
   { immediate: true },
 )
@@ -121,29 +124,10 @@ watch(
     figures.value = []
   },
 )
-onMounted(startPolling)
-let pollingActive = false
-async function tick() {
-  try {
-    await refresh()
-  } finally {
-    if (pollingActive) timer = setTimeout(tick, 2000)
-  }
-}
-function startPolling() {
-  if (pollingActive) return
-  pollingActive = true
-  timer = setTimeout(tick, 2000)
-}
-onActivated(startPolling)
-onDeactivated(() => {
-  pollingActive = false
-  clearTimeout(timer)
-})
-onUnmounted(() => {
-  pollingActive = false
-  clearTimeout(timer)
-})
+onMounted(() => polling.start())
+onActivated(() => polling.start())
+onDeactivated(polling.stop)
+onUnmounted(polling.stop)
 async function preflight() {
   checked.value = await store.inspect('/extraction/preflight')
 }
@@ -162,7 +146,7 @@ async function start(retry = false) {
     retry_path: retry ? path.value : null,
   })
   if (result) {
-    await refresh()
+    await polling.refresh()
     path.value = result.path
   }
 }
@@ -210,7 +194,7 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
     <div class="card">
       <div class="section-heading">
         <h2>项目任务</h2>
-        <button @click="refresh" :disabled="store.busy" class="preview">刷新批次</button>
+        <button @click="polling.refresh()" :disabled="store.busy" class="preview">刷新批次</button>
       </div>
       <label class="field"
         ><FieldLabel name="处理批次" /><select

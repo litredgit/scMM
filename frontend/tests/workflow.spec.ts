@@ -1,5 +1,6 @@
 import { test, expect, type Page } from './fixtures'
 import { readFile } from 'node:fs/promises'
+import { serialPolling } from '../src/api/polling'
 
 test.use({ actionTimeout: 15000 })
 
@@ -638,4 +639,169 @@ test('raw signal diagnostic stays independent and exports full numeric compariso
   await page.getByLabel('诊断基线', { exact: true }).selectOption('zero')
   await expect(panel.locator('.js-plotly-plot')).toHaveCount(0)
   await noError(page)
+})
+
+for (const mode of ['hidden-error', 'resumed-error', 'hidden-ready'] as const) {
+  test(`preview polling ignores previous page activation: ${mode}`, async ({ page }) => {
+    await create(page, '预览页面停用')
+    await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
+    await page.getByRole('button', { name: /extract.mzML/ }).click()
+    await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
+    await page.getByRole('link', { name: /原始谱与参数/ }).click()
+    await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let entered!: () => void
+    const pending = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    let reads = 0
+    let revision = 0
+    let collects = 0
+    await page.route('**/workspace/raw/preview/collect', async (route) => {
+      collects++
+      await route.fulfill({ status: 400, json: { error: { message: '不应收集停用代次' } } })
+    })
+    await page.route('**/workspace/raw/preview', async (route) => {
+      if (route.request().method() === 'POST') {
+        const response = await page.request.get('/api/v1/workspace', {
+          headers: route.request().headers(),
+        })
+        const workspace = await response.json()
+        revision = workspace.revision
+        await route.fulfill({
+          json: {
+            workspace,
+            value: {
+              id: 'synthetic-poll',
+              revision: workspace.revision,
+              status: 'running',
+              message: '轮询测试',
+            },
+          },
+        })
+      } else {
+        reads++
+        entered()
+        await held
+        await route.fulfill(
+          mode === 'hidden-ready'
+            ? { json: { id: 'synthetic-poll', revision, status: 'ready', message: '旧代次可收集' } }
+            : { status: 400, json: { error: { message: '停用页面的迟到状态错误' } } },
+        )
+      }
+    })
+    await page.getByRole('button', { name: '预览细胞窗口', exact: true }).click()
+    await pending
+    await page.getByRole('link', { name: /项目与样本/ }).click()
+    if (mode === 'resumed-error') {
+      await page.getByRole('link', { name: /原始谱与参数/ }).click()
+      // Longer than the 1500ms cadence: activation must not overlap a held read.
+      await page.waitForTimeout(1700)
+      expect(reads).toBe(1)
+    }
+    const response = page.waitForResponse(
+      (r) => r.url().endsWith('/raw/preview') && r.request().method() === 'GET',
+    )
+    release()
+    await response
+    await page.waitForTimeout(100)
+    expect(collects).toBe(0)
+    await expect(page.getByRole('alert')).toHaveCount(0)
+  })
+}
+
+test('serial polling coalesces refreshes and resume waits for the old read to settle', async () => {
+  let release!: () => void
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let calls = 0
+  let concurrent = 0
+  let maximum = 0
+  const publications: boolean[] = []
+  const polling = serialPolling(
+    async (isCurrent) => {
+      calls++
+      concurrent++
+      maximum = Math.max(maximum, concurrent)
+      if (calls === 1) await held
+      publications.push(isCurrent())
+      concurrent--
+    },
+    60_000,
+    (cause) => {
+      throw cause
+    },
+  )
+  try {
+    polling.start()
+    await expect.poll(() => calls).toBe(1)
+    const first = polling.refresh()
+    expect(polling.refresh()).toBe(first)
+    polling.stop()
+    polling.start()
+    expect(calls).toBe(1)
+    release()
+    await first
+    await expect.poll(() => calls).toBe(2)
+    expect(maximum).toBe(1)
+    expect(publications).toEqual([false, true])
+  } finally {
+    release()
+    polling.stop()
+  }
+})
+
+test('serial polling reports current errors once and can read again without replaying a write', async () => {
+  const errors: unknown[] = []
+  let calls = 0
+  const polling = serialPolling(
+    async () => {
+      calls++
+      if (calls === 1) throw new Error('合成读取失败')
+    },
+    60_000,
+    (cause) => errors.push(cause),
+  )
+  try {
+    polling.start(false)
+    await polling.refresh()
+    expect(errors).toHaveLength(1)
+    await polling.refresh()
+    expect(calls).toBe(2)
+    expect(errors).toHaveLength(1)
+  } finally {
+    polling.stop()
+  }
+})
+
+test('stopping before a poll starts prevents the request and stale failures are ignored', async () => {
+  const errors: unknown[] = []
+  let calls = 0
+  let reject!: (cause: unknown) => void
+  const held = new Promise<void>((_, fail) => {
+    reject = fail
+  })
+  const polling = serialPolling(
+    async () => {
+      calls++
+      await held
+    },
+    60_000,
+    (cause) => errors.push(cause),
+  )
+  polling.start()
+  polling.stop()
+  await Promise.resolve()
+  expect(calls).toBe(0)
+  polling.start()
+  await expect.poll(() => calls).toBe(1)
+  const pending = polling.refresh()
+  polling.stop()
+  reject(new Error('停用后的失败'))
+  await pending
+  expect(errors).toEqual([])
 })

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useWorkspace } from './stores/workspace'
 import { useAuth } from './stores/auth'
 import { startMaintenance } from './api/maintenance'
+import { serialPolling } from './api/polling'
 import { startPresence, updatePresence } from './api/presence'
 import LoginPanel from './components/LoginPanel.vue'
 import AssistantPanel from './features/assistant/AssistantPanel.vue'
@@ -56,11 +57,10 @@ onMounted(() => {
   presence = startPresence()
   stopMaintenance = startMaintenance(router)
   void presence.ready.then(() => auth.refresh())
-  void pollWorkflow()
+  workflowPolling.start()
 })
 onUnmounted(() => {
-  workflowPolling = false
-  clearTimeout(workflowTimer)
+  workflowPolling.stop()
   presence?.stop()
   stopMaintenance?.()
 })
@@ -75,16 +75,16 @@ const workflow = [
   ...stages,
   { path: '/results', name: '结果与保存' },
 ]
-let workflowPolling = true
-let workflowTimer: ReturnType<typeof setTimeout> | undefined
-async function pollWorkflow() {
-  try {
+const workflowPolling = serialPolling(
+  async () => {
     if (!standalone.value && !store.busy && route.path !== '/extraction')
       await store.refreshBatches()
-  } finally {
-    if (workflowPolling) workflowTimer = setTimeout(pollWorkflow, 5000)
-  }
-}
+  },
+  5000,
+  (cause) => {
+    store.error = cause instanceof Error ? cause.message : String(cause)
+  },
+)
 watch(
   () => route.path,
   () => {

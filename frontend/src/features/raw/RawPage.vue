@@ -11,6 +11,7 @@ import {
   nextTick,
 } from 'vue'
 import { request } from '../../api/client'
+import { serialPolling } from '../../api/polling'
 import type { Figure, DataTable, Job } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
 import { useAuth } from '../../stores/auth'
@@ -75,7 +76,6 @@ const strategy = ref('shared'),
 let parameterGeneration = 0
 let editGeneration = 0,
   jobGeneration = 0,
-  timer: ReturnType<typeof setTimeout> | undefined,
   loading = false
 const legacyParameters = computed(() => {
   const item = samples.value.find((s) => s.id === sample.value)
@@ -322,10 +322,10 @@ async function startPreview() {
     jobNote.value = '细胞预览已启动，可继续操作其他步骤。'
   }
 }
-async function poll() {
+async function poll(isCurrent: () => boolean) {
   if (!job.value || !store.project) return
-  const status = await store.read<Job | null>('/raw/preview')
-  if (!status || status.id !== job.value.id) return
+  const status = await store.read<Job | null>('/raw/preview', undefined, isCurrent)
+  if (!isCurrent() || !status || !job.value || status.id !== job.value.id) return
   job.value = status
   if (status.status === 'failed') {
     jobNote.value = status.message
@@ -364,30 +364,17 @@ onMounted(async () => {
   preferences.value = await request('/preferences')
   preset.value = String(store.project?.manifest.cell_type ?? preferences.value?.selected ?? '')
   presetText.value = JSON.stringify(preferences.value?.presets, null, 2)
-  startPolling()
 })
-let pollingActive = false
-async function tick() {
-  try {
-    await poll()
-  } finally {
-    if (pollingActive) timer = setTimeout(tick, 1500)
-  }
-}
+const polling = serialPolling(poll, 1500, (cause) => {
+  store.error = cause instanceof Error ? cause.message : String(cause)
+})
 function startPolling() {
-  if (pollingActive) return
-  pollingActive = true
-  timer = setTimeout(tick, 1500)
+  polling.start(false)
 }
+onMounted(startPolling)
 onActivated(startPolling)
-onDeactivated(() => {
-  pollingActive = false
-  clearTimeout(timer)
-})
-onUnmounted(() => {
-  pollingActive = false
-  clearTimeout(timer)
-})
+onDeactivated(polling.stop)
+onUnmounted(polling.stop)
 function usePreset() {
   const mass = preferences.value?.presets[preset.value]
   if (mass) {

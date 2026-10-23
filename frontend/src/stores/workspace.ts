@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
+import { serialPolling } from '../api/polling'
 import {
   ApiError,
   request,
@@ -69,7 +70,7 @@ export const useWorkspace = defineStore('workspace', () => {
     },
     { flush: 'sync' },
   )
-  let heartbeat: ReturnType<typeof setInterval> | undefined
+  let heartbeat: ReturnType<typeof serialPolling> | undefined
 
   async function run<T>(action: () => Promise<T>, success = ''): Promise<T | undefined> {
     if (busy.value) return
@@ -89,7 +90,7 @@ export const useWorkspace = defineStore('workspace', () => {
       }
       if (cause instanceof ApiError && cause.code === 'workspace_missing') {
         current.value = null
-        if (heartbeat) clearInterval(heartbeat)
+        heartbeat?.stop()
       }
     } finally {
       busy.value = false
@@ -114,20 +115,33 @@ export const useWorkspace = defineStore('workspace', () => {
       if (!current.value)
         current.value = await request<WorkspaceView>('/workspaces', { method: 'POST' })
       sessionStorage.setItem('scmm-workspace', current.value.workspace_id)
-      if (heartbeat) clearInterval(heartbeat)
-      heartbeat = setInterval(async () => {
-        if (busy.value || !current.value) return
-        try {
-          // Keep the workspace alive; never replace state with an older heartbeat.
-          await request('/workspace', { workspace: current.value.workspace_id })
-        } catch (cause) {
-          if (cause instanceof ApiError && cause.code === 'workspace_missing') {
-            error.value = cause.message
-            current.value = null
-            clearInterval(heartbeat)
+      heartbeat?.stop()
+      heartbeat = serialPolling(
+        async (isCurrent) => {
+          const selected = current.value
+          if (busy.value || !selected) return
+          try {
+            // Keep alive without publishing an older heartbeat as scientific state.
+            await request('/workspace', { workspace: selected.workspace_id })
+          } catch (cause) {
+            if (
+              isCurrent() &&
+              current.value?.workspace_id === selected.workspace_id &&
+              cause instanceof ApiError &&
+              cause.code === 'workspace_missing'
+            ) {
+              error.value = cause.message
+              current.value = null
+              heartbeat?.stop()
+            }
           }
-        }
-      }, 30_000)
+        },
+        30_000,
+        (cause) => {
+          error.value = cause instanceof Error ? cause.message : String(cause)
+        },
+      )
+      heartbeat.start(false)
     })
   }
 
@@ -228,10 +242,15 @@ export const useWorkspace = defineStore('workspace', () => {
     })
   }
 
-  async function read<T>(path: string, body?: Record<string, unknown>): Promise<T | undefined> {
+  async function read<T>(
+    path: string,
+    body?: Record<string, unknown>,
+    accept: () => boolean = () => true,
+  ): Promise<T | undefined> {
     if (!current.value) return
     const snapshot = current.value
     const valid = () =>
+      accept() &&
       current.value?.workspace_id === snapshot.workspace_id &&
       current.value?.revision === snapshot.revision
     try {
@@ -308,7 +327,7 @@ export const useWorkspace = defineStore('workspace', () => {
   }
 
   function release() {
-    if (heartbeat) clearInterval(heartbeat)
+    heartbeat?.stop()
     if (!current.value) return
     void fetch('/api/v1/workspace', {
       method: 'DELETE',
@@ -318,7 +337,7 @@ export const useWorkspace = defineStore('workspace', () => {
   }
 
   function reset() {
-    if (heartbeat) clearInterval(heartbeat)
+    heartbeat?.stop()
     current.value = null
     configuration.value = null
     analysisDraft.value = null
