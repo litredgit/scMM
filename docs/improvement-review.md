@@ -4,7 +4,7 @@
 
 本文整理 2026-10-18 的全面审阅，并补充代码模块化、文档和前端三方面的执行建议。
 它是本次审阅的证据与实施设计，**不维护另一份滚动待办**；任务当前状态以
-[roadmap](roadmap.md#审阅新增改进) 为准，完成记录归 CHANGELOG，已实现行为归对应主题文档。
+[roadmap](roadmap.md#已验收的工程与交互改进) 为准，完成记录归 CHANGELOG，已实现行为归对应主题文档。
 本文保留审阅时的建议与证据；后续实施状态见 roadmap，验证结论见 CHANGELOG。
 实施记录不表示方案已通过科学验收或获生产发布授权。
 
@@ -33,7 +33,7 @@ TypeScript 类型检查、Ruff 和当前文件敏感信息扫描通过，扫描�
 
 下表保留 2026-10-18 审阅时的分批依据，不是最新任务排序；REV-01/REV-06 已验收。
 2026-10-19 本批已实现并验证，剩余事项及与旧修复的衔接见
-[roadmap 当前里程碑顺序](roadmap.md#里程碑与依赖)，不重复执行已完成项。
+[roadmap 当前交付与后续范围](roadmap.md#当前交付与后续边界)，不重复执行已完成项。
 
 优先级按本次审阅定义：P1 为下一次相关功能发布前优先修复的正确性或数据一致性问题，
 P2 为随后完善的兼容性、溯源及工程工作。这些是历史审阅等级；2026-10-21 当前规划已调整为
@@ -186,7 +186,7 @@ FE 编号是 M1 的具体执行切面，不另建相互竞争的交互规划。
 [RawPage](../frontend/src/features/raw/RawPage.vue)、[ExtractionPage](../frontend/src/features/extraction/ExtractionPage.vue)、
 [SavedItems](../frontend/src/components/SavedItems.vue)、[分析执行组合函数](../frontend/src/features/analysis/composables/useAnalysis.ts)。
 
-2026-10-18 审阅时，`run()` 忙时直接返回，异常也被内部处理，调用方可能把未执行当成链路已结束；这是历史问题定位，当前执行结果与保护范围以[roadmap](roadmap.md#m1繁忙交互与误操作)和[开发契约](development.md#操作返回值与完整互斥链)为准。
+2026-10-18 审阅时，`run()` 忙时直接返回，异常也被内部处理，调用方可能把未执行当成链路已结束；这是历史问题定位，当前执行结果与保护范围以[roadmap](roadmap.md#已验收的工程与交互改进)和[开发契约](development.md#操作返回值与完整互斥链)为准。
 原始谱 open→扫描列表→TIC→单扫描、审核→刷新和参数应用→展示失效应作为完整逻辑操作检查。
 此处是竞态风险定位，不是已完成浏览器压力复现。
 

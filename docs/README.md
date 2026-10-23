@@ -31,13 +31,13 @@
 
 - [代理工作指南](../AGENTS.md)：主要设计、模块职责及提问/提交规则；具体进展见 CHANGELOG。
 - [开发指南](development.md)：模块职责、测试与发布、main/dev 环境分工、上游快照、开源敏感信息检查及历史清理计划。
-- [待办与发展计划](roadmap.md)：工程完善与功能接入优先、可靠性与性能其次；真实验证待办已取消，公网开放已完成，见[当前顺序](roadmap.md#里程碑与依赖)；已通过验收的工作归 CHANGELOG。
+- [待办与发展计划](roadmap.md)：本批实现已验收归档，M2 架构暂缓、性能基线待后续；真实验证待办已取消，见[当前交付](roadmap.md#当前交付与后续边界)；已通过验收的工作归 CHANGELOG。
 - [改进审阅与执行交接](improvement-review.md)：2026-10-18 审阅证据，以及正确性、代码模块化、文档和前端的实施建议与验收要求；当前任务状态以 roadmap 为准。
 - [CHANGELOG](../CHANGELOG.md)：实现、验证、验收和部署记录，包括历史环境证据。
 
 ## 新会话继续开发
 
-按 [AGENTS.md](../AGENTS.md) → [roadmap 新会话起点](roadmap.md#新会话起点) →
+按 [AGENTS.md](../AGENTS.md) → [roadmap 当前交付](roadmap.md#当前交付与后续边界) →
 [改进交接](improvement-review.md) → [前后端能力覆盖](development.md#前后端能力覆盖) → CHANGELOG 最新记录阅读。
 2026-10-19 的 21 项需求已完成实现和本机验证，用户明确授权测试后自动发布；实际部署证据见 CHANGELOG。
 后续从 roadmap 的剩余事项继续，不重新执行已完成功能及审阅修复。

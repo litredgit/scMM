@@ -5,7 +5,7 @@
 本页负责模块分工、扩展方式、兼容性回归、检查与发布流程。主要设计和协作规则见
 [AGENTS.md](../AGENTS.md)，环境安装见安装说明；实现进展不在本页维护。
 2026-10-18 的改进依据与实施建议见[审阅交接](improvement-review.md)，任务当前状态见
-[roadmap](roadmap.md#审阅新增改进)；建议中的模块拆分不代表本页所述现有结构已经改变。
+[roadmap](roadmap.md#已验收的工程与交互改进)；建议中的模块拆分不代表本页所述现有结构已经改变。
 
 ## 代码结构
 
@@ -107,22 +107,22 @@ scMM/
 | 能力 | Python / Notebook 入口 | 当前应用/HTTP/Vue | 规划或保留边界 |
 |---|---|---|---|
 | 原始谱与提取 | `CyESIData.load_from_file()` / `load_from_directory()`、`file/readers/` | Vue 有 TIC/多 EIC/合谱/单扫描、SNR 预览、批次与人工审核 | PERF-01/TASK-01～03/VAL-05 改执行与资源，不改现有数值；legacy 仅保留 Python/CLI/旧产物兼容，不恢复 Vue 方法选择器 |
-| 基础预处理/QC | `analysis/quality.py`、`analysis/preprocessing.py`、`util/normalize.py`、`file/_dataset_processing.py` | 筛选、七种归一化、四种插补、异常检测高级参数、稳定 ID 子集和层/完整起点恢复 | PARAM-01 / SUBSET-01 / QC-01 已接待统一验收；各入口默认值分别保持，失败候选不提交 |
+| 基础预处理/QC | `analysis/quality.py`、`analysis/preprocessing.py`、`util/normalize.py`、`file/_dataset_processing.py` | 筛选、七种归一化、四种插补、异常检测高级参数、稳定 ID 子集和层/完整起点恢复 | PARAM-01 / SUBSET-01 / QC-01 已接入；各入口默认值分别保持，失败候选不提交 |
 | 天然同位素 | 原 `CyESIData.deisotope()`、`file/_deisotope.py`；网页 `util/lipid_isotopes.py` | 网页按数据库分子式/加合物计算天然分布，保留所有峰，只标记、审阅与筛选导出 | ISO-01～03 与 ANN 联合；网页不使用旧 API 的删峰/求和及平方矩阵 |
 | SDF 精确质量注释 | 原 `get_annotation()`；网页 `util/lipid_annotation.py` / `lipid_rules.py` | LMSD 本地准备、质量索引、完整候选、规则/预设、人工指定、独立版本及 CSV 已接入 | ANN-01～03；保留用户验收，背景任务迁移仍归 M2；Python/Notebook 旧默认值保持 |
 | 细胞降维/聚类 | `analysis/embedding.py`、`analysis/clustering.py`、`PlotEngine`、`plot/embedding.py` | 五种降维、五种聚类、聚类参数白名单及着色已有；工作台保留候选提交，领域辅助函数负责参数校验/计算 | PARAM-03 已核对现有显式降维字段均有控件；三套 Python 入口的默认值/返回值不混用，Matplotlib 包装不重复造按钮 |
 | 差异/Marker/相关网络 | `analysis/statistics.py`、`plot/_engine_statistics.py` | 检验、全局 FDR、筛选/分页、图形与导出已有 | 保持 STAT-01 解释和结果生命周期；不是待重新移植的功能 |
 | 监督诊断/潜变量/SHAP | `analysis/supervised.py` | 分组验证、四模型、ROC/PR/校准、潜变量及 SHAP 已有 | PARAM-03 已接入 model_parameters.py 白名单/组合/训练折校验、四模型控件及 SHAP 显示设置；不序列化可执行模型 |
 | Palantir 与窗口轨迹 | `PlotEngine.run_palantir()` / `compute_trajectory()` | `time_analysis` / `web_time`、严格 HTTP、Vue 命名结果、只读重载/全量导出 | 沿用现有定义，扩散核/多尺度近邻图断连检查仅网页显式启用；暂缓上游方法不引入 |
-| 代谢速度 | `PlotEngine.metabolic_velocity()` | `time_analysis` / `web_time`、严格 HTTP、Vue 显式层/时间/单位、命名结果/完整表/只读重载 | TIME-02 已接待统一验收；沿递增时间计算强度斜率及范数，不能解释为示踪通量 |
-| 代谢物趋势 | `plot_metabolite_trends()` | `time_trends` 适配既有数值算法、表/热图，`time_analysis` / `web_time` 管理命名结果与工作区；HTTP/Vue/完整导出/只读重载 | TIME-03 已接待统一验收；时间/层/精确 ID/名称来源/窗口统计可追溯，显示标准化不修改数据 |
-| 趋势聚类 | `plot_trend_clusters()` | `time_trend_clusters` / 命名时间协议 / HTTP / Vue，完整分组/曲线/距离导出及只读重载 | TIME-04 已接待统一验收；复用原标准化/聚类，`plot/_trend_worker.py` 隔离拟合随机源/警告及诊断；短进程单并发/限时回收，非 M2 持久任务 |
-| 特征距离嵌入 | `PlotEngine.feature_network()`；网页 `analysis/feature_embedding.py` | 独立特征距离 UMAP、层/ID/名称/类别、完整表及只读重载 | PLOT-02 待统一验收；Pearson 绝对相关/Euclidean 与相关阈值网络区分，常量/缺失及资源门限有明确规则 |
-| 双特征散点/回归 | `PlotEngine.plot_feature_scatter()`；网页 `analysis/feature_scatter.py` | 独立面板、精确 ID/层/着色、全体细胞回归、完整导出及只读图重载 | PLOT-01 待用户统一验收；网页不采用 Notebook 的最近质量匹配，不将细胞级回归解释为生物重复验证 |
-| 已处理结果合并 | `CyESIData.alignwith()`、`file.batch.concat()` | `merge_sources` / `processed_merge` / `web_merge` / 严格 HTTP / Vue，当前与完整起点独立候选、只读溯源 | MERGE-01 已接待统一验收；直接适配 H5AD/旧目录，复用原匹配规则；concat 仍仅读取旧目录，非批次校正 |
-| 显式数据子集 | `AnalysisWorkspace.subset()` | 稳定细胞/特征 ID、数量预览、手动应用和完整起点恢复 | SUBSET-01 待统一验收；不是 `CyESIData.__getitem__` 的最近 m/z 强度读取，失败原子性及保存重开受检查 |
-| 采集稳定性 QC | Notebook 稳定性段；网页 `analysis/stability.py` | 显式坐标/来源/参考特征、箱图/窗口数量/来源中位谱相关和完整表、只读图重载 | QC-01 待统一验收；存储顺序不当采集时间，不把细胞级 QC 当生物重复验证 |
-| QC / 当前分析报告 | Python `analysis.quality.render_quality_report()`；网页 `analysis/quality_pdf.py`、`application/reporting.py` | 当前矩阵 QC PDF、分页分析摘要及完整数值/参数/图形附件 ZIP | REPORT-01 待统一验收；请求数据修订检查，不自动分析或保存项目，旧图身份不可核实则明确列为省略 |
+| 代谢速度 | `PlotEngine.metabolic_velocity()` | `time_analysis` / `web_time`、严格 HTTP、Vue 显式层/时间/单位、命名结果/完整表/只读重载 | TIME-02 已接入；沿递增时间计算强度斜率及范数，不能解释为示踪通量 |
+| 代谢物趋势 | `plot_metabolite_trends()` | `time_trends` 适配既有数值算法、表/热图，`time_analysis` / `web_time` 管理命名结果与工作区；HTTP/Vue/完整导出/只读重载 | TIME-03 已接入；时间/层/精确 ID/名称来源/窗口统计可追溯，显示标准化不修改数据 |
+| 趋势聚类 | `plot_trend_clusters()` | `time_trend_clusters` / 命名时间协议 / HTTP / Vue，完整分组/曲线/距离导出及只读重载 | TIME-04 已接入；复用原标准化/聚类，`plot/_trend_worker.py` 隔离拟合随机源/警告及诊断；短进程单并发/限时回收，非 M2 持久任务 |
+| 特征距离嵌入 | `PlotEngine.feature_network()`；网页 `analysis/feature_embedding.py` | 独立特征距离 UMAP、层/ID/名称/类别、完整表及只读重载 | PLOT-02 已接入；Pearson 绝对相关/Euclidean 与相关阈值网络区分，常量/缺失及资源门限有明确规则 |
+| 双特征散点/回归 | `PlotEngine.plot_feature_scatter()`；网页 `analysis/feature_scatter.py` | 独立面板、精确 ID/层/着色、全体细胞回归、完整导出及只读图重载 | PLOT-01 已接入；网页不采用 Notebook 的最近质量匹配，不将细胞级回归解释为生物重复验证 |
+| 已处理结果合并 | `CyESIData.alignwith()`、`file.batch.concat()` | `merge_sources` / `processed_merge` / `web_merge` / 严格 HTTP / Vue，当前与完整起点独立候选、只读溯源 | MERGE-01 已接入；直接适配 H5AD/旧目录，复用原匹配规则；concat 仍仅读取旧目录，非批次校正 |
+| 显式数据子集 | `AnalysisWorkspace.subset()` | 稳定细胞/特征 ID、数量预览、手动应用和完整起点恢复 | SUBSET-01 已接入；不是 `CyESIData.__getitem__` 的最近 m/z 强度读取，失败原子性及保存重开受检查 |
+| 采集稳定性 QC | Notebook 稳定性段；网页 `analysis/stability.py` | 显式坐标/来源/参考特征、箱图/窗口数量/来源中位谱相关和完整表、只读图重载 | QC-01 已接入；存储顺序不当采集时间，不把细胞级 QC 当生物重复验证 |
+| QC / 当前分析报告 | Python `analysis.quality.render_quality_report()`；网页 `analysis/quality_pdf.py`、`application/reporting.py` | 当前矩阵 QC PDF、分页分析摘要及完整数值/参数/图形附件 ZIP | REPORT-01 已接入；请求数据修订检查，不自动分析或保存项目，旧图身份不可核实则明确列为省略 |
 | 峰重建与秩一分解 | `util.denoise.peak_recon()` / `r1_decomposition()` | 无应用/HTTP/Vue 工作流 | TOOL-01，工具级输入/科学定义/验证先于界面，不能替换现有提取算法 |
 | 互操作/元数据/绘图辅助 | AnnData/H5AD、assign_source_metadata、EIC/质谱 Matplotlib、configure_plotting | Vue 已有保存重载、稳定样本元数据、Plotly 原始谱及导出 | 保留 Python 专用辅助接口，功能等价覆盖不要求逐函数建立控件；恢复原始输入和方法默认值分别管理 |
 

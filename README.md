@@ -26,10 +26,10 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | 当前数据 QC PDF、当前分析报告及完整参数/数值附件 ZIP | [报告说明](docs/analysis.md#统计解释与网页分析) |
 | 网页 LMSD 候选、相关性辅助排序、天然同位素标记、分类饼图及特征/分子网络 | [注释与同位素](docs/workflow.md#注释与同位素) |
 
-待验收、工程改进和暂缓决策统一见 [roadmap](docs/roadmap.md)。
+后续工作与暂缓决策统一见 [roadmap](docs/roadmap.md)。
 网页覆盖范围与全部 Python 能力不同：网页注释与同位素功能保留全部峰和候选，只在显示/导出时筛选；
 Python 原有删峰/求和去同位素接口与部分时间/趋势分析继续保留，边界见[分析说明](docs/analysis.md)。
-待验收与新会话起点见 [发展计划](docs/roadmap.md#新会话起点)。
+当前交付与后续范围见 [发展计划](docs/roadmap.md#当前交付与后续边界)。
 
 同行复核提取方法可直接阅读[细胞事件与特征峰确认流程](docs/cell-feature-identification.md)。
 
