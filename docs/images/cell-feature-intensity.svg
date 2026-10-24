@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="620" viewBox="0 0 1000 620" role="img" aria-labelledby="title desc">
+<title id="title">默认特征SNR门槛怎样得到矩阵强度</title><desc id="desc">合成特征原始峰顶160,000，基线40,000，净峰高120,000。噪声40,000时SNR等于3，输出120,000。</desc>
+<defs><marker id="arrow" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto-start-reverse"><path d="M0 0 L7 3.5 L0 7" fill="#237354"/></marker></defs>
+<rect width="1000" height="620" fill="white"/><g font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" fill="#243449">
+<text x="32" y="42" font-size="27" fill="#243449" text-anchor="start" font-weight="bold">矩阵填入通过检出门槛的净峰高</text>
+<text x="32" y="76" font-size="19" fill="#65758a" text-anchor="start" font-weight="normal">snr_v1 · 默认特征 SNR 门槛 3 · 合成窗口</text>
+<rect x="585" y="110" width="380" height="355" rx="8" fill="#f0f6fb"/>
+<line x1="85" y1="420" x2="540" y2="420" stroke="#65758a" stroke-width="2"/>
+<line x1="85" y1="420" x2="85" y2="145" stroke="#65758a" stroke-width="2"/>
+<text x="85" y="122" font-size="18" fill="#243449" text-anchor="start" font-weight="normal">特征强度（×1,000）</text>
+<text x="72" y="426.0" font-size="17" fill="#65758a" text-anchor="end" font-weight="normal">0</text>
+<text x="72" y="366.0" font-size="17" fill="#65758a" text-anchor="end" font-weight="normal">40</text>
+<text x="72" y="186.0" font-size="17" fill="#65758a" text-anchor="end" font-weight="normal">160</text>
+<line x1="85" y1="360.0" x2="540" y2="360.0" stroke="#65758a" stroke-width="2" stroke-dasharray="6 5"/>
+<polyline points="120,330.0 210,270.0 300,180.0 390,210.0 480,300.0" fill="none" stroke="#2267ae" stroke-width="3"/>
+<circle cx="120" cy="330.0" r="5" fill="#2267ae"/>
+<circle cx="210" cy="270.0" r="5" fill="#2267ae"/>
+<circle cx="300" cy="180.0" r="5" fill="#2267ae"/>
+<circle cx="390" cy="210.0" r="5" fill="#2267ae"/>
+<circle cx="480" cy="300.0" r="5" fill="#2267ae"/>
+<line x1="85" y1="180.0" x2="300" y2="180.0" stroke="#2267ae" stroke-width="2" stroke-dasharray="4 5"/>
+<line x1="330" y1="360.0" x2="330" y2="180.0" stroke="#237354" stroke-width="2" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="345" y="288" font-size="20" fill="#237354" text-anchor="start" font-weight="bold">净峰高</text>
+<text x="345" y="317" font-size="20" fill="#237354" text-anchor="start" font-weight="normal">120,000</text>
+<text x="520" y="389" font-size="18" fill="#65758a" text-anchor="end" font-weight="normal">基线 40,000</text>
+<text x="540" y="450" font-size="18" fill="#65758a" text-anchor="end" font-weight="normal">窗口内扫描 →</text>
+<text x="610" y="151" font-size="23" fill="#243449" text-anchor="start" font-weight="bold">① 扣除基线</text>
+<text x="610" y="190" font-size="19" fill="#243449" text-anchor="start" font-weight="normal">160,000 − 40,000 = 120,000</text>
+<text x="610" y="239" font-size="23" fill="#243449" text-anchor="start" font-weight="bold">② 检查信噪比</text>
+<text x="610" y="278" font-size="19" fill="#243449" text-anchor="start" font-weight="normal">假设估计噪声 = 40,000</text>
+<text x="610" y="315" font-size="19" fill="#243449" text-anchor="start" font-weight="normal">SNR = 120,000 / 40,000 = 3</text>
+<text x="610" y="365" font-size="23" fill="#237354" text-anchor="start" font-weight="bold">③ 达到默认门槛（≥ 3）</text>
+<text x="610" y="415" font-size="25" fill="#237354" text-anchor="start" font-weight="bold">矩阵输出：120,000</text>
+<text x="32" y="510" font-size="21" fill="#243449" text-anchor="start" font-weight="normal">若净峰高为 80,000、噪声仍为 40,000，则 SNR = 2，输出 0。</text>
+<text x="32" y="552" font-size="19" fill="#65758a" text-anchor="start" font-weight="normal">基线和噪声是假设已估计的数值，不由图中几个点单独计算。</text>
+<text x="32" y="589" font-size="19" fill="#65758a" text-anchor="start" font-weight="normal">默认基线窗口 50 帧，噪声窗口 51 帧；帧数不是秒。</text>
+</g></svg>

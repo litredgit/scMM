@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="610" viewBox="0 0 1000 610" role="img" aria-labelledby="title desc">
+<title id="title">默认参数怎样确定细胞窗口</title><desc id="desc">合成单参考示例，基线20,000。参考信号须同时超过100,000和120,000。第4至6扫描通过，峰顶是第5扫描。</desc>
+<defs><marker id="arrow" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto-start-reverse"><path d="M0 0 L7 3.5 L0 7" fill="#237354"/></marker></defs>
+<rect width="1000" height="610" fill="white"/><g font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" fill="#243449">
+<text x="32" y="42" font-size="27" fill="#243449" text-anchor="start" font-weight="bold">连续通过两个条件，才组成事件窗口</text>
+<text x="32" y="76" font-size="19" fill="#65758a" text-anchor="start" font-weight="normal">snr_v1 · 默认倍数 5、最低净信号 100,000 · 合成局部曲线</text>
+<rect x="360" y="130" width="160" height="290" rx="8" fill="#e9f5ef"/>
+<line x1="80" y1="420" x2="800" y2="420" stroke="#65758a" stroke-width="2"/>
+<line x1="80" y1="420" x2="80" y2="130" stroke="#65758a" stroke-width="2"/>
+<text x="80" y="116" font-size="18" fill="#243449" text-anchor="start" font-weight="normal">参考强度（×1,000）</text>
+<text x="67" y="426.0" font-size="17" fill="#65758a" text-anchor="end" font-weight="normal">0</text>
+<text x="67" y="398.0" font-size="17" fill="#65758a" text-anchor="end" font-weight="normal">20</text>
+<text x="67" y="286.0" font-size="17" fill="#65758a" text-anchor="end" font-weight="normal">100</text>
+<text x="67" y="258.0" font-size="17" fill="#65758a" text-anchor="end" font-weight="normal">120</text>
+<text x="67" y="174.00000000000003" font-size="17" fill="#65758a" text-anchor="end" font-weight="normal">180</text>
+<line x1="80" y1="392.0" x2="800" y2="392.0" stroke="#65758a" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="80" y1="280.0" x2="800" y2="280.0" stroke="#a5530a" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="80" y1="252.0" x2="800" y2="252.0" stroke="#237354" stroke-width="2" stroke-dasharray="6 5"/>
+<text x="815" y="398.0" font-size="17" fill="#65758a" text-anchor="start" font-weight="normal">基线 20,000</text>
+<text x="815" y="287.0" font-size="17" fill="#a5530a" text-anchor="start" font-weight="normal">5 × 基线</text>
+<text x="815" y="248.0" font-size="17" fill="#237354" text-anchor="start" font-weight="normal">基线 + 100,000</text>
+<polyline points="120,392.0 200,280.0 280,252.0 360,224.0 440,168.00000000000003 520,210.0 600,252.0 680,280.0 760,392.0" fill="none" stroke="#2267ae" stroke-width="3"/>
+<circle cx="120" cy="392.0" r="5" fill="#2267ae"/>
+<circle cx="200" cy="280.0" r="5" fill="#2267ae"/>
+<circle cx="280" cy="252.0" r="5" fill="#2267ae"/>
+<circle cx="360" cy="224.0" r="5" fill="#2267ae"/>
+<circle cx="440" cy="168.00000000000003" r="5" fill="#2267ae"/>
+<circle cx="520" cy="210.0" r="5" fill="#2267ae"/>
+<circle cx="600" cy="252.0" r="5" fill="#2267ae"/>
+<circle cx="680" cy="280.0" r="5" fill="#2267ae"/>
+<circle cx="760" cy="392.0" r="5" fill="#2267ae"/>
+<text x="120" y="449" font-size="18" fill="#65758a" text-anchor="middle" font-weight="normal">1</text>
+<text x="200" y="449" font-size="18" fill="#65758a" text-anchor="middle" font-weight="normal">2</text>
+<text x="280" y="449" font-size="18" fill="#65758a" text-anchor="middle" font-weight="normal">3</text>
+<text x="360" y="449" font-size="18" fill="#65758a" text-anchor="middle" font-weight="normal">4</text>
+<text x="440" y="449" font-size="18" fill="#65758a" text-anchor="middle" font-weight="normal">5</text>
+<text x="520" y="449" font-size="18" fill="#65758a" text-anchor="middle" font-weight="normal">6</text>
+<text x="600" y="449" font-size="18" fill="#65758a" text-anchor="middle" font-weight="normal">7</text>
+<text x="680" y="449" font-size="18" fill="#65758a" text-anchor="middle" font-weight="normal">8</text>
+<text x="760" y="449" font-size="18" fill="#65758a" text-anchor="middle" font-weight="normal">9</text>
+<line x1="360" y1="135" x2="360" y2="420" stroke="#237354" stroke-width="2" stroke-dasharray="4 5"/>
+<line x1="520" y1="135" x2="520" y2="420" stroke="#237354" stroke-width="2" stroke-dasharray="4 5"/>
+<text x="440" y="139" font-size="20" fill="#2267ae" text-anchor="middle" font-weight="bold">峰顶：第 5 次扫描</text>
+<text x="440" y="485" font-size="21" fill="#237354" text-anchor="middle" font-weight="bold">窗口：第 4–6 次扫描（含两端）</text>
+<text x="800" y="483" font-size="18" fill="#65758a" text-anchor="end" font-weight="normal">扫描顺序 →</text>
+<text x="32" y="540" font-size="21" fill="#243449" text-anchor="start" font-weight="normal">120,000 只让净信号等于门槛，仍不通过；必须严格超过。</text>
+<text x="32" y="578" font-size="19" fill="#65758a" text-anchor="start" font-weight="normal">恒定基线仅为简化示意；实际基线由完整扫描序列估计。</text>
+</g></svg>
