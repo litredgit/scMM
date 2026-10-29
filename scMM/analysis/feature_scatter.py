@@ -86,13 +86,13 @@ def feature_scatter_figure(
                     y=missing.y_value,
                     mode="markers",
                     marker_color="#9ca3af",
-                    name="缺失/非有限着色",
+                    name="Missing/non-finite color",
                     customdata=missing[["cell_id"]].to_numpy(),
                 )
             )
             notes.append("缺失/非有限着色值显示为灰色，不排除其有限两轴数值。")
     else:
-        missing_label = "（缺失着色）"
+        missing_label = "(Missing color)"
         existing = set(displayed["color_value"].dropna().astype(str))
         while missing_label in existing:
             missing_label += "·"
@@ -111,7 +111,7 @@ def feature_scatter_figure(
         if missing.any():
             notes.append("缺失着色单独显示，不排除其有限两轴数值。")
     figure.update_traces(
-        hovertemplate="细胞：%{customdata[0]}<br>x：%{x:.2e}<br>y：%{y:.2e}<extra>%{fullData.name}</extra>"
+        hovertemplate="Cell: %{customdata[0]}<br>x: %{x:.2e}<br>y: %{y:.2e}<extra>%{fullData.name}</extra>"
     )
     fit = {
         "method": "OLS y_on_x",
@@ -161,7 +161,7 @@ def feature_scatter_figure(
                         y=yy,
                         mode="lines",
                         line_color="#374151",
-                        name="全体细胞回归",
+                        name="All-cell regression",
                         hoverinfo="skip",
                     )
                 )
@@ -183,7 +183,7 @@ def feature_scatter_figure(
         return f"{feature_label(identity, mz)} · {identity}"
 
     figure.update_layout(
-        title="双特征散点",
+        title="Feature scatter",
         xaxis_title=label(feature_a),
         yaxis_title=label(feature_b),
         meta={

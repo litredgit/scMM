@@ -32,7 +32,7 @@ def test_feature_selection_and_hiding_zero_never_recompute_fdr(monkeypatch):
     violin = violin_figure(state.data, result, ["0"], hide_zero=True)
     assert len(volcano.data[0].x) == 2
     assert len(violin.data[0].y) == 2
-    assert "全局 FDR" in violin.layout.annotations[0].text
+    assert "Global FDR" in violin.layout.annotations[0].text
     pd.testing.assert_frame_equal(expected, result["table"])
 
 

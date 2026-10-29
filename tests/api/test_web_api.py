@@ -507,3 +507,134 @@ def test_vue_cli_starts_without_panel_and_preserves_storage_options(api, monkeyp
     }
     assert app.state.workspaces.store.root == manager.store.root
     assert [root.label for root in app.state.workspaces.storage.roots] == ["Raw"]
+
+
+def test_scoped_artifact_cleanup_protects_live_and_disk_references(api, tmp_path):
+    from pathlib import Path
+
+    client, manager, *_ = api
+    manager.trash_root = tmp_path / "scoped-trash"
+    headers = session(client)
+    create(client, headers)
+    identity = headers["X-SCMM-Workspace"]
+    with manager.access(identity) as workspace:
+        project = workspace.project
+        project.workspace.replace(AnnData(np.ones((3, 2))))
+        manager.store.save(project)
+        old_snapshot = project.folder / Path(project.manifest["artifacts"]["current"]).parent
+        manager.store.save(project)
+        current_snapshot = project.folder / Path(project.manifest["artifacts"]["current"]).parent
+        old_batch = project.folder / "processing" / "old-batch"
+        old_batch.mkdir()
+        (old_batch / "request.json").write_text("{}")
+        (old_batch / "state.json").write_text('{"status":"completed"}')
+        project.workspace.source = str(old_batch / "state.json")
+
+    def post(endpoint, **values):
+        revision = client.get("/api/v1/workspace", headers=headers).json()["revision"]
+        return client.post(
+            "/api/v1/workspace" + endpoint, headers=headers, json={"revision": revision, **values}
+        )
+
+    listing = client.get("/api/v1/workspace/saved/artifacts?scope=snapshots", headers=headers)
+    assert listing.status_code == 200, listing.text
+    assert next(r for r in listing.json() if r["path"] == str(current_snapshot))["protection"]
+    assert not next(r for r in listing.json() if r["path"] == str(old_snapshot))["protection"]
+    assert post("/saved/plan", root="项目结果", path=str(old_batch), scope="batches").is_error
+    assert post("/saved/plan", root="项目结果", path=str(project.folder), scope="batches").is_error
+    plan = post("/saved/plan", root="项目结果", path=str(old_snapshot), scope="snapshots")
+    assert plan.status_code == 200, plan.text
+    # A late unsaved reference invalidates the reviewed plan even without a disk save.
+    with manager.access(identity) as workspace:
+        workspace.project.views["source"] = str(old_snapshot)
+    assert post("/saved/move", token=plan.json()["token"]).is_error
+    assert old_snapshot.exists()
+    with manager.access(identity) as workspace:
+        workspace.project.views.pop("source")
+    plan = post("/saved/plan", root="项目结果", path=str(old_snapshot), scope="snapshots")
+    moved = post("/saved/move", token=plan.json()["token"])
+    assert moved.status_code == 200, moved.text
+    assert not old_snapshot.exists() and current_snapshot.is_dir()
+    assert post("/saved/restore", entry=moved.json()["entry"]).status_code == 200
+    assert old_snapshot.is_dir()
+    # An unsaved import into a different project also protects its source.
+    imported = session(client)
+    imported_state = create(client, imported, "另一个项目")
+    with manager.access(imported["X-SCMM-Workspace"]) as peer:
+        peer.project.workspace.replace(
+            AnnData(np.ones((2, 2))), source=str(old_snapshot / "source.h5ad")
+        )
+    assert post("/saved/plan", root="项目结果", path=str(old_snapshot), scope="snapshots").is_error
+    client.post(
+        "/api/v1/workspace/project/close",
+        headers=imported,
+        json={"revision": imported_state["revision"]},
+    ).raise_for_status()
+    # A second workspace protects the entire project, including otherwise unused history.
+    other = session(client)
+    client.post(
+        "/api/v1/workspace/project/open",
+        headers=other,
+        json={"revision": 0, "path": str(project.folder)},
+    ).raise_for_status()
+    assert post("/saved/plan", root="项目结果", path=str(old_snapshot), scope="snapshots").is_error
+
+
+def test_two_batch_comparison_http_is_read_only_and_project_scoped(api):
+    from scMM.application.projects import write_json
+
+    client, manager, *_ = api
+    headers = session(client)
+    create(client, headers)
+    identity = headers["X-SCMM-Workspace"]
+    with manager.access(identity) as workspace:
+        project = workspace.project
+        paths = []
+        for label in ("A", "B"):
+            folder = project.folder / "processing" / label
+            folder.mkdir()
+            write_json(
+                folder / "request.json",
+                {
+                    "parameters": {"cell_snr": 5},
+                    "samples": [
+                        {"id": "same-id", "name": "保留输入", "parameters": {}, "path": "/raw/test"}
+                    ],
+                },
+            )
+            write_json(
+                folder / "state.json",
+                {
+                    "status": "failed",
+                    "samples": [
+                        {"id": "same-id", "status": "failed", "error": "synthetic failure"}
+                    ],
+                },
+            )
+            paths.append(str(folder / "state.json"))
+        before = project.folder.joinpath("project.json").read_bytes()
+    revision = client.get("/api/v1/workspace", headers=headers).json()["revision"]
+    response = client.post(
+        "/api/v1/workspace/extraction/compare",
+        headers=headers,
+        json={
+            "revision": revision,
+            "path_a": paths[0],
+            "path_b": paths[1],
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["samples"][0]["name_A"] == "保留输入"
+    assert response.json()["warnings"]
+    assert response.json()["figures"] == []
+    current = client.get("/api/v1/workspace", headers=headers).json()
+    assert current["revision"] == revision and current["project"]["dataset"] is None
+    assert project.folder.joinpath("project.json").read_bytes() == before
+    for body in (
+        {"revision": revision - 1, "path_a": paths[0], "path_b": paths[1]},
+        {"revision": revision, "path_a": paths[0], "path_b": "/other/state.json"},
+        {"revision": revision, "path_a": paths[0], "path_b": paths[0]},
+    ):
+        assert client.post(
+            "/api/v1/workspace/extraction/compare", headers=headers, json=body
+        ).is_error

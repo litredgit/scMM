@@ -50,7 +50,7 @@ const figure = computed<Figure>(() => {
         x,
         y: mean,
         customdata: ids,
-        name: '分钟均值',
+        name: 'Minute mean',
         line: { color: '#0072b2' },
       },
       {
@@ -59,16 +59,16 @@ const figure = computed<Figure>(() => {
         x,
         y: peak,
         customdata: ids,
-        name: '分钟峰值',
+        name: 'Minute peak',
         line: { color: '#666666', dash: 'dash' },
       },
     ],
     layout: {
-      title: '最近 24 小时',
+      title: 'Last 24 hours',
       paper_bgcolor: 'white',
       plot_bgcolor: 'white',
-      xaxis: { title: { text: '北京时间（UTC+8）' }, showline: true },
-      yaxis: { title: { text: props.bytes ? '用量（GiB）' : '用量' }, showline: true },
+      xaxis: { title: { text: 'Beijing time (UTC+8)' }, showline: true },
+      yaxis: { title: { text: props.bytes ? 'Usage (GiB)' : 'Usage' }, showline: true },
       meta: {
         metric: props.metric,
         unit: props.bytes ? 'GiB' : 'percent',
@@ -81,6 +81,7 @@ const figure = computed<Figure>(() => {
 <template>
   <PlotView :figure="figure" :name="`monitor-${metric}`" readonly compact />
   <p class="muted">
-    实线为分钟均值，虚线为分钟峰值；断线表示无采样或服务重启。悬停可查看分钟值；图形仅用于监控，保留缩放、平移与复位工具。
+    实线为Minute mean，虚线为Minute
+    peak；断线表示无采样或服务重启。悬停可查看分钟值；图形仅用于监控，保留缩放、平移与复位工具。
   </p>
 </template>

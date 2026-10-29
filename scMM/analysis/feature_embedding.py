@@ -135,7 +135,7 @@ def feature_embedding_figure(
             notes.append("缺失/空白名称使用稳定特征 ID，不静默删除特征；重名依靠 ID 区分。")
     if class_key is not None:
         frame["category"] = (
-            selected.var[class_key].astype("string").fillna("（缺失类别）").to_numpy()
+            selected.var[class_key].astype("string").fillna("(Missing category)").to_numpy()
         )
     figure = px.scatter(
         frame,
@@ -145,12 +145,12 @@ def feature_embedding_figure(
         color="category" if class_key else None,
         hover_name="name",
         custom_data=["feature_id"],
-        labels={"category": class_key or "类别"},
+        labels={"category": class_key or "Category"},
     )
     distance_frame = pd.DataFrame(distances, index=identities, columns=identities)
     distance_frame.index.name = "feature_id"
     figure.update_layout(
-        title="特征距离嵌入",
+        title="Feature distance embedding",
         meta={
             "point_kind": "feature",
             "notes": notes,

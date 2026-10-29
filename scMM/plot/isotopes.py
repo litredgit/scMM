@@ -35,7 +35,13 @@ def isotope_spectrum(data, version, relation_id):
         [np.zeros(len(frame)), frame.intensity, np.full(len(frame), np.nan)]
     ).ravel()
     figure = go.Figure(
-        go.Scatter(x=x, y=y, mode="lines", name="有效细胞平均特征谱", line={"color": "#333333"})
+        go.Scatter(
+            x=x,
+            y=y,
+            mode="lines",
+            name="Mean feature spectrum of valid cells",
+            line={"color": "#333333"},
+        )
     )
     predicted = float(relation["predicted_mz"])
     theoretical = float(values[valid, parent].mean()) * float(relation["theoretical_ratio"])
@@ -43,14 +49,14 @@ def isotope_spectrum(data, version, relation_id):
         x=[predicted, predicted],
         y=[0, theoretical],
         mode="lines",
-        name="理论同位素峰 (按母峰缩放)",
+        name="Theoretical isotope peaks (scaled to parent)",
         line={"color": "#CC79A7", "dash": "dash"},
     )
     colors = {
-        "accepted": ("#0072B2", "人工接受", "solid"),
-        "rejected": ("#777777", "人工排除", "dot"),
-        "matched": ("#009E73", "自动匹配", "solid"),
-        "pending": ("#E69F00", "待检查", "dash"),
+        "accepted": ("#0072B2", "Manually accepted", "solid"),
+        "rejected": ("#777777", "Manually rejected", "dot"),
+        "matched": ("#009E73", "Automatically matched", "solid"),
+        "pending": ("#E69F00", "Pending review", "dash"),
     }
     status = (
         relation["review"]
@@ -77,12 +83,12 @@ def isotope_spectrum(data, version, relation_id):
             x=[None], y=[None], mode="lines", line={"color": c, "dash": d}, name=status_label
         )
     figure.update_traces(
-        hovertemplate="m/z=%{x:.5f}<br>强度=%{y:.1e}<extra>%{fullData.name}</extra>"
+        hovertemplate="m/z=%{x:.5f}<br>Intensity=%{y:.1e}<extra>%{fullData.name}</extra>"
     )
     figure.update_layout(
-        title=f"天然同位素截谱 · {label}",
+        title=f"Natural isotope spectrum · {label}",
         xaxis_title="m/z",
-        yaxis={"title": "平均强度", "tickformat": ".1e"},
+        yaxis={"title": "Mean intensity", "tickformat": ".1e"},
         meta={
             "source": "matrix_feature_stems_not_raw_profile",
             "layer": layer,

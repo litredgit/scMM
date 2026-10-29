@@ -2,14 +2,14 @@
 # ruff: noqa: RUF001
 
 import json
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 import pandas as pd
 
 from .projects import child_path
 from .result_catalog import RESULTS
-from .trash import SavedItems
+from .trash import SavedItems, _references
 
 
 class ResultWorkflow:
@@ -55,6 +55,110 @@ class ResultWorkflow:
             active_paths=self.active_paths,
             trash_root=getattr(self, "trash_root", None),
         )
+
+    @contextmanager
+    def scoped_cleanup(self, scope):
+        if scope is None:
+            yield
+            return
+        # Refuse busy peers instead of waiting while holding the caller's lock.
+        # Keep all live references stable through the final check and file move,
+        # including unsaved imports from this project into a different project.
+        with self._lock, ExitStack() as locks:
+            for peer in self._workspaces.values():
+                if not peer.lock.acquire(blocking=False):
+                    raise RuntimeError("其他工作区正在执行操作 请稍后重新检查清理计划")
+                locks.callback(peer.lock.release)
+            yield
+
+    def project_saved_items(self, workspace, scope):
+        if scope is None:
+            return self.saved_items()
+        project = workspace.require_project()
+
+        def active_paths():
+            # Caller holds this workspace's lock. Other sessions protect their
+            # whole project; this session protects actual unsaved references.
+            paths = list(self.active_paths())
+            paths.remove(project.folder)
+            refs = list(_references([project.manifest, project.views], project.folder))
+            refs.extend(_references({"source": project.workspace.source}, project.folder))
+            for data in (project.workspace.data, project.workspace._original):
+                if data is not None:
+                    refs.extend(_references(dict(data.uns), project.folder))
+            paths.extend(ref for ref in refs if ref != project.folder)
+            for peer in self._workspaces.values():
+                other = peer.project
+                if peer is workspace or peer.closed or other is None:
+                    continue
+                paths.extend(_references([other.manifest, other.views], other.folder))
+                paths.extend(_references({"source": other.workspace.source}, other.folder))
+                for data in (other.workspace.data, other.workspace._original):
+                    if data is not None:
+                        paths.extend(_references(dict(data.uns), other.folder))
+            if workspace.preview_job and not workspace.preview_job["future"].done():
+                paths.append(project.folder)
+            # Workers may still create or reuse any project-local cache.
+            for path in (project.folder / "processing").rglob("state.json"):
+                state = json.loads(path.read_text(encoding="utf-8"))
+                if state.get("status") not in {
+                    "completed",
+                    "succeeded",
+                    "failed",
+                    "stopped",
+                    "interrupted",
+                }:
+                    paths.append(project.folder)
+                    break
+            return paths
+
+        manager = self.saved_items()
+        manager.active_paths = active_paths
+        return manager
+
+    @staticmethod
+    def artifact_paths(project, scope):
+        """Only recognized direct children can use the current-project cleanup gate."""
+        if scope == "snapshots":
+            return sorted((project.folder / "snapshots").glob("*"), reverse=True)
+        if scope == "exports":
+            return sorted((project.folder / "exports").glob("*.h5ad"), reverse=True)
+        if scope == "previews":
+            return sorted((project.folder / "processing").glob("preview-*"), reverse=True)
+        if scope == "batches":
+            from .project_batch import batches
+
+            return [path.parent for path in batches(project)]
+        raise ValueError("未知的项目产物类型")
+
+    def check_artifact_path(self, workspace, scope, path):
+        project = workspace.require_project()
+        path = Path(path)
+        if path not in self.artifact_paths(project, scope) or path.is_symlink():
+            raise ValueError("请选择当前项目中可识别的对应产物")
+        if scope == "previews" and not (path / "identity.json").is_file():
+            raise ValueError("预览缓存不完整，保留待核实")
+        return path
+
+    def saved_artifacts(self, identity, scope):
+        with self.access(identity) as workspace, self.scoped_cleanup(scope):
+            project = workspace.require_project()
+            manager = self.project_saved_items(workspace, scope)
+            rows = []
+            for path in self.artifact_paths(project, scope):
+                if path.name.startswith(".") or path.name == "preview-jobs":
+                    continue
+                row = {"path": str(path), "name": path.name, "files": None, "bytes": None}
+                try:
+                    self.check_artifact_path(workspace, scope, path)
+                    count, size, _ = manager._inventory(path)
+                    row.update(files=count, bytes=size)
+                    plan = manager.plan("项目结果", path)
+                    row.update(files=plan["files"], bytes=plan["bytes"], protection="")
+                except (OSError, ValueError, RuntimeError) as exc:
+                    row["protection"] = str(exc)
+                rows.append(row)
+            return rows
 
     def export_dataset(self, identity, revision, root, directory, filename):
         with self.access(identity) as workspace:

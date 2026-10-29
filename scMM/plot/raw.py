@@ -1,6 +1,5 @@
 """Raw preview plots and display-only downsampling."""
 
-# ruff: noqa: RUF001
 import numpy as np
 import pandas as pd
 from plotly.subplots import make_subplots
@@ -16,7 +15,9 @@ def cell_detection_figure(result):
         rows=2 if has_net else 1,
         cols=1,
         shared_xaxes=True,
-        subplot_titles=["参考信号与细胞窗口", "净信号与判定门槛"] if has_net else None,
+        subplot_titles=["Reference signals and cell windows", "Net signals and thresholds"]
+        if has_net
+        else None,
     )
     peaks = frame.loc[frame.cell_apex]
     for i, mass in enumerate(result.reference_mz):
@@ -33,8 +34,8 @@ def cell_detection_figure(result):
             x=peaks.rt_seconds,
             y=peaks[f"reference_{i}"],
             mode="markers",
-            name=f"峰顶 {mass:.4f}",
-            text=[f"细胞 {index + 1}" for index in range(len(peaks))],
+            name=f"Apex {mass:.4f}",
+            text=[f"Cell {index + 1}" for index in range(len(peaks))],
             row=1,
             col=1,
         )
@@ -42,7 +43,7 @@ def cell_detection_figure(result):
             figure.add_scattergl(
                 x=display.rt_seconds,
                 y=display[f"net_{i}"],
-                name=f"净信号 {mass:.4f}",
+                name=f"Net signal {mass:.4f}",
                 mode="lines",
                 row=2,
                 col=1,
@@ -50,7 +51,7 @@ def cell_detection_figure(result):
             figure.add_scattergl(
                 x=display.rt_seconds,
                 y=display[f"threshold_{i}"],
-                name=f"门槛 {mass:.4f}",
+                name=f"Threshold {mass:.4f}",
                 line={"dash": "dash"},
                 mode="lines",
                 row=2,
@@ -58,9 +59,9 @@ def cell_detection_figure(result):
             )
     times = frame.rt_seconds.to_numpy()
     figure.update_layout(
-        title="细胞窗口与参考峰顶",
-        xaxis_title="RT（秒）",
-        yaxis_title="强度",
+        title="Cell windows and reference apices",
+        xaxis_title="RT (s)",
+        yaxis_title="Intensity",
         meta={
             "reference_mz": list(result.reference_mz),
             "window_ranges": result.window_ranges,
@@ -83,8 +84,8 @@ def cell_detection_figure(result):
         ],
     )
     if has_net:
-        figure.update_yaxes(title_text="净强度", row=2, col=1)
-        figure.update_xaxes(title_text="时间（秒）", row=2, col=1)
+        figure.update_yaxes(title_text="Net intensity", row=2, col=1)
+        figure.update_xaxes(title_text="Time (s)", row=2, col=1)
     return style_figure(figure)
 
 

@@ -162,7 +162,7 @@ const positioned = computed(() => {
 const positions = computed(() => Object.fromEntries(positioned.value.map((n) => [n.id, n])))
 const title = computed(
   () =>
-    `${graph.value?.kind === 'molecule' ? '分子相关网络' : '带注释标签的 m/z 特征相关网络'} · ${graph.value?.method ?? ''}`,
+    `${graph.value?.kind === 'molecule' ? 'Molecule correlation network' : 'Annotated m/z feature correlation network'} · ${graph.value?.method ?? ''}`,
 )
 const evidence = computed(() => {
   const rows: Record<string, unknown>[] = []
@@ -435,8 +435,8 @@ const { image } = useLipidImageExport({
         </metadata>
         <rect width="900" :height="pieBodyHeight + filterLines.length * 15" fill="white" />
         <text x="20" y="24" font-size="16" fill="#172033">
-          {{ charts.pie.level }} · {{ charts.pie.denominator }} 特征 ·
-          {{ charts.pie.candidate_mode }} · 人工优先
+          {{ charts.pie.level }} · {{ charts.pie.denominator }} features ·
+          {{ charts.pie.candidate_mode }} · manual review first
         </text>
         <path
           v-for="part in sectors"
@@ -498,7 +498,10 @@ const { image } = useLipidImageExport({
         </button>
       </div>
       <template v-if="graph">
-        <h4>{{ title }}</h4>
+        <h4>
+          {{ graph.kind === 'molecule' ? '分子相关网络' : '带注释标签的 m/z 特征相关网络' }} ·
+          {{ graph.method }}
+        </h4>
         <p>
           强度来源：{{ graph.layer }} · {{ graph.scope }} · |ρ| ≥
           {{ graph.parameters.plot_threshold }} · 显示 {{ graph.nodes.length }} /
@@ -528,7 +531,7 @@ const { image } = useLipidImageExport({
             {{ graph.parameters.plot_threshold }}
           </text>
           <text x="20" y="70" font-size="12" fill="#475569">
-            蓝色实线：正相关；红色虚线：负相关 · 节点 {{ graph.nodes.length }}/{{
+            Blue solid: positive; red dashed: negative · nodes {{ graph.nodes.length }}/{{
               graph.total_nodes
             }}
           </text>
@@ -579,7 +582,7 @@ const { image } = useLipidImageExport({
             </text>
           </g>
           <text x="20" y="780" font-size="11" fill="#475569">
-            annotation_version={{ results.version }} · 圆形布局无距离含义
+            annotation_version={{ results.version }} · Circular layout does not encode distance
           </text>
           <text
             v-for="(line, i) in filterLines"

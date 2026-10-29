@@ -285,7 +285,9 @@ def cluster_figure(data, key, run):
     fig = make_subplots(
         rows=len(groups),
         cols=1,
-        subplot_titles=[f"簇 {label} · {int((labels == label).sum())} 个特征" for label in groups],
+        subplot_titles=[
+            f"Cluster {label} · {int((labels == label).sum())} features" for label in groups
+        ],
     )
     ids = run["parameters"]["feature_ids"]
     for row, label in enumerate(groups, 1):
@@ -308,7 +310,7 @@ def cluster_figure(data, key, run):
             go.Scatter(
                 x=times,
                 y=matrix[:, members].mean(axis=1),
-                name=f"簇 {label} 均值",
+                name=f"Cluster {label} mean",
                 mode="lines",
                 line={"color": "#111827", "width": 2},
             ),
@@ -316,11 +318,11 @@ def cluster_figure(data, key, run):
             col=1,
         )
         fig.update_xaxes(
-            title_text=f"时间 ({run['parameters']['trend_parameters']['unit']})", row=row, col=1
+            title_text=f"Time ({run['parameters']['trend_parameters']['unit']})", row=row, col=1
         )
-        fig.update_yaxes(title_text="标准化趋势", row=row, col=1)
+        fig.update_yaxes(title_text="Standardized trend", row=row, col=1)
     fig.update_layout(
-        title=f"趋势聚类 · {key}",
+        title=f"Trend clusters · {key}",
         height=max(400, 250 * len(groups)),
         meta={
             "trend_cluster_parent": run["parameters"]["trend_key"],

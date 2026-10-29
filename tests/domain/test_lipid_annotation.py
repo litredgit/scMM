@@ -454,12 +454,14 @@ def test_network_representatives_pie_and_manual_priority(lipid_database):
     )
     assert chart["pie"]["denominator"] == 5
     assert sum(r["count"] for r in chart["pie"]["counts"]) == 5
-    assert not any(r["classification"] == "多义" for r in chart["pie"]["counts"])
+    assert not any(r["classification"] == "Ambiguous" for r in chart["pie"]["counts"])
     assert chart["network"]["truncated"]
     assert len(version["network"]["feature_edges"]) > 1
     version["selected"].pop("h")
     chart = annotation_charts(version, list(data.var_names), mz, version["candidates"], {})
-    assert next(r for r in chart["pie"]["counts"] if r["classification"] == "多义")["count"] == 1
+    assert (
+        next(r for r in chart["pie"]["counts"] if r["classification"] == "Ambiguous")["count"] == 1
+    )
     assert "h" not in representatives(version)[0]
 
 

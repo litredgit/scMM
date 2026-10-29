@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import asdict
 from uuid import uuid4
 
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -193,13 +194,13 @@ class RawWorkflow:
                 )
             figure.update_layout(
                 title={
-                    "tic": "总离子流 TIC",
-                    "eic": "提取离子流 EIC",
-                    "sum": "合并谱",
-                    "single": "单扫描谱",
+                    "tic": "Total ion chromatogram (TIC)",
+                    "eic": "Extracted ion chromatogram (EIC)",
+                    "sum": "Summed spectrum",
+                    "single": "Single-scan spectrum",
                 }[kind],
-                xaxis_title="m/z" if x == "mz" else "RT（秒）",
-                yaxis_title="强度",
+                xaxis_title="m/z" if x == "mz" else "RT (s)",
+                yaxis_title="Intensity",
                 meta={
                     "parameters": options,
                     "sample_id": sample_id,
@@ -469,7 +470,7 @@ class RawWorkflow:
                 raise ValueError("该提取产物没有完整检测信号，请使用新批次重新提取。")
             folder = child_path(path.parent, row["detection_directory"])
             detection = load_detection(folder / "data.h5ad")
-            request = json.loads((path.parent / "request.json").read_text())
+            request = json.loads((path.parent / "request.json").read_text(encoding="utf-8"))
             source = next(item for item in request["samples"] if item["id"] == sample_id)
             figure = cell_detection_figure(detection)
             figure.update_layout(
@@ -489,6 +490,51 @@ class RawWorkflow:
                     "cell_count": detection.cell_count,
                 },
             }
+
+    def compare_extraction(self, identity, revision, path_a, path_b):
+        from .batch_comparison import compare_batches
+
+        with self.access(identity) as workspace:
+            workspace.check(revision)
+            project = workspace.require_project()
+            result = compare_batches(
+                self.batch_path(project, path_a), self.batch_path(project, path_b)
+            )
+            qc = result.pop("qc")
+            figures = []
+            for metric in ("total_intensity", "detected_features"):
+                if qc.empty:
+                    break
+                figure = style_figure(
+                    px.box(
+                        qc,
+                        x="sample_id",
+                        y=metric,
+                        color="comparison_batch",
+                        points=False,
+                        labels={
+                            "sample_id": "Sample",
+                            "comparison_batch": "Batch",
+                            "total_intensity": "Total intensity",
+                            "detected_features": "Detected features",
+                        },
+                    )
+                )
+                names = qc.drop_duplicates("sample_id")
+                figure.update_xaxes(
+                    tickmode="array",
+                    tickvals=names.sample_id.tolist(),
+                    ticktext=names.sample_name.tolist(),
+                )
+                figure.update_layout(meta={"export_tables": {"cells": qc.to_csv(index=False)}})
+                figures.append(figure_view(figure))
+            result["figures"] = figures
+            result["export_tables"] = {
+                "parameters": pd.DataFrame(result["parameters"]).to_csv(index=False),
+                "samples": pd.DataFrame(result["samples"]).to_csv(index=False),
+                "cells": qc.to_csv(index=False),
+            }
+            return result
 
     def review_extraction(self, identity, revision, path, ids, *, compare=False):
         from .web_projects import project_candidate, sync_metadata

@@ -57,6 +57,11 @@ frontend/tests/  # fixtures.ts、server.py 和按交互划分的 spec
 | `docs` / `notebook` | 受影响文档的链接/锚点与 Python 示例；Notebook 清洁及语法 |
 | `browser-*` | 项目、工作流/分析、导航、登录/普通 HTTP、监控、脂质及 AI；实际 spec 与影响范围以 blocks.json 为准 |
 
+两批次比较的只读、ID/输入身份、摘要损坏与旧版证据边界在 `test_project_batch.py` 和 `test_web_api.py`；
+项目内清理在 API 与 saved-items/retention 块验证未保存及跨项目引用保护。
+浏览器 workflow 保留两批信号联动与清理贯通，raw 验证真实拖动、复位再缩放、完整范围导出及旧标签/用户输入区分，
+analysis 验证三维视角导出和集中设置；这些仍是隔离合成检查。
+
 数值断言集中领域层，应用层验证失败/恢复和生命周期，API 验证边界/序列化/状态，浏览器保留真实交互。
 不同边界不能只因功能同名而删除；共享构造从 `support` 导入，不从另一个测试文件导入。
 根目录不放通用重型 fixture，HTTP 工作流 fixture 只在 `tests/api/conftest.py` 注册。

@@ -35,7 +35,7 @@ def shap_figure(result, kind="shap_plot", *, class_index=0, cell_index=0, featur
         figure.add_bar(
             x=importance[indices][::-1], y=np.asarray(names)[indices][::-1], orientation="h"
         )
-        figure.update_layout(xaxis_title="平均绝对 SHAP", yaxis_title="特征")
+        figure.update_layout(xaxis_title="Mean absolute SHAP", yaxis_title="Feature")
     elif kind == "shap_beeswarm":
         rng = np.random.default_rng(42)
         for position, index in enumerate(indices[::-1]):
@@ -49,7 +49,7 @@ def shap_figure(result, kind="shap_plot", *, class_index=0, cell_index=0, featur
                     "colorscale": "RdBu",
                     "reversescale": True,
                     "size": 5,
-                    "colorbar": {"title": "特征值"},
+                    "colorbar": {"title": "Feature value"},
                     "showscale": position == 0,
                 },
                 customdata=np.asarray(result["obs_names"])[:, None],
@@ -67,13 +67,13 @@ def shap_figure(result, kind="shap_plot", *, class_index=0, cell_index=0, featur
         index = np.argsort(-np.abs(selected[cell_index]), kind="stable")[:top]
         residual = float(selected[cell_index].sum() - selected[cell_index, index].sum())
         figure.add_waterfall(
-            x=["基准", *np.asarray(names)[index], "其他特征", "预测输出"],
+            x=["Baseline", *np.asarray(names)[index], "Other features", "Prediction"],
             y=[float(baselines[cell_index]), *selected[cell_index, index], residual, 0],
             measure=["absolute", *["relative"] * (len(index) + 1), "total"],
         )
         figure.update_layout(
-            xaxis_title=f"细胞 {result['obs_names'][cell_index]}",
-            yaxis_title=result.get("output_space", "解释输出"),
+            xaxis_title=f"Cell {result['obs_names'][cell_index]}",
+            yaxis_title=result.get("output_space", "Model output"),
         )
     else:
         feature = feature or names[indices[0]]

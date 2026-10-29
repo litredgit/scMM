@@ -4,7 +4,8 @@ import { ref, watch, computed } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import type { AnalysisInfo, Figure } from '../../api/types'
 import { resultDownloads, resultTitles } from '../analysis/results'
-import SavedItems from '../../components/SavedItems.vue'
+import ProjectArtifacts from '../../components/ProjectArtifacts.vue'
+import SaveExplanation from '../../components/SaveExplanation.vue'
 import PlotView from '../../components/PlotView.vue'
 import { useReadScope } from '../../api/readScope'
 const store = useWorkspace(),
@@ -166,6 +167,8 @@ async function exportH5ad() {
         </button>
       </div>
       <p class="muted">保存项目用于继续完整工作；下载到本机与服务器独立导出不替代保存。</p>
+      <SaveExplanation />
+      <ProjectArtifacts scope="snapshots" :refresh-key="store.project.manifest.revision" />
     </div>
     <div v-if="store.project.dataset" class="card">
       <h2>下载与独立导出</h2>
@@ -274,7 +277,8 @@ async function exportH5ad() {
           <button class="save" :disabled="store.busy || !filename" @click="exportH5ad">
             导出当前 H5AD（不覆盖）
           </button>
-          <p v-if="exported" role="status">已导出：{{ exported }}</p>
+          <p v-if="exported" role="status">已写入服务器：{{ exported }}；项目快照未更新。</p>
+          <ProjectArtifacts scope="exports" :refresh-key="exported" />
           <p class="page-note">
             独立 H5AD
             保留当前轴上的历史层、嵌入和报告；完整恢复起点由项目快照保存。导出不替代保存项目。
@@ -370,5 +374,4 @@ async function exportH5ad() {
     <h1>还没有打开项目</h1>
     <RouterLink to="/projects" class="button primary">前往项目首页 →</RouterLink>
   </div>
-  <SavedItems />
 </template>

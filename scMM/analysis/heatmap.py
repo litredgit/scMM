@@ -108,11 +108,11 @@ def heatmap_figure(
             zmid=0 if zscore and color_min is None else None,
             zmin=color_min,
             zmax=color_max,
-            hovertemplate="特征=%{y}<br>列=%{x}<br>值=%{z:.3g}<extra></extra>"
+            hovertemplate="Feature=%{y}<br>Column=%{x}<br>Value=%{z:.3g}<extra></extra>"
             if zscore
-            else "特征=%{y}<br>列=%{x}<br>强度=%{z:.1e}<extra></extra>",
+            else "Feature=%{y}<br>Column=%{x}<br>Intensity=%{z:.1e}<extra></extra>",
             colorbar={
-                "title": "行标准分" if zscore else "强度",
+                "title": "Row z-score" if zscore else "Intensity",
                 "tickformat": ".2g" if zscore else ".1e",
             },
         )
@@ -176,7 +176,7 @@ def heatmap_figure(
     figure.update_layout(yaxis={"domain": [0, 0.88] if annotation_rows else [0, 1]})
     annotation = data.obs.copy()
     figure.update_layout(
-        title="特征热图",
+        title="Feature heatmap",
         xaxis={
             "type": "category",
             "categoryorder": "array",
@@ -188,8 +188,8 @@ def heatmap_figure(
             "categoryarray": shown.index.astype(str).tolist(),
             "domain": [0, 0.88] if annotation_rows else [0, 1],
         },
-        xaxis_title="分组" if group_key else "细胞",
-        yaxis_title="特征",
+        xaxis_title="Group" if group_key else "Cell",
+        yaxis_title="Feature",
         meta={
             "parameters": {
                 "features": features,

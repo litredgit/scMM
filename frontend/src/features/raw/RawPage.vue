@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRawWorkbench } from './composables/useRawWorkbench'
 import PlotView from '../../components/PlotView.vue'
+import ProjectArtifacts from '../../components/ProjectArtifacts.vue'
 import ProcessingFields from './ProcessingFields.vue'
 import SignalDiagnostics from './SignalDiagnostics.vue'
 const {
@@ -311,7 +312,10 @@ const {
             预览细胞窗口
           </button>
         </div>
-        <p v-if="jobNote" role="status">{{ jobNote }}</p>
+        <p v-if="jobNote" role="status">
+          {{ jobNote }}；预览缓存写入服务器，不直接建立当前数据集。
+        </p>
+        <ProjectArtifacts scope="previews" :refresh-key="cellCount" />
       </div>
       <div class="card">
         <h2>原始信号</h2>

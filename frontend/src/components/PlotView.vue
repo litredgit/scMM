@@ -4,7 +4,10 @@ import { usePlotRenderer } from './usePlotRenderer'
 import LegendOrder from './LegendOrder.vue'
 import resultContract from '../features/analysis/results.contract.json'
 import { useLegendOrder } from './useLegendOrder'
-import { useViewState } from '../api/viewState'
+import { useViewState, restoringViews } from '../api/viewState'
+import { applyViewport } from './plotViewport'
+import { applyLegend } from './plotPresentation'
+import { systemPlotText } from './systemPlotText'
 import { useWorkspace } from '../stores/workspace'
 import type { Figure } from '../api/types'
 import { authenticatedFetch } from '../api/client'
@@ -18,6 +21,7 @@ const props = withDefaults(
     selectRange?: boolean
     compact?: boolean
     readonly?: boolean
+    linkedViewport?: Record<string, unknown>
   }>(),
   {
     legend: 'right',
@@ -52,7 +56,12 @@ const chartKey = computed(
     props.name,
 )
 const legendNames = computed(() =>
-  (props.figure.data as { name?: string; showlegend?: boolean }[])
+  (
+    systemPlotText(JSON.parse(JSON.stringify(props.figure)) as Figure, chartKey.value).data as {
+      name?: string
+      showlegend?: boolean
+    }[]
+  )
     .filter((t) => t.showlegend !== false && t.name)
     .map((t) => t.name!),
 )
@@ -62,8 +71,9 @@ const {
   reset: resetLegend,
 } = useLegendOrder(chartKey, legendNames, () => !!props.readonly)
 function orderedFigure(): Figure {
-  const copy = JSON.parse(JSON.stringify(props.figure)) as Figure
-  for (const trace of copy.data as Record<string, unknown>[]) {
+  const copy = systemPlotText(JSON.parse(JSON.stringify(props.figure)) as Figure, chartKey.value)
+  for (const [index, trace] of (copy.data as Record<string, unknown>[]).entries()) {
+    if (traceVisibility.value[index] !== undefined) trace.visible = traceVisibility.value[index]
     if (typeof trace.name === 'string') trace.legendrank = legendItems.value.indexOf(trace.name)
     if (
       ['scatter', 'scattergl', 'scatter3d'].includes(String(trace.type)) &&
@@ -83,6 +93,8 @@ const chartKind = computed(() =>
 )
 const chartHeight = computed(() => {
   const width = chartWidth.value
+  if (props.figure.layout.yaxis2 && (chartKind.value === 'cells' || props.name.includes('signal')))
+    return Math.max(560, Math.min(760, width * 0.9))
   if (['tic', 'eic', 'sum', 'single', 'cells'].includes(chartKind.value))
     return Math.max(320, Math.min(600, width / 2.2))
   if (['roc', 'pr', 'calibration'].includes(chartKind.value))
@@ -114,7 +126,11 @@ function changeLegend(event: Event) {
     'PUT',
   )
 }
-const emit = defineEmits<{ select: [feature: string]; range: [range: [number, number]] }>()
+const emit = defineEmits<{
+  select: [feature: string]
+  range: [range: [number, number]]
+  viewport: [value: Record<string, unknown>]
+}>()
 const element = ref<HTMLElement>()
 const failure = ref('')
 const filename = ref(props.name)
@@ -123,6 +139,7 @@ const widthMm = ref(89),
   dpi = ref(300),
   fontPt = ref(7)
 const viewport = ref<Record<string, unknown>>({})
+const traceVisibility = ref<(boolean | string)[]>([])
 const fresh = computed(() => {
   const meta = props.figure.layout.meta as
     | { dataset_token?: unknown[]; result_identity?: string; result_identity_valid?: boolean }
@@ -147,39 +164,10 @@ const pointOpacity = ref(1)
 const artwork = ref('color')
 const includeTitle = ref(true)
 const previewImage = ref('')
-const exportLanguage = ref('en'),
-  exportTitle = ref(''),
+const exportRange = ref('current')
+const exportTitle = ref(''),
   exportX = ref(''),
   exportY = ref('')
-function paperText(value: unknown) {
-  const text = String(value ?? '')
-  if (exportLanguage.value === 'zh') return text
-  const labels: Record<string, string> = {
-    强度: 'Intensity',
-    总强度: 'Total intensity',
-    检出特征数: 'Detected features',
-    '每细胞 QC · 当前矩阵': 'Cell quality control',
-    细胞质谱对比: 'Cell mass spectra',
-    归一化强度: 'Normalized intensity',
-    样本: 'Sample',
-    特征: 'Feature',
-    分组: 'Group',
-    细胞: 'Cell',
-    特征热图: 'Feature heatmap',
-    行标准分: 'Row z-score',
-    维度: 'Dimension',
-    '平均绝对 SHAP': 'Mean absolute SHAP',
-    预测类别: 'Predicted class',
-    真实类别: 'True class',
-    留出测试集混淆矩阵: 'Held-out confusion matrix',
-    召回率: 'Recall',
-    精确率: 'Precision',
-    '假阳性率（FPR）': 'False positive rate',
-    '真阳性率（TPR）': 'True positive rate',
-    'RT（秒）': 'Time (s)',
-  }
-  return labels[text] ?? text
-}
 useViewState(`plot:${chartKey.value}`, {
   filename,
   widthMm,
@@ -189,7 +177,8 @@ useViewState(`plot:${chartKey.value}`, {
   preset,
   localPosition,
   viewport,
-  exportLanguage,
+  traceVisibility,
+  exportRange,
   exportTitle,
   exportX,
   exportY,
@@ -223,6 +212,15 @@ watch(artwork, () => {
   dpi.value = artwork.value === 'line' ? 1000 : artwork.value === 'bw' ? 500 : 300
 })
 watch(
+  () => props.figure,
+  () => {
+    if (!restoringViews) {
+      viewport.value = {}
+      traceVisibility.value = []
+    }
+  },
+)
+watch(
   () => props.name,
   (name) => (filename.value = name),
 )
@@ -243,7 +241,19 @@ const renderer = usePlotRenderer({
   emit,
   legendItems,
   pointOpacity,
+  traceVisibility,
 })
+watch(
+  () => props.linkedViewport,
+  (value) => {
+    if (!value || !Object.keys(value).length) return
+    const next = { ...viewport.value, ...value }
+    if (JSON.stringify(next) !== JSON.stringify(viewport.value)) {
+      viewport.value = next
+      void renderer.retry()
+    }
+  },
+)
 onBeforeUnmount(() => {
   if (previewImage.value) URL.revokeObjectURL(previewImage.value)
 })
@@ -279,7 +289,8 @@ async function plotData() {
                 height_mm: heightMm.value,
                 dpi: dpi.value,
                 font_pt: fontPt.value,
-                language: exportLanguage.value,
+                language: 'en',
+                range: exportRange.value,
                 title: exportTitle.value,
                 x_label: exportX.value,
                 y_label: exportY.value,
@@ -345,21 +356,10 @@ async function image(format: string, preview = false) {
         .filter((key) => Object.hasOwn(source, key))
         .map((key) => [key, source[key]]),
     )
-    for (const [key, value] of Object.entries(viewport.value)) {
-      const match = /^([xy]axis\d*)\.(range)(?:\[(\d)\])?$/.exec(key)
-      if (match) {
-        const axis = (copy.layout[match[1]!] ??= {}) as Record<string, unknown>
-        if (match[3] !== undefined) {
-          const range = (axis.range ??= []) as unknown[]
-          range[Number(match[3])] = value
-        } else axis.range = value
-      } else if (key.endsWith('.autorange')) {
-        const name = key.split('.')[0]!
-        copy.layout[name] ??= {}
-        ;(copy.layout[name] as Record<string, unknown>).autorange = value
-      } else if (key === 'scene.camera')
-        copy.layout.scene = { ...(copy.layout.scene as object), camera: value }
-    }
+    if (exportRange.value === 'current') applyViewport(copy, renderer.currentViewport(), true)
+    const visibility = renderer.visibility()
+    for (const [i, trace] of (copy.data as Record<string, unknown>[]).entries())
+      if (visibility[i] !== undefined) trace.visible = visibility[i]
     for (const trace of copy.data as Record<string, unknown>[])
       if (trace.type === 'scattergl') trace.type = 'scatter'
     const font = {
@@ -394,7 +394,7 @@ async function image(format: string, preview = false) {
         const original = (axis.title as { text?: string })?.text
         axis.title = {
           ...(axis.title as object),
-          text: (name.startsWith('x') ? exportX.value : exportY.value) || paperText(original),
+          text: (name.startsWith('x') ? exportX.value : exportY.value) || String(original ?? ''),
           font,
         }
         Object.assign(axis, {
@@ -411,20 +411,9 @@ async function image(format: string, preview = false) {
     const titleText = (copy.layout.title as { text?: string })?.text
     copy.layout.title = {
       ...(copy.layout.title as object),
-      text: includeTitle.value ? exportTitle.value || paperText(titleText) : '',
+      text: includeTitle.value ? exportTitle.value || String(titleText ?? '') : '',
     }
-    copy.layout.showlegend = position.value !== 'hidden'
-    const inside = position.value !== 'right',
-      right = position.value.endsWith('right'),
-      bottom = position.value.startsWith('bottom')
-    copy.layout.legend = {
-      traceorder: 'normal',
-      font,
-      x: inside ? (right ? 0.99 : 0.01) : 1.02,
-      y: bottom ? 0.01 : 0.99,
-      xanchor: inside && right ? 'right' : 'left',
-      yanchor: bottom ? 'bottom' : 'top',
-    }
+    applyLegend(copy, position.value)
     const scene = copy.layout.scene as Record<string, unknown> | undefined
     if (scene)
       for (const name of ['xaxis', 'yaxis', 'zaxis']) {
@@ -450,10 +439,19 @@ async function image(format: string, preview = false) {
           tickfont: font,
           title: {
             ...(bar.title as object),
-            text: paperText((bar.title as { text?: string })?.text ?? ''),
+            text: (bar.title as { text?: string })?.text ?? '',
             font,
           },
         }
+    }
+    for (const annotation of (copy.layout.annotations ?? []) as Record<string, unknown>[])
+      annotation.font = font
+    for (const trace of copy.data as Record<string, unknown>[]) {
+      const marker = trace.marker as Record<string, unknown> | undefined
+      if (marker?.colorbar) {
+        const bar = marker.colorbar as Record<string, unknown>
+        marker.colorbar = { ...bar, tickfont: font, title: { ...(bar.title as object), font } }
+      }
     }
     await plotly.newPlot(temporary, copy.data as never, copy.layout as never, {
       staticPlot: true,
@@ -503,33 +501,16 @@ async function image(format: string, preview = false) {
       aria-label="交互图表"
     ></div>
     <div v-if="!compact" class="plot-actions">
-      <label class="field"
-        ><FieldLabel name="图例位置" /><select
-          :value="position"
-          :disabled="store.busy"
-          :aria-label="`图例位置：${name}`"
-          @change="changeLegend"
+      <label
+        >导出范围<select
+          v-model="exportRange"
+          aria-label="导出范围"
+          :disabled="exporting || store.busy"
         >
-          <option value="right">图右侧</option>
-          <option value="top_left">图内左上</option>
-          <option value="top_right">图内右上</option>
-          <option value="bottom_left">图内左下</option>
-          <option value="bottom_right">图内右下</option>
-          <option value="hidden">隐藏</option>
+          <option value="current">当前视图</option>
+          <option value="full">完整范围</option>
         </select></label
       >
-      <label
-        ><FieldLabel name="图文件名" /><input v-model="filename" :aria-label="`图文件名：${name}`"
-      /></label>
-      <label
-        >点不透明度<input
-          v-model.number="pointOpacity"
-          aria-label="点不透明度"
-          type="number"
-          min="0.1"
-          max="1"
-          step="0.1"
-      /></label>
       <button
         class="preview"
         :disabled="exporting || store.busy || !fresh"
@@ -551,100 +532,135 @@ async function image(format: string, preview = false) {
       </button>
     </div>
     <details v-if="!compact" class="plot-settings">
-      <summary>论文导出设置 · 尺寸、字号与 DPI</summary>
-      <div class="field-grid">
-        <label
-          >论文规格<select v-model="preset" aria-label="论文规格" @change="paperPreset">
-            <option value="nature-single">Nature 单栏</option>
-            <option value="nature-double">Nature 双栏</option>
-            <option value="cell-single">Cell 单栏（85 mm）</option>
-            <option value="cell-onehalf">Cell 一栏半（114 mm）</option>
-            <option value="cell-double">Cell 双栏（174 mm）</option>
-            <option value="custom">自定义</option>
-          </select></label
-        >
-        <label
-          >宽度（mm）<input
-            aria-label="宽度（mm）"
-            v-model.number="widthMm"
-            type="number"
-            min="20"
-            max="600"
-        /></label>
-        <label
-          >高度（mm）<input
-            aria-label="高度（mm）"
-            v-model.number="heightMm"
-            type="number"
-            min="20"
-            max="600"
-        /></label>
-        <label
-          >字号（pt）<input
-            aria-label="字号（pt）"
-            v-model.number="fontPt"
-            type="number"
-            min="4.5"
-            max="24"
-            step="0.5"
-        /></label>
-        <label
-          >位图 DPI<input
-            v-model.number="dpi"
-            type="number"
-            min="72"
-            max="2400"
-            step="1"
-            :list="`${name}-dpi`"
-        /></label>
-        <datalist :id="`${name}-dpi`">
-          <option value="300" />
-          <option value="500" />
-          <option value="600" />
-          <option value="1000" />
-          <option value="1200" />
-        </datalist>
-      </div>
-      <label class="inline-check"
-        ><input v-model="includeTitle" type="checkbox" />图内显示标题</label
-      >
-      <label
-        >图形内容（设置 DPI）<select v-model="artwork">
-          <option value="color">彩色或灰度（至少 300 DPI）</option>
-          <option value="bw">黑白（至少 500 DPI）</option>
-          <option value="line">线图（至少 1000 DPI）</option>
-        </select></label
-      >
-      <p v-if="preset.startsWith('cell-')" class="muted">
-        Cell：Arial，正文约 6–8 pt，线宽 0.5–1.5 pt；推荐高度不超过 200 mm。主标题与图注另附，PDF
-        优先用于生产。PDF 检查服务器真实 Arial 字体；SVG 和 PNG 需在装有 Arial
-        的环境核对。此预设不代替最终投稿检查。
-      </p>
+      <summary>导出设置 · 论文版式、图例与标题</summary>
+      <fieldset class="export-settings-grid" :disabled="exporting || store.busy">
+        <section aria-label="论文导出设置">
+          <h3>论文版式</h3>
+          <div class="field-grid">
+            <label
+              >论文规格<select v-model="preset" aria-label="论文规格" @change="paperPreset">
+                <option value="nature-single">Nature 单栏</option>
+                <option value="nature-double">Nature 双栏</option>
+                <option value="cell-single">Cell 单栏（85 mm）</option>
+                <option value="cell-onehalf">Cell 一栏半（114 mm）</option>
+                <option value="cell-double">Cell 双栏（174 mm）</option>
+                <option value="custom">自定义</option>
+              </select></label
+            >
+            <label
+              >宽度（mm）<input
+                aria-label="宽度（mm）"
+                v-model.number="widthMm"
+                type="number"
+                min="20"
+                max="600"
+            /></label>
+            <label
+              >高度（mm）<input
+                aria-label="高度（mm）"
+                v-model.number="heightMm"
+                type="number"
+                min="20"
+                max="600"
+            /></label>
+            <label
+              >字号（pt）<input
+                aria-label="字号（pt）"
+                v-model.number="fontPt"
+                type="number"
+                min="4.5"
+                max="24"
+                step="0.5"
+            /></label>
+            <label
+              >位图 DPI<input
+                v-model.number="dpi"
+                type="number"
+                min="72"
+                max="2400"
+                step="1"
+                :list="`${name}-dpi`"
+            /></label>
+            <datalist :id="`${name}-dpi`">
+              <option value="300" />
+              <option value="500" />
+              <option value="600" />
+              <option value="1000" />
+              <option value="1200" />
+            </datalist>
+          </div>
+          <label class="inline-check"
+            ><input v-model="includeTitle" type="checkbox" />图内显示标题</label
+          >
+          <label
+            >图形内容（设置 DPI）<select v-model="artwork">
+              <option value="color">彩色或灰度（至少 300 DPI）</option>
+              <option value="bw">黑白（至少 500 DPI）</option>
+              <option value="line">线图（至少 1000 DPI）</option>
+            </select></label
+          >
+          <p v-if="preset.startsWith('cell-')" class="muted">
+            Cell：Arial，正文约 6–8 pt，线宽 0.5–1.5 pt；推荐高度不超过 200
+            mm。主标题与图注另附，PDF 优先用于生产。PDF 检查服务器真实 Arial 字体；SVG 和 PNG
+            需在装有 Arial 的环境核对。此预设不代替最终投稿检查。
+          </p>
+        </section>
+        <section aria-label="图例与样式">
+          <h3>图例与样式</h3>
+          <div class="field-grid">
+            <label class="field"
+              ><FieldLabel name="图例位置" /><select
+                :value="position"
+                :disabled="store.busy"
+                :aria-label="`图例位置：${name}`"
+                @change="changeLegend"
+              >
+                <option value="right">图右侧</option>
+                <option value="top_left">图内左上</option>
+                <option value="top_right">图内右上</option>
+                <option value="bottom_left">图内左下</option>
+                <option value="bottom_right">图内右下</option>
+                <option value="hidden">隐藏</option>
+              </select></label
+            >
+            <label
+              ><FieldLabel name="图文件名" /><input
+                v-model="filename"
+                :aria-label="`图文件名：${name}`"
+            /></label>
+            <label
+              >点不透明度<input
+                v-model.number="pointOpacity"
+                aria-label="点不透明度"
+                type="number"
+                min="0.1"
+                max="1"
+                step="0.1"
+            /></label>
+          </div>
+          <LegendOrder
+            v-if="!compact"
+            :items="legendItems"
+            :disabled="store.busy"
+            @move="moveLegend"
+            @reset="resetLegend"
+          />
+        </section>
+        <section aria-label="导出标题与标签">
+          <h3>图中文字</h3>
+          <p class="muted">系统自动图文为英文；样本名、分组名和自定义输入保留原文。</p>
+          <div class="field-grid">
+            <label>导出标题<input v-model="exportTitle" placeholder="留空沿用图标题" /></label>
+            <label>导出横轴标签<input v-model="exportX" placeholder="留空沿用图标签" /></label>
+            <label>导出纵轴标签<input v-model="exportY" placeholder="留空沿用图标签" /></label>
+          </div>
+        </section>
+      </fieldset>
     </details>
     <div v-if="previewImage" class="export-preview">
       <button @click="previewImage = ''">关闭导出预览</button
       ><img :src="previewImage" alt="按论文设置生成的导出预览" style="max-width: 100%" />
     </div>
-    <LegendOrder
-      v-if="!compact"
-      :items="legendItems"
-      :disabled="store.busy"
-      @move="moveLegend"
-      @reset="resetLegend"
-    />
-    <details v-if="!compact">
-      <summary>导出标题与语言</summary>
-      <div class="field-grid">
-        <label
-          >导出标签<select v-model="exportLanguage">
-            <option value="en">英文通用标签</option>
-            <option value="zh">中文</option>
-          </select></label
-        ><label>导出标题<input v-model="exportTitle" placeholder="留空沿用图标题" /></label
-        ><label>导出横轴标签<input v-model="exportX" placeholder="留空沿用图标签" /></label
-        ><label>导出纵轴标签<input v-model="exportY" placeholder="留空沿用图标签" /></label>
-      </div>
-    </details>
     <p v-if="!fresh" role="status">该图对应的数据已改变，请重新绘图后下载或选择细胞。</p>
     <div v-if="failure" role="alert" class="state-note">
       {{ failure

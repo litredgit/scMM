@@ -19,6 +19,7 @@ def table_view(frame, *, limit=200):
 def figure_view(figure):
     # Plotly's encoder retains float64 values and handles typed numerical arrays.
     payload = figure.to_dict()
+    payload.setdefault("layout", {}).setdefault("meta", {})["system_text_language"] = "en"
     meta = payload.get("layout", {}).get("meta") or {}
     # JS numbers cannot preserve nanosecond timestamps/inodes above 2**53.
     for holder in (meta, meta.get("provenance", {})):

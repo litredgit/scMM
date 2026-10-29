@@ -311,6 +311,34 @@ test('PCA axes, stable cell clicks, paper exports and complete heatmap data', as
   expect((await projected).ok()).toBe(true)
   await page.getByText('主成分解释率', { exact: true }).first().click()
   await expect(page.getByRole('cell', { name: 'PC4', exact: true })).toBeVisible()
+  const embeddingPlot = page.locator('.plot-shell').first()
+  async function embeddingSvg() {
+    const pending = page.waitForEvent('download')
+    await embeddingPlot.getByRole('button', { name: '下载 SVG', exact: true }).click()
+    return readFile((await (await pending).path())!, 'utf8')
+  }
+  const originalView = await embeddingSvg()
+  await embeddingPlot.locator('.js-plotly-plot').evaluate((el) => {
+    const graph = el as HTMLElement & {
+      layout: { scene: { camera: unknown } }
+      emit: (name: string, value: unknown) => void
+    }
+    graph.layout.scene.camera = { eye: { x: 2, y: 0.4, z: 0.2 } }
+    graph.emit('plotly_relayout', { 'scene.camera': graph.layout.scene.camera })
+  })
+  const rotatedView = await embeddingSvg()
+  const raster = (svg: string) => svg.match(/data:image\/png;base64,[^"]+/g) ?? []
+  expect(raster(originalView).length).toBeGreaterThan(0)
+  expect(raster(rotatedView)).not.toEqual(raster(originalView))
+  const plotDataRequest = page.waitForRequest((request) => request.url().endsWith('/figures/data'))
+  const plotDataDownload = page.waitForEvent('download')
+  await embeddingPlot.getByRole('button', { name: '下载作图数据', exact: true }).click()
+  const publication = (await plotDataRequest).postDataJSON().figure.layout.meta.publication
+  expect(publication.range).toBe('current')
+  expect(publication.viewport['scene.camera'].eye).toEqual({ x: 2, y: 0.4, z: 0.2 })
+  await plotDataDownload
+  await embeddingPlot.getByLabel('导出范围', { exact: true }).selectOption('full')
+  expect(raster(await embeddingSvg())).not.toEqual(raster(rotatedView))
   await page
     .locator('.js-plotly-plot')
     .first()
@@ -926,7 +954,8 @@ for (const [width, height] of [
       .toBe(true)
     await page.screenshot({ path: test.info().outputPath(`supervised-first-${width}.png`) })
     await page.getByLabel('监督诊断图', { exact: true }).selectOption('confusion')
-    await expect(page.getByLabel('图文件名：confusion', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('图文件名：confusion', { exact: true })).toBeAttached()
+    await expect(plot.locator('.gtitle')).toHaveText('Held-out confusion matrix')
     await expect(plot).toHaveCount(1)
     expect(calculations).toBe(1)
     await page.getByRole('button', { name: '新建训练', exact: true }).click()

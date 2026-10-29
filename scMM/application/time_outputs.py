@@ -152,11 +152,11 @@ def time_figure(data, *, key, coordinate_key=None, plot_top_n=30, display_standa
                     "color": cells["pseudotime"],
                     "colorscale": "Viridis",
                     "showscale": True,
-                    "colorbar": {"title": "伪时间"},
+                    "colorbar": {"title": "Pseudotime"},
                 },
                 customdata=np.column_stack([cells["cell_id"], cells["pseudotime"]]),
-                hovertemplate="细胞 %{customdata[0]}<br>伪时间 %{customdata[1]}<extra></extra>",
-                name="细胞",
+                hovertemplate="Cell %{customdata[0]}<br>Pseudotime %{customdata[1]}<extra></extra>",
+                name="Cells",
             )
         )
         root = data.obs_names.get_loc(run["parameters"]["root_cell_id"])
@@ -166,9 +166,9 @@ def time_figure(data, *, key, coordinate_key=None, plot_top_n=30, display_standa
                 y=[coordinates[root, 1]],
                 mode="markers",
                 marker={"symbol": "star", "size": 14, "color": "red"},
-                name="所选根点",
+                name="Selected root",
                 customdata=[[str(data.obs_names[root])]],
-                hovertemplate="所选根点 %{customdata[0]}<extra></extra>",
+                hovertemplate="Selected root %{customdata[0]}<extra></extra>",
             )
         )
         notes = [
@@ -205,9 +205,9 @@ def time_figure(data, *, key, coordinate_key=None, plot_top_n=30, display_standa
                 y=windows["speed"],
                 mode="lines+markers",
                 connectgaps=False,
-                name="速度范数",
+                name="Velocity norm",
                 customdata=windows[["window_index", "valid_cells"]].to_numpy(),
-                hovertemplate="窗口 %{customdata[0]}<br>有效细胞 %{customdata[1]}<br>速度 %{y}<extra></extra>",
+                hovertemplate="Window %{customdata[0]}<br>Valid cells %{customdata[1]}<br>Speed %{y}<extra></extra>",
             )
         )
         notes = [
@@ -217,8 +217,8 @@ def time_figure(data, *, key, coordinate_key=None, plot_top_n=30, display_standa
             f"时间含义：{run['parameters']['time_kind']}；单位：{run['parameters']['unit']}。伪时间和归一化时间不是物理时间。",
         ]
         figure.update_layout(
-            title=f"窗口代谢速度 · {key}",
-            xaxis_title=f"时间 ({run['parameters']['unit']})",
+            title=f"Window metabolic velocity · {key}",
+            xaxis_title=f"Time ({run['parameters']['unit']})",
             yaxis_title=run["parameters"]["velocity_unit"],
         )
     else:
@@ -239,7 +239,7 @@ def time_figure(data, *, key, coordinate_key=None, plot_top_n=30, display_standa
                     customdata=frame[
                         ["window_index", "time_center", "valid_cells", "weight_sum"]
                     ].to_numpy(),
-                    hovertemplate="窗口 %{customdata[0]}<br>时间中心 %{customdata[1]}<br>有效细胞 %{customdata[2]}<br>权重和 %{customdata[3]}<extra></extra>",
+                    hovertemplate="Window %{customdata[0]}<br>Time center %{customdata[1]}<br>Valid cells %{customdata[2]}<br>Weight sum %{customdata[3]}<extra></extra>",
                 )
             )
         valid = int(np.isfinite(windows["coordinate_0"]).sum())
@@ -249,7 +249,7 @@ def time_figure(data, *, key, coordinate_key=None, plot_top_n=30, display_standa
             "轨迹为排序窗口的加权坐标中心，不是细胞命运或流形分支推断；坐标分离不证明独立生物分支。",
         ]
         figure.update_layout(
-            title=f"滑动窗口轨迹 · {key}",
+            title=f"Sliding-window trajectory · {key}",
             xaxis_title=f"{run['parameters']['coordinate_key']} 1",
             yaxis_title=f"{run['parameters']['coordinate_key']} 2",
         )

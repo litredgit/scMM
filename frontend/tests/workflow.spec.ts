@@ -112,3 +112,75 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   await noError(page)
   expect(errors).toEqual([])
 })
+
+test('two completed batches compare without replacing data, link signal axes and recycle an unused batch', async ({
+  page,
+}) => {
+  test.setTimeout(90000)
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto('/')
+  await page
+    .getByRole('row')
+    .filter({ hasText: '两批次比较合成项目' })
+    .getByRole('button', { name: '打开项目 →' })
+    .click()
+  await page.getByRole('link', { name: /提取与审核/ }).click()
+  const panel = page.locator('.batch-comparison')
+  await panel.locator(':scope > summary').click()
+  const compared = page.waitForResponse((r) => r.url().endsWith('/extraction/compare'))
+  await panel.getByRole('button', { name: '比较两个批次', exact: true }).click()
+  const response = await compared
+  expect(response.ok()).toBeTruthy()
+  const result = await response.json()
+  expect(result.samples[0].input).toBe('same')
+  expect(result.samples[0].name_A).toBe('中文样本')
+  expect(result.export_tables.cells).toContain('中文样本')
+  expect(
+    result.parameters.some(
+      (row: { parameter: string; changed: boolean }) => row.parameter === 'cell_snr' && row.changed,
+    ),
+  ).toBe(true)
+  await expect(panel.getByText('相同输入身份', { exact: true }).first()).toBeVisible()
+  await expect(panel.locator('.js-plotly-plot')).toHaveCount(2)
+  await panel.getByRole('button', { name: '并排查看两批信号', exact: true }).click()
+  const signals = panel.locator('.comparison-signals .js-plotly-plot')
+  await expect(signals).toHaveCount(2)
+  await signals.first().evaluate((el) => {
+    const graph = el as HTMLElement & {
+      layout: {
+        xaxis: { range: number[]; autorange: boolean }
+        xaxis2: { range: number[]; autorange: boolean }
+      }
+      emit: (name: string, value: unknown) => void
+    }
+    graph.layout.xaxis.range = [5, 15]
+    graph.layout.xaxis.autorange = false
+    graph.layout.xaxis2.range = [5, 15]
+    graph.layout.xaxis2.autorange = false
+    graph.emit('plotly_relayout', { 'xaxis.range': [5, 15], 'xaxis2.range': [5, 15] })
+  })
+  await expect
+    .poll(() =>
+      signals
+        .last()
+        .evaluate(
+          (el) =>
+            (el as HTMLElement & { layout: { xaxis: { range: number[] } } }).layout.xaxis.range,
+        ),
+    )
+    .toEqual([5, 15])
+  const download = page.waitForEvent('download')
+  await panel.getByRole('button', { name: '下载完整细胞 QC对比 CSV', exact: true }).click()
+  expect((await download).suggestedFilename()).toBe('batch-comparison-cells.csv')
+  await page.screenshot({ path: test.info().outputPath('batch-comparison.png'), fullPage: true })
+  await panel.locator(':scope > summary').click()
+  await page.getByRole('button', { name: '移入回收站', exact: true }).click()
+  await expect(page.getByRole('button', { name: '执行移入回收站', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '执行移入回收站', exact: true }).click()
+  await expect(
+    page.getByLabel('处理批次', { exact: true }).locator('option:not([value=""])'),
+  ).toHaveCount(1)
+  await noError(page)
+  expect(errors).toEqual([])
+})

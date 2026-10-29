@@ -226,7 +226,7 @@ test('monitor charts use Beijing time and omit scientific publication tools', as
   await page.goto('/admin/monitor')
   const plot = page.locator('.js-plotly-plot').first()
   await expect(plot).toBeVisible()
-  await expect(page.getByText('北京时间（UTC+8）', { exact: true })).toBeVisible()
+  await expect(page.getByText('Beijing time (UTC+8)', { exact: true })).toBeVisible()
   await expect(page.getByText('论文导出设置 · 尺寸、字号与 DPI', { exact: true })).toHaveCount(0)
   await expect(page.locator('.modebar-btn[data-title="下载论文 SVG"]')).toHaveCount(0)
   await expect(page.getByRole('button', { name: '保存项目', exact: true })).toHaveCount(0)

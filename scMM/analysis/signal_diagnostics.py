@@ -108,7 +108,11 @@ def diagnostic_figure(result, scan_index, times, channels, *, provenance):
         rows=3,
         cols=1,
         shared_xaxes=True,
-        subplot_titles=("原始信号、基线与重构", "扣基线信号与秩一近似", "峰重构残差与逐通道噪声"),
+        subplot_titles=(
+            "Raw signals, baselines and reconstruction",
+            "Baseline-corrected signals and rank-one approximation",
+            "Peak reconstruction residuals and channel noise",
+        ),
     )
     tables, summaries = [], []
     for index, channel in enumerate(channels):
@@ -156,7 +160,7 @@ def diagnostic_figure(result, scan_index, times, channels, *, provenance):
     summary = pd.DataFrame(summaries)
     figure.update_layout(
         height=900,
-        title="独立原始信号诊断",
+        title="Independent raw signal diagnostics",
         meta={
             "parameters": result["parameters"],
             "provenance": provenance,
@@ -175,5 +179,5 @@ def diagnostic_figure(result, scan_index, times, channels, *, provenance):
             },
         },
     )
-    figure.update_xaxes(title_text="RT（秒；计算按扫描顺序）", row=3, col=1)
+    figure.update_xaxes(title_text="RT (s; computed in scan order)", row=3, col=1)
     return figure, full

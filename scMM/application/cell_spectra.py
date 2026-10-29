@@ -121,13 +121,13 @@ def cell_spectra(
         tables[f"{index + 1}_display.csv"] = frame.assign(intensity=display).to_csv(index=False)
         provenance.append({"cell": cell, **detail})
     figure.update_traces(
-        hovertemplate="m/z=%{x:.5f}<br>强度=%{y:.1e}<extra>%{fullData.name}</extra>"
+        hovertemplate="m/z=%{x:.5f}<br>Intensity=%{y:.1e}<extra>%{fullData.name}</extra>"
     )
     figure.update_layout(
-        title="细胞质谱对比",
+        title="Cell mass spectra",
         xaxis_title="m/z",
         yaxis={
-            "title": "强度" if normalization == "raw" else "归一化强度",
+            "title": "Intensity" if normalization == "raw" else "Normalized intensity",
             "tickformat": ".1e",
             "hoverformat": ".1e",
         },

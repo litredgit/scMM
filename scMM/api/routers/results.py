@@ -48,15 +48,24 @@ def list_trash(manager: Service, identity: Identity):
 
 @router.post("/workspace/saved/plan")
 def plan(body: s.SavedPlan, manager: Service, identity: Identity):
-    with manager.access(identity) as workspace:
+    with manager.access(identity) as workspace, manager.scoped_cleanup(body.scope):
         workspace.check(body.revision)
-        plan = manager.saved_items().plan(body.root, body.path)
+        if body.scope is not None:
+            if body.root != "项目结果":
+                raise ValueError("项目内管理仅支持本环境项目根")
+            manager.check_artifact_path(workspace, body.scope, body.path)
+        plan = manager.project_saved_items(workspace, body.scope).plan(body.root, body.path)
         token = uuid4().hex
-        workspace.trash_plan = (token, plan)
+        workspace.trash_plan = (token, plan, body.scope, workspace.project)
         from scMM.application.saved_catalog import ResultCatalog
 
         description = ResultCatalog(manager.store, Path(plan["root"])).describe(Path(plan["path"]))
         return {"token": token, **plan, **description}
+
+
+@router.get("/workspace/saved/artifacts")
+def artifacts(manager: Service, identity: Identity, scope: str):
+    return manager.saved_artifacts(identity, scope)
 
 
 @router.post("/workspace/saved/retention")
@@ -81,8 +90,14 @@ def move(body: s.ExecutePlan, manager: Service, identity: Identity):
         workspace.check(body.revision)
         if not workspace.trash_plan or workspace.trash_plan[0] != body.token:
             raise ValueError("请先生成有效的删除计划。")
-        entry = manager.saved_items().move(workspace.trash_plan[1])
+        _, plan, scope, project = workspace.trash_plan
         workspace.trash_plan = None
+        with manager.scoped_cleanup(scope):
+            if scope is not None:
+                if workspace.project is not project:
+                    raise ValueError("项目已改变 请重新生成删除计划")
+                manager.check_artifact_path(workspace, scope, plan["path"])
+            entry = manager.project_saved_items(workspace, scope).move(plan)
         return {"entry": str(entry)}
 
 

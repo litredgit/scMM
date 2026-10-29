@@ -128,6 +128,7 @@
         "scMM/application/tasks.py",
         "scMM/application/worker.py",
         "scMM/application/project_batch.py",
+        "scMM/application/batch_comparison.py",
         "scMM/application/cell_preview.py",
         "scMM/application/parameters.py",
         "scMM/application/preferences.py",

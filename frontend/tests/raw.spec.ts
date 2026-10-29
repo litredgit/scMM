@@ -275,3 +275,112 @@ test('changing the raw sample clears counts and messages belonging to the previo
   await expect(page.getByText(/预览完成，7 个细胞/)).toHaveCount(0)
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
+
+test('raw zoom, reset then zoom, and full-range SVG share one explicit export policy', async ({
+  page,
+}) => {
+  const { readFile } = await import('node:fs/promises')
+  await create(page, '原始谱统一视图导出')
+  await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
+  await page.getByRole('button', { name: /extract.mzML/ }).click()
+  await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
+  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
+  const plot = page.locator('.plot-shell').first()
+  await expect(plot.locator('.js-plotly-plot')).toBeVisible()
+  await expect(plot.getByLabel('导出范围', { exact: true })).toHaveValue('current')
+  const drag = plot.locator('.nsewdrag').first()
+  const box = (await drag.boundingBox())!
+  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.1)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.9, { steps: 10 })
+  await page.mouse.up()
+  await expect
+    .poll(() =>
+      plot
+        .locator('.js-plotly-plot')
+        .evaluate(
+          (el) =>
+            (el as HTMLElement & { layout: { xaxis: { autorange: boolean } } }).layout.xaxis
+              .autorange,
+        ),
+    )
+    .toBe(false)
+  async function svgTicks() {
+    const pending = page.waitForEvent('download')
+    await plot.getByRole('button', { name: '下载 SVG', exact: true }).click()
+    const svg = await readFile((await (await pending).path())!, 'utf8')
+    expect(svg).toContain('Intensity')
+    expect(svg).not.toContain('总离子流')
+    return page.evaluate(
+      (content) =>
+        Array.from(
+          new DOMParser().parseFromString(content, 'image/svg+xml').querySelectorAll('.xtick text'),
+        ).map((el) => Number(el.textContent)),
+      svg,
+    )
+  }
+  const zoomed = await svgTicks()
+  expect(Math.min(...zoomed)).toBeGreaterThan(0)
+  expect(Math.max(...zoomed)).toBeLessThan(30)
+  await plot.locator('.js-plotly-plot').evaluate((el) => {
+    const graph = el as HTMLElement & {
+      layout: { xaxis: { autorange: boolean; range: number[] } }
+      emit: (name: string, value: unknown) => void
+    }
+    graph.layout.xaxis.autorange = true
+    graph.layout.xaxis.range = [0, 30]
+    graph.emit('plotly_relayout', { 'xaxis.autorange': true })
+    graph.layout.xaxis.autorange = false
+    graph.layout.xaxis.range = [11, 15]
+    graph.emit('plotly_relayout', { 'xaxis.range[0]': 11, 'xaxis.range[1]': 15 })
+  })
+  const again = await svgTicks()
+  expect(Math.min(...again)).toBeGreaterThanOrEqual(11)
+  expect(Math.max(...again)).toBeLessThanOrEqual(15)
+  await plot.getByLabel('导出范围', { exact: true }).selectOption('full')
+  const full = await svgTicks()
+  expect(Math.min(...full)).toBeLessThanOrEqual(0)
+  expect(Math.max(...full)).toBeGreaterThanOrEqual(30)
+  await noError(page)
+})
+
+test('legacy automatic labels become English while input legend and custom title remain unchanged', async ({
+  page,
+}) => {
+  const { readFile } = await import('node:fs/promises')
+  await create(page, '历史图英文兼容')
+  await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
+  await page.getByRole('button', { name: /extract.mzML/ }).click()
+  await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
+  await page.route('**/workspace/raw/plot', async (route) => {
+    const response = await route.fetch()
+    const body = await response.json()
+    delete body.figure.layout.meta.system_text_language
+    body.figure.layout.title.text = '总离子流 TIC'
+    body.figure.layout.yaxis.title.text = '强度'
+    body.figure.layout.xaxis.title.text = 'RT（秒）'
+    body.figure.data[0].name = '用户输入图例'
+    await route.fulfill({ response, json: body })
+  })
+  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
+  const plot = page.locator('.plot-shell').first()
+  await expect(plot.locator('.gtitle')).toHaveText('Total ion chromatogram (TIC)')
+  await expect(plot.locator('.legendtext')).toHaveText('用户输入图例')
+  await plot.locator('.plot-settings > summary').click()
+  await plot.getByLabel('导出标题', { exact: true }).fill('强度')
+  const download = page.waitForEvent('download')
+  await plot.getByRole('button', { name: '下载 SVG', exact: true }).click()
+  const svg = await readFile((await (await download).path())!, 'utf8')
+  const text = await page.evaluate((content) => {
+    const doc = new DOMParser().parseFromString(content, 'image/svg+xml')
+    return {
+      title: doc.querySelector('.gtitle')?.textContent,
+      axis: doc.querySelector('.ytitle')?.textContent,
+      legend: doc.querySelector('.legendtext')?.textContent,
+    }
+  }, svg)
+  expect(text).toEqual({ title: '强度', axis: 'Intensity', legend: '用户输入图例' })
+  await noError(page)
+})

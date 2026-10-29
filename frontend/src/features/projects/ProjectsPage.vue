@@ -2,6 +2,8 @@
 import { formatTime } from '../../help/time'
 import { computed, onMounted, ref } from 'vue'
 import SavedItems from '../../components/SavedItems.vue'
+import TrashAction from '../../components/TrashAction.vue'
+import SaveExplanation from '../../components/SaveExplanation.vue'
 import { useRouter } from 'vue-router'
 import { useReadScope } from '../../api/readScope'
 import type { SavedProject } from '../../api/types'
@@ -9,6 +11,11 @@ import { useWorkspace } from '../../stores/workspace'
 
 const store = useWorkspace()
 const router = useRouter()
+const savedManager = ref<InstanceType<typeof SavedItems>>()
+async function removed() {
+  await load()
+  await savedManager.value?.refresh()
+}
 const name = ref('')
 const search = ref('')
 const projects = ref<SavedProject[]>([])
@@ -104,7 +111,8 @@ function date(value: string) {
           <li>审核提取结果，再进行预处理与分析</li>
           <li>主动保存项目，下载需要的结果</li>
         </ol>
-        <p class="muted">提取后人工审核，项目由你主动保存。</p>
+        <p class="muted">提取后人工审核；开始提取也会先完整保存项目。</p>
+        <SaveExplanation />
       </details>
     </div>
     <section class="card project-list">
@@ -173,13 +181,23 @@ function date(value: string) {
                 <template v-else>尚未保存数据集</template>
               </td>
               <td>{{ date(item.saved_at) }}</td>
-              <td><button :disabled="store.busy" @click="open(item.path)">打开项目 →</button></td>
+              <td>
+                <button :disabled="store.busy" @click="open(item.path)">打开项目 →</button>
+                <TrashAction
+                  :path="item.path"
+                  :disabled="item.path === store.project?.path"
+                  @changed="removed"
+                />
+                <small v-if="item.path === store.project?.path"
+                  >当前项目，请先保存并关闭后管理。</small
+                >
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
       <p class="storage-path">项目根目录：{{ store.configuration?.project_root }}</p>
     </section>
-    <SavedItems @changed="load" />
+    <SavedItems ref="savedManager" @changed="load" />
   </section>
 </template>

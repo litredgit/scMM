@@ -207,3 +207,77 @@ def test_frozen_input_changed_during_extraction_does_not_publish(tmp_path, monke
     assert "Input changed" in state["samples"][0]["error"]
     assert not (folder / f"{project.samples[0]['id']}.h5ad").exists()
     assert state["samples"][1]["status"] == "succeeded"
+
+
+def test_two_batch_comparison_matches_ids_and_preserves_inputs(tmp_path):
+    import numpy as np
+    from anndata import AnnData
+
+    from scMM.application.batch_comparison import compare_batches
+    from scMM.application.preview_cache import digest_file
+
+    paths = []
+    for index, cells in enumerate((2, 3)):
+        folder = tmp_path / f"batch-{index}"
+        folder.mkdir()
+        data = AnnData(np.arange(cells * 2, dtype=float).reshape(cells, 2))
+        data.obs_names = [f"c{i}" for i in range(cells)]
+        data.write_h5ad(folder / "sample.h5ad")
+        write_json(
+            folder / "request.json",
+            {
+                "parameters": {"cell_snr": 5 + index},
+                "feature_strategy": "shared",
+                "samples": [
+                    {
+                        "id": "stable",
+                        "name": "中文输入",
+                        "path": "/raw/file",
+                        "input_identity": {"sha": "same"},
+                        "parameters": {"cell_snr": 5 + index},
+                    }
+                ],
+            },
+        )
+        write_json(
+            folder / "state.json",
+            {
+                "status": "completed",
+                "samples": [
+                    {
+                        "id": "stable",
+                        "status": "succeeded",
+                        "cells": cells,
+                        "features": 2,
+                        "output": "sample.h5ad",
+                        "sha256": digest_file(folder / "sample.h5ad"),
+                    }
+                ],
+            },
+        )
+        paths.append(folder / "state.json")
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    result = compare_batches(*paths)
+    assert result["samples"][0]["input"] == "same"
+    assert result["samples"][0]["cell_difference"] == 1
+    assert result["samples"][0]["name_A"] == "中文输入"
+    assert result["qc"].groupby("comparison_batch").size().to_dict() == {"A": 2, "B": 3}
+    assert len([r for r in result["parameters"] if r["changed"]]) == 2
+    assert all(path.read_bytes() == value for path, value in before.items())
+    with pytest.raises(ValueError, match="不同"):
+        compare_batches(paths[0], paths[0])
+    request = json.loads(paths[1].with_name("request.json").read_text(encoding="utf-8"))
+    request["samples"][0].pop("input_identity")
+    write_json(paths[1].with_name("request.json"), request)
+    unknown = compare_batches(*paths)
+    assert unknown["samples"][0]["input"] == "unknown"
+    assert unknown["samples"][0]["cell_difference"] is None
+    assert unknown["warnings"]
+    # Digest mismatch removes only that side's QC and reports the missing evidence.
+    paths[1].with_name("sample.h5ad").write_bytes(b"changed")
+    broken = compare_batches(*paths)
+    assert set(broken["qc"].comparison_batch) == {"A"}
+    assert any("摘要" in warning for warning in broken["warnings"])
+    write_json(paths[1], {"status": "running", "samples": []})
+    with pytest.raises(ValueError, match="结束"):
+        compare_batches(*paths)

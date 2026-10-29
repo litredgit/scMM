@@ -205,6 +205,37 @@ def main():
         shared = retention_project.folder / "processing" / f"shared-{'b' * 64}.npy"
         np.save(shared, np.array([150.123456789]))
         shared.with_suffix(".json").write_text('{"synthetic":true}')
+        from scMM.application.preview_cache import file_identity
+        from scMM.application.project_batch import preflight, run_batch
+        from scMM.application.projects import write_json
+
+        comparison = app.state.workspaces.store.create("两批次比较合成项目")
+        comparison.add_files(app.state.workspaces.storage, "Raw", ["extract.mzML"])
+        comparison.samples[0]["name"] = "中文样本"
+        comparison.manifest["parameters"].update(
+            ref_mz=150,
+            mz_min=140,
+            mz_max=160,
+            extraction_method="snr_v1",
+            reference_ppm_tol=50,
+            baseline_filter_size=5,
+            n_jobs=1,
+            ppm_tol=500,
+            resolution=5000,
+            resample_points_per_fwhm=2,
+            cell_min_signal=0,
+        )
+        for index in range(2):
+            comparison.manifest["parameters"]["cell_snr"] = 5 + index
+            request = preflight(comparison, app.state.workspaces.storage)
+            request["created_at"] = f"2026-10-29T00:00:0{index}Z"
+            for sample in request["samples"]:
+                sample["input_identity"] = file_identity(sample["path"])
+            folder = comparison.folder / "processing" / f"synthetic-batch-{index}"
+            folder.mkdir()
+            write_json(folder / "request.json", request)
+            run_batch(folder / "state.json")
+        app.state.workspaces.store.save(comparison)
         # AI uses real encrypted settings and HTTP routes, with a synthetic upstream.
         # No user credentials or external model service are needed by browser tests.
         import asyncio

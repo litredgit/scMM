@@ -1206,7 +1206,7 @@ def test_qc_preview_identifies_candidate_and_expires_with_input(workflow):
     metadata = figure["layout"]["meta"]
     assert metadata["matrix_status"] == "preview"
     assert metadata["preview_of"]["operation"] == "normalize"
-    assert "未应用预览" in figure["layout"]["title"]["text"]
+    assert "unapplied preview" in figure["layout"]["title"]["text"]
 
     def check():
         return workflow[0].post(

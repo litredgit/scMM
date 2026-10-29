@@ -44,7 +44,7 @@ def volcano_figure(table, *, fdr=0.05, fold_change=1.0, labels=10, order="fdr"):
             "display_fdr": True,
         },
         labels={"display_p_value": "p_value", "display_fdr": "fdr"},
-        title="火山图：全部特征的全局 BH-FDR",
+        title="Volcano plot: global BH-FDR across all features",
     )
     figure.update_traces(textposition="top center")
     figure.add_vline(x=fold_change, line_dash="dot")
@@ -56,7 +56,7 @@ def volcano_figure(table, *, fdr=0.05, fold_change=1.0, labels=10, order="fdr"):
 
 def violin_figure(data, result, features, *, hide_zero=False, columns=3):
     if not features:
-        return go.Figure(layout={"title": "选择特征后显示小提琴图"})
+        return go.Figure(layout={"title": "Select features to display a violin plot"})
     if len(features) > 12:
         raise ValueError("Select at most 12 features for the violin plot")
     table = result["table"].set_index("feature_id")
@@ -68,7 +68,7 @@ def violin_figure(data, result, features, *, hide_zero=False, columns=3):
         rows=rows,
         cols=columns,
         subplot_titles=[
-            f"{feature_label(feature, table.loc[feature].get('mz'))}<br>全局 FDR={probability_number(table.loc[feature, 'fdr'])}"
+            f"{feature_label(feature, table.loc[feature].get('mz'))}<br>Global FDR={probability_number(table.loc[feature, 'fdr'])}"
             for feature in features
         ],
     )
@@ -88,7 +88,7 @@ def violin_figure(data, result, features, *, hide_zero=False, columns=3):
                     points="all",
                     jitter=0.25,
                     pointpos=0,
-                    hovertemplate="细胞=%{customdata[0]}<br>强度=%{y:.1e}<extra>%{fullData.name}</extra>",
+                    hovertemplate="Cell=%{customdata[0]}<br>Intensity=%{y:.1e}<extra>%{fullData.name}</extra>",
                     name=name,
                     legendgroup=name,
                     showlegend=column == 1,
@@ -99,13 +99,13 @@ def violin_figure(data, result, features, *, hide_zero=False, columns=3):
                 row=(column - 1) // columns + 1,
                 col=(column - 1) % columns + 1,
             )
-    figure.update_yaxes(tickformat=".1e", title_text="强度")
+    figure.update_yaxes(tickformat=".1e", title_text="Intensity")
     figure.update_layout(
         meta={"point_kind": "cell"},
         height=340 * rows,
-        title="小提琴图（零值仅从显示中隐藏；检验与全局 FDR 不变）"
+        title="Violin plot (zeros hidden for display; tests and global FDR unchanged)"
         if hide_zero
-        else "小提琴图（包含零值；使用同一份全局 FDR）",
+        else "Violin plot (zeros included; same global FDR)",
     )
     return style_figure(figure)
 
@@ -145,11 +145,11 @@ def embedding_figure(data, key, color=None, dimensions=None):
     labels = {}
     for axis, dimension in zip(("x", "y", "z"), dimensions, strict=False):
         labels[axis] = (
-            "常数轴"
+            "Constant axis"
             if dimension == 0
             else f"PC{dimension} ({variance[dimension - 1]:.2%})"
             if variance
-            else f"维度 {dimension}"
+            else f"Dimension {dimension}"
         )
     kwargs = {
         "color_discrete_sequence": PLOT_COLORS,
@@ -183,9 +183,9 @@ def embedding_figure(data, key, color=None, dimensions=None):
         }
     )
     if color and color.startswith("feature:"):
-        figure.update_coloraxes(colorbar_tickformat=".1e", colorbar_title="强度")
+        figure.update_coloraxes(colorbar_tickformat=".1e", colorbar_title="Intensity")
         figure.update_traces(
-            hovertemplate="细胞 %{hovertext}<br>x=%{x}<br>y=%{y}<br>强度 %{marker.color:.1e}<extra></extra>"
+            hovertemplate="Cell %{hovertext}<br>x=%{x}<br>y=%{y}<br>Intensity %{marker.color:.1e}<extra></extra>"
         )
     elif color:
         scientific = any(word in color.lower() for word in ("intensity", "abundance", "强度"))
@@ -214,12 +214,18 @@ def supervised_figures(analyzer):
             name=name,
         )
     roc.update_layout(
-        title="留出测试集 ROC", xaxis_title="假阳性率（FPR）", yaxis_title="真阳性率（TPR）"
+        title="Held-out ROC",
+        xaxis_title="False positive rate (FPR)",
+        yaxis_title="True positive rate (TPR)",
     )
-    pr.update_layout(title="留出测试集精确率–召回率", xaxis_title="召回率", yaxis_title="精确率")
-    calibration.add_scatter(x=[0, 1], y=[0, 1], mode="lines", name="理想校准")
+    pr.update_layout(
+        title="Held-out precision-recall", xaxis_title="Recall", yaxis_title="Precision"
+    )
+    calibration.add_scatter(x=[0, 1], y=[0, 1], mode="lines", name="Ideal calibration")
     calibration.update_layout(
-        title="留出测试集校准诊断（不重新拟合）", xaxis_title="预测概率", yaxis_title="实际阳性比例"
+        title="Held-out calibration (without refitting)",
+        xaxis_title="Predicted probability",
+        yaxis_title="Observed positive fraction",
     )
     return roc, pr, calibration
 
@@ -230,7 +236,10 @@ def network_figure(graph):
 
     positions = nx.spring_layout(graph, seed=42)
     figure = go.Figure()
-    for positive, color, label in ((True, "#d95f02", "正相关"), (False, "#1b9e77", "负相关")):
+    for positive, color, label in (
+        (True, "#d95f02", "Positive correlation"),
+        (False, "#1b9e77", "Negative correlation"),
+    ):
         x, y = [], []
         for a, b, attrs in graph.edges(data=True):
             if (attrs["correlation"] >= 0) == positive:
@@ -243,12 +252,12 @@ def network_figure(graph):
             y=[positions[n][1] for n in graph],
             text=[mass_label(node) for node in graph],
             mode="markers",
-            name="特征",
+            name="Features",
             hovertemplate="%{text}<extra></extra>",
         )
     )
     figure.update_layout(
-        title="特征相关网络（不代表因果或轨迹）",
+        title="Feature correlation network (not causality or trajectory)",
         showlegend=True,
         meta={
             "layout_seed": 42,

@@ -270,7 +270,10 @@ async function refresh() {
   const accept = listScope.begin()
   const value = await store.readResource<SavedProject[]>('/projects', { accept })
   if (!accept()) return
-  if (value) projects.value = value
+  if (value) {
+    projects.value = value
+    if (!value.some((project) => project.path === selected.value)) selected.value = ''
+  }
   const entries = await store.read<typeof trash.value>('/saved/trash', undefined, accept)
   if (accept() && entries) trash.value = entries
 }
@@ -321,18 +324,19 @@ async function clear() {
     store.notice = `已永久清空 ${result} 个回收条目。`
   }
 }
+defineExpose({ refresh })
 </script>
 <template>
   <section class="card">
     <div class="section-heading">
       <div>
-        <h2>已保存内容与回收区</h2>
+        <h2>统一回收站与高级保留策略</h2>
         <p>先查看删除计划，再直接执行。当前打开项目、任务及被引用产物受到保护。</p>
       </div>
       <button :disabled="store.busy" @click="refresh" class="preview">刷新管理列表</button>
     </div>
     <details>
-      <summary>管理已保存项目 / 结果</summary>
+      <summary>高级：保留策略与外部结果</summary>
       <div class="field-grid">
         <label
           ><FieldLabel name="已保存项目" /><select
@@ -347,9 +351,9 @@ async function clear() {
           </select></label
         >
       </div>
-      <button class="danger" :disabled="store.busy || !selected" @click="makePlan(true)">
-        查看项目删除计划
-      </button>
+      <p class="muted">
+        项目请在上方项目列表管理；批次、预览缓存、保存记录和独立导出在各自页面管理。这里保留跨项目保留策略与外部结果管理。
+      </p>
       <div class="field-grid">
         <label>
           <FieldLabel

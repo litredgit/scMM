@@ -119,7 +119,9 @@ def style_figure(figure):
                 axis.tickformat = axis.hoverformat = ".1e"
             elif "m/z" in title or title == "mz":
                 axis.tickformat = axis.hoverformat = ".4f"
-            elif any(word in title for word in ("features", "cells", "特征数", "细胞数")):
+            elif any(
+                word in title for word in ("features", "cells", "cell count", "特征数", "细胞数")
+            ):
                 axis.tickformat = axis.hoverformat = "d"
             else:
                 axis.tickformat = axis.hoverformat = ".3~f"

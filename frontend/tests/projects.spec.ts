@@ -79,7 +79,7 @@ test('dataset import, mapping, CSV and snapshot reload', async ({ page }) => {
   await expect(
     page.locator('#main-content').getByText('6 细胞 × 4 特征', { exact: true }),
   ).toBeVisible()
-  await expect(page.getByText(/baseline.h5ad/)).toBeVisible()
+  await expect(page.locator('dd').filter({ hasText: 'baseline.h5ad' })).toBeVisible()
   await page.getByRole('link', { name: /参数参考/ }).click()
   await expect(page.getByRole('cell', { name: 'snr', exact: true })).toHaveCount(2)
   await page.reload()

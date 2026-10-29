@@ -9,6 +9,8 @@ import {
   type ComputedRef,
 } from 'vue'
 import type { Figure } from '../api/types'
+import { applyViewport, readViewport } from './plotViewport'
+import { applyLegend } from './plotPresentation'
 import type { useWorkspace } from '../stores/workspace'
 
 type RenderOptions = {
@@ -25,9 +27,14 @@ type RenderOptions = {
   exporting: Ref<boolean>
   fresh: ComputedRef<boolean>
   image: (format: string) => Promise<void>
-  emit: { (event: 'select', value: string): void; (event: 'range', value: [number, number]): void }
+  emit: {
+    (event: 'select', value: string): void
+    (event: 'range', value: [number, number]): void
+    (event: 'viewport', value: Record<string, unknown>): void
+  }
   legendItems: Ref<string[]>
   pointOpacity: Ref<number>
+  traceVisibility: Ref<(boolean | string)[]>
 }
 
 export function usePlotRenderer({
@@ -47,11 +54,13 @@ export function usePlotRenderer({
   emit,
   legendItems,
   pointOpacity,
+  traceVisibility,
 }: RenderOptions) {
   let plotly: (typeof import('plotly.js-dist-min'))['default'] | undefined
   let observer: ResizeObserver | undefined
   let active = true
   let generation = 0
+  let figureRevision = 0
   let chain: Promise<unknown> = Promise.resolve()
   async function draw() {
     const token = ++generation
@@ -59,39 +68,12 @@ export function usePlotRenderer({
       plotly ??= (await import('plotly.js-dist-min')).default
       if (!active || !element.value || token !== generation) return
       const copy = orderedFigure()
-      for (const [key, value] of Object.entries(viewport.value)) {
-        const match = /^([xy]axis\d*)\.(range)(?:\[(\d)\])?$/.exec(key)
-        if (match) {
-          const axis = (copy.layout[match[1]!] ??= {}) as Record<string, unknown>
-          if (match[3] !== undefined) {
-            const range = (axis.range ??= []) as unknown[]
-            range[Number(match[3])] = value
-          } else axis.range = value
-        } else if (key.endsWith('.autorange')) {
-          const name = key.split('.')[0]!
-          copy.layout[name] ??= {}
-          ;(copy.layout[name] as Record<string, unknown>).autorange = value
-        } else if (key === 'scene.camera')
-          copy.layout.scene = { ...(copy.layout.scene as object), camera: value }
-      }
+      applyViewport(copy, viewport.value)
       const selectedPosition = position.value
       const outside = selectedPosition === 'right'
       const narrow = chartWidth.value < 680
       const inside = !outside
       const below = outside && narrow
-      const right = selectedPosition.endsWith('right'),
-        bottom = selectedPosition.startsWith('bottom')
-      const legend = inside
-        ? {
-            x: right ? 0.99 : 0.01,
-            y: bottom ? 0.01 : 0.99,
-            xanchor: right ? 'right' : 'left',
-            yanchor: bottom ? 'bottom' : 'top',
-            bgcolor: 'rgba(255,255,255,0.8)',
-          }
-        : below
-          ? { x: 0, y: -0.22, xanchor: 'left', yanchor: 'top', orientation: 'h' }
-          : { x: 1.02, y: 1, xanchor: 'left', yanchor: 'top' }
       const originalTitle = copy.layout.title as { text?: string } | string | undefined
       const title = (typeof originalTitle === 'string' ? originalTitle : originalTitle?.text) ?? ''
       const wrap = Math.max(12, Math.floor((chartWidth.value - 35) / 18))
@@ -121,14 +103,13 @@ export function usePlotRenderer({
         },
         showlegend: selectedPosition !== 'hidden',
         legend: {
-          ...legend,
           traceorder: 'normal',
           title: { text: '' },
           font: { size: 14 },
           itemwidth: 30,
           maxheight: below ? 0.3 : 1,
         },
-        uirevision: props.name,
+        uirevision: `${props.name}:${figureRevision}`,
         dragmode: props.selectRange ? 'select' : 'zoom',
         selectdirection: props.selectRange ? 'h' : undefined,
         margin: {
@@ -169,27 +150,8 @@ export function usePlotRenderer({
       for (const trace of copy.data as Record<string, unknown>[]) {
         if (typeof trace.name === 'string' && displayNames.has(trace.name))
           trace.name = displayNames.get(trace.name)
-
-        const marker = trace.marker as Record<string, unknown> | undefined
-        if (marker && 'colorbar' in marker) marker.showscale = selectedPosition !== 'hidden'
-        if (marker && 'colorbar' in marker)
-          marker.colorbar = {
-            ...(marker.colorbar as object),
-            x: inside ? (right ? 0.98 : 0.02) : 1.02,
-            xanchor: inside && right ? 'right' : 'left',
-            len: inside ? 0.65 : 1,
-          }
       }
-      const axes = copy.layout.coloraxis as Record<string, unknown> | undefined
-      if (axes) {
-        axes.showscale = selectedPosition !== 'hidden'
-        axes.colorbar = {
-          ...(axes.colorbar as object),
-          x: inside ? (right ? 0.98 : 0.02) : 1.02,
-          xanchor: inside && right ? 'right' : 'left',
-          len: inside ? 0.65 : 1,
-        }
-      }
+      applyLegend(copy, selectedPosition, narrow)
       chain = chain
         .catch(() => undefined)
         .then(async () => {
@@ -243,11 +205,18 @@ export function usePlotRenderer({
             removeAllListeners?: (name: string) => void
           }
           graph.removeAllListeners?.('plotly_relayout')
-          graph.on?.('plotly_relayout', (value) => {
-            const next: Record<string, unknown> = {}
-            for (const [key, item] of Object.entries(value))
-              if (/^(?:[xy]axis\d*\.(?:range|autorange)|scene\.camera)/.test(key)) next[key] = item
-            if (Object.keys(next).length) viewport.value = { ...viewport.value, ...next }
+          graph.on?.('plotly_relayout', () => {
+            const layout = (graph as unknown as { layout?: Record<string, unknown> }).layout
+            if (layout) {
+              viewport.value = readViewport(layout)
+              emit('viewport', viewport.value)
+            }
+          })
+          graph.removeAllListeners?.('plotly_restyle')
+          graph.on?.('plotly_restyle', () => {
+            traceVisibility.value = (
+              (graph as unknown as { data?: { visible?: boolean | string }[] }).data ?? []
+            ).map((t) => t.visible ?? true)
           })
           graph.removeAllListeners?.('plotly_click')
           graph.on?.('plotly_click', (data) => {
@@ -277,7 +246,10 @@ export function usePlotRenderer({
       legendItems.value,
       pointOpacity.value,
     ],
-    () => void draw(),
+    (value, previous) => {
+      if (value[0] !== previous?.[0]) figureRevision++
+      void draw()
+    },
     { deep: false },
   )
   onMounted(() => {
@@ -314,5 +286,16 @@ export function usePlotRenderer({
     if (element.value) plotly?.purge(element.value)
   })
 
-  return { plotly: () => plotly, retry: draw }
+  return {
+    plotly: () => plotly,
+    retry: draw,
+    currentViewport: () => {
+      const layout = (element.value as unknown as { layout?: Record<string, unknown> })?.layout
+      return layout ? readViewport(layout) : viewport.value
+    },
+    visibility: () =>
+      ((element.value as unknown as { data?: { visible?: boolean | string }[] })?.data ?? []).map(
+        (t) => t.visible ?? true,
+      ),
+  }
 }

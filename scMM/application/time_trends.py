@@ -207,14 +207,19 @@ def trend_figure(data, key, run, plot_top_n, display_standardize):
             customdata=custom,
             colorscale="Viridis",
             hoverongaps=False,
-            colorbar={"title": "行标准分" if display_standardize else "窗口强度"},
-            hovertemplate="%{customdata[2]} · %{y}<br>窗口 %{x}<br>时间 %{customdata[0]}<br>有限细胞 %{customdata[1]}<br>显示值 %{z}<extra></extra>",
+            colorbar={"title": "Row z-score" if display_standardize else "Window intensity"},
+            hovertemplate="%{customdata[2]} · %{y}<br>Window %{x}<br>Time %{customdata[0]}<br>Finite cells %{customdata[1]}<br>Display value %{z}<extra></extra>",
         )
     )
     figure.update_layout(
-        title=f"代谢趋势 · {key}",
-        xaxis_title="窗口（时间递增排序）",
-        yaxis={"title": "特征", "tickmode": "array", "tickvals": ids.tolist(), "ticktext": labels},
+        title=f"Metabolic trends · {key}",
+        xaxis_title="Window (increasing time)",
+        yaxis={
+            "title": "Feature",
+            "tickmode": "array",
+            "tickvals": ids.tolist(),
+            "ticktext": labels,
+        },
         meta={
             "trend_display_standardize": display_standardize,
             "trend_display_feature_ids": ids.tolist(),

@@ -83,6 +83,11 @@ class BatchRequest(RevisionRequest):
     path: str
 
 
+class CompareBatches(RevisionRequest):
+    path_a: str
+    path_b: str
+
+
 class StartBatch(RevisionRequest):
     retry_path: str | None = None
 
@@ -465,6 +470,7 @@ class ViewSettings(RevisionRequest):
 class SavedPlan(RevisionRequest):
     root: str
     path: str
+    scope: Literal["snapshots", "previews", "exports", "batches"] | None = None
 
 
 class RetentionPlan(SavedPlan):

@@ -7,6 +7,8 @@ import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivate
 import type { Batch, Figure, DataTable } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
 import PlotView from '../../components/PlotView.vue'
+import TrashAction from '../../components/TrashAction.vue'
+import BatchComparison from './BatchComparison.vue'
 import DataTableView from '../../components/DataTable.vue'
 const store = useWorkspace()
 const now = ref(Date.now()),
@@ -273,6 +275,11 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
           </p>
         </div>
         <p class="task-note">批次 ID：{{ selected.path.split('/').at(-2) }}</p>
+        <TrashAction
+          :path="selected.path.slice(0, -'/state.json'.length)"
+          scope="batches"
+          :disabled="active"
+          @changed="polling.refresh()" />
         <div class="actions">
           <button
             class="restore"
@@ -354,6 +361,7 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
       ></template>
       <p v-else class="muted">尚无处理批次。可先前往原始谱页面检查信号与参数。</p>
     </div>
+    <BatchComparison :batches="batchList" :selected="path" />
     <details class="card extraction-preparation" :open="!selected">
       <summary>处理准备 · 新建或重试批次</summary>
       <p>
@@ -380,7 +388,8 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
         </button>
       </div>
       <p class="page-note">
-        开始或重试自动预检并保存输入配置。停止仅阻止后续样本，保留当前样本及已完成产物。
+        开始或重试先预检并完整保存项目：已有当前矩阵时也会生成新快照，再将逐样本结果写入 processing
+        批次目录。停止仅阻止后续样本；审核建立的数据仍需主动保存。
       </p>
       <template v-if="checked"
         ><h3>逐样本完整参数</h3>

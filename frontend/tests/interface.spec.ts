@@ -28,6 +28,8 @@ test('legend reorder persists, selection is manual and six steps fit narrow scre
         (t) => [t.name, t.marker?.color],
       ),
     )
+  if (!(await plot.locator('.plot-settings').evaluate((el) => (el as HTMLDetailsElement).open)))
+    await plot.locator('.plot-settings > summary').click()
   await plot.locator('.legend-order > summary').click()
   await plot.getByRole('button', { name: '下移图例 a', exact: true }).click()
   await expect(plot.locator('.legendtext')).toHaveText(['b', 'a'])
@@ -52,6 +54,8 @@ test('legend reorder persists, selection is manual and six steps fit narrow scre
   await page.getByRole('link', { name: /^5\s*分析$/ }).click()
   await page.getByRole('button', { name: '更新嵌入图', exact: true }).click()
   await expect(plot.locator('.legendtext')).toHaveText(['b', 'a'])
+  if (!(await plot.locator('.plot-settings').evaluate((el) => (el as HTMLDetailsElement).open)))
+    await plot.locator('.plot-settings > summary').click()
   await plot.locator('.legend-order > summary').click()
   await plot.getByRole('button', { name: '恢复图例默认顺序', exact: true }).click()
   await expect(plot.locator('.legendtext')).toHaveText(['a', 'b'])

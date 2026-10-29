@@ -48,7 +48,7 @@ def stability_tables(data, *, source_key, feature, time_kind, time_key=None, bin
         raise ValueError("normalized_time coordinates must be within [0, 1]")
     source = data.obs[source_key].astype("string")
     source = source.mask(source.str.strip().eq(""))
-    missing = "（缺失来源）"
+    missing = "(Missing source)"
     existing = set(source.dropna())
     while missing in existing:
         missing += "·"
@@ -146,7 +146,11 @@ def stability_figure(data, **options):
     figure = make_subplots(
         rows=3,
         cols=1,
-        subplot_titles=("参考特征强度分布", "各窗口细胞数", "来源中位强度谱相关"),
+        subplot_titles=(
+            "Reference feature intensity distributions",
+            "Cell counts per window",
+            "Correlation of source median spectra",
+        ),
         vertical_spacing=0.1,
     )
     frame, summary, corr = result["cells"], result["windows"], result["correlation"]
@@ -188,15 +192,15 @@ def stability_figure(data, **options):
         row=3,
         col=1,
     )
-    figure.update_xaxes(title_text="窗口编号", row=1, col=1)
-    figure.update_xaxes(title_text="窗口编号", row=2, col=1)
-    figure.update_yaxes(title_text="参考强度", row=1, col=1)
-    figure.update_yaxes(title_text="细胞数", row=2, col=1)
-    figure.update_xaxes(title_text="来源", row=3, col=1)
-    figure.update_yaxes(title_text="来源", row=3, col=1)
+    figure.update_xaxes(title_text="Window index", row=1, col=1)
+    figure.update_xaxes(title_text="Window index", row=2, col=1)
+    figure.update_yaxes(title_text="Reference intensity", row=1, col=1)
+    figure.update_yaxes(title_text="Cell count", row=2, col=1)
+    figure.update_xaxes(title_text="Source", row=3, col=1)
+    figure.update_yaxes(title_text="Source", row=3, col=1)
     figure.update_layout(
         height=1000,
-        title="采集稳定性 QC",
+        title="Acquisition stability QC",
         boxmode="group",
         barmode="group",
         meta={

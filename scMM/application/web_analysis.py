@@ -59,11 +59,11 @@ def quality_view(state, *, preview_of=None):
         y="detected_features",
         color="source_file",
         labels={
-            "source_file": "样本",
-            "total_intensity": "总强度",
-            "detected_features": "检出特征数",
+            "source_file": "Sample",
+            "total_intensity": "Total intensity",
+            "detected_features": "Detected features",
         },
-        title="每细胞 QC · 当前矩阵",
+        title="Cell quality control · current matrix",
         custom_data=["cell_id", "source_file"],
     )
     names = Counter(PureWindowsPath(str(trace.name)).name for trace in figure.data)
@@ -73,8 +73,8 @@ def quality_view(state, *, preview_of=None):
         occurrences[name] += 1
         trace.name = name if names[name] == 1 else f"{name}（{occurrences[name]}）"
         trace.hovertemplate = (
-            "文件：%{customdata[1]}<br>当前总强度：%{x:.1e}"
-            "<br>强度 > 0 的特征数：%{y}<extra></extra>"
+            "File: %{customdata[1]}<br>Current total intensity: %{x:.1e}"
+            "<br>Features with intensity > 0: %{y}<extra></extra>"
         )
     figure.update_layout(
         legend_title_text="",
@@ -104,7 +104,7 @@ def quality_view(state, *, preview_of=None):
         else "QC 基于未应用的预览候选；检出特征按强度 > 0 计数，不代表当前矩阵。"
     ]
     if preview_of is not None:
-        figure.update_layout(title="每细胞 QC · 未应用预览")
+        figure.update_layout(title="Cell quality control · unapplied preview")
     totals = qc["cell"]["total_intensity"].to_numpy(dtype=float)
     nonzero = totals[totals != 0]
     if (
@@ -492,9 +492,9 @@ class AnalysisWorkflow:
                     )
                 )
                 figure.update_layout(
-                    title="留出测试集混淆矩阵",
-                    xaxis_title="预测类别",
-                    yaxis_title="真实类别",
+                    title="Held-out confusion matrix",
+                    xaxis_title="Predicted class",
+                    yaxis_title="True class",
                     meta={
                         "export_tables": {
                             "counts.csv": pd.DataFrame(

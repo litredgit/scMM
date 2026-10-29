@@ -70,9 +70,9 @@ def annotation_charts(version, feature_ids, mz, candidate_rows, filters, view=No
     nodes = []
     for feature in feature_ids:
         candidates = grouped.get(feature, [])
-        classes = {r.get(level) or "未分类" for r in candidates}
+        classes = {r.get(level) or "Unclassified" for r in candidates}
         classification = (
-            next(iter(classes)) if len(classes) == 1 else "多义" if classes else "未注释"
+            next(iter(classes)) if len(classes) == 1 else "Ambiguous" if classes else "Unannotated"
         )
         counts[classification] += 1
         nodes.append(
@@ -80,20 +80,20 @@ def annotation_charts(version, feature_ids, mz, candidate_rows, filters, view=No
                 "id": feature,
                 "feature_id": feature,
                 "mz": float(mz[feature]),
-                "label": "; ".join(dict.fromkeys(r["name"] for r in candidates)) or "未注释",
+                "label": "; ".join(dict.fromkeys(r["name"] for r in candidates)) or "Unannotated",
                 "classification": classification,
                 "candidate_ids": [r["candidate_id"] for r in candidates],
-                "review": "人工指定"
+                "review": "Manually selected"
                 if feature in version["selected"]
-                else "已审阅"
+                else "Reviewed"
                 if feature in version["reviewed_features"]
-                else "待审核",
+                else "Pending review",
             }
         )
     pie = {
         "level": level,
         "denominator": len(feature_ids),
-        "unit": "特征数",
+        "unit": "Feature count",
         "counts": [
             {"classification": key, "count": value} for key, value in sorted(counts.items())
         ],
@@ -122,7 +122,7 @@ def annotation_charts(version, feature_ids, mz, candidate_rows, filters, view=No
                 "feature_id": representative,
                 "mz": float(candidate["query_mz"]),
                 "label": candidate["name"],
-                "classification": candidate.get(level) or "未分类",
+                "classification": candidate.get(level) or "Unclassified",
                 "features": features,
                 "representative_manual": network["representatives"].get(identity) == representative,
                 **network["representative_metrics"][representative],
