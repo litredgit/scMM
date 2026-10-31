@@ -25,6 +25,7 @@ from .workspace_state import WorkspaceError
 def project_candidate(project):
     """Copy mutable data/annotations before importing or synchronizing metadata."""
     candidate = copy(project)
+    candidate.ion_state = deepcopy(project.ion_state)
     candidate.manifest = deepcopy(project.manifest)
     candidate.saved_reports = deepcopy(project.saved_reports)
     candidate.views = deepcopy(project.views)

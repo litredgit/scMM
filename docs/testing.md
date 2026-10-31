@@ -45,6 +45,7 @@ frontend/tests/  # fixtures.ts、server.py 和按交互划分的 spec
 | `spectra` | 谱 I/O、峰/细胞、SNR、ppm、RAW 协议/资源回收与 RAW/XML 等价 |
 | `data` | 矩阵/元数据、合并、H5AD/旧目录、原子写入、归一化及零分母 |
 | `analysis` | 统计、分组验证、监督诊断、统一降维 |
+| `ion-grouping` | 离子领域契约、测量根/轴/数值身份与数值空间；新算法随实施加入 |
 | `annotation` | 质量候选、同位素、规则、数据库下载/完整性 |
 | `plotting` | Notebook 绘图、轨迹、趋势及网页显示精度 |
 | `processing` | 原始预览、参数、缓存、持久 worker、提取审核、质量产物及处理 CLI |

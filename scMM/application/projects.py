@@ -111,6 +111,7 @@ class Project:
     dirty: bool = False
     saved_token: tuple | None = None
     report_token: tuple | None = None
+    ion_state: dict | None = None
 
     @property
     def samples(self):
@@ -290,6 +291,10 @@ class ProjectStore:
         return project
 
     def save(self, project):
+        if project.ion_state is not None:
+            raise ValueError(
+                "Ion catalogue storage is not available until complete snapshot support"
+            )
         folder = self._folder(project.folder)
         project.validate_samples()
         ProcessingParameters(**project.manifest["parameters"])

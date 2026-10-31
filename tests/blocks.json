@@ -77,6 +77,13 @@
       "downstream": ["workbench", "processing", "plotting"],
       "extras": ["plot", "cluster", "supervised"]
     },
+    "ion-grouping": {
+      "kind": "python",
+      "tests": ["tests/domain/test_ion_identity.py"],
+      "sources": ["scMM/ion/*"],
+      "downstream": [],
+      "extras": []
+    },
     "annotation": {
       "kind": "python",
       "tests": [
@@ -165,12 +172,14 @@
       "kind": "python",
       "tests": [
         "tests/application/test_workbench_state.py",
+        "tests/application/test_data_views.py",
         "tests/application/test_processed_merge.py",
         "tests/application/test_result_catalog.py",
         "tests/application/test_maintenance_recovery.py"
       ],
       "sources": [
         "scMM/application/workbench.py",
+        "scMM/application/data_views.py",
         "scMM/application/processed_merge.py",
         "scMM/application/merge_sources.py",
         "scMM/application/merge_metadata.py",
@@ -523,6 +532,7 @@
       "browser-analysis-journey"
     ],
     "tests/conftest.py": [
+      "ion-grouping",
       "spectra",
       "data",
       "analysis",
@@ -546,6 +556,7 @@
   "shared": {
     "scMM/application/preview_cache.py": ["processing", "projects"],
     "scMM/__init__.py": [
+      "ion-grouping",
       "spectra",
       "data",
       "analysis",
@@ -585,6 +596,7 @@
     "scMM/api/__init__.py": ["api", "api-time"],
     "scMM/api/routers/__init__.py": ["api", "api-time"],
     "pyproject.toml": [
+      "ion-grouping",
       "spectra",
       "data",
       "analysis",
@@ -618,6 +630,7 @@
       "browser-analysis-journey"
     ],
     "uv.lock": [
+      "ion-grouping",
       "spectra",
       "data",
       "analysis",

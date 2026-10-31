@@ -141,6 +141,10 @@ class RecoveryStore:
                         )
                     project = workspace.project
                     if project is not None:
+                        if project.ion_state is not None:
+                            raise ValueError(
+                                "Ion catalogue recovery requires complete branch support"
+                            )
                         record["project"] = {
                             key: getattr(project, key)
                             for key in (

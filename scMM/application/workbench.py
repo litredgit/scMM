@@ -19,6 +19,7 @@ from scMM.analysis.embedding import reduce_dimension
 from scMM.analysis.quality import quality_metrics
 from scMM.analysis.statistics import feature_correlation_network, marker_features
 from scMM.file.data import CyESIData
+from scMM.ion.semantics import transform_value_state, value_states, write_value_states
 from scMM.util.intensity import intensity_states, transformed_state, write_intensity_states
 from scMM.util.normalize import normalize
 
@@ -94,12 +95,14 @@ class AnalysisWorkspace:
         if metadata.get("schema_version", 1) != 1:
             raise ValueError("unsupported scmm_workbench schema version")
         states = intensity_states(candidate)
+        semantics = value_states(candidate)
         metadata["schema_version"] = 1
         if "original_layer" not in metadata:
             layer = self._layer_key(candidate, "input")
             candidate.layers[layer] = candidate.X.copy()
             metadata["original_layer"] = layer
             states[layer] = states["X"]
+            semantics[layer] = deepcopy(semantics["X"])
         if metadata["original_layer"] not in candidate.layers:
             raise ValueError("preprocessing input layer is missing")
         metadata.setdefault("history_json", "[]")
@@ -107,6 +110,7 @@ class AnalysisWorkspace:
         if not isinstance(json.loads(metadata["history_json"]), list):
             raise ValueError("invalid preprocessing history")
         write_intensity_states(candidate, states)
+        write_value_states(candidate, semantics)
         self.dataset_id = uuid4().hex
         self.revision = 0
         self.source = str(source)
@@ -140,9 +144,17 @@ class AnalysisWorkspace:
     def _commit(self, candidate, operation, parameters, *, clear_derived=True, save_layer=True):
         self._validate(candidate)
         states = intensity_states(candidate)
+        semantics = value_states(candidate)
         if operation == "restore":
+            semantics["X"] = deepcopy(
+                semantics.get(
+                    parameters["layer"],
+                    {"space": "unknown", "imputed": False, "normalization": [], "history": []},
+                )
+            )
             states["X"] = states.get(parameters["layer"], "unknown")
         elif operation != "reset":
+            semantics["X"] = transform_value_state(semantics["X"], operation, parameters)
             states["X"] = transformed_state(states["X"], operation, parameters)
         # Reset's candidate is the full baseline, including its actual X lineage.
         if clear_derived:
@@ -154,6 +166,8 @@ class AnalysisWorkspace:
             layer = self._layer_key(candidate, operation)
             candidate.layers[layer] = candidate.X.copy()
             states[layer] = states["X"]
+            semantics[layer] = deepcopy(semantics["X"])
+        write_value_states(candidate, semantics)
         write_intensity_states(candidate, states)
         history.append(
             {
