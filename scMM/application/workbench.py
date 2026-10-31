@@ -313,9 +313,24 @@ class AnalysisWorkspace:
 
         if "scmm_analysis_input_json" in self.require_data().uns:
             if isinstance(value, dict):
-                value.setdefault("input", workspace_input(self, purpose=name))
+                input_layer = (
+                    value.get("test_layer")
+                    or value.get("layer")
+                    or value.get("parameters", {}).get("layer")
+                )
+                if name == "shap":
+                    input_layer = self.result("supervised").layer
+                value.setdefault("input", workspace_input(self, layer=input_layer, purpose=name))
+                if name == "differential":
+                    value["effect_input"] = workspace_input(
+                        self,
+                        layer=value.get("effect_layer") or value.get("layer"),
+                        purpose="fold_change",
+                    )
             elif hasattr(value, "__dict__"):
-                value.scmm_analysis_input = workspace_input(self, purpose=name)
+                value.scmm_analysis_input = workspace_input(
+                    self, layer=getattr(value, "layer", None), purpose=name
+                )
         previous = self.results.get(name)
         if previous is None or previous[1] is not value or name not in self._result_identities:
             self._result_identities[name] = uuid4().hex

@@ -177,3 +177,87 @@ def test_stale_task_not_collected_and_cancel_idempotent(workflow):
     assert not row["collectible"] and "changed" in row["reason"]
     assert post("/ions/collect", {"job_id": task}).status_code == 400
     assert post("/ions/cancel", {"job_id": task}).status_code == 200
+
+
+def test_source_l2_import_materialization_ec_analysis_and_permissions(workflow):
+    import base64
+
+    client, headers, manager, _, _, _, _, current, post = workflow
+    root = prepare(workflow)
+    task = run_job(workflow, root)
+    post("/ions/collect", {"job_id": task}).raise_for_status()
+    response = post("/ions/represent", {"version": task})
+    response.raise_for_status()
+    view = next(row["view"] for row in response.json()["value"] if row["view"]["level"] == "L2")
+    source = get(
+        workflow, f"/ions/download?kind=source_l2&key={view['id']}&revision={current()['revision']}"
+    )
+    assert source.status_code == 200, source.text
+    # A second workspace cannot query or cancel this owner's first workspace task.
+    other = client.post("/api/v1/workspaces").json()["workspace_id"]
+    denied = client.get(
+        f"/api/v1/workspace/ions/status?job_id={task}",
+        headers={**headers, "X-SCMM-Workspace": other},
+    )
+    assert denied.status_code == 400
+    post("/project", {"name": "source-only"}).raise_for_status()
+    response = post(
+        "/ions/import",
+        {"kind": "source_l2", "content_base64": base64.b64encode(source.content).decode()},
+    )
+    assert response.status_code == 200, response.text
+    info = get(workflow, "/ions/info").json()
+    assert info["roots"] == [] and info["branches"] == []
+    imported = info["views"][0]
+    response = post(
+        "/ions/availability", {"view_id": imported["id"], "cell_ids": imported["cell_ids"]}
+    )
+    response.raise_for_status()
+    preview = response.json()["value"]
+    response = post("/ions/materialize", {"view_id": imported["id"], "preview": preview})
+    response.raise_for_status()
+    branch = response.json()["value"]
+    info = get(workflow, "/ions/info").json()
+    response = post(
+        "/ions/activate",
+        {
+            "view_id": imported["id"],
+            "branch_id": branch,
+            "catalog_revision": info["catalog_revision"],
+        },
+    )
+    response.raise_for_status()
+    project = manager._workspaces[current()["workspace_id"]].project
+    training_layer = project.workspace.data.uns["scmm_workbench"]["original_layer"]
+    for operation, options in [
+        ("reduce", {"method": "pca", "n_components": 2, "store_key": "X_compound"}),
+        (
+            "cluster",
+            {
+                "method": "kmeans",
+                "n_clusters": 2,
+                "key": "cluster_compound",
+                "use_rep": "X_compound",
+            },
+        ),
+        ("differential", {"group_key": "group", "group_a": "a", "group_b": "b"}),
+        ("network", {"method": "pearson", "min_abs_correlation": 0.5}),
+        ("markers", {"group_key": "group"}),
+        ("train", {"label_key": "group", "model": "logistic", "cv": 2, "layer": training_layer}),
+    ]:
+        response = post("/analysis/operation", {"operation": operation, "options": options})
+        assert response.status_code == 200, (operation, response.text)
+    project = manager._workspaces[current()["workspace_id"]].project
+    assert (
+        project.workspace.result("differential")["input"]["variable_kind"] == "empirical_compound"
+    )
+    assert "view_id" in project.workspace.result("supervised").scmm_analysis_input
+    assert project.workspace.result("supervised").scmm_analysis_input["layer"] == training_layer
+    stale = current()["revision"] - 1
+    assert get(workflow, f"/ions/download?kind=registry&revision={stale}").status_code == 409
+    post("/project/save").raise_for_status()
+    response = post("/project/open", {"path": current()["project"]["path"]})
+    assert response.status_code == 200, response.text
+    assert not get(workflow, "/ions/info").json()["roots"]
+    reopened = manager._workspaces[current()["workspace_id"]].project
+    assert reopened.saved_reports["supervised"]["input"]["layer"] == training_layer

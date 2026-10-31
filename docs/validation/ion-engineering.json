@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "purpose": "synthetic engineering benchmark; no real chemical accuracy validation",
+  "python": "3.12.13",
+  "platform": "Linux-5.15.0-191-generic-x86_64-with-glibc2.35",
+  "cases": [
+    {
+      "samples": 1,
+      "shape": [
+        1000,
+        500
+      ],
+      "seed": 1024,
+      "timings": {
+        "freeze_seconds": 0.12903494480997324,
+        "submit_freeze_seconds": 0.016850993037223816,
+        "worker_wall_seconds": 0.9901697682216763,
+        "represent_and_register_seconds": 0.7107851188629866,
+        "save_and_validate_seconds": 1.9248743928037584,
+        "reopen_seconds": 0.7767018307931721
+      },
+      "peak_process_rss_kib": 542732,
+      "peak_worker_rss_kib": 303780,
+      "raw_matrix_bytes": 4000000,
+      "job_bytes": 4430458,
+      "snapshot_bytes": 64478270,
+      "status_query_max_seconds": 0.0015086270868778229,
+      "relations": 40,
+      "groups": 20,
+      "search_complete": true,
+      "search_states": 2400,
+      "l1_variables": 500,
+      "l2_variables": 500,
+      "selection_mode": "reviewed_v1 with no accepted relations; unknowns retained",
+      "roundtrip_exact": true
+    },
+    {
+      "samples": 10,
+      "shape": [
+        10000,
+        500
+      ],
+      "seed": 1024,
+      "timings": {
+        "freeze_seconds": 1.0545978336594999,
+        "submit_freeze_seconds": 0.03722147922962904,
+        "worker_wall_seconds": 1.3658622791990638,
+        "represent_and_register_seconds": 5.864674856886268,
+        "save_and_validate_seconds": 13.15875606611371,
+        "reopen_seconds": 5.118549223989248
+      },
+      "peak_process_rss_kib": 3455532,
+      "peak_worker_rss_kib": 1151756,
+      "raw_matrix_bytes": 40000000,
+      "job_bytes": 41092684,
+      "snapshot_bytes": 622243602,
+      "status_query_max_seconds": 0.0015068231150507927,
+      "relations": 40,
+      "groups": 20,
+      "search_complete": true,
+      "search_states": 2400,
+      "l1_variables": 500,
+      "l2_variables": 500,
+      "selection_mode": "reviewed_v1 with no accepted relations; unknowns retained",
+      "roundtrip_exact": true
+    }
+  ],
+  "dense_component": {
+    "shape": [
+      20,
+      30
+    ],
+    "relations": 450,
+    "elapsed_seconds": 0.05031924694776535,
+    "budgets": {
+      "max_states": 1000,
+      "timeout_seconds": 1.0,
+      "max_hypotheses": 100
+    },
+    "search_complete": false,
+    "diagnostics": [
+      {
+        "features": [
+          "f0",
+          "f1",
+          "f10",
+          "f11",
+          "f12",
+          "f13",
+          "f14",
+          "f15",
+          "f16",
+          "f17",
+          "f18",
+          "f19",
+          "f2",
+          "f20",
+          "f21",
+          "f22",
+          "f23",
+          "f24",
+          "f25",
+          "f26",
+          "f27",
+          "f28",
+          "f29",
+          "f3",
+          "f4",
+          "f5",
+          "f6",
+          "f7",
+          "f8",
+          "f9"
+        ],
+        "search_complete": false,
+        "states": 1001
+      }
+    ],
+    "interpretation": "budget exhaustion must stay incomplete; not a chemistry failure"
+  }
+}

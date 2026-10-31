@@ -12,6 +12,19 @@ from scMM.ion.semantics import value_states
 KEY = "scmm_analysis_input_json"
 
 
+def _plain(value):
+    """Readable report values after H5AD roundtrip; arrays never escape as API objects."""
+    if isinstance(value, dict):
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return [_plain(item) for item in value]
+    if isinstance(value, np.generic):
+        return _plain(value.item())
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    return value
+
+
 def bind_analysis_input(workspace, view, branch_id):
     context = {
         "schema_version": 1,
@@ -106,6 +119,17 @@ def compare_views(project, *, branch_ids, normalization_mode, shared_factors=Non
         raise ValueError("select at least two distinct branches")
     catalog = DataViewCatalog.from_state(freeze_active_branch(project))
     entries = [catalog._branches[key] for key in branch_ids]
+    roots = {
+        (
+            catalog._views[entry["view_id"]]["root_id"],
+            catalog._views[entry["view_id"]]["root_identity"],
+        )
+        for entry in entries
+    }
+    if len(roots) != 1:
+        raise ValueError(
+            "comparison requires the same measurement root; matching cell names are insufficient"
+        )
     datasets = [entry["workspace"].require_data() for entry in entries]
     cells = list(datasets[0].obs_names)
     if any(list(data.obs_names) != cells for data in datasets):
@@ -120,9 +144,17 @@ def compare_views(project, *, branch_ids, normalization_mode, shared_factors=Non
             recorded = data.uns.get("scmm_shared_normalization_json")
             if recorded is None or json.loads(recorded) != shared_factors:
                 raise ValueError("branches must record the applied shared normalization factors")
+            normalization = value_states(data)["X"]["normalization"]
+            if not normalization or normalization[-1].get("method") != "shared":
+                raise ValueError("shared factors were superseded by another normalization")
     summaries = []
     for key, entry, data in zip(branch_ids, entries, datasets, strict=True):
         ws = entry["workspace"]
+        source_view = catalog._views[entry["view_id"]]
+        representation = json.loads(data.uns.get("scmm_representation_json", "{}"))
+        grouping = (
+            catalog.registry["grouping"].get(source_view.get("grouping_id"), {}).get("grouping", {})
+        )
         reductions = {
             name: deepcopy(dict(value))
             for name, value in data.uns.items()
@@ -148,8 +180,23 @@ def compare_views(project, *, branch_ids, normalization_mode, shared_factors=Non
                     if name.endswith("_loadings")
                 },
                 "differential": differential,
+                "exclusion_summary": {
+                    "selection_audit": deepcopy(representation.get("selection_audit", [])),
+                    "unquantifiable_groups": len(representation.get("unavailable_groups", [])),
+                    "competing_groups": sum(
+                        len(group.get("hypotheses", [])) > 1 for group in grouping.get("groups", [])
+                    ),
+                    "not_in_current_variables": len(
+                        source_view.get("variable_ids", source_view["feature_ids"])
+                    )
+                    - data.n_vars,
+                },
                 "quantifier_mapping": data.var[
-                    [c for c in ("quantifier_feature_id", "source_members_json") if c in data.var]
+                    [
+                        c
+                        for c in ("quantifier_feature_id", "source_members", "ion_role")
+                        if c in data.var
+                    ]
                 ].to_dict(orient="index"),
             }
         )
@@ -183,15 +230,17 @@ def compare_views(project, *, branch_ids, normalization_mode, shared_factors=Non
                     "pca_comparability": diagnostics,
                 }
             )
-    return {
-        "schema_version": 1,
-        "cell_ids": cells,
-        "normalization_mode": normalization_mode,
-        "shared_factors": deepcopy(shared_factors),
-        "branches": summaries,
-        "comparisons": comparisons,
-        "interpretation": "descriptive sensitivity comparison; no experimental accuracy claim",
-    }
+    return _plain(
+        {
+            "schema_version": 1,
+            "cell_ids": cells,
+            "normalization_mode": normalization_mode,
+            "shared_factors": deepcopy(shared_factors),
+            "branches": summaries,
+            "comparisons": comparisons,
+            "interpretation": "descriptive sensitivity comparison; no experimental accuracy claim",
+        }
+    )
 
 
 def apply_shared_normalization(workspace, factors):

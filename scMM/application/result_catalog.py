@@ -79,7 +79,7 @@ def live_report(name, value):
     if name not in RESULTS:
         raise ValueError("Unknown analysis result")
     if name == "supervised":
-        return {
+        result = {
             "diagnostics": value.result_,
             "label_key": getattr(value, "label_key", None),
             "group_key": getattr(value, "group_key", None),
@@ -87,6 +87,9 @@ def live_report(name, value):
             "test_obs": value.test_obs_names_.tolist(),
             "classes": value.classes_.tolist(),
         }
+        if hasattr(value, "scmm_analysis_input"):
+            result["input"] = deepcopy(value.scmm_analysis_input)
+        return result
     return value
 
 

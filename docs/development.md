@@ -101,8 +101,9 @@ scMM/
 `ion/species.py` 与 `relations.py` 提供数据库无关离子关系、条件天然同位素和逐样本证据；只输出候选/规则状态，不替代归组或人工接受。
 `ion/hypotheses.py` 与 `representation.py` 负责带预算的角色解释、人工/探索资格和L1/L2；未知加合物包络使用独立质量坐标，不当作已知中性质量。
 `ion/annotation.py`、`ion/evidence.py` 与 `application/compound_database.py` 提供本地通用候选、旧脂质排序适配及外部证据导入/作用域预览；不执行自动MS/MS匹配。
-目前普通提取/导入尚不自动创建新目录；显式目录项目走版本2完整快照，正式保存与维护恢复分别处理报告与白名单模型，
-不降级为只保存活动矩阵。实施顺序和对外开放条件见[主计划](ion-compound-plan.md)。
+目录由离子页显式启用；启用后的提取/导入在保留旧分支基础上建立新测量来源。目录项目走版本2完整快照，正式保存与维护恢复分别处理报告与白名单模型，不降级为只保存活动矩阵。
+`data_view_storage.py` 与 `project_references.py` 管理完整快照/引用闭包；`analysis_inputs.py` 统一来源、空间与敏感性报告。
+`web_ions.py` 负责短锁事务与身份复核，`ion_jobs.py`/`ion_worker.py` 只为新增离子流程提供冻结输入、独立进程及校验后收集；状态与预算见[后台资源](installation.md#离子后台资源)。Vue 只持表单/摘要/分页，不持计算矩阵。
 
 ## 前后端能力覆盖
 

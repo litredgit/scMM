@@ -1,4 +1,4 @@
-"""Internal immutable source catalogue; not connected to user-facing persistence yet."""
+"""Immutable measurement sources, derived views and isolated analysis branches."""
 
 from copy import deepcopy
 from uuid import uuid4
@@ -11,7 +11,7 @@ from .workbench import AnalysisWorkspace
 
 
 class DataViewCatalog:
-    """Own roots and isolated analysis branches until complete project storage is available."""
+    """Own immutable roots, source views and independently mutable analysis branches."""
 
     def __init__(self):
         self._roots = {}
@@ -276,7 +276,7 @@ class DataViewCatalog:
 
 
 def initialize_catalog(project, data, *, source, origin_kind, linearity, preserve_active=False):
-    """Internal opt-in; ordinary extraction/import remains unchanged until S7."""
+    """Explicitly enable a catalogue while retaining legacy single-branch compatibility."""
     if project.ion_state is not None:
         raise ValueError("measurement catalogue already initialized")
     catalog = DataViewCatalog()

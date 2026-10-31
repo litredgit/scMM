@@ -1,6 +1,7 @@
 """Transactional preprocessing and analysis operations exposed to web clients."""
 # ruff: noqa: RUF001
 
+import json
 from collections import Counter
 from copy import deepcopy
 from pathlib import PureWindowsPath
@@ -548,6 +549,7 @@ class AnalysisWorkflow:
                 meta={
                     **(figure.layout.meta or {}),
                     "dataset_token": list(state.token),
+                    "analysis_input": json.loads(data.uns.get("scmm_analysis_input_json", "{}")),
                     "selected_cells": (figure.layout.meta or {}).get("selected_cells", data.n_obs),
                     "total_cells": state.require_data().n_obs,
                     "parameters": {**options, **({"scope": scope} if scope is not None else {})},

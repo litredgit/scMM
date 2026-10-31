@@ -135,3 +135,67 @@ def test_replicate_export_and_ec_not_mz(tmp_path):
     data.uns["scmm_analysis_input_json"] = '{"variable_kind":"empirical_compound"}'
     with pytest.raises(ValueError, match="m/z"):
         dataset_inputs(data)
+
+
+def test_saved_comparison_is_json_safe_and_normalization_claims_are_checked(tmp_path):
+    import json
+
+    from scMM.application.analysis_inputs import apply_shared_normalization
+    from scMM.application.projects import ProjectStore
+
+    store = ProjectStore(tmp_path)
+    project = store.create("sensitivity")
+    _, data = example(tmp_path)
+    view, first = initialize_catalog(
+        project,
+        data,
+        source={"kind": "synthetic"},
+        origin_kind="extraction",
+        linearity="linear_abundance",
+    )
+    catalog = DataViewCatalog.from_state(project.ion_state)
+    _, second = catalog.create_feature_view(
+        root_id=view["root_id"],
+        cell_ids=list(data.obs_names),
+        feature_ids=["f1", "f2"],
+        expected_revision=1,
+    )
+    for entry in catalog._branches.values():
+        entry["workspace"].reduce(method="pca", store_key="X_compare", n_components=2)
+    project.workspace = catalog.workspace
+    project.ion_state = catalog.export_state()
+    store.save(project)
+    project = store.open(project.folder)
+    report = compare_views(project, branch_ids=[first, second], normalization_mode="independent")
+    json.dumps(report, allow_nan=False)
+    assert report["branches"][0]["pca_loadings"]
+    from scMM.application.data_views import freeze_active_branch
+
+    catalog = DataViewCatalog.from_state(freeze_active_branch(project))
+    factors = dict.fromkeys(data.obs_names, 2.0)
+    for entry in catalog._branches.values():
+        apply_shared_normalization(entry["workspace"], factors)
+    project.workspace = catalog.workspace
+    project.ion_state = catalog.export_state()
+    assert (
+        compare_views(
+            project, branch_ids=[first, second], normalization_mode="shared", shared_factors=factors
+        )["normalization_mode"]
+        == "shared"
+    )
+    project.workspace.normalize("total")
+    with pytest.raises(ValueError, match="superseded"):
+        compare_views(
+            project, branch_ids=[first, second], normalization_mode="shared", shared_factors=factors
+        )
+    catalog = DataViewCatalog.from_state(freeze_active_branch(project))
+    _, other = catalog.add_measurement(
+        data,
+        source={"kind": "different acquisition"},
+        origin_kind="extraction",
+        value_semantics="linear_abundance",
+    )
+    project.workspace = catalog.workspace
+    project.ion_state = catalog.export_state()
+    with pytest.raises(ValueError, match="same measurement root"):
+        compare_views(project, branch_ids=[first, other], normalization_mode="independent")
