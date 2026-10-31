@@ -70,6 +70,10 @@ class TimeWorkflow:
             project = workspace.require_project()
             time_analysis.check_size(project.workspace.require_data())
             candidate = project_candidate(project)
+            if candidate.ion_state is not None:
+                from .analysis_inputs import resolve_analysis_input
+
+                resolve_analysis_input(candidate, purpose=operation)
             state = candidate.workspace
             result = getattr(time_analysis, operation)(state.data, **options)
             state._commit(

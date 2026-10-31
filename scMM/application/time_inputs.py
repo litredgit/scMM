@@ -105,6 +105,10 @@ def _publish(data, key, kind, parameters, inputs, outputs):
         "implementation": "scmm-time-v1",
         "stale": False,
     }
+    if "scmm_analysis_input_json" in data.uns:
+        import json
+
+        record["analysis_input"] = json.loads(data.uns["scmm_analysis_input_json"])
     value["runs"][key] = record
     total = sum(
         np.asarray(getattr(data, out["axis"])[out["key"]]).size

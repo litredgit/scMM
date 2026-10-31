@@ -20,7 +20,16 @@ def _bh_fdr(p_values):
 
 
 def differential_features(
-    data, group_key, group_a, group_b, *, method="mannwhitney", min_present=3, layer=None
+    data,
+    group_key,
+    group_a,
+    group_b,
+    *,
+    method="mannwhitney",
+    min_present=3,
+    layer=None,
+    effect_layer=None,
+    test_layer=None,
 ):
     """Compare cells in two groups; cells are the statistical unit.
 
@@ -36,16 +45,32 @@ def differential_features(
     b_mask = (labels.notna() & (labels.astype(str) == str(group_b))).to_numpy()
     if min(a_mask.sum(), b_mask.sum()) < min_present:
         raise ValueError("each group must contain at least min_present cells")
-    X = data.layers[layer] if layer else data.X
+    from scMM.ion.semantics import value_states
+
+    if layer is not None and (effect_layer is not None or test_layer is not None):
+        raise ValueError("layer cannot be combined with effect_layer/test_layer")
+    effect_layer = layer if layer is not None else effect_layer
+    test_layer = layer if layer is not None else test_layer
+    effect_key, test_key = effect_layer or "X", test_layer or "X"
+    state = value_states(data)[effect_key]
+    strict = "scmm_analysis_input_json" in data.uns
+    if state["space"] != "linear_abundance" and (strict or state["space"] != "unknown"):
+        raise ValueError("fold change requires known linear_abundance effect input")
+    X = data.X if effect_key == "X" else data.layers[effect_key]
     X = X.toarray() if hasattr(X, "toarray") else np.asarray(X)
     if not np.isfinite(X).all() or (X < 0).any():
         raise ValueError("differential features require finite nonnegative abundances")
+    tests = data.X if test_key == "X" else data.layers[test_key]
+    tests = tests.toarray() if hasattr(tests, "toarray") else np.asarray(tests)
+    if not np.isfinite(tests).all():
+        raise ValueError("differential test input must be finite")
     if data.n_vars == 0:
         raise ValueError("at least one feature is required")
     rows = []
     eps = np.finfo(float).eps
     for i, name in enumerate(data.var_names):
-        a, b = X[a_mask, i], X[b_mask, i]
+        abundance_a, abundance_b = X[a_mask, i], X[b_mask, i]
+        a, b = tests[a_mask, i], tests[b_mask, i]
         if np.ptp(np.concatenate([a, b])) == 0:
             statistic, p_value = 0.0, 1.0
         elif method == "mannwhitney":
@@ -58,16 +83,27 @@ def differential_features(
             {
                 "feature_id": name,
                 "mz": data.var.iloc[i].get("mz", np.nan),
-                "mean_a": float(a.mean()),
-                "mean_b": float(b.mean()),
-                "log2_fold_change": float(np.log2((a.mean() + eps) / (b.mean() + eps))),
+                "mean_a": float(abundance_a.mean()),
+                "mean_b": float(abundance_b.mean()),
+                "log2_fold_change": float(
+                    np.log2((abundance_a.mean() + eps) / (abundance_b.mean() + eps))
+                ),
                 "statistic": float(statistic),
                 "p_value": float(p_value),
             }
         )
     result = pd.DataFrame(rows)
     result["fdr"] = _bh_fdr(result["p_value"])
-    return result.sort_values(["fdr", "p_value"], ignore_index=True)
+    result = result.sort_values(["fdr", "p_value"], ignore_index=True)
+    result.attrs["input"] = {
+        "effect_layer": effect_key,
+        "test_layer": test_key,
+        "statistical_unit": "cell",
+        "effect_space": state["space"],
+        "legacy_unverified_abundance": state["space"] == "unknown",
+        "biological_replication": "not established by cell count",
+    }
+    return result
 
 
 def marker_features(data, cluster_key="cluster", **kwargs):

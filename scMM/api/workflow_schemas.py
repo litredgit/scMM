@@ -206,6 +206,8 @@ class Markers(Controls):
     group_key: str
     method: Literal["mannwhitney", "welch", "classifier"] = "mannwhitney"
     layer: str | None = None
+    effect_layer: str | None = None
+    test_layer: str | None = None
 
 
 class Differential(Markers):

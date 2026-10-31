@@ -59,7 +59,13 @@ class DataViewCatalog:
     def workspace(self):
         if self.active_branch_id is None:
             raise ValueError("no active analysis branch")
-        return self._branches[self.active_branch_id]["workspace"]
+        from .analysis_inputs import bind_analysis_input
+
+        entry = self._branches[self.active_branch_id]
+        bind_analysis_input(
+            entry["workspace"], self._views[entry["view_id"]], self.active_branch_id
+        )
+        return entry["workspace"]
 
     def measurement(self, root_id):
         return self._roots[root_id].data
@@ -134,6 +140,10 @@ class DataViewCatalog:
 
     def export_state(self):
         """Built-in containers only; maintenance/storage choose their own model policy."""
+        from .analysis_inputs import bind_analysis_input
+
+        for branch_id, entry in self._branches.items():
+            bind_analysis_input(entry["workspace"], self._views[entry["view_id"]], branch_id)
         return {
             "schema_version": 1,
             "roots": {
@@ -265,7 +275,7 @@ class DataViewCatalog:
         return candidate
 
 
-def initialize_catalog(project, data, *, source, origin_kind, linearity):
+def initialize_catalog(project, data, *, source, origin_kind, linearity, preserve_active=False):
     """Internal opt-in; ordinary extraction/import remains unchanged until S7."""
     if project.ion_state is not None:
         raise ValueError("measurement catalogue already initialized")
@@ -273,13 +283,29 @@ def initialize_catalog(project, data, *, source, origin_kind, linearity):
     view, branch_id = catalog.add_measurement(
         data, source=source, origin_kind=origin_kind, value_semantics=linearity
     )
+    if preserve_active:
+        existing = project.workspace
+        if existing.data is None or dataset_identity(existing._original) != dataset_identity(data):
+            raise ValueError("preserving analysis requires the exact preprocessing baseline")
+        preserved = deepcopy(existing)
+        catalog._branches[branch_id]["workspace"] = preserved
+        catalog._branches[branch_id]["presentation"] = deepcopy(
+            {
+                "views": project.views,
+                "saved_reports": project.saved_reports,
+                "saved_token": project.saved_token,
+                "report_token": project.report_token,
+            }
+        )
     state = catalog.export_state()
+    DataViewCatalog.from_state(state)
     project.ion_state = state
     project.workspace = catalog.workspace
-    project.saved_reports = {}
-    project.views = {}
-    project.saved_token = None
-    project.report_token = None
+    if not preserve_active:
+        project.saved_reports = {}
+        project.views = {}
+        project.saved_token = None
+        project.report_token = None
     project.dirty = True
     return view, branch_id
 

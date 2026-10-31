@@ -183,6 +183,7 @@
       "tests": [
         "tests/application/test_workbench_state.py",
         "tests/application/test_data_views.py",
+        "tests/application/test_analysis_inputs.py",
         "tests/application/test_processed_merge.py",
         "tests/application/test_ion_merge.py",
         "tests/application/test_result_catalog.py",
@@ -191,6 +192,7 @@
       "sources": [
         "scMM/application/workbench.py",
         "scMM/application/data_views.py",
+        "scMM/application/analysis_inputs.py",
         "scMM/application/processed_merge.py",
         "scMM/application/ion_merge.py",
         "scMM/application/merge_sources.py",

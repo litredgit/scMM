@@ -21,6 +21,9 @@ def validate_intensity_layer(data, layer):
 
 
 def dataset_inputs(data, layer=""):
+    context = json.loads(data.uns.get("scmm_analysis_input_json", "{}"))
+    if context.get("variable_kind") == "empirical_compound":
+        raise ValueError("EC 中性质量不是 m/z；请选择 Feature 视图或通用化合物候选搜索。")
     feature_ids = data.var_names.astype(str).tolist()
     mz = np.asarray(data.var.get("mz", data.var_names), dtype=float)
     if not np.isfinite(mz).all() or (mz <= 0).any() or not data.var_names.is_unique:

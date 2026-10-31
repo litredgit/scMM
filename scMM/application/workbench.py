@@ -309,6 +309,13 @@ class AnalysisWorkspace:
     def put_result(self, name, value, token):
         if token != self.token:
             raise RuntimeError("Dataset changed; discard stale analysis result")
+        from .analysis_inputs import workspace_input
+
+        if "scmm_analysis_input_json" in self.require_data().uns:
+            if isinstance(value, dict):
+                value.setdefault("input", workspace_input(self, purpose=name))
+            elif hasattr(value, "__dict__"):
+                value.scmm_analysis_input = workspace_input(self, purpose=name)
         previous = self.results.get(name)
         if previous is None or previous[1] is not value or name not in self._result_identities:
             self._result_identities[name] = uuid4().hex
@@ -477,11 +484,28 @@ class AnalysisWorkspace:
             save_layer=False,
         )
 
-    def differential(self, group_key, group_a, group_b, *, method="mannwhitney", layer=None):
+    def differential(
+        self,
+        group_key,
+        group_a,
+        group_b,
+        *,
+        method="mannwhitney",
+        layer=None,
+        effect_layer=None,
+        test_layer=None,
+    ):
         self.results.pop("differential", None)
         token = self.token
         table = differential_features(
-            self.require_data(), group_key, group_a, group_b, method=method, layer=layer
+            self.require_data(),
+            group_key,
+            group_a,
+            group_b,
+            method=method,
+            layer=layer,
+            effect_layer=effect_layer,
+            test_layer=test_layer,
         )
         result = {
             "table": table,
@@ -490,6 +514,10 @@ class AnalysisWorkspace:
             "group_b": str(group_b),
             "method": method,
             "layer": layer,
+            "effect_layer": effect_layer,
+            "test_layer": test_layer,
+            "statistical_unit": "cell",
+            "numerical_inputs": table.attrs["input"],
         }
         self.put_result("differential", result, token)
         return result
@@ -510,17 +538,26 @@ class AnalysisWorkspace:
         self.put_result("supervised", analyzer, token)
         return analyzer
 
-    def markers(self, group_key, *, method="mannwhitney", layer=None):
+    def markers(
+        self, group_key, *, method="mannwhitney", layer=None, effect_layer=None, test_layer=None
+    ):
         self.results.pop("markers", None)
         token = self.token
         result = {"group_key": group_key, "method": method, "layer": layer}
         if method == "classifier":
+            if effect_layer is not None or test_layer is not None:
+                raise ValueError("classifier markers accept layer only")
             from scMM.analysis.markers import classifier_markers
 
             result["table"] = classifier_markers(self.require_data(), group_key, layer=layer)
         else:
             result["table"] = marker_features(
-                self.require_data(), group_key, method=method, layer=layer
+                self.require_data(),
+                group_key,
+                method=method,
+                layer=layer,
+                effect_layer=effect_layer,
+                test_layer=test_layer,
             )
         self.put_result("markers", result, token)
         return result

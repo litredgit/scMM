@@ -39,6 +39,39 @@ def project_candidate(project):
 
 
 def sync_metadata(project):
+    """Synchronize analysis branches transactionally; immutable sources stay historical."""
+    if project.ion_state is None:
+        return _sync_metadata_active(project)
+    from .data_views import DataViewCatalog, freeze_active_branch
+
+    catalog = DataViewCatalog.from_state(freeze_active_branch(project))
+    for entry in catalog._branches.values():
+        branch_project = copy(project)
+        branch_project.ion_state = None
+        branch_project.workspace = entry["workspace"]
+        presentation = entry.get("presentation", {})
+        branch_project.views = deepcopy(presentation.get("views", {}))
+        branch_project.saved_reports = deepcopy(presentation.get("saved_reports", {}))
+        branch_project.saved_token = presentation.get("saved_token")
+        branch_project.report_token = presentation.get("report_token")
+        _sync_metadata_active(branch_project)
+        entry["presentation"] = {
+            "views": branch_project.views,
+            "saved_reports": branch_project.saved_reports,
+            "saved_token": branch_project.saved_token,
+            "report_token": branch_project.report_token,
+        }
+    state = catalog.export_state()
+    DataViewCatalog.from_state(state)
+    project.ion_state = state
+    if catalog.active_branch_id is not None:
+        project.workspace = catalog.workspace
+        fields = state["branches"][catalog.active_branch_id]["presentation"]
+        for key, value in fields.items():
+            setattr(project, key, value)
+
+
+def _sync_metadata_active(project):
     """Invalidate reports and saved plots using their recorded data dependencies."""
     before = set(project.workspace.results)
     previous_token = project.workspace.token

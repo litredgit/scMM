@@ -123,6 +123,8 @@ def reduce_dimension(
         **params,
     }
     if method == "pca":
+        if source == "X" and pca_components is None:
+            data.varm[f"{key}_loadings"] = model.components_.T
         data.uns[f"{key}_params"]["explained_variance_ratio"] = (
             model.explained_variance_ratio_.tolist()
         )

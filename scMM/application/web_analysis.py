@@ -296,9 +296,13 @@ class AnalysisWorkflow:
         if operation not in PREPROCESS | ANALYSES or (preview and operation not in PREPROCESS):
             raise ValueError("不支持的分析操作。")
         with self.access(identity, operation=operation) as workspace:
+            from .analysis_inputs import resolve_analysis_input
+
             workspace.check(revision)
             project = workspace.require_project()
             candidate = project_candidate(project)
+            if operation in ANALYSES and candidate.ion_state is not None:
+                resolve_analysis_input(candidate, purpose=operation)
             state = candidate.workspace
             # SHAP enriches the fitted analyzer; isolate it too so failures are atomic.
             if operation == "explain_shap":
