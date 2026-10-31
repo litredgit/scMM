@@ -100,6 +100,7 @@ scMM/
 `application/data_views.py`：测量根隔离、精确内容身份、数值空间及独立分支目录。
 `ion/species.py` 与 `relations.py` 提供数据库无关离子关系、条件天然同位素和逐样本证据；只输出候选/规则状态，不替代归组或人工接受。
 `ion/hypotheses.py` 与 `representation.py` 负责带预算的角色解释、人工/探索资格和L1/L2；未知加合物包络使用独立质量坐标，不当作已知中性质量。
+`ion/annotation.py`、`ion/evidence.py` 与 `application/compound_database.py` 提供本地通用候选、旧脂质排序适配及外部证据导入/作用域预览；不执行自动MS/MS匹配。
 目前普通提取/导入尚不自动创建新目录；完整快照与恢复接入前，带内部离子状态的项目拒绝走旧保存/恢复入口，
 防止静默丢失非活动分支。实施顺序和对外开放条件见[主计划](ion-compound-plan.md)。
 

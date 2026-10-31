@@ -80,15 +80,17 @@
     "ion-grouping": {
       "kind": "python",
       "tests": ["tests/domain/test_ion_identity.py", "tests/domain/test_ion_relations.py", "tests/domain/test_ion_representation.py"],
-      "sources": ["scMM/ion/*"],
-      "downstream": [],
+      "sources": ["scMM/ion/__init__.py", "scMM/ion/contracts.py", "scMM/ion/identity.py", "scMM/ion/semantics.py", "scMM/ion/species.py", "scMM/ion/relations.py", "scMM/ion/hypotheses.py", "scMM/ion/representation.py"],
+      "downstream": ["annotation", "workbench"],
       "extras": []
     },
     "annotation": {
       "kind": "python",
       "tests": [
         "tests/domain/test_annotation.py",
-        "tests/domain/test_lipid_annotation.py"
+        "tests/domain/test_lipid_annotation.py",
+        "tests/domain/test_compound_candidates.py",
+        "tests/application/test_compound_database.py"
       ],
       "sources": [
         "scMM/util/*adduct*.py",
@@ -96,6 +98,9 @@
         "scMM/util/lipid_*.py",
         "scMM/resources/lipid_rules/*",
         "scMM/application/lipid_database.py",
+        "scMM/application/compound_database.py",
+        "scMM/ion/annotation.py",
+        "scMM/ion/evidence.py",
         "tools/benchmark_lipid_annotation.py",
         "rules/lipids/*"
       ],
