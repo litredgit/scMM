@@ -98,6 +98,7 @@ scMM/
 
 离子体系的内部基础位于 `ion/contracts.py`、`identity.py`、`semantics.py` 和
 `application/data_views.py`：测量根隔离、精确内容身份、数值空间及独立分支目录。
+`ion/species.py` 与 `relations.py` 提供数据库无关离子关系、条件天然同位素和逐样本证据；只输出候选/规则状态，不替代归组或人工接受。
 目前普通提取/导入尚不自动创建新目录；完整快照与恢复接入前，带内部离子状态的项目拒绝走旧保存/恢复入口，
 防止静默丢失非活动分支。实施顺序和对外开放条件见[主计划](ion-compound-plan.md)。
 

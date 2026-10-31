@@ -72,10 +72,12 @@ def resolved_distribution(formula, adduct, max_order, parent_mz, resolution):
     Resolution is R at m/z 200 for the extraction's Orbitrap-style scaling.
     The probability-weighted centroid is an approximation, not signal deconvolution.
     """
+    from scMM.file._spectrum import orbitrap_fwhm_at_mz
+
     clusters = []
     for delta, ratio, order in sorted(fine_distribution(formula, adduct, max_order)):
         mz = parent_mz + delta
-        width = mz / (resolution * np.sqrt(200 / mz))
+        width = orbitrap_fwhm_at_mz(mz, resolution)
         if clusters and clusters[-1]["order"] == order and mz - clusters[-1]["first_mz"] <= width:
             group = clusters[-1]
             group["mz"] = (group["mz"] * group["ratio"] + mz * ratio) / (group["ratio"] + ratio)
