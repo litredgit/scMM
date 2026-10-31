@@ -82,6 +82,14 @@ class RecoveryStore:
                         + estimate(value.var)
                         + estimate(dict(value.uns))
                         + estimate(dict(value.obsm))
+                        + estimate(dict(value.varm))
+                        + estimate(dict(value.obsp))
+                        + estimate(dict(value.varp))
+                        + (
+                            estimate(value.raw.X) + estimate(value.raw.var)
+                            if value.raw is not None
+                            else 0
+                        )
                     )
                 if isinstance(value, dict):
                     return sum(estimate(k) + estimate(v) for k, v in value.items())
@@ -99,6 +107,7 @@ class RecoveryStore:
                 estimate(w.client_state if hasattr(w, "client_state") else {})
                 + estimate(vars(w.project.workspace) if w.project else {})
                 + estimate(w.project.views if w.project else {})
+                + estimate(w.project.ion_state if w.project else {})
                 for w in workspaces
             )
             limit = getattr(manager, "snapshot_byte_limit", None)
@@ -107,7 +116,10 @@ class RecoveryStore:
             required = max(64 * 1024**2, estimated * 3)
             if shutil.disk_usage(self.root).free < required:
                 raise ValueError("维护暂存磁盘空间不足，请先释放空间；尚未更新服务。")
-            if psutil.virtual_memory().available < estimated * 1.5 + 64 * 1024**2:
+            multiplier = (
+                3 if any(w.project and w.project.ion_state is not None for w in workspaces) else 1.5
+            )
+            if psutil.virtual_memory().available < estimated * multiplier + 64 * 1024**2:
                 raise ValueError("维护恢复验证的可用内存不足，请减少并行工作区后重试。")
             directory = self.root / uuid4().hex
             directory.mkdir(mode=0o700)
@@ -141,10 +153,6 @@ class RecoveryStore:
                         )
                     project = workspace.project
                     if project is not None:
-                        if project.ion_state is not None:
-                            raise ValueError(
-                                "Ion catalogue recovery requires complete branch support"
-                            )
                         record["project"] = {
                             key: getattr(project, key)
                             for key in (
@@ -155,8 +163,15 @@ class RecoveryStore:
                                 "dirty",
                                 "saved_token",
                                 "report_token",
+                                "ion_state",
                             )
                         }
+                        if project.ion_state is not None:
+                            from .data_views import DataViewCatalog, freeze_active_branch
+
+                            frozen = freeze_active_branch(project)
+                            DataViewCatalog.from_state(frozen)
+                            record["project"]["ion_state"] = frozen
                         record["project"]["workspace"] = dict(vars(project.workspace))
                     records.append(record)
                 state = codec.encode(
@@ -242,10 +257,20 @@ class RecoveryStore:
 
                 from .workbench import dense
 
-                for entry in project.workspace.results.values():
+                branches = [project.workspace]
+                if project.ion_state is not None:
+                    from .data_views import DataViewCatalog
+
+                    restored_catalog = DataViewCatalog.from_state(project.ion_state)
+                    if restored_catalog.active_branch_id is not None:
+                        project.workspace = restored_catalog.workspace
+                    branches = [row["workspace"] for row in restored_catalog._branches.values()]
+                for branch, entry in (
+                    (state, result) for state in branches for result in state.results.values()
+                ):
                     model = entry[1]
                     if isinstance(model, SupervisedAnalyzer):
-                        data = project.workspace.require_data()
+                        data = branch.require_data()
                         if (
                             model.feature_names != data.var_names.astype(str).tolist()
                             or not model.obs_names.isin(data.obs_names).all()

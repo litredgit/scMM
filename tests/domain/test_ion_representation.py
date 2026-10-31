@@ -181,3 +181,18 @@ def test_unknown_adduct_envelope_does_not_invent_neutral_mass():
     )
     assert l1.n_vars == 1 and l2 is None
     assert metadata["unavailable_groups"]
+
+
+def test_explicit_singletons_keep_unknown_mass_and_save_as_h5ad(tmp_path):
+    from anndata import read_h5ad
+
+    data, _rows, grouping = setup_group()
+    _l1, l2, _metadata = build_representations(
+        data, grouping, [], relation_reviews={}, include_singletons=True
+    )
+    assert l2.n_vars == 3 and l2.var["neutral_mass"].isna().all()
+    path = tmp_path / "ungrouped.h5ad"
+    l2.write_h5ad(path)
+    loaded = read_h5ad(path)
+    np.testing.assert_array_equal(loaded.X, data[:, loaded.var["quantifier_feature_id"].tolist()].X)
+    assert set(loaded.var["entity_status"].astype(str)) == {"ungrouped"}

@@ -129,3 +129,62 @@ def test_failed_restart_restores_configuration_and_checkpoint(tmp_path, monkeypa
     assert json.loads(pointer.read_text())["id"] == "verified-checkpoint"
     assert json.loads((root / "last-operation.json").read_text())["status"] == "rolled_back"
     assert commands == [["systemctl", "--user", "restart", "scmm-dev.service"]] * 2
+
+
+def test_catalogue_inactive_model_formal_report_and_maintenance_model(tmp_path):
+    from scMM.application.data_views import (
+        DataViewCatalog,
+        activate_view,
+        freeze_active_branch,
+        initialize_catalog,
+    )
+    from scMM.application.projects import ProjectStore
+
+    projects = tmp_path / "projects"
+    projects.mkdir()
+    store = ProjectStore(projects)
+    project = store.create("multi")
+    measured = data()
+    measured.X = np.abs(measured.X)
+    measured.var["mz"] = np.arange(100.0, 106.0)
+    view, original_branch = initialize_catalog(
+        project,
+        measured,
+        source={"kind": "synthetic"},
+        origin_kind="extraction",
+        linearity="linear_abundance",
+    )
+    model = project.workspace.train("label", cv=2)
+    catalog = DataViewCatalog.from_state(freeze_active_branch(project))
+    selected_view, branch = catalog.create_feature_view(
+        root_id=view["root_id"],
+        cell_ids=list(measured.obs_names),
+        feature_ids=list(measured.var_names[:3]),
+        expected_revision=catalog.revision,
+    )
+    project.ion_state = catalog.export_state()
+    activate_view(
+        project, selected_view["id"], branch_id=branch, expected_catalog_revision=catalog.revision
+    )
+    store.save(project)
+    opened = store.open(project.folder)
+    inactive = opened.ion_state["branches"][original_branch]
+    assert not inactive["workspace"]["results"]
+    assert "supervised" in inactive["presentation"]["saved_reports"]
+    assert not list(project.folder.rglob("*.skops"))
+    private = tmp_path / "private"
+    private.mkdir()
+    recovery = RecoveryStore(SimpleNamespace(path=private / "dev.json"))
+    workspace = BrowserWorkspace(owner_id="owner", project=project)
+    manager = SimpleNamespace(
+        _lock=threading.RLock(), _workspaces={workspace.id: workspace}, publish_ai=lambda w: None
+    )
+    recovery.snapshot(manager)
+    restored = SimpleNamespace(_lock=threading.RLock(), _workspaces={}, publish_ai=lambda w: None)
+    assert recovery.restore(restored) == 1
+    restored_project = restored._workspaces[workspace.id].project
+    assert restored_project.workspace.data.n_vars == 3
+    fitted = restored_project.ion_state["branches"][original_branch]["workspace"]["results"][
+        "supervised"
+    ][1]
+    np.testing.assert_array_equal(fitted.probabilities_, model.probabilities_)

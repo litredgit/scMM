@@ -33,14 +33,27 @@ PROJECT_ROOT = Path("~/data/results").expanduser()
 def saved_dataset_summary(folder, manifest):
     """Read dimensions only; never load project matrices while listing projects."""
     artifacts = manifest["artifacts"]
-    if "current" not in artifacts:
+    if "current" not in artifacts and manifest.get("schema_version") != 2:
         return {"data_state": "configuration", "cells": None, "features": None}
     try:
         import h5py
 
-        current = child_path(folder, artifacts["current"])
-        if not child_path(folder, artifacts["baseline"]).is_file():
-            raise ValueError("Missing baseline")
+        if manifest.get("schema_version") == 2:
+            from .project_references import iter_project_artifacts
+
+            list(iter_project_artifacts(manifest, folder))
+        if "current" in artifacts:
+            current = child_path(folder, artifacts["current"])
+            if not child_path(folder, artifacts["baseline"]).is_file():
+                raise ValueError("Missing baseline")
+        else:
+            catalog = json.loads(
+                child_path(folder, artifacts["data_catalog"]).read_text(encoding="utf-8")
+            )
+            sources = catalog["source_matrices"]
+            if not sources:
+                return {"data_state": "configuration", "cells": None, "features": None}
+            current = child_path(folder, next(iter(sources.values())))
         with h5py.File(current, "r") as handle:
             cells, features = (
                 handle[axis][handle[axis].attrs["_index"]].shape[0] for axis in ("obs", "var")
@@ -212,7 +225,11 @@ class ProjectStore:
     def _manifest(self, folder):
         path = child_path(folder, "project.json")
         result = json.loads(path.read_text(encoding="utf-8"))
-        if result.get("schema_version") != 1 or not isinstance(result.get("samples"), list):
+        if (
+            type(result.get("schema_version")) is not int
+            or result["schema_version"] not in {1, 2}
+            or not isinstance(result.get("samples"), list)
+        ):
             raise ValueError("Unsupported or invalid project manifest")
         if (
             not isinstance(result.get("name"), str)
@@ -267,6 +284,14 @@ class ProjectStore:
         project.validate_samples()
         ProcessingParameters(**manifest["parameters"])
         artifacts = manifest["artifacts"]
+        if manifest["schema_version"] == 2:
+            from .data_view_storage import install_catalog_state, read_catalog_snapshot
+
+            if "data_catalog" not in artifacts:
+                raise ValueError("Missing complete ion data catalogue")
+            state = read_catalog_snapshot(folder, artifacts["data_catalog"])
+            install_catalog_state(project, state)
+            return project
         if "current" in artifacts:
             try:
                 data = read_h5ad(child_path(folder, artifacts["current"]))
@@ -292,9 +317,11 @@ class ProjectStore:
 
     def save(self, project):
         if project.ion_state is not None:
-            raise ValueError(
-                "Ion catalogue storage is not available until complete snapshot support"
-            )
+            from .data_view_storage import save_ion_project
+
+            return save_ion_project(self, project)
+        if project.manifest.get("schema_version") == 2:
+            raise ValueError("Cannot save a version 2 project without its complete catalogue")
         folder = self._folder(project.folder)
         project.validate_samples()
         ProcessingParameters(**project.manifest["parameters"])

@@ -69,7 +69,7 @@ def table_identity(frame):
         {
             "index": list(frame.index),
             "columns": list(frame.columns),
-            "dtypes": [str(dtype) for dtype in frame.dtypes],
+            "dtypes": ["string" if dtype.kind in "OUS" else str(dtype) for dtype in frame.dtypes],
             "values": [
                 [scalar(value) for value in row] for row in frame.itertuples(index=False, name=None)
             ],

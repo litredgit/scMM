@@ -41,9 +41,9 @@ def test_branch_isolation_and_atomic_failure():
     assert catalog.workspace.require_data().X[0, 0] == 77
 
 
-def test_internal_project_opt_in_and_storage_guard(tmp_path):
+def test_internal_project_opt_in_and_source_integrity(tmp_path):
     from scMM.application.data_views import initialize_catalog
-    from scMM.application.projects import Project, ProjectStore
+    from scMM.application.projects import Project
     from scMM.ion.semantics import value_states
 
     project = Project(tmp_path, {"name": "test", "samples": []})
@@ -64,8 +64,6 @@ def test_internal_project_opt_in_and_storage_guard(tmp_path):
     project.workspace.normalize("log")
     assert value_states(project.workspace.data)["X"]["space"] == "log_abundance"
     assert value_states(project.workspace._original)["X"]["space"] == "linear_abundance"
-    with pytest.raises(ValueError, match="snapshot support"):
-        ProjectStore.__new__(ProjectStore).save(project)
     corrupted = catalog.export_state()
     next(iter(corrupted["roots"].values()))["data"].X[0, 0] = 123
     with pytest.raises(ValueError, match="identity"):

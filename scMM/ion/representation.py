@@ -179,6 +179,9 @@ def build_representations(
             )
     kept = [str(key) for key in data.var_names if key not in exclude]
     l1 = data[:, kept].copy()
+    from scMM.util.lifecycle import invalidate_derived
+
+    invalidate_derived(l1)
     l2 = None
     if quantifiers:
         columns = [positions[row["quantifier_feature_id"]] for row in quantifiers]
@@ -192,6 +195,7 @@ def build_representations(
             for row in quantifiers
         ]
         var = pd.DataFrame(records).set_index("ec_id", drop=False)
+        var["neutral_mass"] = pd.to_numeric(var["neutral_mass"], errors="coerce")
         availability = (
             np.asarray(data.layers["scmm_measurement_available"], dtype=bool)[:, columns]
             if "scmm_measurement_available" in data.layers
@@ -279,6 +283,9 @@ def materialize_complete_availability(source, preview):
     numeric = selected.X.toarray() if hasattr(selected.X, "toarray") else selected.X
     if not np.isfinite(numeric).all():
         raise ValueError("selection contains unavailable measurements")
+    from scMM.util.lifecycle import invalidate_derived
+
+    invalidate_derived(selected)
     selected.uns["scmm_materialization"] = dict(preview)
     return selected
 

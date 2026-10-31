@@ -155,6 +155,7 @@
       "kind": "python",
       "tests": [
         "tests/application/test_projects.py",
+        "tests/application/test_data_view_storage.py",
         "tests/application/test_saved_items.py",
         "tests/application/test_retention.py",
         "tests/application/test_retention_scheduler.py",
@@ -162,6 +163,10 @@
       ],
       "sources": [
         "scMM/application/projects.py",
+        "scMM/application/data_view_storage.py",
+        "scMM/file/ion_bundle.py",
+        "scMM/file/ion_view.py",
+        "scMM/application/project_references.py",
         "scMM/application/trash.py",
         "scMM/application/retention.py",
         "scMM/application/retention_cleanup.py",
@@ -179,6 +184,7 @@
         "tests/application/test_workbench_state.py",
         "tests/application/test_data_views.py",
         "tests/application/test_processed_merge.py",
+        "tests/application/test_ion_merge.py",
         "tests/application/test_result_catalog.py",
         "tests/application/test_maintenance_recovery.py"
       ],
@@ -186,6 +192,7 @@
         "scMM/application/workbench.py",
         "scMM/application/data_views.py",
         "scMM/application/processed_merge.py",
+        "scMM/application/ion_merge.py",
         "scMM/application/merge_sources.py",
         "scMM/application/merge_metadata.py",
         "scMM/application/merge_audit.py",

@@ -19,9 +19,16 @@ class ResultWorkflow:
             self._prune()
             workspaces = list(self._workspaces.values())
             openings = list(self._project_openings)
-        return openings + [
-            w.project.folder for w in workspaces if not w.closed and w.project is not None
+        from .project_references import memory_project_references
+
+        projects = [w.project for w in workspaces if not w.closed and w.project is not None]
+        linked = [
+            reference
+            for project in projects
+            for reference in memory_project_references(project)
+            if reference != project.folder
         ]
+        return openings + [project.folder for project in projects] + linked
 
     @contextmanager
     def retention_operation(self, path):
@@ -81,7 +88,9 @@ class ResultWorkflow:
             # whole project; this session protects actual unsaved references.
             paths = list(self.active_paths())
             paths.remove(project.folder)
-            refs = list(_references([project.manifest, project.views], project.folder))
+            from .project_references import memory_project_references
+
+            refs = memory_project_references(project)
             refs.extend(_references({"source": project.workspace.source}, project.folder))
             for data in (project.workspace.data, project.workspace._original):
                 if data is not None:
@@ -91,7 +100,7 @@ class ResultWorkflow:
                 other = peer.project
                 if peer is workspace or peer.closed or other is None:
                     continue
-                paths.extend(_references([other.manifest, other.views], other.folder))
+                paths.extend(memory_project_references(other))
                 paths.extend(_references({"source": other.workspace.source}, other.folder))
                 for data in (other.workspace.data, other.workspace._original):
                     if data is not None:

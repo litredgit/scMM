@@ -8,8 +8,6 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from anndata import read_h5ad
-
 from .preview_cache import PREVIEW_FILES, file_identity
 from .tasks import utc_now
 from .trash import _overlaps, _references
@@ -68,21 +66,11 @@ def _usage(manager):
         try:
             remember(path)
             manifest = manager.store._manifest(path.parent)
-            refs = list(_references(manifest, path.parent))
-            for key in ("current", "baseline"):
-                value = manifest["artifacts"].get(key)
-                if not value:
-                    continue
-                artifact = Path(value)
-                artifact = _safe(path.parent / artifact)
-                if not artifact.resolve().is_relative_to(path.parent.resolve()):
-                    raise PermissionError("快照路径越界")
+            from .project_references import iter_project_artifacts, project_references
+
+            refs = project_references(manifest, path.parent)
+            for artifact in iter_project_artifacts(manifest, path.parent):
                 remember(artifact)
-                data = read_h5ad(artifact, backed="r")
-                try:
-                    refs.extend(_references(dict(data.uns), path.parent))
-                finally:
-                    data.file.close()
             references.append((path.parent, refs))
         except (OSError, ValueError, KeyError, TypeError, AttributeError, RuntimeError):
             errors.append(f"项目引用无法核实：{path}")
@@ -121,7 +109,11 @@ def _items(folder):
             [path],
             not path.is_symlink()
             and path.is_dir()
-            and (any(path.glob("*.h5ad")) or (path / "views.json").is_file()),
+            and (
+                any(path.glob("*.h5ad"))
+                or (path / "views.json").is_file()
+                or (path / "catalog.json").is_file()
+            ),
         )
     processing = folder / "processing"
     shared = {}

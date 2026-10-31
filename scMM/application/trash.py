@@ -10,8 +10,6 @@ from contextlib import ExitStack
 from pathlib import Path
 from uuid import uuid4
 
-from anndata import read_h5ad
-
 from .naming import beijing_time
 from .projects import project_lock, write_json
 from .storage import SUPPORTED_RAW_SUFFIXES, StorageCatalog, StorageRoot
@@ -28,6 +26,8 @@ def _references(value, folder):
             if (
                 key
                 in {
+                    "data_catalog",
+                    "registry_artifact",
                     "current",
                     "baseline",
                     "views",
@@ -125,17 +125,9 @@ class SavedItems:
         for folder in self._project_folders():
             manifest = self.store._manifest(folder)
             if folder != target:
-                references = list(_references(manifest, folder))
-                # H5AD also retains extraction-batch provenance after imports.
-                for artifact in ("current", "baseline"):
-                    if not manifest["artifacts"].get(artifact):
-                        continue
-                    current = folder / manifest["artifacts"][artifact]
-                    data = read_h5ad(current, backed="r")
-                    try:
-                        references.extend(_references(dict(data.uns), folder))
-                    finally:
-                        data.file.close()
+                from .project_references import project_references
+
+                references = project_references(manifest, folder)
                 # Reopening a project records its own folder as the workspace source.
                 # This provenance is not a reference to every obsolete snapshot inside it.
                 if target.is_relative_to(folder):

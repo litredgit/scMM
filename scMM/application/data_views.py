@@ -4,7 +4,7 @@ from copy import deepcopy
 from uuid import uuid4
 
 from scMM.ion.contracts import MeasurementRoot, validate_schema
-from scMM.ion.identity import dataset_identity
+from scMM.ion.identity import axis_identity, dataset_identity, json_identity
 from scMM.ion.semantics import unknown_state, value_states, write_value_states
 
 from .workbench import AnalysisWorkspace
@@ -19,6 +19,9 @@ class DataViewCatalog:
         self._branches = {}
         self.active_branch_id = None
         self.revision = 0
+        self.registry = {"grouping": {}, "annotation": {}, "evidence": {}, "reviews": []}
+        self.source_matrices = {}
+        self.project_presentation = {}
 
     def add_measurement(self, data, *, source, origin_kind, value_semantics):
         root_id, view_id, branch_id = (uuid4().hex for _ in range(3))
@@ -74,6 +77,9 @@ class DataViewCatalog:
             if not ids or len(ids) != len(set(ids)) or not set(ids).issubset(set(axis)):
                 raise ValueError("selection contains empty, duplicate or unknown IDs")
         selected = data[cells, features].copy()
+        from scMM.util.lifecycle import invalidate_derived
+
+        invalidate_derived(selected)
         states = value_states(selected)
         states["X"] = {**unknown_state(), "space": root.value_semantics}
         write_value_states(selected, states)
@@ -100,9 +106,12 @@ class DataViewCatalog:
         target = self._branches[branch_id]
         view = self._views[target["view_id"]]
         validate_schema(view)
-        root = self._roots[view["root_id"]]
-        root.validate()
-        if root.identity != view["root_identity"]:
+        root = self._roots.get(view["root_id"])
+        if root is not None:
+            root.validate()
+        if root is None and view.get("root_available", True):
+            raise ValueError("missing measurement root")
+        if root is not None and root.identity != view["root_identity"]:
             raise ValueError("view source identity changed")
         target["workspace"]._validate(target["workspace"].require_data())
         self.active_branch_id = branch_id
@@ -133,17 +142,33 @@ class DataViewCatalog:
             },
             "views": deepcopy(self._views),
             "branches": {
-                key: {"view_id": entry["view_id"], "workspace": deepcopy(vars(entry["workspace"]))}
+                key: {
+                    **deepcopy(
+                        {field: value for field, value in entry.items() if field != "workspace"}
+                    ),
+                    "workspace": deepcopy(vars(entry["workspace"])),
+                }
                 for key, entry in self._branches.items()
             },
             "active_branch_id": self.active_branch_id,
             "revision": self.revision,
+            "project_presentation": deepcopy(self.project_presentation),
+            "registry": deepcopy(self.registry),
+            "source_matrices": {key: data.copy() for key, data in self.source_matrices.items()},
         }
 
     @classmethod
     def from_state(cls, state):
         validate_schema(state)
         candidate = cls()
+        candidate.project_presentation = deepcopy(state.get("project_presentation", {}))
+        candidate.registry = deepcopy(
+            state.get("registry", {"grouping": {}, "annotation": {}, "evidence": {}, "reviews": []})
+        )
+        json_identity(candidate.registry)
+        candidate.source_matrices = {
+            key: data.copy() for key, data in state.get("source_matrices", {}).items()
+        }
         for key, record in state["roots"].items():
             meta = record["metadata"]
             validate_schema(meta)
@@ -160,15 +185,45 @@ class DataViewCatalog:
                 raise ValueError("root identity mismatch")
             candidate._roots[key] = root
         candidate._views = deepcopy(state["views"])
+        if not set(candidate.source_matrices).issubset(candidate._views):
+            raise ValueError("source matrix references unknown view")
         for key, view in candidate._views.items():
             validate_schema(view)
-            root = candidate._roots[view["root_id"]]
-            if key != view["id"] or view["root_identity"] != root.identity:
+            if view.get("level") not in {"L0", "L1", "L2"} or view.get("variable_kind") != (
+                "empirical_compound" if view["level"] == "L2" else "feature"
+            ):
+                raise ValueError("view variable type conflicts with representation level")
+            axis_identity(view["cell_ids"])
+            axis_identity(view.get("variable_ids", view["feature_ids"]))
+            axis_identity(view["feature_ids"])
+            root = candidate._roots.get(view["root_id"])
+            if root is None and (
+                view.get("root_available", True)
+                or view.get("level") != "L2"
+                or view.get("variable_kind") != "empirical_compound"
+            ):
+                raise ValueError("missing measurement root")
+            if view.get("level") == "L2" and key not in candidate.source_matrices:
+                raise ValueError("missing complete compound source")
+            if key != view["id"] or (root is not None and view["root_identity"] != root.identity):
                 raise ValueError("view identity mismatch")
-            if not set(view["cell_ids"]).issubset(set(root.data.obs_names)) or not set(
-                view["feature_ids"]
-            ).issubset(set(root.data.var_names)):
+            if root is not None and (
+                not set(view["cell_ids"]).issubset(set(root.data.obs_names))
+                or not set(view["feature_ids"]).issubset(set(root.data.var_names))
+            ):
                 raise ValueError("view axis outside measurement root")
+            if (
+                key in candidate.source_matrices
+                and dataset_identity(candidate.source_matrices[key], allow_missing=True)
+                != view["source_identity"]
+            ):
+                raise ValueError("source view identity changed")
+            if key in candidate.source_matrices:
+                source = candidate.source_matrices[key]
+                if list(source.obs_names) != view["cell_ids"] or list(source.var_names) != view.get(
+                    "variable_ids", view["feature_ids"]
+                ):
+                    raise ValueError("source matrix axes differ from its view")
         for key, entry in state["branches"].items():
             branch = AnalysisWorkspace()
             if set(entry["workspace"]) != set(vars(branch)):
@@ -179,11 +234,17 @@ class DataViewCatalog:
             if entry["view_id"] not in candidate._views:
                 raise ValueError("unknown source view")
             view = candidate._views[entry["view_id"]]
+            branch_cells = entry.get("materialization", {}).get("cell_ids", view["cell_ids"])
+            branch_variables = entry.get("materialization", {}).get(
+                "variable_ids", view.get("variable_ids", view["feature_ids"])
+            )
             if (
-                list(branch._original.obs_names) != view["cell_ids"]
-                or list(branch._original.var_names) != view["feature_ids"]
+                list(branch._original.obs_names) != branch_cells
+                or list(branch._original.var_names) != branch_variables
                 or not set(branch.data.obs_names).issubset(set(view["cell_ids"]))
-                or not set(branch.data.var_names).issubset(set(view["feature_ids"]))
+                or not set(branch.data.var_names).issubset(
+                    set(view.get("variable_ids", view["feature_ids"]))
+                )
             ):
                 raise ValueError("analysis branch axes differ from its source view")
             if any(
@@ -191,8 +252,11 @@ class DataViewCatalog:
                 for item in candidate._branches.values()
             ):
                 raise ValueError("analysis branches must have distinct dataset identities")
-            candidate._branches[key] = {"view_id": entry["view_id"], "workspace": branch}
-        if state["active_branch_id"] not in candidate._branches:
+            candidate._branches[key] = {**deepcopy(entry), "workspace": branch}
+        if (
+            state["active_branch_id"] is not None
+            and state["active_branch_id"] not in candidate._branches
+        ):
             raise ValueError("unknown active branch")
         if type(state["revision"]) is not int or state["revision"] < 0:
             raise ValueError("invalid catalogue revision")
@@ -225,6 +289,9 @@ def freeze_active_branch(project):
     if project.ion_state is None:
         raise ValueError("measurement catalogue is not initialized")
     state = deepcopy(project.ion_state)
+    if state["active_branch_id"] is None:
+        state["project_presentation"] = {"views": deepcopy(project.views)}
+        return state
     entry = state["branches"][state["active_branch_id"]]
     entry["workspace"] = deepcopy(vars(project.workspace))
     entry["presentation"] = deepcopy(
@@ -261,3 +328,89 @@ def activate_view(project, view_id, *, branch_id=None, expected_catalog_revision
     project.saved_token = presentation.get("saved_token")
     project.report_token = presentation.get("report_token")
     project.dirty = True
+
+
+def add_source_view(
+    project, data, *, root_id, level, source_features=None, grouping_id=None, quantification_id=None
+):
+    """Register an immutable derived source; incomplete L2 is never auto-filled."""
+    import numpy as np
+
+    state = freeze_active_branch(project)
+    catalog = DataViewCatalog.from_state(state)
+    if level not in {"L1", "L2"} or min(data.shape) < 1:
+        raise ValueError("nonempty L1 or L2 source required")
+    root = catalog._roots[root_id]
+    features = list(data.var_names) if level == "L1" else list(source_features or [])
+    if not set(features).issubset(set(root.data.var_names)) or not set(data.obs_names).issubset(
+        set(root.data.obs_names)
+    ):
+        raise ValueError("derived source is outside measurement root")
+    values = data.X.toarray() if hasattr(data.X, "toarray") else np.asarray(data.X)
+    if np.isinf(values).any():
+        raise ValueError("source contains infinite values")
+    if level == "L2":
+        available = data.layers["scmm_quantifiable"]
+        mask = available.toarray() if hasattr(available, "toarray") else np.asarray(available)
+        if mask.dtype.kind != "b" or not np.array_equal(~mask, np.isnan(values)):
+            raise ValueError("source availability differs from missing measurements")
+    elif not np.isfinite(values).all():
+        raise ValueError("L1 feature source must be finite")
+    view_id = uuid4().hex
+    view = {
+        "schema_version": 1,
+        "id": view_id,
+        "root_id": root_id,
+        "root_identity": root.identity,
+        "root_available": True,
+        "level": level,
+        "variable_kind": "feature" if level == "L1" else "empirical_compound",
+        "cell_ids": list(data.obs_names),
+        "feature_ids": features,
+        "variable_ids": list(data.var_names),
+        "source_identity": dataset_identity(data, allow_missing=True),
+        "grouping_id": grouping_id,
+        "quantification_id": quantification_id,
+    }
+    catalog._views[view_id] = view
+    catalog.source_matrices[view_id] = data.copy()
+    branch_id = None
+    if np.isfinite(values).all():
+        branch_id = uuid4().hex
+        workspace = AnalysisWorkspace()
+        workspace.replace(data, source=f"view:{view_id}")
+        catalog._branches[branch_id] = {
+            "view_id": view_id,
+            "workspace": workspace,
+            "presentation": {},
+        }
+    catalog.revision += 1
+    exported = catalog.export_state()
+    DataViewCatalog.from_state(exported)
+    project.ion_state = exported
+    project.dirty = True
+    return deepcopy(view), branch_id
+
+
+def materialize_analysis_branch(project, *, view_id, preview):
+    from scMM.ion.representation import materialize_complete_availability
+
+    catalog = DataViewCatalog.from_state(freeze_active_branch(project))
+    view = catalog._views[view_id]
+    source = catalog.source_matrices[view_id]
+    selected = materialize_complete_availability(source, preview)
+    workspace = AnalysisWorkspace()
+    workspace.replace(selected, source=f"view:{view_id}")
+    branch_id = uuid4().hex
+    catalog._branches[branch_id] = {
+        "view_id": view["id"],
+        "workspace": workspace,
+        "materialization": deepcopy(preview),
+        "presentation": {},
+    }
+    catalog.revision += 1
+    state = catalog.export_state()
+    DataViewCatalog.from_state(state)
+    project.ion_state = state
+    project.dirty = True
+    return branch_id
