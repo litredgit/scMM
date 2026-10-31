@@ -76,3 +76,15 @@ def test_integer_measurements_do_not_lose_precision_in_identity():
     a = np.array([[2**53]], dtype=np.int64)
     b = np.array([[2**53 + 1]], dtype=np.int64)
     assert matrix_identity(a) != matrix_identity(b)
+
+
+def test_equal_measurements_in_distinct_roots_have_distinct_entity_namespaces():
+    data = example()
+    a = MeasurementRoot.create(
+        data, root_id="a", source={}, origin_kind="extraction", value_semantics="linear_abundance"
+    )
+    b = MeasurementRoot.create(
+        data, root_id="b", source={}, origin_kind="extraction", value_semantics="linear_abundance"
+    )
+    assert a.identity != b.identity
+    assert "scmm_measurement_root_id" not in data.uns

@@ -46,6 +46,7 @@ class MeasurementRoot:
             raise ValueError("feature m/z must be finite and positive")
         json_identity(source)
         candidate = data.copy()
+        candidate.uns["scmm_measurement_root_id"] = root_id
         return cls(
             root_id,
             origin_kind,

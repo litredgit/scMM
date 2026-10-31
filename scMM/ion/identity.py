@@ -82,6 +82,7 @@ def dataset_identity(data, *, allow_missing=False):
     return json_identity(
         {
             "schema_version": 1,
+            "measurement_root_id": data.uns.get("scmm_measurement_root_id"),
             "cells": axis_identity(data.obs_names),
             "variables": axis_identity(data.var_names),
             "X": matrix_identity(data.X, allow_missing=allow_missing),

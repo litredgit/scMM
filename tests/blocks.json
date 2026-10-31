@@ -79,7 +79,7 @@
     },
     "ion-grouping": {
       "kind": "python",
-      "tests": ["tests/domain/test_ion_identity.py", "tests/domain/test_ion_relations.py"],
+      "tests": ["tests/domain/test_ion_identity.py", "tests/domain/test_ion_relations.py", "tests/domain/test_ion_representation.py"],
       "sources": ["scMM/ion/*"],
       "downstream": [],
       "extras": []
