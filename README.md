@@ -24,10 +24,11 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | 独立 TIC/EIC 信号重构、残差与噪声对照，不改提取算法 | [原始信号诊断](docs/analysis.md#独立原始信号诊断) |
 | 热图组别／样本筛选与排序、Nature／Cell 图形及 MetaboAnalyst 矩阵 CSV 导出 | [图形操作](docs/workflow.md#论文图细胞联动与热图) · [矩阵格式](docs/data-output.md#面向-metaboanalyst-的矩阵下载) |
 | 当前数据 QC PDF、当前分析报告及完整参数/数值附件 ZIP | [报告说明](docs/analysis.md#统计解释与网页分析) |
+| 离子关系/竞争 EC、独立 L0/L1/L2、通用本地候选及标准品/群体 MS/MS 证据 | [离子归组与证据](docs/workflow.md#离子归组与化合物证据) |
 | 网页 LMSD 候选、相关性辅助排序、天然同位素标记、分类饼图及特征/分子网络 | [注释与同位素](docs/workflow.md#注释与同位素) |
 
 后续工作与暂缓决策统一见 [roadmap](docs/roadmap.md)。
-网页覆盖范围与全部 Python 能力不同：网页注释与同位素功能保留全部峰和候选，只在显示/导出时筛选；
+网页覆盖范围与全部 Python 能力不同：旧脂质注释保留全部峰和候选；新离子流程通过独立视图去冗余，原测量根保持不可变；
 Python 原有删峰/求和去同位素接口与部分时间/趋势分析继续保留，边界见[分析说明](docs/analysis.md)。
 当前交付与后续范围见 [发展计划](docs/roadmap.md)。
 

@@ -46,6 +46,8 @@ export function useAnalysisSettings() {
     max_level: null as number | null,
   })
   const diff = reactive({
+    effect_layer: null as string | null,
+    test_layer: null as string | null,
     group_key: '',
     group_a: '',
     group_b: '',

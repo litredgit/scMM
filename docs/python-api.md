@@ -354,3 +354,99 @@ reconstructed, noise_sigma = peak_recon(
 
 `assign_source_metadata(metadata_by_file, overwrite=False)` 默认拒绝已有列冲突；显式 overwrite=True 可更新标签并扩充已有分类字段。
 元数据修改按报告记录的字段依赖失效相应只读结果，无关字段/同值写回保留；畸形或未知版本报告使操作失败且不更改原状态，见[报告目录](data-output.md#统计与监督报告目录)。
+
+## 离子归组、表示与完整项目
+
+新入口为 `scMM.ion`，不改变旧 `deisotope/get_annotation`。下面的 `measured` 是已对齐、
+有唯一细胞/Feature ID 与 `var['mz']` 的 AnnData；只有明确核实的未变换输入才声明线性。
+同 m/z 的不同 Feature ID 不合并，稳定同位素示踪需另建模型。
+
+```python
+from pathlib import Path
+from scMM.application.projects import ProjectStore
+from scMM.application.data_views import (
+    DataViewCatalog, initialize_catalog, add_source_view, activate_view,
+)
+from scMM.ion import ION_SPECS, find_relations, infer_groups, build_representations
+
+project_root = Path("ion_projects")
+project_root.mkdir(exist_ok=True)
+store = ProjectStore(project_root)
+project = store.create("ions")
+view, branch = initialize_catalog(
+    project, measured, source={"kind": "verified acquisition"},
+    origin_kind="extraction", linearity="linear_abundance",
+)
+catalog = DataViewCatalog.from_state(project.ion_state)
+source = catalog.measurement(view["root_id"])
+specs = [ION_SPECS[key] for key in ("[M+H]+", "[M+Na]+", "[M+K]+", "[M+NH4]+")]
+relations = find_relations(source, specs, polarity="pos", ppm=5.0)
+grouping = infer_groups(source, relations["relations"], specs, ppm=5.0)
+# Inspect all alternatives before specifying selections. Empty selections retain unknowns.
+selections = []  # each: ec_id, hypothesis_id, relation_ids, review="accepted"
+relation_reviews = {key: "accepted" for row in selections for key in row["relation_ids"]}
+l1, l2, audit = build_representations(
+    source, grouping, selections, relation_reviews=relation_reviews, include_singletons=True,
+)
+project.ion_state["registry"]["grouping"]["review-1"] = {
+    "root_id": view["root_id"], "grouping": grouping,
+    "selections": selections, "relation_reviews": relation_reviews,
+}
+for level, matrix in (("L1", l1), ("L2", l2)):
+    if matrix is not None and min(matrix.shape) > 0:
+        derived, derived_branch = add_source_view(
+            project, matrix, root_id=view["root_id"], level=level,
+            source_features=list(source.var_names), grouping_id="review-1",
+            quantification_id=audit["representation_id"],
+        )
+store.save(project)
+reopened = store.open(project.folder)
+```
+
+每个选定角色解释仍需与接受关系一致并连接全部成员，不自动选最大组或第一个解释。
+固定代表可通过 selection 的 `quantifier_feature_id` 指定。
+`build_exploratory_representations` 需传入公式条件比例规则评估，不把准确质量阶梯当作验证丰度。
+`formula_relations` 接受显式 `feature_id/formula/species_id` 假设和实际 `resolution_200`；
+`measure_evidence` 还要求原始强度溯源且未插补，信息不足应保留原因。
+
+```python
+from scMM.ion import build_compound_index, search_candidates, normalize_evidence
+
+database = build_compound_index(
+    [{"namespace": "local", "record_id": "g1", "formula": "C6H12O6", "name": "candidate"}],
+    source={"kind": "local curated table", "version": "1"},
+)
+annotations = search_candidates(
+    [{"target_id": "unknown-feature", "target_kind": "feature", "mass": 181.0707, "polarity": "pos"}],
+    database, specs, ppm=5.0,
+)
+evidence = normalize_evidence(
+    [{"kind": "experience", "target": {"kind": "feature", "id": "unknown-feature", "version": "review-1"},
+      "scope": {"samples": ["sample-1"]}, "note": "user assertion; not automatic identification"}],
+    source={"kind": "manual evidence", "version": "1"},
+)
+# Attach overlays to the catalogue registry; numerical branches remain unchanged.
+project.ion_state["registry"]["annotation"]["annotation-1"] = annotations
+project.ion_state["registry"]["evidence"].update({row["evidence_id"]: row for row in evidence})
+```
+
+含不可量化条目的 L2 不直接进入有限矩阵分析：
+
+```python
+from scMM.ion import preview_complete_availability
+from scMM.application.data_views import materialize_analysis_branch
+
+# Choose an existing L2 source view ID, not an AnnData layer name.
+preview = preview_complete_availability(l2, cell_ids=list(l2.obs_names))
+new_branch = materialize_analysis_branch(project, view_id=l2_view_id, preview=preview)
+activate_view(project, l2_view_id, branch_id=new_branch,
+              expected_catalog_revision=project.ion_state["revision"])
+# After transformations, use a declared linear layer for FC and another layer for tests.
+result = project.workspace.differential(
+    "group", "a", "b", effect_layer=linear_layer, test_layer=test_layer,
+)
+```
+
+`file.ion_bundle.export_project_bundle/import_project_bundle` 处理完整项目内存包，
+`file.ion_view.export_compound_source/import_compound_source` 处理单源 L2；正式项目用 `ProjectStore.save/open`。
+正式保存没有可执行模型；维护恢复模型继续采用已有白名单及输入验证。完整示例在无输出 Notebook 的可选离子分支中，默认关闭。

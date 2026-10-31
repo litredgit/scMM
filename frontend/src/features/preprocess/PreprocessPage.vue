@@ -9,6 +9,7 @@ import type { QC, AnalysisInfo, DataTable } from '../../api/types'
 import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
 import QCComparison from './QCComparison.vue'
+import DataViewSelector from '../ions/DataViewSelector.vue'
 const store = useWorkspace()
 const historyOpen = ref(false)
 const historyPanel = ref<HTMLElement>()
@@ -196,6 +197,10 @@ useViewState('preprocess', {
 })
 </script>
 <template>
+  <DataViewSelector />
+  <p v-if="store.project?.dataset">
+    <RouterLink to="/ions">离子归组与注释（统计预处理前）</RouterLink>
+  </p>
   <section v-if="store.project?.dataset">
     <div class="page-title">
       <div>

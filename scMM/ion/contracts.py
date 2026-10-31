@@ -46,6 +46,11 @@ class MeasurementRoot:
             raise ValueError("feature m/z must be finite and positive")
         json_identity(source)
         candidate = data.copy()
+        from .semantics import value_states, write_value_states
+
+        states = value_states(candidate)
+        states["X"]["space"] = value_semantics
+        write_value_states(candidate, states)
         candidate.uns["scmm_measurement_root_id"] = root_id
         return cls(
             root_id,

@@ -43,6 +43,11 @@ _ENV = {
     "origins": "SCMM_ALLOWED_ORIGINS",
     "session_idle_seconds": "SCMM_SESSION_IDLE_SECONDS",
     "session_absolute_seconds": "SCMM_SESSION_ABSOLUTE_SECONDS",
+    "ion_task_seconds": "SCMM_ION_TASK_SECONDS",
+    "ion_component_seconds": "SCMM_ION_COMPONENT_SECONDS",
+    "ion_max_states": "SCMM_ION_MAX_STATES",
+    "ion_max_hypotheses": "SCMM_ION_MAX_HYPOTHESES",
+    "ion_memory_mb": "SCMM_ION_MEMORY_MB",
 }
 _STATE = Path("~/.local/state/scmm")
 DEFAULTS = {
@@ -72,6 +77,11 @@ DEFAULTS = {
     "project_root": None,
     "session_idle_seconds": 3600,
     "session_absolute_seconds": 43200,
+    "ion_task_seconds": 300,
+    "ion_component_seconds": 30,
+    "ion_max_states": 100000,
+    "ion_max_hypotheses": 10000,
+    "ion_memory_mb": 16384,
 }
 
 
@@ -215,7 +225,15 @@ def load_server_config(path=None, overrides=None, *, environ=None):
     values["port"] = int(values["port"])
     if not 1 <= values["port"] <= 65535:
         raise ValueError("端口必须在 1–65535 之间。")
-    for key in ("session_idle_seconds", "session_absolute_seconds"):
+    for key in (
+        "session_idle_seconds",
+        "session_absolute_seconds",
+        "ion_task_seconds",
+        "ion_component_seconds",
+        "ion_max_states",
+        "ion_max_hypotheses",
+        "ion_memory_mb",
+    ):
         if isinstance(values[key], str) and values[key].isdigit():
             values[key] = int(values[key])
         if type(values[key]) is not int or values[key] <= 0:

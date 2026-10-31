@@ -28,6 +28,7 @@ export const router = createRouter({
     { path: '/raw', component: () => import('../features/raw/RawPage.vue') },
     { path: '/extraction', component: () => import('../features/extraction/ExtractionPage.vue') },
     { path: '/preprocess', component: () => import('../features/preprocess/PreprocessPage.vue') },
+    { path: '/ions', component: () => import('../features/ions/IonsPage.vue') },
     { path: '/analysis', component: () => import('../features/analysis/AnalysisPage.vue') },
   ],
 })

@@ -89,8 +89,10 @@ def test_source_dependencies_expand_but_tests_and_fixtures_do_not():
         "api-raw",
         "api-lipids",
         "api-time",
+        "api-ions",
     }
     assert set(plan("tests/api/conftest.py")["selected"]) == {
+        "api-ions",
         "api",
         "api-raw",
         "api-lipids",

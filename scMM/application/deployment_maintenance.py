@@ -72,6 +72,8 @@ def checkpoint(service):
         retention = getattr(service.manager, "retention", None)
         if retention is not None and any(retention.runtime()):
             raise ValueError("自动保留任务尚未到达安全停止点。")
+        if hasattr(service.manager, "ion_jobs"):
+            service.manager.ion_jobs.shutdown()
         service.deployment["phase"] = "snapshotting"
         service.deployment["snapshot_deadline"] = time.time() + SNAPSHOT_SECONDS
         service._deployment_stop = threading.Event()

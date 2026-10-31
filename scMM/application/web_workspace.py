@@ -17,6 +17,7 @@ from .projects import ProjectStore
 from .storage import StorageCatalog
 from .web_ai import AISummaryWorkflow
 from .web_analysis import AnalysisWorkflow
+from .web_ions import IonWorkflow
 from .web_lipids import LipidWorkflow
 from .web_merge import MergeWorkflow
 from .web_projects import ProjectWorkflow
@@ -37,6 +38,7 @@ class WebWorkspaceService(
     AnalysisWorkflow,
     ResultWorkflow,
     LipidWorkflow,
+    IonWorkflow,
     TimeWorkflow,
     MergeWorkflow,
 ):
@@ -162,6 +164,8 @@ class WebWorkspaceService(
                 self._workspaces.pop(identity, None)
 
     def shutdown(self):
+        if hasattr(self, "ion_jobs"):
+            self.ion_jobs.shutdown()
         with self._lock:
             workspaces = list(self._workspaces.values())
         for workspace in workspaces:

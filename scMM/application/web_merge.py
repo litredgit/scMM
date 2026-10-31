@@ -217,7 +217,15 @@ class MergeWorkflow:
                         **fields,
                     }
                 )
-            candidate.workspace = state
+            if candidate.ion_state is not None:
+                from .data_views import replace_measurement
+
+                replace_measurement(
+                    candidate, state.data, source="processed_feature_merge", origin_kind="composite"
+                )
+                state = candidate.workspace
+            else:
+                candidate.workspace = state
             candidate.manifest["samples"] = samples
             candidate.manifest.update(
                 sample_column="sample", sample_mapping={s["name"]: s["id"] for s in samples}

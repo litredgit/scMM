@@ -289,7 +289,8 @@ export function useAnalysis() {
     { flush: 'sync' },
   )
   watch(
-    () => JSON.stringify([diff.group_key, diff.method, diff.layer]),
+    () =>
+      JSON.stringify([diff.group_key, diff.method, diff.layer, diff.effect_layer, diff.test_layer]),
     () => {
       if (!hydrating) void invalidate(['differential', 'markers'])
     },

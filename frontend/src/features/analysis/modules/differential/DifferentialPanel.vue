@@ -69,6 +69,7 @@ const violinStale = computed(() => {
             ><FieldLabel name="layer" /><select
               aria-label="layer"
               v-model="diff.layer"
+              @change="Object.assign(diff, { effect_layer: null, test_layer: null })"
               :disabled="store.busy"
             >
               <option :value="null">当前矩阵</option>
@@ -85,6 +86,27 @@ const violinStale = computed(() => {
             </select></label
           >
         </div>
+        <details>
+          <summary>分别指定效应量与检验输入</summary>
+          <div class="field-grid">
+            <label title="effect_layer：Fold Change 要求已知线性丰度"
+              >效应量输入<select v-model="diff.effect_layer" @change="diff.layer = null">
+                <option :value="null">当前矩阵</option>
+                <option v-for="key in info?.layers" :key="key" :value="key">
+                  {{ displayName(key) }}
+                </option>
+              </select></label
+            >
+            <label title="test_layer：用于统计检验，可使用 log 或标准分"
+              >检验输入<select v-model="diff.test_layer" @change="diff.layer = null">
+                <option :value="null">当前矩阵</option>
+                <option v-for="key in info?.layers" :key="key" :value="key">
+                  {{ displayName(key) }}
+                </option>
+              </select></label
+            >
+          </div>
+        </details>
         <p class="page-note">
           细胞数不等于生物重复。细胞级差异用于探索，来源层面推断须先按重复聚合；精确质量注释只是候选。
         </p>
@@ -231,7 +253,13 @@ const violinStale = computed(() => {
         class="primary"
         :disabled="store.busy || !diff.group_key"
         @click="
-          execute('markers', { group_key: diff.group_key, method: diff.method, layer: diff.layer })
+          execute('markers', {
+            group_key: diff.group_key,
+            method: diff.method,
+            layer: diff.layer,
+            effect_layer: diff.effect_layer,
+            test_layer: diff.test_layer,
+          })
         "
       >
         计算全部簇 Marker

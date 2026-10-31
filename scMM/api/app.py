@@ -23,6 +23,7 @@ from .routers import (
     analysis,
     auth,
     extraction,
+    ions,
     lipids,
     maintenance,
     monitor,
@@ -89,6 +90,16 @@ def create_app(
     from scMM.application.ai_config import AIConfigStore, AIError
 
     values = getattr(server_config, "values", {})
+    manager.ion_resources = {
+        key: values.get(key, default)
+        for key, default in {
+            "ion_task_seconds": 300,
+            "ion_component_seconds": 30,
+            "ion_max_states": 100000,
+            "ion_max_hypotheses": 10000,
+            "ion_memory_mb": 16384,
+        }.items()
+    }
     app.state.ai_config = (
         AIConfigStore(values["ai_db"], values["ai_key_file"])
         if values.get("ai_db") and values.get("ai_key_file")
@@ -334,6 +345,7 @@ def create_app(
         extraction.router,
         analysis.router,
         lipids.router,
+        ions.router,
         results.router,
     ):
         app.include_router(router)
@@ -352,6 +364,7 @@ def create_app(
         @app.get("/raw", include_in_schema=False)
         @app.get("/extraction", include_in_schema=False)
         @app.get("/preprocess", include_in_schema=False)
+        @app.get("/ions", include_in_schema=False)
         @app.get("/analysis", include_in_schema=False)
         @app.get("/admin/monitor", include_in_schema=False)
         @app.get("/account", include_in_schema=False)

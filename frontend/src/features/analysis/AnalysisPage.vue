@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DataViewSelector from '../ions/DataViewSelector.vue'
 import CellSpectraPanel from './components/CellSpectraPanel.vue'
 import { computed, provide } from 'vue'
 import { useAnalysis } from './composables/useAnalysis'
@@ -54,6 +55,7 @@ const resultStates = computed(() => {
 })
 </script>
 <template>
+  <DataViewSelector />
   <section v-if="store.project?.dataset" class="analysis-page">
     <div class="page-title">
       <div>

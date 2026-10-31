@@ -26,6 +26,8 @@ def extra_values(value):
 
 
 def check_size(data):
+    if data.uns.get("scmm_variable_kind") == "empirical_compound":
+        raise ValueError("EC 合并需要显式对应和定量可比性，请使用化合物来源合并入口。")
     if (
         data.X is None
         or min(data.shape) < 1

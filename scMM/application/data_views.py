@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from scMM.ion.contracts import MeasurementRoot, validate_schema
 from scMM.ion.identity import axis_identity, dataset_identity, json_identity
-from scMM.ion.semantics import unknown_state, value_states, write_value_states
+from scMM.ion.semantics import value_states, write_value_states
 
 from .workbench import AnalysisWorkspace
 
@@ -35,7 +35,7 @@ class DataViewCatalog:
         branch = AnalysisWorkspace()
         measured = root.data
         states = value_states(measured)
-        states["X"] = {**unknown_state(), "space": value_semantics}
+        states["X"] = {**states["X"], "space": value_semantics}
         write_value_states(measured, states)
         branch.replace(measured, source=str(source.get("kind", "")))
         view = {
@@ -87,7 +87,7 @@ class DataViewCatalog:
 
         invalidate_derived(selected)
         states = value_states(selected)
-        states["X"] = {**unknown_state(), "space": root.value_semantics}
+        states["X"] = {**states["X"], "space": root.value_semantics}
         write_value_states(selected, states)
         branch = AnalysisWorkspace()
         branch.replace(selected, source="measurement_selection")
@@ -297,6 +297,14 @@ def initialize_catalog(project, data, *, source, origin_kind, linearity, preserv
                 "report_token": project.report_token,
             }
         )
+        from scMM.ion.annotation import migrate_lipid_version
+        from scMM.util.lipid_annotation import annotation_store
+
+        legacy = annotation_store(existing.data)
+        if legacy["versions"]:
+            catalog.registry["legacy_annotations"] = {
+                row["id"]: migrate_lipid_version(row) for row in legacy["versions"]
+            }
     state = catalog.export_state()
     DataViewCatalog.from_state(state)
     project.ion_state = state
@@ -440,3 +448,22 @@ def materialize_analysis_branch(project, *, view_id, preview):
     project.ion_state = state
     project.dirty = True
     return branch_id
+
+
+def replace_measurement(project, data, *, source, origin_kind):
+    """Retain earlier roots/branches when a new approved measurement replaces current data."""
+    if project.ion_state is None:
+        project.workspace.replace(data, source=source)
+        return
+    catalog = DataViewCatalog.from_state(freeze_active_branch(project))
+    semantic = value_states(data)["X"]["space"]
+    catalog.add_measurement(
+        data, source={"kind": source}, origin_kind=origin_kind, value_semantics=semantic
+    )
+    project.ion_state = catalog.export_state()
+    project.workspace = catalog.workspace
+    project.saved_reports = {}
+    project.views = {}
+    project.saved_token = None
+    project.report_token = None
+    project.dirty = True

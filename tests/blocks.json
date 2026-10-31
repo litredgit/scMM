@@ -84,6 +84,40 @@
       "downstream": ["annotation", "workbench"],
       "extras": []
     },
+    "api-ions": {
+      "kind": "python",
+      "tests": [
+        "tests/api/test_web_ions.py",
+        "tests/application/test_ion_jobs.py"
+      ],
+      "sources": [
+        "scMM/api/ion_schemas.py",
+        "scMM/api/routers/ions.py",
+        "scMM/application/web_ions.py",
+        "scMM/application/ion_jobs.py",
+        "scMM/application/ion_worker.py"
+      ],
+      "downstream": [
+        "browser-ions"
+      ],
+      "extras": [
+        "web"
+      ]
+    },
+    "browser-ions": {
+      "kind": "browser",
+      "tests": [
+        "frontend/tests/ions.spec.ts"
+      ],
+      "sources": [
+        "frontend/src/features/ions/*",
+        "frontend/src/api/ions.ts"
+      ],
+      "downstream": [],
+      "extras": [
+        "web"
+      ]
+    },
     "annotation": {
       "kind": "python",
       "tests": [
@@ -175,7 +209,7 @@
         "scMM/application/naming.py",
         "scMM/application/storage.py"
       ],
-      "downstream": ["processing", "workbench", "api", "api-raw", "monitor"],
+      "downstream": ["api-ions", "processing", "workbench", "api", "api-raw", "monitor"],
       "extras": []
     },
     "workbench": {
@@ -208,7 +242,7 @@
         "scMM/application/deployment_maintenance.py",
         "scMM/application/deployment_client.py"
       ],
-      "downstream": ["api", "api-lipids", "plotting", "time"],
+      "downstream": ["api-ions", "api", "api-lipids", "plotting", "time"],
       "extras": []
     },
     "api": {
@@ -230,7 +264,7 @@
         "scMM/api/routers/preferences.py",
         "scMM/api/routers/maintenance.py"
       ],
-      "downstream": [
+      "downstream": ["api-ions",
         "browser-projects",
         "browser-workflow",
         "browser-navigation",
@@ -490,7 +524,7 @@
     }
   },
   "support": {
-    "tests/support/auth.py": [
+    "tests/support/auth.py": ["api-ions",
       "spectra",
       "api",
       "api-raw",
@@ -499,7 +533,7 @@
       "ai",
       "api-time"
     ],
-    "tests/support/project.py": [
+    "tests/support/project.py": ["api-ions",
       "processing",
       "api",
       "api-raw",
@@ -509,14 +543,14 @@
       "api-time"
     ],
     "tests/support/lipids.py": ["annotation", "api-lipids"],
-    "tests/support/workflow.py": [
+    "tests/support/workflow.py": ["api-ions",
       "api",
       "api-raw",
       "api-lipids",
       "ai",
       "api-time"
     ],
-    "tests/api/conftest.py": ["api", "api-raw", "api-lipids", "api-time"],
+    "tests/api/conftest.py": ["api-ions", "api", "api-raw", "api-lipids", "api-time"],
     "frontend/tests/fixtures.ts": [
       "browser-projects",
       "browser-workflow",

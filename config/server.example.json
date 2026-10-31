@@ -25,5 +25,10 @@
   "monitor_peer_token_file": null,
   "ai_db": null,
   "ai_key_file": null,
-  "ai_private_urls": []
+  "ai_private_urls": [],
+  "ion_task_seconds": 300,
+  "ion_component_seconds": 30,
+  "ion_max_states": 100000,
+  "ion_max_hypotheses": 10000,
+  "ion_memory_mb": 16384
 }

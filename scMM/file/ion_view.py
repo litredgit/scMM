@@ -39,6 +39,10 @@ def export_compound_source(project, view_id):
 
 
 def import_compound_source(project, content, *, max_bytes=2_000_000_000):
+    if project.ion_state is None and project.workspace.data is not None:
+        raise ValueError(
+            "enable a feature catalogue or select an empty project before importing source L2"
+        )
     if len(content) > max_bytes:
         raise ValueError("source H5AD exceeds import budget")
     with TemporaryDirectory(prefix="scmm-source-import-") as temporary:

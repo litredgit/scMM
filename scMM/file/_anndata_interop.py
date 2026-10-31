@@ -55,6 +55,12 @@ def to_anndata(dataset) -> AnnData:
     states = intensity_states(adata) if template is not None else {}
     states["X"] = dataset_intensity_state(dataset)
     write_intensity_states(adata, states)
+    from scMM.ion.semantics import KEY, value_states, write_value_states
+
+    if states["X"] == "raw" and KEY not in adata.uns:
+        semantics = value_states(adata)
+        semantics["X"]["space"] = "linear_abundance"
+        write_value_states(adata, semantics)
     return adata
 
 

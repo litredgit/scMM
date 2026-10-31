@@ -557,7 +557,9 @@ class RawWorkflow:
                     "value": {"figures": figures, "cells": data.n_obs, "features": data.n_vars},
                 }
             candidate = project_candidate(project)
-            candidate.workspace.replace(data, source=str(path))
+            from .data_views import replace_measurement
+
+            replace_measurement(candidate, data, source=str(path), origin_kind="extraction")
             sync_metadata(candidate)
             candidate.saved_reports = {}
             candidate.views.pop("figures", None)

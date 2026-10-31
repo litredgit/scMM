@@ -361,7 +361,20 @@ class ProjectWorkflow:
         def action(workspace):
             data = read_dataset(self.results, root, path, trust_pickle=trust_pickle)
             candidate = project_candidate(workspace.project)
-            candidate.workspace.replace(data, source=str(self.results.resolve(root, path)))
+            if "scmm_source_view_json" in data.uns:
+                from scMM.file.ion_view import import_compound_source
+
+                import_compound_source(candidate, self.results.resolve(root, path).read_bytes())
+                workspace.project = candidate
+                return
+            from .data_views import replace_measurement
+
+            replace_measurement(
+                candidate,
+                data,
+                source=str(self.results.resolve(root, path)),
+                origin_kind="imported_feature",
+            )
             prepare_mapping(candidate, self.storage.roots[0].label)
             candidate.validate_samples()
             sync_metadata(candidate)

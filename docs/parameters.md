@@ -604,3 +604,25 @@ quantile 的并列值处理必须与细胞排列无关。反例输入 `[[0, 1], 
 PQN 的同值列表与 NumPy 参考向量须一致，检查形状、有限值、零分母和调用方数组不变。
 KNN 等插补须保留全空特征轴，不借修复轴长度统一不同入口默认方法。
 这些性质由[归一化测试](../tests/domain/test_normalize.py)和[数据测试](../tests/domain/test_data.py)维护。
+
+## 离子关系与表示参数
+
+新离子页与 `scMM.ion` 独立于旧 `deisotope/get_annotation` 的参数及默认值。
+
+| 参数 | 网页初始值 | 含义 |
+|---|---|---|
+| polarity | pos | 明确按正/负采集极性分别归组 |
+| ppm | 5 | 相对预测 m/z 的质量容差；经验偏差偶到 10 ppm 时由用户调整，不自动扩大 |
+| species | H、Na、K、NH4、失水加氢 | 元素组成与带符号电荷定义；失水形式保留候选，不直接归并 |
+| max_isotope_order | 3 | 自然丰度碳同位素候选阶数，非示踪丰度校正 |
+| min_valid_cells | 20 | 每样本比例证据的最低可评估细胞数；不足记录不可评估 |
+| resolution_200 | 未填写 | 有公式的同位素精细结构需明确实际采集分辨率，参考 m/z 200 |
+| mode | reviewed_v1 | 仅人工接受且通过硬约束；exploratory_v1 为未实验校准规则模式 |
+| strategy | isotope_representatives | L1 每个离子形式保留同位素代表；可选择整组代表 |
+| include_singletons | true | 保留未知单例，L2 标明其未归组状态 |
+| quantification | fixed_representative | 固定单体代表离子，按样本等权检出率/响应排序，稳定 ID 破同分；支持人工指定 |
+
+不同加合物响应不相加。同位素未知起点允许 0～3 的角色备选，不自动选择单一中性质量。
+QE/Orbitrap 的本地分辨率使用 `R(m)=R200*sqrt(200/m)`，FWHM 为 `m/R(m)`；不是固定 Da 窗口。
+
+离子 worker 的状态/时间/内存预算属于运维配置，见[部署说明](installation.md#离子后台资源)。预算不是实验阈值或错误率。
