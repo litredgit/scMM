@@ -14,6 +14,7 @@
 | 统计、监督、降维 | `scMM/analysis/`、`application/workbench.py`、`frontend/src/features/analysis/` | [分析](analysis.md)、[功能接入](feature-development.md) | analysis、workbench、api；`frontend/tests/analysis.spec.ts` |
 | 时间与趋势 | `scMM/application/time_analysis.py`、`scMM/plot/_trajectory.py` | [时间方法](time-analysis.md)、[结果格式](data-output.md) | `test_trajectory.py`、`test_time_analysis.py`、`test_time_api.py` |
 | 脂质候选、规则与审核 | `scMM/util/lipid_*.py`、`application/web_lipids.py`、`frontend/src/features/preprocess/LipidPanel.vue` | [脂质方法](lipid-analysis.md)、[规则依据](../rules/lipids/README.md)、[参数](parameters.md) | annotation、api-lipids、browser-lipids |
+| 离子归组与化合物视图实施（待实现） | 新域包、数据视图与网页接入按计划分阶段新增 | [主实施计划](ion-compound-plan.md)、[领域任务卡](ion-domain-tasks.md)、[数据与应用任务卡](ion-data-tasks.md) | S0～S8；阶段本地提交，最后统一验收 |
 | 绘图、显示与导出 | `scMM/plot/`、`frontend/src/components/PlotView.vue` | [分析绘图](analysis.md)、[格式](data-output.md)、[交互](workflow.md) | plotting、`frontend/tests/interface.spec.ts`；共享组件按映射扩大 |
 | 认证、监控、AI | `scMM/application/auth.py`、`monitor*.py`、`ai_*.py` | [架构边界](development.md)、[安装配置](installation.md) | auth、monitor、ai 及对应浏览器块 |
 | 测试、映射与 CI | `tests/blocks.json`、`scripts/test_blocks.py`、`.github/workflows/ci.yml` | [测试指南](testing.md) | `tests/tooling/test_test_blocks.py`、test_environments.py |
@@ -27,3 +28,4 @@
 - [分析](analysis.md)、[脂质方法](lipid-analysis.md)、[时间方法](time-analysis.md)维护方法含义与限制。
 - [开发指南](development.md)维护架构；[功能接入](feature-development.md)维护扩展契约；[测试](testing.md)维护检查入口；[发布](release.md)维护运维与来源。
 - [安装](installation.md)维护环境与配置；[排错](troubleshooting.md)按症状定位；[原始验证报告](validation/)保存独有证据。
+- [离子归组实施计划](ion-compound-plan.md)维护本任务的已确认范围、阶段与执行契约；[领域任务卡](ion-domain-tasks.md)细化算法和反例，[数据任务卡](ion-data-tasks.md)细化视图、持久化和下游接入。它们描述待实施设计，不代替当前使用说明或进展记录。
