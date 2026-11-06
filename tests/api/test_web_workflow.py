@@ -1235,3 +1235,35 @@ def test_readonly_graph_result_identity_survives_repeated_project_saves(workflow
             .status_code
             == 200
         )
+
+
+def test_matrix_download_sample_labels_precision_and_readonly(workflow):
+    data = import_data(workflow)
+    current = workflow[-2]()
+    info = get(workflow, "/results/matrix?source=current").json()
+    assert info["available"] and info["cells"] == data.n_obs
+    # Use the fixture command helper: revision checking remains active for read-only POSTs.
+    response = workflow[-1]("/results/matrix/download", {"source": "current", "labels": {}})
+    assert response.status_code == 200, response.text
+    frame = pd.read_csv(StringIO(response.text), float_precision="round_trip")
+    assert list(frame) == ["Sample", "Label", *data.var_names]
+    assert frame.Label.tolist() == data.obs["sample"].tolist()
+    np.testing.assert_array_equal(frame.iloc[:, 2:].to_numpy(), data.X)
+    labels = {s["id"]: "Combined" for s in info["samples"]}
+    response = workflow[-1]("/results/matrix/download", {"source": "current", "labels": labels})
+    assert set(pd.read_csv(StringIO(response.text)).Label) == {"Combined"}
+    assert workflow[-2]() == current
+    for invalid in ({"unknown": "A"}, {info["samples"][0]["id"]: " "}):
+        assert (
+            workflow[-1](
+                "/results/matrix/download", {"source": "current", "labels": invalid}
+            ).status_code
+            == 400
+        )
+    assert not get(workflow, "/results/matrix?source=extracted").json()["available"]
+    stale = workflow[-1]("/results/matrix/download", {"revision": 0, "source": "current"})
+    assert stale.status_code == 409
+    operation(workflow, "normalize", {"method": "total", "scale": 100})
+    processed = workflow[-1]("/results/matrix/download", {"source": "current"})
+    values = pd.read_csv(StringIO(processed.text)).iloc[:, 2:].to_numpy()
+    np.testing.assert_allclose(values.sum(axis=1), 100)

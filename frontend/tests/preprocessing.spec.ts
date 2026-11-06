@@ -110,3 +110,26 @@ test('explicit ID subset previews, applies and restores full preprocessing origi
   await expect(page.locator('.page-title').getByText(/64 细胞 × 8 特征/)).toBeVisible()
   await noError(page)
 })
+
+test('matrix CSV uses editable sample labels without changing analysis groups', async ({
+  page,
+}) => {
+  await importData(page, '矩阵下载')
+  await page.getByRole('link', { name: /预处理/ }).click()
+  const panel = page.getByRole('region', { name: '矩阵 CSV 下载' })
+  await expect(panel.getByRole('button', { name: '下载预处理矩阵 CSV' })).toBeEnabled()
+  await panel.getByText('CSV 标签设置', { exact: true }).click()
+  const inputs = panel.getByRole('textbox')
+  await expect(inputs.first()).toBeVisible()
+  await inputs.first().fill('CustomLabel')
+  const pending = page.waitForEvent('download')
+  await panel.getByRole('button', { name: '下载预处理矩阵 CSV' }).click()
+  const download = await pending
+  expect(download.suggestedFilename()).toBe('preprocessed-matrix.csv')
+  const stream = await download.createReadStream()
+  const chunks = []
+  for await (const chunk of stream!) chunks.push(chunk)
+  const csv = Buffer.concat(chunks).toString('utf8')
+  expect(csv).toMatch(/^Sample,Label,/)
+  expect(csv).toContain('CustomLabel')
+})

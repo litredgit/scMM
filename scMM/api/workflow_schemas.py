@@ -546,3 +546,8 @@ class Presentation(RevisionRequest):
         Literal["right", "top_left", "top_right", "bottom_left", "bottom_right", "hidden"] | None
     ) = None
     order: list[str] | None = Field(default=None, max_length=5000)
+
+
+class MatrixDownload(RevisionRequest):
+    source: Literal["extracted", "current"]
+    labels: dict[str, str] = Field(default_factory=dict, max_length=10000)

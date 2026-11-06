@@ -199,3 +199,35 @@ def clear(body: RevisionRequest, manager: Service, identity: Identity):
     with manager.access(identity) as workspace:
         workspace.check(body.revision)
         return manager.saved_items().clear()
+
+
+@router.get("/workspace/results/matrix")
+def matrix_info(manager: Service, identity: Identity, source: str = "current"):
+    from scMM.application.matrix_export import export_matrix, export_samples
+
+    with manager.access(identity) as workspace:
+        try:
+            project = workspace.require_project()
+            data = export_matrix(project, source)
+            _, samples = export_samples(project, data)
+        except ValueError as exc:
+            return {"available": False, "reason": str(exc)}
+        return {
+            "available": True,
+            "revision": workspace.revision,
+            "source": source,
+            "cells": data.n_obs,
+            "features": data.n_vars,
+            "samples": samples,
+        }
+
+
+@router.post("/workspace/results/matrix/download")
+def matrix_download(body: s.MatrixDownload, manager: Service, identity: Identity):
+    from scMM.application.matrix_export import export_matrix, labeled_matrix
+
+    with manager.access(identity) as workspace:
+        workspace.check(body.revision)
+        project = workspace.require_project()
+        content = labeled_matrix(project, export_matrix(project, body.source), body.labels)
+        return Response(content, media_type="text/csv; charset=utf-8")

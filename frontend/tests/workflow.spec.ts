@@ -107,6 +107,17 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   await expect(
     page.getByText('当前数据集已建立，可进入预处理。项目仍需主动保存。', { exact: true }),
   ).toBeVisible()
+  const originalDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: '下载提取原始矩阵 CSV', exact: true }).click()
+  const original = await originalDownload
+  expect(original.suggestedFilename()).toBe('extracted-matrix.csv')
+  const originalStream = await original.createReadStream()
+  const originalChunks = []
+  for await (const chunk of originalStream!) originalChunks.push(chunk)
+  const originalCSV = Buffer.concat(originalChunks).toString('utf8')
+  expect(originalCSV).toMatch(/^Sample,Label,/)
+  expect(originalCSV.trim().split('\n')).toHaveLength(3)
+  expect(originalCSV).toContain(',extract,')
   await page.getByRole('button', { name: '下一步：预处理 →', exact: true }).click()
   await expect(page.getByText('2 细胞 × 1 特征 · 每步成功后保留历史层。')).toBeVisible()
   await noError(page)

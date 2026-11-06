@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MatrixDownload from '../../components/MatrixDownload.vue'
 import { useViewState } from '../../api/viewState'
 import { useReadScope } from '../../api/readScope'
 import { displayName } from '../../help/labels'
@@ -197,6 +198,7 @@ useViewState('preprocess', {
 })
 </script>
 <template>
+  <MatrixDownload source="current" />
   <DataViewSelector />
   <p v-if="store.project?.dataset">
     <RouterLink to="/ions">离子归组与注释（统计预处理前）</RouterLink>

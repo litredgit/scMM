@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MatrixDownload from '../../components/MatrixDownload.vue'
 import { formatTime } from '../../help/time'
 import { useViewState } from '../../api/viewState'
 import { serialPolling } from '../../api/polling'
@@ -205,6 +206,7 @@ const parameterTable = computed<DataTable>(() => {
 useViewState('extraction', { path, included, checked, figures, signalSample, signalFigure })
 </script>
 <template>
+  <MatrixDownload source="extracted" />
   <section v-if="store.project" class="extraction-workspace" :class="{ 'has-batch': selected }">
     <div class="page-title">
       <div>

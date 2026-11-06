@@ -165,3 +165,33 @@ def test_view_only_snapshot_failure_keeps_previous_manifest(tmp_path, monkeypatc
     reopened = store.open(project.folder)
     assert reopened.workspace.data is None
     assert reopened.views["legend_orders"]["raw.tic_pane"] == ["b", "a"]
+
+
+def test_extracted_matrix_retains_full_axes_and_active_root(tmp_path):
+    from scMM.application.matrix_export import export_matrix, labeled_matrix
+
+    store = ProjectStore(tmp_path)
+    project = store.create("matrix")
+    data = AnnData(
+        np.array([[1.2345678901234567, 0], [3, 4.0]]),
+        obs=pd.DataFrame({"sample": ["A", "B"], "group": ["old", "old"]}, index=["c1", "c2"]),
+        var=pd.DataFrame(index=["f1", "f2"]),
+    )
+    data.uns["project_batch"] = {"source": "reviewed"}
+    project.workspace.replace(data)
+    project.workspace.subset(cell_ids=["c1"], feature_ids=["f1"])
+    original = export_matrix(project, "extracted")
+    assert original.shape == (2, 2)
+    assert export_matrix(project, "current").shape == (1, 1)
+    assert b"A" in labeled_matrix(project, original, {})
+    assert original.obs.group.tolist() == ["old", "old"]
+    project.ion_state = {
+        "active_branch_id": "b",
+        "branches": {"b": {"view_id": "v"}},
+        "views": {"v": {"root_id": "r"}},
+        "roots": {"r": {"data": data}},
+    }
+    assert export_matrix(project, "extracted") is data
+    project.ion_state["roots"] = {}
+    with pytest.raises(ValueError, match="审核"):
+        export_matrix(project, "extracted")
