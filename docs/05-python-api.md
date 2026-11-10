@@ -1,10 +1,8 @@
-# Python API 与批处理
+# 05 Python API 与批处理
 
-[返回文档索引](README.md) · [参数参考](parameters.md)
+[返回文档索引](README.md) · [参数参考](04-parameters.md)
 
-本页提供提取/预览、变换/注释、保存与互操作、批处理/合并及底层工具的调用示例。
-参数完整默认值查参数参考，文件格式查 [数据与输出](data-output.md)，下游方法查 [分析](analysis.md)。
-下例中的参考离子均为示例，须按实验选择。
+下面的参考离子仅用于示例，请按实验选择。文件格式见[数据输出](06-data-output.md)，下游方法见[分析](07-analysis.md)。
 
 ## 单个原始文件
 
@@ -30,7 +28,7 @@ data = CyESIData.load_from_file(
 返回的对象可以通过 `len(data)` 查看细胞数，通过 `data.data.shape` 查看完整矩阵形状。
 `cell_min_signal` 在 `preprocess`、单文件及各目录入口均可调，默认 `1e5`。
 逐扫描参考离子必须同时通过原倍数条件和扣基线后的最低净信号条件；0 关闭附加条件。
-两种提取算法均适用，定义、单位及旧项目兼容见[参数说明](parameters.md#细胞逐扫描最低净信号)。
+两种提取算法均适用，定义、单位及旧项目兼容见[参数说明](04-parameters.md#细胞逐扫描最低净信号)。
 
 ### Thermo profile RAW 直接读取
 
@@ -53,7 +51,7 @@ shared/independent 仍串行。独立的 `batch_process()` 旧助手仍仅扫描
 
 项目不提供 RAW 格式转换工具；旧 `msconvert_path` / `--msconvert` 参数已移除。
 不支持 Thermo RAW 的环境仍可直接读取已有 mzML/mzXML。
-安装位置、协议、结果差异和验证见 [Thermo RAW 技术说明](thermo-raw.md)。
+安装位置、协议、结果差异和验证见 [Thermo RAW 技术说明](10-thermo-raw.md)。
 网页项目入口现亦支持 Thermo profile RAW，复用本节后台路径。
 
 ## 缓存原始数据的细胞提取预览（Python API）
@@ -137,7 +135,7 @@ data = (
 ### 检查去同位素结果而不修改数据
 
 本节是原 Python 回归/强度上限算法；网页数据库分子式天然分布标记保留所有峰和候选，
-与本方法的删峰/求和语义不同，见[网页操作](workflow.md#注释与同位素)。原接口和 Notebook 默认值不改变。
+与本方法的删峰/求和语义不同，见[网页操作](02-workflow.md#注释与同位素)。原接口和 Notebook 默认值不改变。
 
 ```python
 audit = data.deisotope(
@@ -217,7 +215,7 @@ adata = data.to_anndata()
 ```
 
 `adata.raw` 是转换时的矩阵快照，不保证为仪器原始强度。完整映射及层/嵌入的保存含义见
-[AnnData 映射](data-output.md#anndata-映射)。从旧格式转换时重建唯一细胞名称并保留 `obs["source_index"]`；从 AnnData 导入的往返保留原细胞/特征 ID。
+[AnnData 映射](06-data-output.md#anndata-映射)。从旧格式转换时重建唯一细胞名称并保留 `obs["source_index"]`；从 AnnData 导入的往返保留原细胞/特征 ID。
 
 ## 目录处理与批处理模式
 
@@ -297,7 +295,7 @@ uv run --locked scmm-process raw-data/ results \
 ```
 
 CLI 的目录模式调用 `load_from_filelist()`，不是 `batch_process()`；可用 `--processing-strategy`
-选择表中的 legacy/shared/independent。它输出一个合并数据集；完整选项见 [CLI 参数](parameters.md#cli-参数)。
+选择表中的 legacy/shared/independent。它输出一个合并数据集；完整选项见 [CLI 参数](04-parameters.md#cli-参数)。
 
 ## 底层谱工具
 
@@ -339,7 +337,7 @@ reconstructed, noise_sigma = peak_recon(
 - 这些工具不会自动更新 `CyESIData` 的 `peak_meta` 或 `feature_meta`，因此不应把返回矩阵直接替换
   `data.data`，除非已经确认维度和语义保持一致。
 
-下一步：[下游分析](analysis.md) 和 [数据输出](data-output.md)。
+下一步：[下游分析](07-analysis.md) 和 [数据输出](06-data-output.md)。
 
 ### 工作台显式子集
 
@@ -349,11 +347,11 @@ reconstructed, noise_sigma = peak_recon(
 
 
 数值变换、提取和对齐在完整候选通过校验后才更新对象；插件归一化、缺失判定、调试钩子和估计器不会获得当前矩阵的可写视图。
-回调失败或返回非法矩阵/元数据时保留原状态；不要依赖调试钩子写入计算输入。矩阵变换失效旧分析及其序列化报告，测量层/raw 的保留规则见[AnnData 映射](data-output.md#anndata-映射)。
+回调失败或返回非法矩阵/元数据时保留原状态；不要依赖调试钩子写入计算输入。矩阵变换失效旧分析及其序列化报告，测量层/raw 的保留规则见[AnnData 映射](06-data-output.md#anndata-映射)。
 离群筛选仍接受 sklearn kwargs，建议显式传 `random_state`；file_meta.outlier 记录种子/随机状态和筛选数量，完整参数由调用方保存。
 
 `assign_source_metadata(metadata_by_file, overwrite=False)` 默认拒绝已有列冲突；显式 overwrite=True 可更新标签并扩充已有分类字段。
-元数据修改按报告记录的字段依赖失效相应只读结果，无关字段/同值写回保留；畸形或未知版本报告使操作失败且不更改原状态，见[报告目录](data-output.md#统计与监督报告目录)。
+元数据修改按报告记录的字段依赖失效相应只读结果，无关字段/同值写回保留；畸形或未知版本报告使操作失败且不更改原状态，见[报告目录](06-data-output.md#统计与监督报告目录)。
 
 ## 离子归组、表示与完整项目
 

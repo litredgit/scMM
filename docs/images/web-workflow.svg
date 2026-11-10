@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="266" viewBox="0 0 640 266" role="img" aria-labelledby="title description">
+  <title id="title">网页六步操作</title>
+  <desc id="description">从项目与样本、原始谱与参数到提取审核；建立矩阵后进入预处理、分析和结果保存。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M1 1 L7 4 L1 7" fill="none" stroke="#56728e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="640" height="266" rx="16" fill="#f8fbfe" stroke="none"/>
+  <g font-family="Noto Sans CJK SC, Microsoft YaHei, PingFang SC, sans-serif">
+    <rect x="16" y="15" width="180" height="98" rx="12" fill="#edf4fc" stroke="#bacfe5"/>
+    <text x="106" y="42" font-size="18" font-weight="700" fill="#24568c" text-anchor="middle">01</text>
+    <text x="106" y="71" font-size="23" font-weight="700" fill="#172c43" text-anchor="middle">项目与样本</text>
+    <text x="106" y="97" font-size="19" font-weight="400" fill="#385570" text-anchor="middle">选原始文件</text>
+    <path d="M200 64 H225" fill="none" stroke="#56728e" stroke-width="2.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+    <rect x="230" y="15" width="180" height="98" rx="12" fill="#edf4fc" stroke="#bacfe5"/>
+    <text x="320" y="42" font-size="18" font-weight="700" fill="#24568c" text-anchor="middle">02</text>
+    <text x="320" y="71" font-size="23" font-weight="700" fill="#172c43" text-anchor="middle">原始谱与参数</text>
+    <text x="320" y="97" font-size="19" font-weight="400" fill="#385570" text-anchor="middle">看谱 · 应用参数</text>
+    <path d="M414 64 H439" fill="none" stroke="#56728e" stroke-width="2.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+    <rect x="444" y="15" width="180" height="98" rx="12" fill="#e9f6f1" stroke="#b3d9cb"/>
+    <text x="534" y="42" font-size="18" font-weight="700" fill="#126352" text-anchor="middle">03</text>
+    <text x="534" y="71" font-size="23" font-weight="700" fill="#172c43" text-anchor="middle">提取与审核</text>
+    <text x="534" y="97" font-size="19" font-weight="400" fill="#385570" text-anchor="middle">审核后建立矩阵</text>
+    <rect x="16" y="153" width="180" height="98" rx="12" fill="#edf4fc" stroke="#bacfe5"/>
+    <text x="106" y="180" font-size="18" font-weight="700" fill="#24568c" text-anchor="middle">04</text>
+    <text x="106" y="209" font-size="23" font-weight="700" fill="#172c43" text-anchor="middle">预处理</text>
+    <text x="106" y="235" font-size="19" font-weight="400" fill="#385570" text-anchor="middle">筛选 · 变换 · 质控</text>
+    <path d="M200 202 H225" fill="none" stroke="#56728e" stroke-width="2.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+    <rect x="230" y="153" width="180" height="98" rx="12" fill="#edf4fc" stroke="#bacfe5"/>
+    <text x="320" y="180" font-size="18" font-weight="700" fill="#24568c" text-anchor="middle">05</text>
+    <text x="320" y="209" font-size="23" font-weight="700" fill="#172c43" text-anchor="middle">分析</text>
+    <text x="320" y="235" font-size="19" font-weight="400" fill="#385570" text-anchor="middle">统计 · 建模 · 绘图</text>
+    <path d="M414 202 H439" fill="none" stroke="#56728e" stroke-width="2.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+    <rect x="444" y="153" width="180" height="98" rx="12" fill="#edf4fc" stroke="#bacfe5"/>
+    <text x="534" y="180" font-size="18" font-weight="700" fill="#24568c" text-anchor="middle">06</text>
+    <text x="534" y="209" font-size="23" font-weight="700" fill="#172c43" text-anchor="middle">结果与保存</text>
+    <text x="534" y="235" font-size="19" font-weight="400" fill="#385570" text-anchor="middle">主动保存或下载</text>
+    <path d="M534 116 V132 H106 V149" fill="none" stroke="#56728e" stroke-width="2.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+  </g>
+</svg>

@@ -31,7 +31,7 @@ def reader_command():
     path = Path(program).expanduser()
     if not path.is_file():
         raise ThermoRawError(
-            "Thermo reader not installed; set SCMM_THERMO_READER (see docs/thermo-raw.md)"
+            "Thermo reader not installed; set SCMM_THERMO_READER (see docs/10-thermo-raw.md)"
         )
     if path.suffix.lower() == ".dll":
         if os.environ.get("SCMM_SERVER_CONFIG_ACTIVE") == "1" and not os.environ.get("SCMM_DOTNET"):

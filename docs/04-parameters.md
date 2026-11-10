@@ -1,8 +1,8 @@
-# 参数默认值、含义与推荐
+# 04 参数默认值、含义与推荐
 
-[返回文档索引](README.md) · [Notebook 工作流](workflow.md)
+[返回文档索引](README.md) · [Notebook 工作流](02-workflow.md)
 
-本页集中维护默认值、单位和参数含义，区分四类入口；操作顺序见 [工作流程](workflow.md)，调用示例见 [API](python-api.md)。
+本页集中维护默认值、单位和参数含义，区分四类入口；操作顺序见 [工作流程](02-workflow.md)，调用示例见 [API](05-python-api.md)。
 
 - **Notebook 默认值**：`scMM_workflow.ipynb` 顶部参数单元中的值。
 - **Python API 默认值**：函数签名中的值。
@@ -18,7 +18,7 @@ Vue 网页的“参数参考”从 `/api/v1/configuration` 读取同一应用层
 状态区区分表单与所选范围、当前样本生效配置，保存项目不隐式应用参数；预览使用表单，正式提取使用已应用配置。
 样本合并策略、合并容差和自动范围始终为项目级设置。显示范围独立于提取范围。
 Vue 使用应用层参数定义和新项目默认值，分析保留现有算法及固定聚类参数限制，
-具体操作见[Vue 操作](workflow.md#vue-网页项目与样本)。
+具体操作见[Vue 操作](02-workflow.md#vue-网页项目与样本)。
 
 ## 网页管理员：持续自动保留
 
@@ -32,7 +32,7 @@ Vue 使用应用层参数定义和新项目默认值，分析保留现有算法�
 
 年龄/数量同时填写时共同限制清理，两项都空不能启用持续规则；零值可取消对应限制，但不能绕过引用/活动/未知状态保护。
 前两项也用于只读建议和一次性清单。持续规则另须管理员审阅启用，作用于未来产物，
-不会因修改表单自动生效。执行/停用见[网页指南](workflow.md)，身份、调度、重启及记录见[数据说明](data-output.md#持续自动保留)。
+不会因修改表单自动生效。执行/停用见[网页指南](02-workflow.md)，身份、调度、重启及记录见[数据说明](06-data-output.md#持续自动保留)。
 
 ## Notebook：路径与运行控制
 
@@ -47,7 +47,7 @@ Vue 使用应用层参数定义和新项目默认值，分析保留现有算法�
 
 ## 原始谱与细胞检测
 
-这些参数用于原始 mzML/mzXML 和 Thermo profile RAW 的提取；RAW 的额外依赖见 [安装说明](installation.md#thermo-raw-额外依赖)。
+这些参数用于原始 mzML/mzXML 和 Thermo profile RAW 的提取；RAW 的额外依赖见 [安装说明](01-installation.md#thermo-raw-额外依赖)。
 
 | Notebook 参数 | API 参数 | 默认值 | 含义 | 推荐与调优方向 |
 |---|---|---:|---|---|
@@ -224,7 +224,7 @@ Notebook 和 API 的默认方法都是 `total`；Notebook 默认额外传入 `sc
 
 注释辅助与 m/z 特征网络共用未变换、未插补原始强度；天然同位素比例仍使用该原始层。
 旧 H5AD/项目没有可靠溯源时允许常规分析，但不提供为上述可选强度层；reset/restore 不改变来源定义。
-具体兼容与恢复规则见[强度溯源](data-output.md#强度溯源)。
+具体兼容与恢复规则见[强度溯源](06-data-output.md#强度溯源)。
 分子网络 `total` 的分母在本次输入的完整特征集合上计算，不随候选、代表离子或显示筛选重算，
 也不覆盖当前 `X`。已有层按其完整溯源使用，不因数值相似而假定匹配当前原始输入。
 导入初始层是否真实原始强度仍须由使用者核对；系统无法从数值逆推导入前处理历史。
@@ -278,7 +278,7 @@ adduct,LIPID_CLASS,PC,pos,[M+H]+,5
 | `n_diff_components` / `knn` / `num_waypoints` | `10` / `30` / `500` | 成分 2–100 且小于细胞数减 1；近邻至少 3 且小于细胞数；路标至少为 3 和成分数、不超过细胞数；少细胞须显式调整 |
 | `scale_components` / `max_iterations` | `true` / `25` | 多尺度成分缩放及迭代次数（1–1000） |
 | `seed` / `use_early_cell_as_start` | `42` / `true` | seed 为 0–2³²−1 整数；默认固定根点，关闭时记录算法实际最早细胞 |
-| `coordinate_key` / `time_key` / `time_kind` | 空 | 至少二维坐标、有限数值时间列、显式时间含义；见[算法说明](time-analysis.md#滑动窗口轨迹) |
+| `coordinate_key` / `time_key` / `time_kind` | 空 | 至少二维坐标、有限数值时间列、显式时间含义；见[算法说明](08-time-analysis.md#滑动窗口轨迹) |
 | `unit` | 随含义填写 | 归一化/伪时间 `unitless`，采集秒数 `s`，实验时间显式自定义 |
 | `branch_probability_key` | `null` | 单分支等权；指定键须存在且为合法概率，不静默回退 |
 | `window_size` / `step_size` / `min_cells_per_window` | `100` / `50` / `5` | 均为 1–5000 整数，单位细胞；窗口超总数截断并记录，空窗保留 |
@@ -291,7 +291,7 @@ adduct,LIPID_CLASS,PC,pos,[M+H]+,5
 `features=[]` 使用全部稳定特征 ID，显式列表须非空 ID、唯一且存在；不做最近 m/z 匹配。
 `feature_name_key=null` 使用 ID，指定列缺失则拒绝，列内缺失/空白名称回退 ID；`kernel_stat=median`，只允许 median/mean/sum。
 没有随机步骤，seed 记录为 null。`plot_top_n=30`（1–500），`display_standardize=true`，均仅控制绘图；
-热图至多 20 万显示值，完整趋势下载不受该限制。NaN/相同时间/统计边界见[代谢趋势](time-analysis.md#代谢趋势)。
+热图至多 20 万显示值，完整趋势下载不受该限制。NaN/相同时间/统计边界见[代谢趋势](08-time-analysis.md#代谢趋势)。
 
 趋势聚类要求显式 `trend_key` 指向有效命名趋势；参数采用该趋势的时间/层/窗口，不从当前草稿重算。
 `metric=correlation`，支持 cosine/euclidean/sqeuclidean；`cluster_method=leiden`，另支持 louvain/kmeans/agglomerative。
@@ -302,12 +302,12 @@ adduct,LIPID_CLASS,PC,pos,[M+H]+,5
 记录请求值、生效参数及实际簇数；不开放任意第三方 kwargs。沿用累计 500 万结果数值保护，簇图至多 20 万显示值。
 四种实际拟合共用最多 1 个在途短进程，不排队；繁忙拒绝候选，90 秒超时后终止并回收，不自动重放请求。
 请求等待该短进程；单个有效特征直接成组，不启动拟合。
-此短进程不是可断线查询的持久任务，跨工作区统一任务/队列仍归 M2。
+此短进程随请求等待，断线后没有持久任务可查询。
 
 网页固定单计算线程；依赖 Palantir 时按需导入，缺失时明确提示，不替换算法。
 当前同步工程上限为 5000 细胞、当前矩阵和单个输入表示各 500 万数值、64 个命名记录（含失效键），
 累计有效结果及预计单次窗口结果各 500 万数值；为限制请求资源，不是实验推荐阈值或耗时承诺。
-计算在请求内持有本工作区锁，超时后先刷新查询真实结果，不自动重放；后台任务迁移仍见 roadmap M1/M2。
+计算在请求内持有本工作区锁，超时后先刷新查询真实结果，不自动重放。
 显示表最多 200 行，完整 ZIP 不截断也不降低精度。主动保存与计算分开。
 
 ## Notebook：分析参数
@@ -350,7 +350,7 @@ uv run --locked scmm-process INPUT OUTPUT --ref-mz REF_MZ [options]
 | `--ppm-tol` | `10.0` | 对齐容差 ppm |
 | `--resolution` | `35000.0` | m/z 200 分辨率 |
 | `--mz-min` / `--mz-max` | `100.0` / `1000.0` | 正式提取 m/z 范围，包含边界 |
-| `--processing-strategy` | `legacy` | `legacy`/`shared`/`independent` 目录处理策略，见 [API](python-api.md#目录处理与批处理模式) |
+| `--processing-strategy` | `legacy` | `legacy`/`shared`/`independent` 目录处理策略，见 [API](05-python-api.md#目录处理与批处理模式) |
 | `--feature-merge-ppm` | `10.0` | 独立特征轴合并容差 |
 | `--extraction-method` | `legacy` | `legacy` 或 `snr_v1` 细胞提取算法 |
 | `--reference-mz` / `--reference-mode` | 省略 / `union` | SNR 多参考离子及窗口 `union`/`intersection` |
@@ -365,7 +365,7 @@ uv run --locked scmm-process INPUT OUTPUT --ref-mz REF_MZ [options]
 
 CLI 只负责原始数据预处理和保存，不执行归一化、去同位素或下游分析。需要这些步骤时使用
 Notebook 或 Python API。
-`--msconvert` 参数已移除；RAW 使用外部 reader 直接读取，见 [RAW 调用说明](python-api.md#thermo-profile-raw-直接读取)。
+`--msconvert` 参数已移除；RAW 使用外部 reader 直接读取，见 [RAW 调用说明](05-python-api.md#thermo-profile-raw-直接读取)。
 
 ## 特征轴合并参数
 
@@ -382,7 +382,7 @@ Notebook 或 Python API。
 ## 网页默认参数
 
 网页参数名保留英文，中文解释通过控件或预检参数名的鼠标悬停查看。预处理及分析高级参数也采用此方式；
-显示位置、按钮和保存行为见[网页流程](workflow.md#网页六步项目流程)。
+显示位置、按钮和保存行为见[网页流程](02-workflow.md#网页六步项目流程)。
 
 Vue/FastAPI 网页第二步固定使用 `snr`，取消方法选择器；内部标识仍为 `snr_v1`，用于参数、缓存和旧产物兼容。
 Vue 新项目固定此方法，新参数应用、预览和新批次不接受 legacy。旧项目的 legacy 参数与产物继续可读，
@@ -402,7 +402,7 @@ CLI、Python API 和 Notebook 的默认提取方法仍为 legacy；两种提取�
 分析页网络的 `layer` 独立于差异比较，默认 `null`（当前 X）；监督训练的 `random_state`
 独立于降维，初始来自分析配置的 `random_state`（通用默认 42），SHAP 使用该监督 seed。
 监督 `group_key` 按用户所选字段计数来源组，拒绝空白标签；分组留出及 CV 的每类来源数量要求
-与解释边界见[统计解释](analysis.md#统计解释与网页分析)，不会因数量不足自动改 seed 或切换验证方式。
+与解释边界见[统计解释](07-analysis.md#统计解释与网页分析)，不会因数量不足自动改 seed 或切换验证方式。
 
 网页聚类使用下表白名单；旧项目缺少新增字段时保留此前算法默认值，不追溯重算旧聚类。
 Python 工作台 `AnalysisWorkspace.cluster()` 同样接受这些参数；Notebook/PlotEngine 的参数入口及默认值仍按各自接口定义。
@@ -421,7 +421,7 @@ DBSCAN 与层次聚类的距离白名单为 euclidean/manhattan/cosine，不开�
 所有数值须有限，整数不接受布尔值/小数；方法不适用的表单草稿不参与计算。
 历史 `effective_parameters` 仅记录该算法实际生效的参数；修改表单不计算，点击“运行聚类”后才生成新列。
 聚类仍共享降维面板的 `use_rep`、`n_neighbors` 和 `random_state`。旧项目缺独立字段时保留原先借用值，
-恢复/保存操作见[分析流程](workflow.md#分析显示与导出)，开发兼容规则见[接入指南](feature-development.md#参数草稿与恢复)。
+恢复/保存操作见[分析流程](02-workflow.md#分析显示与导出)，开发兼容规则见[接入指南](12-development.md#参数草稿与恢复)。
 
 报告下载只读取当前 X，不另选强度层或执行分析；下载请求 `key` 必须是当前 `/analysis` 返回的 token 的 JSON，缺失/过期拒绝。
 工程边界：最多 10 万细胞、500 万当前矩阵数值、累计 500 万嵌入数值和 64 MiB 作图表文本；超限明确提示逐项导出，不自动抽样。
@@ -432,25 +432,25 @@ PDF 使用 40 箱直方图，最多列前 500 个来源、200 个参考列及最
 不自动推断时间或参考离子。`time_kind` 可为 acquisition_seconds/normalized_time/pseudotime/stored_order；
 normalized_time 的有限值须在 [0,1]，stored_order 使用当前行顺序且不接受 time_key。至少两个有限且不同的坐标。
 `bins=10`，范围 2–100；`layer=null` 用 X，参考 ID 必须存在，最多 100 来源及 200 万输入数值。
-缺失来源单列，不合并同名原标签；窗口及来源谱定义见[统计解释](analysis.md#统计解释与网页分析)。
+缺失来源单列，不合并同名原标签；窗口及来源谱定义见[统计解释](07-analysis.md#统计解释与网页分析)。
 
 特征距离嵌入 `features=[]` 使用全部稳定 ID，显式列表不允许重复/缺失 ID；最多 500 项及 200 万输入数值。
 `layer=null` 使用 X，`metric=pearson` 可选 euclidean，`name_key`/`class_key=null` 默认用 ID/统一颜色；指定时须为现有 var 列。
 `n_neighbors=null` 使用 min(15, 特征数−1)，显式值为 2 至特征数−1；`min_dist=0.1` 范围 [0,1]，`random_state=42`。
-UMAP 固定二维、`init=random`/`n_jobs=1`，预计算距离定义见[统计解释](analysis.md#统计解释与网页分析)。
+UMAP 固定二维、`init=random`/`n_jobs=1`，预计算距离定义见[统计解释](07-analysis.md#统计解释与网页分析)。
 
 双特征散点 `feature_a`/`feature_b` 必须是当前数据中两个不同的稳定特征 ID，不接受自动最近质量匹配。
 `layer=null` 使用当前 X；`color_key=null` 为统一颜色，否则明确选择一个观测列；`regression=true` 默认显示全体有限细胞的 y 对 x 回归。
-这些网页设置与图随主动保存保留；科学定义及常量/缺失边界见[统计解释](analysis.md#统计解释与网页分析)。
+这些网页设置与图随主动保存保留；科学定义及常量/缺失边界见[统计解释](07-analysis.md#统计解释与网页分析)。
 
 网页分析默认 `color_source=annotation`（列标签），优先选择有效 group、其次 sample；
 可切换为 `feature` 或 `none`。Feature 默认 `color_sort=mean`、`color_descending=True`，即平均强度降序；
-排序还支持 `total`、`median`、`detection`、`mz`、`name`。下拉选择与搜索的操作见[工作流程](workflow.md#分析显示与导出)。
+排序还支持 `total`、`median`、`detection`、`mz`、`name`。下拉选择与搜索的操作见[工作流程](02-workflow.md#分析显示与导出)。
 火山图标签默认 FDR≤0.05、abs(log2FC)≥1，FDR 优先/效应量辅助排序，最多标注前 10 个特征；阈值、数量和排序可调整。
 小提琴图每次最多 12 个，默认包含零值。它们是显示设置，不改变检验和数值导出。
 
 用 `scmm-web --config workbench.json` 或 `SCMM_UI_CONFIG` 指定，命令行优先。
-这只配置实验参数；服务器路径、认证与可选资源使用独立的[资源配置](installation.md#访问与路径配置)，不能由网页表单修改。
+这只配置实验参数；服务器路径、认证与可选资源使用独立的[资源配置](01-installation.md#访问与路径配置)，不能由网页表单修改。
 
 ```json
 {
@@ -578,7 +578,7 @@ ppm 默认 10，MS 级别默认 1，RT 秒范围留空为全部选中级别扫�
 独立重构参数沿用现有工具默认：`lam=0.5`、`tau=2`（非负）、`sigma_min=0.001`（正数，强度单位）、
 `max_iter=50`（1–1000）；工具内部相对变化容差固定 `1e-4`。
 秩一 `rank_tol=1e-6`（正数，向量变化绝对容差）、`rank_max_iter=100`（1–1000）。
-固定 float64、单线程，独立于正式提取资源配置；噪声/残差与算法限制见[独立诊断定义](analysis.md#独立原始信号诊断)。
+固定 float64、单线程，独立于正式提取资源配置；噪声/残差与算法限制见[独立诊断定义](07-analysis.md#独立原始信号诊断)。
 
 ### 作图范围与论文导出
 
@@ -587,14 +587,14 @@ ppm 默认 10，MS 级别默认 1，RT 秒范围留空为全部选中级别扫�
 样本内按 `rt` 排列；不以归一化时间或伪时间替代采集时间。筛选后的行标准分使用当前展示列的总体标准差。
 色板可选 RdBu、PuOr、Viridis、Cividis；`color_min`／`color_max` 默认均为空（自动），手动时须同时为有限数且下限小于上限。
 导出范围默认 `current`（当前视图），可选 `full`（本次图形完整范围）；系统图文固定英文，用户输入保留原文。
-这些设置只影响作图，不改当前矩阵。Cell 规格、字体／分辨率与导出入口见[论文图操作](workflow.md#论文图细胞联动与热图)。
-细胞和特征判定的完整流程、算法差异及阈值边界见[独立方法说明](cell-feature-identification.md)。
+这些设置只影响作图，不改当前矩阵。Cell 规格、字体／分辨率与导出入口见[论文图操作](02-workflow.md#论文图细胞联动与热图)。
+细胞和特征判定的完整流程、算法差异及阈值边界见[独立方法说明](03-cell-feature-identification.md)。
 
 ## 已处理矩阵合并参数
 
 网页需显式选择参考输入、union/ref、各输入质量来源、样本分组及目标样本名；质量来源可以是指定 var 列或明确的数值 var ID。ppm_tol 初值 5，沿用已有 alignwith/concat 默认参考 ppm，允许有限的 0～1000000；这不是实验容差建议。歧义默认 reject，用户可明确选择 legacy 沿用原一对一贪心规则。common_observations 初始为空，最多 100 个显式共同细胞字段，不推断单位或缩放。group/subject/batch 空值保留原值，非空覆盖，目标样本名相同表示主动合并。
 
-同步工程门限：2～8 个输入、最多 2000 个来源样本映射；每个输入和输出最多 2 万细胞、1 万特征、500 万 X 值，输入当前/完整起点及层/raw/归档元数据累计最多 2000 万存储值；输出也检查同样的总值限制。单文件最多 256 MiB，所选文件累计最多 512 MiB，H5AD 解码前核对存储值，候选匹配比较最多 20 万。超限明确拒绝，不静默截断数据。预览列表最多显示 200 行，完整 ZIP 不截断；预览凭据有效期 300 秒并绑定用户工作区、修订和输入身份。它仍是受限同步请求，不是 M2 持久后台任务。
+同步工程门限：2～8 个输入、最多 2000 个来源样本映射；每个输入和输出最多 2 万细胞、1 万特征、500 万 X 值，输入当前/完整起点及层/raw/归档元数据累计最多 2000 万存储值；输出也检查同样的总值限制。单文件最多 256 MiB，所选文件累计最多 512 MiB，H5AD 解码前核对存储值，候选匹配比较最多 20 万。超限明确拒绝，不静默截断数据。预览列表最多显示 200 行，完整 ZIP 不截断；预览凭据有效期 300 秒并绑定用户工作区、修订和输入身份。合并在同步请求内完成。
 
 ## 数值回归依据
 
@@ -623,6 +623,7 @@ KNN 等插补须保留全空特征轴，不借修复轴长度统一不同入口�
 | quantification | fixed_representative | 固定单体代表离子，按样本等权检出率/响应排序，稳定 ID 破同分；支持人工指定 |
 
 不同加合物响应不相加。同位素未知起点允许 0～3 的角色备选，不自动选择单一中性质量。
-QE/Orbitrap 的本地分辨率使用 `R(m)=R200*sqrt(200/m)`，FWHM 为 `m/R(m)`；不是固定 Da 窗口。
+QE/Orbitrap 的本地分辨率使用 `R(m)=R200*sqrt(200/m)`，FWHM 为 `m/R(m)`。使用实际采集设置；提取界面的默认分辨率仅是软件初始值。
+依据：[Thermo Exactive 系列手册](https://documents.thermofisher.com/TFS-Assets/CMD/manuals/man-bre0012255-exactive-series-manbre0012255-en.pdf)、[Q Exactive 技术论文](https://pmc.ncbi.nlm.nih.gov/articles/PMC3284220/)。
 
-离子 worker 的状态/时间/内存预算属于运维配置，见[部署说明](installation.md#离子后台资源)。预算不是实验阈值或错误率。
+离子 worker 的状态/时间/内存预算属于运维配置，见[部署说明](01-installation.md#离子后台资源)。预算不是实验阈值或错误率。

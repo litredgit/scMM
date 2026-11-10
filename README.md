@@ -6,40 +6,21 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 
 ## 功能入口
 
-包版本为 `0.2.0`（Alpha）；本页概括使用入口，具体进展、回归和部署证据见 [CHANGELOG](CHANGELOG.md)。
+当前版本为 0.2.0（Alpha）。
 
-| 能力 | 使用说明 |
+| 场景 | 文档 |
 |---|---|
-| Vue/FastAPI 六步网页：原始谱、提取审核、预处理、分析、图表与结果保存 | [Vue 网页操作](docs/workflow.md#vue-网页项目与样本) |
-| 个人 API、流式只读 AI 分析助手及匿名上下文 | [AI 分析助手](docs/workflow.md#ai-分析助手) |
-| 管理员只读监控、24 小时资源趋势与活动页面更新检查 | [管理员监控](docs/workflow.md#管理员监控) |
-| 快照/缓存保留建议、配对归档恢复与默认关闭的管理员持续保留规则 | [持续自动保留](docs/data-output.md#持续自动保留) |
-| 管理员创建账号、会话认证和单团队共享项目 | [服务器初始化与登录](docs/installation.md#服务器初始化与账号) |
-| 持久批处理、共同/独立特征、失败继续、停止后续样本和重试 | [多样本流程](docs/workflow.md) |
-| Thermo profile RAW 直接读取，接入 Python、CLI、目录处理及网页 | [RAW 依赖与真实样本验收](docs/thermo-raw.md) |
-| 已处理 H5AD/旧 CSV 矩阵 union/ref 合并、来源映射和完整起点 | [合并流程](docs/workflow.md#合并已处理矩阵) |
-| H5AD、预处理起点恢复、结果失效管理、只读报告与图表重载 | [数据与输出](docs/data-output.md) |
-| 统一降维、双特征散点/特征距离嵌入、差异/Marker/相关网络、监督模型诊断和 SHAP | [分析说明](docs/analysis.md) |
-| 网页 Palantir 稳定 ID 根点、滑动窗口轨迹/代谢速度/代谢物趋势及趋势聚类、命名结果和完整导出 | [伪时间与轨迹](docs/time-analysis.md#palantir-伪时间) |
-| 独立 TIC/EIC 信号重构、残差与噪声对照，不改提取算法 | [原始信号诊断](docs/analysis.md#独立原始信号诊断) |
-| 热图组别／样本筛选与排序、Nature／Cell 图形及 MetaboAnalyst 矩阵 CSV 导出 | [图形操作](docs/workflow.md#论文图细胞联动与热图) · [矩阵格式](docs/data-output.md#面向-metaboanalyst-的矩阵下载) |
-| 当前数据 QC PDF、当前分析报告及完整参数/数值附件 ZIP | [报告说明](docs/analysis.md#统计解释与网页分析) |
-| 离子关系/竞争 EC、独立 L0/L1/L2、通用本地候选及标准品/群体 MS/MS 证据 | [离子归组与证据](docs/workflow.md#离子归组与化合物证据) |
-| 网页 LMSD 候选、相关性辅助排序、天然同位素标记、分类饼图及特征/分子网络 | [注释与同位素](docs/workflow.md#注释与同位素) |
-
-后续工作与暂缓决策统一见 [roadmap](docs/roadmap.md)。
-网页覆盖范围与全部 Python 能力不同：旧脂质注释保留全部峰和候选；新离子流程通过独立视图去冗余，原测量根保持不可变；
-Python 原有删峰/求和去同位素接口与部分时间/趋势分析继续保留，边界见[分析说明](docs/analysis.md)。
-当前交付与后续范围见 [发展计划](docs/roadmap.md)。
-
-同行复核提取方法可直接阅读[细胞事件与特征峰确认流程](docs/cell-feature-identification.md)。
+| 网页：提取审核、预处理、分析与项目保存 | [网页操作](docs/02-workflow.md) |
+| 脚本、Notebook 与命令行 | [Python/CLI](docs/05-python-api.md) · [Notebook](docs/02-workflow.md#notebook参数化流程) |
+| 质谱提取与候选注释 | [细胞与特征识别](docs/03-cell-feature-identification.md) · [离子归组](docs/02-workflow.md#离子归组与化合物证据) |
+| 统计、降维、监督模型与时间趋势 | [分析](docs/07-analysis.md) · [时间与趋势](docs/08-time-analysis.md) |
+| 查看文件、图表和矩阵导出格式 | [数据与输出](docs/06-data-output.md) |
 
 ## 从这里开始
 
-- 代理接手与协作规则：[AGENTS.md](AGENTS.md)。
-- [安装与部署](docs/installation.md) → [网页与 Notebook 工作流程](docs/workflow.md)
-- [参数参考](docs/parameters.md) · [Python/CLI](docs/python-api.md) · [分析](docs/analysis.md)
-- [排错](docs/troubleshooting.md) · [待办](docs/roadmap.md) · [完整文档索引](docs/README.md)
+- [安装与部署](docs/01-installation.md) → [网页与 Notebook 工作流程](docs/02-workflow.md)
+- [参数参考](docs/04-parameters.md) · [Python/CLI](docs/05-python-api.md) · [分析](docs/07-analysis.md)
+- [排错](docs/11-troubleshooting.md) · [待办](docs/14-roadmap.md) · [完整文档索引](docs/README.md)
 
 ## 最短使用路径
 
@@ -53,9 +34,9 @@ uv sync --locked --all-extras --dev
 scMM。后续命令统一通过 `uv run` 执行，无需手工激活环境。
 
 本机生产网页使用 main / 5006，开发使用 dev / 5007，Python 环境及结果分别隔离；
-启动、发布与回滚见 [安装部署](docs/installation.md#开发与生产分离)。
+启动、发布与回滚见 [安装部署](docs/01-installation.md#开发与生产分离)。
 网页启动前必须完成仓库外资源配置和管理员初始化，不支持匿名启动；普通成员不能配置服务器路径。
-网页操作见 [Vue 六步流程](docs/workflow.md#vue-网页项目与样本)。
+网页操作见 [Vue 六步流程](docs/02-workflow.md#vue-网页项目与样本)。
 自动化处理可直接使用命令行（参考离子必须按实验修改）：
 
 ```bash
@@ -63,22 +44,19 @@ uv run --locked scmm-process input.mzML results --ref-mz 734.5929
 uv run --locked scmm-process raw-data/ results --ref-mz 734.5929 --jobs 4
 ```
 
-Python 调用、保存重载和目录处理见 [API 与批处理](docs/python-api.md)。
+Python 调用、保存重载和目录处理见 [API 与批处理](docs/05-python-api.md)。
 需要逐步质控和绘图时打开 [scMM_workflow.ipynb](scMM_workflow.ipynb)，
-修改顶部参数单元后按 [Notebook 流程](docs/workflow.md#notebook参数化流程) 执行。
+修改顶部参数单元后按 [Notebook 流程](docs/02-workflow.md#notebook参数化流程) 执行。
 
 ## 支持范围
 
 - Python：3.11–3.12；`.python-version` 将本地开发默认固定为 Python 3.12。
 - 原始谱：mzML、mzXML；Thermo RAW 仅接受 profile，需另行部署 .NET 8 reader，
-  `uv sync` 不安装厂商组件，详见[安装说明](docs/installation.md#thermo-raw-额外依赖)。
+  `uv sync` 不安装厂商组件，详见[安装说明](docs/01-installation.md#thermo-raw-额外依赖)。
 - 核心依赖：PyOpenMS、NumPy、pandas、SciPy、scikit-learn、AnnData。
 - 可选分析：Matplotlib、Seaborn、UMAP、Palantir、Leiden/Louvain。
 - Vue 网页：Vue 3、TypeScript、FastAPI；Python 使用 `web` extra，前端需 Node.js 构建，
-  运行入口为 `scmm-web`。完整六步功能与构建步骤见[安装部署](docs/installation.md#vuefastapi-网页)。
+  运行入口为 `scmm-web`。完整六步功能与构建步骤见[安装部署](docs/01-installation.md#vuefastapi-网页)。
 
 正式分析前应使用标准样品和实验质控数据验证
 参考离子、ppm 容差、SNR 阈值及归一化方案。
-
-网页新增独立降维/聚类/注释板块、PCA 二/三维选择、分类权重 Marker、完整 SHAP 解释和热图，支持点击细胞比较质谱。
-图形提供论文尺寸、SVG/PDF/指定 DPI PNG 与完整作图数据导出；管理员维护支持会话暂存及模型恢复。操作见[网页流程](docs/workflow.md)。

@@ -2,3 +2,7 @@
 !cell-feature-overview.svg
 !cell-event-window.svg
 !cell-feature-intensity.svg
+# Source illustrations for the workflow, data model, and time guides.
+!web-workflow.svg
+!ion-data-views.svg
+!time-coordinates.svg

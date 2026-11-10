@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="255" viewBox="0 0 640 255" role="img" aria-labelledby="title description">
+  <title id="title">三种时间坐标</title>
+  <desc id="description">实验时间、采集进程与伪时间分别来自实验记录、扫描时间和算法输入，单位也不同。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M1 1 L7 4 L1 7" fill="none" stroke="#56728e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="640" height="255" rx="16" fill="#f8fbfe" stroke="none"/>
+  <g font-family="Noto Sans CJK SC, Microsoft YaHei, PingFang SC, sans-serif">
+    <rect x="16" y="14" width="608" height="69" rx="12" fill="#edf4fc" stroke="#bacfe5"/>
+    <text x="39" y="56" font-size="25" font-weight="700" fill="#24568c" text-anchor="start">实验时间</text>
+    <text x="199" y="56" font-size="23" font-weight="400" fill="#172c43" text-anchor="start">实验记录</text>
+    <text x="416" y="56" font-size="22" font-weight="400" fill="#385570" text-anchor="start">沿用实际时间单位</text>
+    <rect x="16" y="93" width="608" height="69" rx="12" fill="#e9f6f1" stroke="#b3d9cb"/>
+    <text x="39" y="135" font-size="25" font-weight="700" fill="#126352" text-anchor="start">采集进程</text>
+    <text x="199" y="135" font-size="23" font-weight="400" fill="#172c43" text-anchor="start">原始扫描时间</text>
+    <text x="416" y="135" font-size="22" font-weight="400" fill="#385570" text-anchor="start">归一化到 0–1</text>
+    <rect x="16" y="172" width="608" height="69" rx="12" fill="#fff5e4" stroke="#ebd5aa"/>
+    <text x="39" y="214" font-size="25" font-weight="700" fill="#785117" text-anchor="start">伪时间</text>
+    <text x="199" y="214" font-size="23" font-weight="400" fill="#172c43" text-anchor="start">输入表示与根点</text>
+    <text x="416" y="214" font-size="22" font-weight="400" fill="#385570" text-anchor="start">无量纲算法坐标</text>
+  </g>
+</svg>

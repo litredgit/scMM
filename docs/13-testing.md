@@ -1,6 +1,6 @@
-# 测试职责与检查入口
+# 13 测试职责与检查入口
 
-[任务导航](README.md) · [架构职责](development.md)
+[任务导航](README.md) · [架构职责](12-development.md)
 
 ## 完整验证
 
@@ -117,7 +117,7 @@ Linux Chromium 仍需系统动态库和字体，缺库属于浏览器未启动�
 
 ### 手动全量入口
 
-仅在明确需要完整检查时执行；日常修改和本轮整理不默认执行：
+需要全量验证时运行：
 
 ```bash
 uv run --no-sync python scripts/test_blocks.py --all --run
@@ -140,7 +140,7 @@ uv run --no-sync python -m pytest -W error --cov=scMM --cov-report=term-missing
 质量/同位素搜索不构造特征平方矩阵。相关网络在 `util/lipid_network.py` 按样本使用临时特征平方相关矩阵，
 只对绘图阈值以上或化学关系对计算共同检出相关；审阅感知的饼图/分子映射/显示投影在 `lipid_network_views.py`。
 节点显示上限不减少辅助证据计算，完整候选包括同质量异构记录，公式分布缓存复用，不以截断候选节省资源。
-按用户确认，本轮限于 ≤500 特征的同步请求，不开展 M1/M2；不能据此宣称其他重任务已后台化。
+本检查只覆盖最多 500 特征的同步请求。
 
 合成规模报告可在数据库已准备的环境复现：
 
@@ -158,7 +158,7 @@ python tools/benchmark_lipid_annotation.py --cells 10000 --samples 10 --features
 相关网络的当前合成规模证据另见
 [3,000 × 500 网络报告](validation/lipid-network-synthetic-3000x500.json)和
 [10,000 × 500 网络报告](validation/lipid-network-synthetic-10000x500.json)。复用上述命令并更换输出文件名可复现；
-本次领域总耗时包含相关网络，报告新增两层边对数、化学关系数和注释版本 JSON 大小。
+总耗时包含相关网络。报告还记录边对数、化学关系数和注释 JSON 大小。
 图表/网络模块在安装包内，版本数据随 H5AD/项目保存；前端不持有矩阵或执行化学判定。
 
 专项检查为 `tests/domain/test_lipid_annotation.py`、`tests/api/test_web_lipids.py` 和 `frontend/tests/lipids.spec.ts`，

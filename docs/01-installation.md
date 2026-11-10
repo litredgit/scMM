@@ -1,9 +1,9 @@
-# 安装与部署
+# 01 安装与部署
 
 [返回文档索引](README.md)
 
-本页负责环境安装、启动配置与服务更新；网页操作见 [工作流程](workflow.md)，
-参数含义见 [参数参考](parameters.md)，reader 构建与协议见 [RAW 技术说明](thermo-raw.md)。
+本页负责环境安装、启动配置与服务更新；网页操作见 [工作流程](02-workflow.md)，
+参数含义见 [参数参考](04-parameters.md)，reader 构建与协议见 [RAW 技术说明](10-thermo-raw.md)。
 
 ## 推荐方式：uv
 
@@ -36,7 +36,7 @@ mzML/mzXML 使用 Python 环境中的 PyOpenMS。直接读取 Thermo profile RAW
 reader 默认查找用户目录中的部署文件，也可用 `SCMM_THERMO_READER`（DLL 路径）和
 `SCMM_DOTNET`（运行程序路径）指定。采集时区默认 `Asia/Shanghai`，可通过
 `raw_timezone` / `SCMM_RAW_TIMEZONE` 覆盖。依赖版本、构建步骤、部署路径和验证证据见
-[Thermo RAW 技术说明](thermo-raw.md)。不会在直接读取失败时自动转换 mzML；
+[Thermo RAW 技术说明](10-thermo-raw.md)。不会在直接读取失败时自动转换 mzML；
 旧 `--msconvert` / `msconvert_path` 参数及手动转换模块已移除。
 
 ## 使用 Notebook
@@ -50,7 +50,7 @@ uv run --locked jupyter lab
 
 打开项目根目录的 `scMM_workflow.ipynb`，选择显示名为 `scMM`、内部名称为 `scmm` 的内核。
 VS Code 也可直接选择仓库内的 `.venv/bin/python`。Notebook 的功能和参数见
-[参数化 Notebook 工作流](workflow.md)。
+[参数化 Notebook 工作流](02-workflow.md)。
 
 ## 依赖分组
 
@@ -81,7 +81,7 @@ uv sync --locked --extra web
 仅安装 `web` 时仍可使用窗口轨迹；Palantir 缺失会明确报错，不改用其他算法。
 
 完整交互开发环境可使用 `uv sync --locked --all-extras --dev`。PR 验证按
-[受影响测试块](testing.md#选择规则与-ci)安装需要的 extras，仍共享同一份锁文件，不默认安装 Notebook 工具链。
+[受影响测试块](13-testing.md#选择规则与-ci)安装需要的 extras，仍共享同一份锁文件，不默认安装 Notebook 工具链。
 
 ## 验证安装
 
@@ -165,7 +165,7 @@ uv run --locked scmm-admin --server-config ~/.config/scmm/dev.json rotate-operat
 
 配置优先级为 **命令行 > 环境变量 > 本地资源配置 > 通用默认值**。
 资源配置文件由 `--server-config`、`SCMM_SERVER_CONFIG`、`~/.config/scmm/server.json` 依次选择；显式选定的文件不存在即报错。
-`--config` / `SCMM_UI_CONFIG` 仍仅管理实验参数，格式见[参数参考](parameters.md#网页默认参数)。
+`--config` / `SCMM_UI_CONFIG` 仍仅管理实验参数，格式见[参数参考](04-parameters.md#网页默认参数)。
 
 | 资源 | 命令行 | 环境变量 | 资源配置字段 |
 |---|---|---|---|
@@ -221,7 +221,7 @@ TLS 使用原始主机名验证；不使用环境代理、不跟随重定向。�
 例如 `http://127.0.0.1:8000/v1`；只放行该协议、主机、端口及路径，不是网段或通配符。
 环境变量 `SCMM_AI_PRIVATE_URLS` 为 JSON 列表；留空为 `[]`。请只放行可信模型服务。
 
-用户在[我的账号](workflow.md#ai-分析助手)保存地址、模型和新 Key；配置按登录用户隔离，
+用户在[我的账号](02-workflow.md#ai-分析助手)保存地址、模型和新 Key；配置按登录用户隔离，
 不允许管理员通过网页读取别人的 Key。代理仅发送 Chat Completions 文本请求，不支持工具或模型执行接口。
 请求连接超时 10 秒、读取空闲超时 30 秒、整轮上限 180 秒，测试上限 40 秒；每账号同时仅一个 AI 请求，
 不自动重试。停止/断开会关闭上游连接；上游计费及数据留存由所选服务商决定。
@@ -243,13 +243,13 @@ TLS 使用原始主机名验证；不使用环境代理、不跟随重定向。�
 | 全局预设 | `~/data/results/.scmm-preferences.json` | `~/.local/state/scmm/dev/preferences.json` |
 
 已有部署的回收区约定为 `~/data/results/recycle`；新部署由 `recycle_root` 明确指定，需要服务用户可读写；
-项目根、缓存、预设和临时目录仍分别隔离；这些是部署目录约定，实际资源值由仓库外配置指定。回收及清空操作见[网页指南](workflow.md#保存和离开)。
+项目根、缓存、预设和临时目录仍分别隔离；这些是部署目录约定，实际资源值由仓库外配置指定。回收及清空操作见[网页指南](02-workflow.md#保存和离开)。
 自动保留策略与最近运行记录默认保存在各环境项目根的 `.scmm-retention.sqlite3`，可用 `retention_db` 明确指定仓库外、不可浏览的本地持久路径；父目录须已存在。
 CIFS 等共享盘可能不支持 SQLite 文件锁，项目仍可留在共享盘，数据库须选择支持 SQLite 的本地磁盘，并按开发/生产隔离。指定路径失败时报错，不自动切换或创建父目录。
 已有策略迁移须在服务停止后备份并完整复制数据库，不能用空库代替；备份包含所配置路径。策略按项目 ID 和启用管理员授权隔离，
 默认无启用规则；备份项目根时保留此环境管理数据库，不把它当缓存清理。服务保持单进程、一个串行自动保留线程。
 正常停止会等当前归档到达安全检查点，维护暂存/更新检查会阻止跨越正在运行或无法核实的清理。
-异常退出的运行不会自动重放，检查回收区并处理后重新审阅启用；详情见[持续自动保留](data-output.md#持续自动保留)。
+异常退出的运行不会自动重放，检查回收区并处理后重新审阅启用；详情见[持续自动保留](06-data-output.md#持续自动保留)。
 
 项目内的预览缓存、批次状态和快照随各自的项目根隔离。启动器为同步工具设置 `XDG_CACHE_HOME`、
 `UV_CACHE_DIR`、`NUMBA_CACHE_DIR`、`MPLCONFIGDIR` 和 `TMPDIR`，网页再应用资源配置中的缓存/临时目录，后台 worker 继承生效值。
@@ -301,7 +301,7 @@ python3 scripts/scmm_env.py install
 
 评分预设保存为 `SCMM_PREFERENCES` 所在目录的 `lipid-rules.json`，沿用开发/生产预设隔离；
 安装包默认提供五份可选审阅草案；同名用户预设优先保留，不追溯修改旧项目。参数、导入格式和流程见
-[网页参数](parameters.md#网页注释与同位素)与[工作流程](workflow.md#注释与同位素)。
+[网页参数](04-parameters.md#网页注释与同位素)与[工作流程](02-workflow.md#注释与同位素)。
 
 ## 日常开发与调试
 
@@ -330,9 +330,7 @@ python3 scripts/scmm_env.py serve dev
 
 ## 发布、更新与回滚
 
-任务完成并通过相关检查后，更新 5007 开发服务供用户验收，保留修改且不自动提交。
-用户明确确认本任务或里程碑验收通过后，再提交、推送并部署生产；协作授权约定见
-[代理工作指南](../AGENTS.md#协作约定)。
+发布授权见[协作约定](../AGENTS.md#协作约定)。先完成[分块验证](13-testing.md#完整验证)。发行包内容有变化时，用本次构建的 wheel 在受支持的独立环境中检查 `scmm-process --help`；提取或读取链变化时，补跑相应格式的端到端验证。
 
 在开发目录中使用同一个脚本：
 
@@ -358,7 +356,7 @@ python3 scripts/scmm_env.py status
 ```
 
 发布/更新只接受干净 worktree，并用 fast-forward 更新 `main`；分支分叉须先在开发环境处理。
-发布前执行 [开发验证](testing.md#完整验证)。脚本串行锁定环境操作，自动执行下述部署优先维护，
+发布前执行 [开发验证](13-testing.md#完整验证)。脚本串行锁定环境操作，自动执行下述部署优先维护，
 不再要求项目关闭、未保存工作区清零、失联页面人工确认或浏览器 TCP 连接清零。
 正式写入安全结束、相关计算进程退出后才停止服务并变更代码及依赖。新进程通过 systemd 状态和首页 HTTP 检查后，
 `release` 才推送远端 `main`；网络推送失败时，本地新服务已生效，修复网络后补推即可。
@@ -453,7 +451,7 @@ python3 scripts/scmm_env.py release --migrate-auth
 网页 PDF 导出使用锁定的 svglib/ReportLab，附带安全 SVG 检查；无需系统 Cairo。监督维护恢复使用 supervised 可选组中的 skops。
 
 网页 QC/分析 PDF 使用 `web` extra 的 ReportLab（锁定依赖），中文以 STSong-Light CID 字体声明，
-不需要服务端浏览器或额外训练模型；已有 Matplotlib Python QC 报告接口继续保留。报告范围与资源边界见[分析说明](analysis.md#统计解释与网页分析)。
+不需要服务端浏览器或额外训练模型；已有 Matplotlib Python QC 报告接口继续保留。报告范围与资源边界见[分析说明](07-analysis.md#统计解释与网页分析)。
 
 管理员在账号页暂存资源配置；维护任务通过用户级 systemd 延后执行并健康检查，失败回滚上一配置，代码更新沿用环境脚本的失败回滚。
 批准版本清单位于 `<server-config 所在目录>/<配置名>.recovery/approved.json`（提交 SHA 数组）；只加入已验收或用户明确授权发布的版本。
@@ -472,7 +470,7 @@ Cell PDF 导出要求服务账号可发现真实且有使用授权的 Arial（�
 管理员按字体授权安装到服务账号字体目录后，在维护更新时重建该账号的 Matplotlib 字体索引并重启服务。
 未找到 Arial 时该规格 PDF 明确报错，通用 PDF 仍可使用原有嵌入字体；SVG 可交给有 Arial 的排版环境处理。
 浏览器端 SVG 声明字体、PNG 使用浏览器实际字体，服务器装字体不等于用户浏览器已安装。
-具体出版规格见[论文图操作](workflow.md#论文图细胞联动与热图)。
+具体出版规格见[论文图操作](02-workflow.md#论文图细胞联动与热图)。
 
 ## 离子后台资源
 
@@ -493,3 +491,12 @@ Cell PDF 导出要求服务账号可发现真实且有使用授权的 Arial（�
 worker 结果和日志单文件上限 50 MB，网页导入上限 75 MB（含解压科学数组预算），Python 导入可显式选择预算。
 Linux worker 绑定父进程死亡信号；取消/维护按进程组限时终止并核实退出。重启把未完成任务标记 interrupted，不能将临时产物冒充正式恢复包。
 运行监控包含新任务，部署维护先停止并核实进程退出，再暂存科学工作区。正式模型仍只按已有维护白名单恢复。
+
+## 发布前的敏感信息检查
+
+用 `python scripts/check_sensitive.py` 扫描当前源码和发行产物。历史需单独运行
+`python scripts/check_sensitive.py --history --report /tmp/scmm-security-audit.json`。
+输出只列类别、位置和对象摘要。超出扫描上限的产物需要另行核查。
+
+[历史审计报告](validation/open-source-audit.json)记录了个人路径、内网地址和旧 Notebook 输出。当前文件清理只影响现有版本。
+历史重写需要另行授权，并先在隔离镜像备份、复查和验证。发现真实凭据时先撤销或轮换。

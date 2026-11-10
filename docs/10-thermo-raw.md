@@ -1,10 +1,8 @@
-# Thermo RAW：运行依赖、协议与验证
+# 10 Thermo RAW：运行依赖、协议与验证
 
-[文档索引](README.md) · [安装部署](installation.md) · [Python API](python-api.md)
+[文档索引](README.md) · [安装部署](01-installation.md) · [Python API](05-python-api.md)
 
-本页负责外部 reader 的构建、读取协议和数值精度；常规 Python 环境/服务管理见安装部署，
-使用调用见 API，阶段实现及部署进展见 [CHANGELOG](../CHANGELOG.md)。
-下方真实对照是有固定输入和条件的历史证据，不是当前服务或跨仪器支持状态。
+真实文件对照只适用于报告中的输入和采集条件。
 
 ## 支持范围与运行行为
 
@@ -133,4 +131,4 @@ uv run --locked --with psutil==7.2.2 python tools/validate_thermo_pipeline.py \
 - RAW：`f604eeb601b3db97e947bc398ebeb2e0ad258d2322a873b0e9d5e95f1a38bff5`
 - mzML：`fd2f7a7250b7c90b52c2aa9c51af9bb7f07e995a4f42de994d569373a267fa6f`
 
-验证不作生产自动放行依据，也不扩大为跨仪器、批量负载或环境支持结论；真实验证类待办已取消，见[当前规划](roadmap.md)。
+验证不作生产自动放行依据，也不扩大为跨仪器、批量负载或环境支持结论；真实验证类待办已取消，见[当前规划](14-roadmap.md)。
