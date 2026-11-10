@@ -198,7 +198,6 @@ useViewState('preprocess', {
 })
 </script>
 <template>
-  <MatrixDownload source="current" />
   <DataViewSelector />
   <p v-if="store.project?.dataset">
     <RouterLink to="/ions">离子归组与注释（统计预处理前）</RouterLink>
@@ -218,6 +217,7 @@ useViewState('preprocess', {
         ><span class="step-badge">04 / 06</span>
       </div>
     </div>
+    <MatrixDownload source="current" />
     <div class="card">
       <h2>处理当前矩阵</h2>
       <div class="field-grid">

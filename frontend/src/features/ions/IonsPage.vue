@@ -353,6 +353,23 @@ onUnmounted(() => {
   generation++
   polling.stop()
 })
+const taskStatuses: Record<string, string> = {
+  queued: '等待执行',
+  running: '计算中',
+  succeeded: '计算完成',
+  failed: '计算失败',
+  cancelled: '已取消',
+  interrupted: '已中断',
+}
+const taskReasons: Record<string, string> = {
+  'worker submission failed': '无法启动任务，可重新生成。',
+  'task wall time budget exceeded': '计算超时，可调整候选条件后重试。',
+  'worker failed; inspect task log': '计算出错，可重新生成。',
+  'cancelled by user': '已停止计算，可重新生成。',
+  'service restarted': '服务重启，可重新生成。',
+  'service maintenance': '服务维护，可重新生成。',
+  'workspace/input changed; explicitly run a new task': '输入已变化，请重新生成。',
+}
 function label(view: IonView) {
   return `${view.level} · ${view.cell_ids.length} × ${(view.variable_ids ?? view.feature_ids).length} · ${view.id.slice(0, 8)}`
 }
@@ -398,33 +415,49 @@ function label(view: IonView) {
                 </option>
               </select></label
             >
-            <label title="polarity：按采集极性分别归组"
-              >采集极性<select v-model="polarity">
+            <label
+              ><FieldLabel name="采集极性" help-key="polarity" text="按采集极性分别归组" /><select
+                v-model="polarity"
+              >
                 <option value="pos">正离子</option>
                 <option value="neg">负离子</option>
               </select></label
             >
-            <label title="ppm：相对预测 m/z 的容差"
-              >质量容差 (ppm)<input
+            <label
+              ><FieldLabel name="质量容差 (ppm)" help-key="ppm" text="相对预测 m/z 的容差" /><input
                 v-model.number="ppm"
                 type="number"
                 min="0.1"
                 max="100"
                 step="0.5"
             /></label>
-            <label title="species：多选明确的离子形式"
-              >离子形式<select v-model="species" aria-label="离子形式" multiple size="5">
+            <label
+              ><FieldLabel name="离子形式" help-key="species" text="可多选明确的离子形式" /><select
+                v-model="species"
+                aria-label="离子形式"
+                multiple
+                size="5"
+              >
                 <option v-for="row in availableSpecies" :key="row.id">{{ row.id }}</option>
               </select></label
             >
           </div>
           <details>
             <summary>分子式条件同位素证据</summary>
-            <label title="resolution_200：实际采集配置，不能从仪器型号推定"
-              >m/z 200 处分辨率<input v-model.number="resolution" type="number"
+            <label
+              ><FieldLabel
+                name="m/z 200 处分辨率"
+                help-key="resolution_200"
+                text="填写实际采集配置，不能从仪器型号推定" /><input
+                v-model.number="resolution"
+                type="number"
             /></label>
-            <label title="formula_hypotheses：feature_id/formula/species_id"
-              >已有分子式假设 JSON<textarea v-model="formulaHypotheses" rows="3" />
+            <label
+              ><FieldLabel
+                name="已有分子式假设 JSON"
+                help-key="formula_hypotheses"
+                text="字段为 feature_id、formula 和 species_id"
+              /><textarea v-model="formulaHypotheses" rows="3" />
             </label>
           </details>
           <button class="primary" :disabled="store.busy || !root" @click="safely(run)">
@@ -434,10 +467,14 @@ function label(view: IonView) {
             化学质量约束优先；跨细胞相关仅作辅助。搜索触限保留未完成状态，不能用于去冗余。
           </p>
           <div v-for="task in info.tasks" :key="task.id" class="actions">
-            <span>{{ task.id.slice(0, 8) }} · {{ task.status }} {{ task.reason }}</span>
+            <span>
+              {{ task.id.slice(0, 8) }} ·
+              {{ task.collected ? '已收集' : (taskStatuses[task.status] ?? '状态未知') }}
+              {{ task.reason ? (taskReasons[task.reason] ?? task.reason) : '' }}
+            </span>
             <button
               v-if="['queued', 'running'].includes(task.status)"
-              class="danger"
+              class="restore"
               :disabled="store.busy"
               @click="command('cancel', { job_id: task.id })"
             >

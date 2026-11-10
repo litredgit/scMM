@@ -206,7 +206,6 @@ const parameterTable = computed<DataTable>(() => {
 useViewState('extraction', { path, included, checked, figures, signalSample, signalFigure })
 </script>
 <template>
-  <MatrixDownload source="extracted" />
   <section v-if="store.project" class="extraction-workspace" :class="{ 'has-batch': selected }">
     <div class="page-title">
       <div>
@@ -216,6 +215,7 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
       </div>
       <span class="step-badge">03 / 06</span>
     </div>
+    <MatrixDownload source="extracted" />
     <div class="card">
       <div class="section-heading">
         <h2>项目任务</h2>

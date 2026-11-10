@@ -115,8 +115,16 @@ test('matrix CSV uses editable sample labels without changing analysis groups', 
   page,
 }) => {
   await importData(page, '矩阵下载')
+  await page.route(
+    /\/workspace\/results\/matrix\?source=current$/,
+    (route) => route.fulfill({ status: 503, json: { detail: '暂时无法读取矩阵' } }),
+    { times: 1 },
+  )
   await page.getByRole('link', { name: /预处理/ }).click()
   const panel = page.getByRole('region', { name: '矩阵 CSV 下载' })
+  await expect(panel.getByText('未能读取矩阵信息。')).toBeVisible()
+  await expect(panel.getByRole('button', { name: '下载预处理矩阵 CSV' })).toBeDisabled()
+  await panel.getByRole('button', { name: '重试读取' }).click()
   await expect(panel.getByRole('button', { name: '下载预处理矩阵 CSV' })).toBeEnabled()
   await panel.getByText('CSV 标签设置', { exact: true }).click()
   const inputs = panel.getByRole('textbox')
