@@ -127,6 +127,7 @@ function changeLegend(event: Event) {
   )
 }
 const emit = defineEmits<{
+  selection: [cells: string[]]
   select: [feature: string]
   range: [range: [number, number]]
   viewport: [value: Record<string, unknown>]

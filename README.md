@@ -17,6 +17,8 @@ Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵�
 | 统计、降维、监督模型与时间趋势 | [分析](docs/07-analysis.md) · [时间与趋势](docs/08-time-analysis.md) |
 | 查看文件、图表和矩阵导出格式 | [数据与输出](docs/06-data-output.md) |
 
+新增逐文件提取裁剪、可逆筛选标签、目标相关性、候选集合及外部注释/MS/MS 证据入口；操作与边界见[网页流程](docs/02-workflow.md#新上游功能的网页操作)。
+
 ## 从这里开始
 
 - [安装与部署](docs/01-installation.md) → [网页工作流程](docs/02-workflow.md)

@@ -26,6 +26,8 @@ export const names: Record<string, string> = {
   window_index: '窗口索引',
   sorted_position: '时间排序位置',
   ref_mz: '参考离子',
+  rt_range: '提取时间范围（秒）',
+  frame_range: '提取原始帧范围',
   reference_mz: '参考离子',
   reference_mode: '参考判定',
   extraction_method: '提取方法',

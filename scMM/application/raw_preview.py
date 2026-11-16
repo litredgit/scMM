@@ -33,7 +33,7 @@ def detection_from_payload(payload):
     references = tuple(float(mz) for mz in payload["reference_mz"])
     traces = pd.DataFrame(
         {
-            "frame_id": np.arange(len(signal)),
+            "frame_id": payload["frame_obs"].index.to_numpy(copy=True),
             "rt_seconds": payload["frame_obs"]["rt"].to_numpy(copy=True),
             "cell_window": np.asarray(payload["cell_mask"]).copy(),
             "cell_apex": np.zeros(len(signal), dtype=bool),
@@ -136,6 +136,8 @@ class RawFilePreview:
             None,
             3,
             (parameters.mz_min, parameters.mz_max),
+            parameters.rt_range,
+            parameters.frame_range,
         )
         if targets is None:
             state = align_raw_experiment(self.experiment, self.metadata, self.path, config)
@@ -143,7 +145,14 @@ class RawFilePreview:
             from scMM.file._dataset_loading import DatasetState, _annotate_single_file_frames
             from scMM.file.io import align_frame
 
-            frame, obs = align_frame(self.experiment, targets, ppm=parameters.ppm_tol)
+            frame, obs = align_frame(
+                self.experiment,
+                targets,
+                ppm=parameters.ppm_tol,
+                resolution_200=parameters.resolution,
+                rt_range=parameters.rt_range,
+                frame_range=parameters.frame_range,
+            )
             metadata = dict(self.metadata)
             _annotate_single_file_frames(obs, metadata)
             metadata.update(

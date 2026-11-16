@@ -25,7 +25,23 @@ def heatmap_figure(
     colorscale="RdBu",
     color_min=None,
     color_max=None,
+    linkage_method="average",
+    distance="euclidean",
+    aggregate_method="mean",
 ):
+    if linkage_method not in {"average", "complete", "single", "ward"} or distance not in {
+        "euclidean",
+        "cityblock",
+        "cosine",
+        "correlation",
+    }:
+        raise ValueError("请选择有效的聚类方法和距离。")
+    if linkage_method == "ward" and distance != "euclidean":
+        raise ValueError("Ward 仅支持欧氏距离。")
+    if aggregate_method not in {"mean", "median", "sum"}:
+        raise ValueError("请选择有效聚合方式。")
+    if equal_samples and aggregate_method != "mean":
+        raise ValueError("样本等权平均仅支持 mean 聚合。")
     data = plot_subset(data, scope, chronological=not cluster_columns)
     if colorscale not in {"RdBu", "PuOr", "Viridis", "Cividis"}:
         raise ValueError("请选择有效的热图色板。")
@@ -67,7 +83,7 @@ def heatmap_figure(
                 else frame.groupby(groups, observed=True, sort=False).mean().T
             )
         else:
-            aggregate = frame.groupby(groups, observed=True, sort=False).mean().T
+            aggregate = frame.groupby(groups, observed=True, sort=False).agg(aggregate_method).T
         for key, values in (
             ((scope or {}).get("sample_key"), (scope or {}).get("samples")),
             ((scope or {}).get("group_key"), (scope or {}).get("groups")),
@@ -91,7 +107,7 @@ def heatmap_figure(
         if not enabled or len(values) < 2 or not np.any(np.ptp(values, axis=0)):
             return np.arange(len(values))
         return leaves_list(
-            linkage(values, method="average", metric="euclidean", optimal_ordering=True)
+            linkage(values, method=linkage_method, metric=distance, optimal_ordering=True)
         )
 
     rows, columns = order(display, cluster_rows), order(display.T, cluster_columns)
@@ -192,6 +208,9 @@ def heatmap_figure(
         yaxis_title="Feature",
         meta={
             "parameters": {
+                "linkage_method": linkage_method,
+                "distance": distance,
+                "aggregate_method": aggregate_method,
                 "features": features,
                 "layer": layer,
                 "group_key": group_key,

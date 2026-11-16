@@ -34,6 +34,8 @@ def project_candidate(project):
     if project.workspace.data is not None:
         candidate.workspace.data = project.workspace.data.copy()
         candidate.workspace._original = project.workspace._original.copy()
+        if project.workspace._selection_source is not None:
+            candidate.workspace._selection_source = project.workspace._selection_source.copy()
     return candidate
 
 
@@ -422,7 +424,15 @@ class ProjectWorkflow:
                 raise ValueError("映射包含未知的结果样本或项目样本。")
             candidate.manifest.update(sample_column=source_key, sample_mapping=mapping)
             # Explicit remapping must take precedence over previous sample IDs.
-            for dataset in (candidate.workspace.data, candidate.workspace._original):
+            for dataset in (
+                candidate.workspace.data,
+                candidate.workspace._original,
+                *(
+                    [candidate.workspace._selection_source]
+                    if candidate.workspace._selection_source is not None
+                    else []
+                ),
+            ):
                 if "sample_id" not in dataset.obs:
                     dataset.obs["sample_id"] = ""
                 values = dataset.obs[source_key].astype(str)

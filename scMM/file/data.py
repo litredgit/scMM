@@ -46,6 +46,8 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         distance: int = 3,
         mz_range=(100.0, 1000.0),
         raw_timezone=None,
+        rt_range=None,
+        frame_range=None,
         **preprocess_kwds,
     ) -> Self:
         """Load, align, and preprocess one mzML/mzXML or profile Thermo RAW file."""
@@ -61,6 +63,8 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
             distance=distance,
             mz_range=mz_range,
             raw_timezone=raw_timezone,
+            rt_range=rt_range,
+            frame_range=frame_range,
         )
         return cls._from_raw_state(state, preprocess_kwds)
 
@@ -81,6 +85,8 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         feature_merge_ppm: float = 10.0,
         mz_range=(100.0, 1000.0),
         raw_timezone=None,
+        rt_range=None,
+        frame_range=None,
         **preprocess_kwds,
     ) -> Self:
         """Combine direct XML/RAW files; default RAW workers=1, XML workers=all."""
@@ -90,6 +96,8 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
                 ref_mz,
                 feature_strategy=processing_strategy,
                 feature_merge_ppm=feature_merge_ppm,
+                rt_range=rt_range,
+                frame_range=frame_range,
                 mz_range=mz_range,
                 raw_timezone=raw_timezone,
                 dtype=dtype,
@@ -115,6 +123,8 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
             distance=distance,
             mz_range=mz_range,
             raw_timezone=raw_timezone,
+            rt_range=rt_range,
+            frame_range=frame_range,
         )
         return cls._from_raw_state(state, preprocess_kwds)
 

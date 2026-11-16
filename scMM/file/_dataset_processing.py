@@ -157,6 +157,7 @@ class DatasetProcessingMixin:
                     self.ref_mz if reference_mz is None else reference_mz
                 ).tolist(),
                 reference_mode=reference_mode,
+                reference_matches=result["reference_matches"],
                 reference_ppm_tol=reference_ppm_tol,
                 feature_snr_threshold=feature_snr_threshold,
                 noise_window=noise_window,

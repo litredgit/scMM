@@ -37,6 +37,9 @@ def load_directory(
     progress_callback=None,
     metadata_by_file=None,
     mz_range=(100.0, 1000.0),
+    rt_range=None,
+    frame_range=None,
+    file_ranges=None,
     **preprocess,
 ):
     load_options = {"raw_timezone": raw_timezone} if raw_timezone is not None else {}
@@ -63,6 +66,12 @@ def load_directory(
         if progress_callback is not None:
             progress_callback(value, message)
 
+    def selection(path):
+        return (file_ranges or {}).get(
+            str(path),
+            (file_ranges or {}).get(path.name, {"rt_range": rt_range, "frame_range": frame_range}),
+        )
+
     objects = []
     signatures = {source: _file_signature(source) for source in files}
     targets = None
@@ -75,6 +84,7 @@ def load_directory(
                 resolution_200=resolution,
                 points_per_fwhm=resample_points_per_fwhm,
                 mz_range=mz_range,
+                **selection(source),
             )
             mz, intensity = summed.get_peaks()
             if grid is None:
@@ -114,12 +124,13 @@ def load_directory(
                 prominence_ratio=prominence_ratio,
                 distance=distance,
                 mz_range=mz_range,
+                **selection(source),
                 **load_options,
                 **file_preprocess,
             )
         else:
             exp, meta = load_single_file(source, **load_options)
-            frame, obs = align_frame(exp, targets, ppm=ppm_tol, **peak_options)
+            frame, obs = align_frame(exp, targets, ppm=ppm_tol, **selection(source), **peak_options)
             del exp
             _annotate_single_file_frames(obs, meta)
             obs["frame_id"] = obs.index.to_numpy()

@@ -427,7 +427,20 @@ class AnalysisWorkflow:
                 from scMM.analysis.plot_scope import plot_subset
 
                 data = plot_subset(data, options.pop("scope", None))
-            if kind == "embedding":
+            if kind == "msms_evidence":
+                return {
+                    "workspace": self.view(workspace),
+                    "value": self.saved_figure(identity, kind),
+                }
+            if kind in {"target_correlations", "association", "set_comparison"}:
+                from scMM.analysis.exploration import association, correlated_features, memberships
+
+                figure = {
+                    "target_correlations": correlated_features,
+                    "association": association,
+                    "set_comparison": memberships,
+                }[kind](data, **options)
+            elif kind == "embedding":
                 figure = embedding_figure(data, **options)
             elif kind == "volcano":
                 figure = volcano_figure(
@@ -555,6 +568,7 @@ class AnalysisWorkflow:
                     "parameters": {**options, **({"scope": scope} if scope is not None else {})},
                     "observation_dependencies": sorted(
                         set((figure.layout.meta or {}).get("observation_dependencies", []))
+                        | set((figure.layout.meta or {}).get("observation_dependencies", []))
                         | (
                             {options["color"][4:]}
                             if kind == "embedding"

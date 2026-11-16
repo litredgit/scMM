@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SelectionLabels from './SelectionLabels.vue'
 import MatrixDownload from '../../components/MatrixDownload.vue'
 import { useViewState } from '../../api/viewState'
 import { useReadScope } from '../../api/readScope'
@@ -495,6 +496,7 @@ useViewState('preprocess', {
           <QCComparison v-if="qc" :before="qc.files" :after="impact.qc.files" /></details
       ></template>
     </div>
+    <SelectionLabels />
     <details
       ref="historyPanel"
       class="card history-panel"

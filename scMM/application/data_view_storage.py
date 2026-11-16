@@ -100,12 +100,18 @@ def write_catalog_snapshot(project, snapshot, state, *, current_filename="curren
             figure = json.loads(source) if isinstance(source, str) else source
             if rebind_figure_identity(figure, branch, kind=kind, identities=identities):
                 views["figures"][kind] = figure
+        selection = (
+            artifact(f"branches/{key}/selection.h5ad", data=branch._selection_source)
+            if branch._selection_source is not None
+            else None
+        )
         view_file = artifact(f"branches/{key}/views.json", payload=views)
         branches[key] = {
             "view_id": entry["view_id"],
             "materialization": entry.get("materialization"),
             "current": current_path,
             "baseline": baseline,
+            "selection": selection,
             "views": view_file,
         }
     catalog = {
@@ -169,6 +175,12 @@ def read_catalog_snapshot(folder, catalog_path):
         branch.replace(data, source=str(folder))
         branch._validate(baseline)
         branch._original = baseline
+        if record.get("selection"):
+            branch._selection_source = read_h5ad(verified_path(record["selection"]))
+            branch._validate(branch._selection_source)
+            from .selection_labels import validate_pool
+
+            validate_pool(branch)
         reports = json.loads(data.uns["scmm_workbench"].get("reports_json", "{}"))
         views = json.loads(verified_path(record["views"]).read_text(encoding="utf-8"))
         identities = {name: value.get("_result_identity") for name, value in reports.items()}

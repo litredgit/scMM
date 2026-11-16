@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """Feature routes for the remaining five workbench stages."""
 
 from fastapi import APIRouter
@@ -62,3 +63,18 @@ def raw_diagnostic(body: s.RawDiagnostic, manager: Service, identity: Identity):
 @router.get("/workspace/raw/diagnostic")
 def saved_raw_diagnostic(manager: Service, identity: Identity, sample_id: str):
     return manager.saved_raw_diagnostic(identity, sample_id)
+
+
+@router.get("/workspace/raw/acquisition")
+def acquisition(manager: Service, identity: Identity, sample_id: str):
+    from scMM.application.preview_cache import file_identity
+    from scMM.file.acquisition import acquisition_hints
+
+    with manager.access(identity) as workspace:
+        sample = manager.sample(workspace.require_project(), sample_id)
+        path = manager.storage.resolve_raw_file(sample["storage"], sample["path"])
+        before = file_identity(path)
+    result = acquisition_hints(path)
+    if file_identity(path) != before:
+        raise ValueError("原始文件在读取采集信息时发生改变，请重新打开。")
+    return result

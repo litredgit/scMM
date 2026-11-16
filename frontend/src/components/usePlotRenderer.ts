@@ -28,6 +28,7 @@ type RenderOptions = {
   fresh: ComputedRef<boolean>
   image: (format: string) => Promise<void>
   emit: {
+    (event: 'selection', value: string[]): void
     (event: 'select', value: string): void
     (event: 'range', value: [number, number]): void
     (event: 'viewport', value: Record<string, unknown>): void
@@ -230,6 +231,15 @@ export function usePlotRenderer({
           graph.removeAllListeners?.('plotly_selected')
           graph.on?.('plotly_selected', (data) => {
             if (props.selectRange && data?.range?.x) emit('range', data.range.x)
+            const meta = props.figure.layout.meta as Record<string, unknown> | undefined
+            if (meta?.point_kind === 'cell_selection' && fresh.value) {
+              emit(
+                'selection',
+                (data.points ?? [])
+                  .map((point) => point.customdata?.[0])
+                  .filter((id): id is string => !!id),
+              )
+            }
           })
         })
       await chain

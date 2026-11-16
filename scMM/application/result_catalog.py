@@ -39,7 +39,16 @@ RESULTS = {
 RESULT_NAMES = {spec.operation: name for name, spec in RESULTS.items()}
 RESULT_PLOTS = {name: spec.plots for name, spec in RESULTS.items()}
 # Independent plots use only their explicit observation dependencies and X/layer.
-INDEPENDENT_PLOTS = ("feature_scatter", "feature_embedding", "stability", "time_plot")
+INDEPENDENT_PLOTS = (
+    "feature_scatter",
+    "feature_embedding",
+    "stability",
+    "time_plot",
+    "target_correlations",
+    "association",
+    "set_comparison",
+    "msms_evidence",
+)
 
 
 def related_results(names):

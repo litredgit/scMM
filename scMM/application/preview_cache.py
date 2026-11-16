@@ -32,7 +32,7 @@ def digest_file(path):
 
 def signature(path, parameters):
     params = asdict(parameters) if not isinstance(parameters, dict) else dict(parameters)
-    return {"version": 3, "file": file_identity(path), "parameters": json.loads(json.dumps(params))}
+    return {"version": 4, "file": file_identity(path), "parameters": json.loads(json.dumps(params))}
 
 
 def save_preview(project, sample, preview, parameters, before):
@@ -107,7 +107,11 @@ def shared_cache_key(request):
     from .project_batch import SHARED_FIELDS
 
     payload = {
-        "version": 1,
+        "version": 2,
+        "selections": [
+            {k: s["parameters"].get(k) for k in ("rt_range", "frame_range")}
+            for s in request["samples"]
+        ],
         "files": [file_identity(s["path"]) for s in request["samples"]],
         "parameters": {k: request["parameters"][k] for k in SHARED_FIELDS},
     }
@@ -151,6 +155,8 @@ def prepare_shared_targets(project, request):
             resolution_200=base.resolution,
             points_per_fwhm=base.resample_points_per_fwhm,
             mz_range=(base.mz_min, base.mz_max),
+            rt_range=sample["parameters"].get("rt_range"),
+            frame_range=sample["parameters"].get("frame_range"),
         )
         mz, intensity = summed.get_peaks()
         if grid is None:

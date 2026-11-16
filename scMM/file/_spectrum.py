@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
 
 import numpy as np
 import pyopenms as oms
@@ -88,6 +89,8 @@ def sum_spec(
     ms_level: int = 1,
     normalize: bool = False,
     zero_outside: bool = True,
+    rt_range=None,
+    frame_range=None,
 ):
     """Interpolate and sum spectra on a variable-resolution Orbitrap grid."""
     if ms_level < 1:
@@ -98,7 +101,9 @@ def sum_spec(
         resolution_200=resolution_200,
         points_per_fwhm=points_per_fwhm,
     )
-    intensity, count = _accumulate_spectra(exp, grid, mz_min, mz_max, ms_level, zero_outside)
+    intensity, count = _accumulate_spectra(
+        exp, grid, mz_min, mz_max, ms_level, zero_outside, rt_range, frame_range
+    )
     if count == 0:
         raise ValueError("No spectra found.")
     if normalize:
@@ -123,15 +128,20 @@ def _accumulate_spectra(
     mz_max: float,
     ms_level: int,
     zero_outside: bool,
+    rt_range=None,
+    frame_range=None,
 ) -> tuple[np.ndarray, int]:
     accumulated = np.zeros_like(grid, dtype=np.float64)
     count = 0
-    with spectrum_iterator(experiment) as spectra:
-        for spectrum in spectra:
-            if spectrum.getMSLevel() != ms_level:
-                continue
+    from .selection import selected_frames
+
+    with spectrum_iterator(
+        selected_frames(experiment, ms_level=ms_level, rt_range=rt_range, frame_range=frame_range)
+    ) as spectra:
+        for _, spectrum in spectra:
             mz, intensity = _prepare_sorted_unique_peaks(*spectrum.get_peaks())
             if mz.size == 0 or mz[-1] < mz_min or mz[0] > mz_max:
+                del spectrum
                 continue
             if zero_outside:
                 interpolated = np.interp(grid, mz, intensity, left=0.0, right=0.0)
@@ -139,6 +149,7 @@ def _accumulate_spectra(
                 interpolated = np.interp(grid, mz, intensity)
             accumulated += interpolated
             count += 1
+            del spectrum
     return accumulated, count
 
 
@@ -195,7 +206,26 @@ def extract_peaks(
     peak_indices, _ = find_peaks(intensity, prominence=prominence, distance=distance)
     if peak_indices.size == 0:
         return _empty_peaks(dtype)
-    refined = [_refine_peak(mz, intensity, int(index), config) for index in peak_indices]
+    bounds = [0]
+    if method == "centroid":
+        for first, second in pairwise(peak_indices):
+            between = intensity[first + 1 : second]
+            minima = np.flatnonzero(between == between.min()) + first + 1
+            plateaus = np.split(minima, np.flatnonzero(np.diff(minima) > 1) + 1)
+            midpoints = np.array([(part[0] + part[-1]) // 2 for part in plateaus])
+            valley = midpoints[np.argmin(np.abs(midpoints - (first + second) / 2))]
+            bounds.append(int(valley) + 1)
+    bounds.append(len(mz))
+    refined = [
+        _refine_peak(
+            mz,
+            intensity,
+            int(index),
+            config,
+            (bounds[number], bounds[number + 1]) if method == "centroid" else None,
+        )
+        for number, index in enumerate(peak_indices)
+    ]
     peak_mz, peak_intensity = zip(*refined, strict=True)
     return np.asarray(peak_mz, dtype=dtype), np.asarray(peak_intensity, dtype=dtype)
 
@@ -239,8 +269,9 @@ def _refine_peak(
     intensity: np.ndarray,
     index: int,
     config: _PeakConfig,
+    bounds=None,
 ) -> tuple[float, float]:
-    peak_window = _local_peak_window(mz, intensity, index, config)
+    peak_window = _local_peak_window(mz, intensity, index, config, bounds)
     if peak_window is None:
         return mz[index], intensity[index]
     window_mz, window_intensity = peak_window
@@ -255,7 +286,7 @@ def _refine_peak(
     return _parabolic_peak(mz, intensity, index)
 
 
-def _local_peak_window(mz, intensity, index: int, config: _PeakConfig):
+def _local_peak_window(mz, intensity, index: int, config: _PeakConfig, bounds=None):
     local_spacing = _local_mz_spacing(mz, index)
     if not np.isfinite(local_spacing) or local_spacing <= 0:
         return None
@@ -263,6 +294,8 @@ def _local_peak_window(mz, intensity, index: int, config: _PeakConfig):
     half_width = max(1, int(np.ceil(config.window_fwhm_factor * fwhm / local_spacing)))
     left = max(0, index - half_width)
     right = min(len(mz), index + half_width + 1)
+    if bounds is not None:
+        left, right = max(left, bounds[0]), min(right, bounds[1])
     if left == right:
         return None
     return mz[left:right], intensity[left:right]

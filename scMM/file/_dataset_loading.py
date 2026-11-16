@@ -48,6 +48,8 @@ class _RawLoadConfig:
     prominence_ratio: float | None
     distance: int
     mz_range: tuple[float, float] = (100.0, 1000.0)
+    rt_range: tuple | None = None
+    frame_range: tuple | None = None
 
 
 def load_processed_dataset(result_dir: str | Path) -> DatasetState:
@@ -119,6 +121,8 @@ def load_raw_file(
     distance: int = 3,
     mz_range=(100.0, 1000.0),
     raw_timezone=None,
+    rt_range=None,
+    frame_range=None,
 ) -> DatasetState:
     """Load and align one raw file without performing cell preprocessing."""
     config = _raw_config(
@@ -131,6 +135,8 @@ def load_raw_file(
         prominence_ratio,
         distance,
         mz_range,
+        rt_range,
+        frame_range,
     )
     load_options = {}
     if raw_timezone is not None:
@@ -143,13 +149,26 @@ def align_raw_experiment(experiment, file_meta, file_path, config: _RawLoadConfi
     """Share production feature selection/alignment with already-loaded previews."""
     file_meta = dict(file_meta)
     targets = _pick_common_targets(experiment, config, dtype=config.dtype)
-    data, peak_meta = align_frame(experiment, targets, config.ppm_tol, dtype=config.dtype)
+    data, peak_meta = align_frame(
+        experiment,
+        targets,
+        config.ppm_tol,
+        dtype=config.dtype,
+        resolution_200=config.resolution,
+        rt_range=config.rt_range,
+        frame_range=config.frame_range,
+    )
     _annotate_single_file_frames(peak_meta, file_meta)
     peak_meta["source_file"] = Path(file_path).name
     peak_meta["frame_id"] = peak_meta.index.to_numpy()
     peak_meta["acquisition_time"] = file_meta["timestamp"] + peak_meta["rt"].to_numpy()
     file_meta["ref_mz"] = config.ref_mz
     file_meta["mz_range"] = list(config.mz_range)
+    file_meta["scan_selection"] = {
+        "rt_seconds": config.rt_range,
+        "original_frames": config.frame_range,
+    }
+    file_meta["peak_algorithm"] = "valley_centroid_v1"
     return DatasetState(data, peak_meta, file_meta, config.ref_mz)
 
 
@@ -167,6 +186,8 @@ def load_raw_directory(
     distance: int = 3,
     mz_range=(100.0, 1000.0),
     raw_timezone=None,
+    rt_range=None,
+    frame_range=None,
 ) -> DatasetState:
     """Load and align a directory of raw files without cell preprocessing."""
     config = _raw_config(
@@ -179,6 +200,8 @@ def load_raw_directory(
         prominence_ratio,
         distance,
         mz_range,
+        rt_range,
+        frame_range,
     )
     directory = Path(dir_path).expanduser()
     files = discover_ms_files(directory)
@@ -195,7 +218,18 @@ def load_raw_directory(
         if signatures[path] != _file_signature(path):
             raise ValueError(f"MS file changed during shared feature selection: {path}")
     alignments = Parallel(n_jobs=n_jobs)(
-        delayed(_align_frame_from_file)(path, targets, config.ppm_tol, config.dtype, **load_options)
+        delayed(_align_frame_from_file)(
+            path,
+            targets,
+            config.ppm_tol,
+            config.dtype,
+            selection={
+                "rt_range": config.rt_range,
+                "frame_range": config.frame_range,
+                "resolution_200": config.resolution,
+            },
+            **load_options,
+        )
         for path in files
     )
     for path in files:
@@ -216,10 +250,15 @@ def _raw_config(
     prominence_ratio,
     distance,
     mz_range=(100.0, 1000.0),
+    rt_range=None,
+    frame_range=None,
 ) -> _RawLoadConfig:
     if not np.isfinite(ref_mz) or ref_mz <= 0:
         raise ValueError("ref_mz must be a positive finite number")
     mz_range = validate_mz_range(mz_range, ref_mz)
+    from .selection import validate_selection
+
+    validate_selection(rt_range, frame_range)
     return _RawLoadConfig(
         ref_mz,
         dtype,
@@ -230,6 +269,8 @@ def _raw_config(
         prominence_ratio,
         distance,
         mz_range,
+        rt_range,
+        frame_range,
     )
 
 
@@ -268,11 +309,14 @@ def _pick_common_targets(experiment, config: _RawLoadConfig, *, dtype=None) -> n
         resolution_200=config.resolution,
         points_per_fwhm=config.points_per_fwhm,
         mz_range=config.mz_range,
+        rt_range=config.rt_range,
+        frame_range=config.frame_range,
     )
     denoised = filter_spectrum(summed, snr_threshold=config.snr_threshold)
     peak_options = {
         "prominence_ratio": config.prominence_ratio,
         "distance": config.distance,
+        "resolution_200": config.resolution,
     }
     if dtype is not None:
         peak_options["dtype"] = dtype
@@ -294,17 +338,25 @@ def _directory_targets(
             resolution_200=config.resolution,
             points_per_fwhm=config.points_per_fwhm,
             mz_range=config.mz_range,
+            rt_range=config.rt_range,
+            frame_range=config.frame_range,
             **load_options,
         )
         for path in files
     )
-    return _pick_common_targets(pack_specs(spectra), config)
+    from dataclasses import replace
+
+    return _pick_common_targets(
+        pack_specs(spectra), replace(config, rt_range=None, frame_range=None)
+    )
 
 
-def _align_frame_from_file(file_path: str, targets, ppm_tol: int, dtype, **load_options) -> dict:
+def _align_frame_from_file(
+    file_path: str, targets, ppm_tol: int, dtype, *, selection=None, **load_options
+) -> dict:
     experiment, file_meta = load_single_file(file_path, format="auto", **load_options)
     logger.info("Aligning frames from MS file %s", file_path)
-    data, peak_meta = align_frame(experiment, targets, ppm_tol, dtype=dtype)
+    data, peak_meta = align_frame(experiment, targets, ppm_tol, dtype=dtype, **(selection or {}))
     return {"file_meta": file_meta, "data": data, "peak_meta": peak_meta}
 
 

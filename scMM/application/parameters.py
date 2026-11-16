@@ -13,6 +13,8 @@ from .preferences import cpu_default, load_preferences
 from .processing import ProcessingParameters
 
 PROCESSING_HELP = {
+    "rt_range": "正式提取的保留时间范围，秒，包含端点；空值保留全部。影响合谱、定量及细胞检测，不是图形缩放。",
+    "frame_range": "正式提取的原始帧范围，从 0 计数，包含端点；混合 MS1/MS2 时仍按全部原始帧编号。空值保留全部。",
     "ref_mz": "用于识别细胞窗口的参考离子 m/z，须依据实验明确选择且位于提取范围内。SNR reference_mz 留空时使用此值；与图形显示范围分别设置。",
     "ppm_tol": "扫描峰对齐到共同特征轴时允许的相对质量误差，单位 ppm（百万分之一）。值越大匹配越宽松；与参考离子的 reference_ppm_tol 分开设置。",
     "resolution": "仪器在 m/z 200 处的分辨率，用于构建随质量变化的高分辨率合谱网格。须为正数，应按实际仪器设置；不是最终 m/z 小数位数。",
@@ -179,7 +181,12 @@ def load_defaults(path: str | Path | None = None) -> WorkbenchDefaults:
         raise ValueError("unknown processing parameter or invalid section")
     for key, value in updates.items():
         default = processing[key]
-        if key == "reference_mz":
+        if key in {"rt_range", "frame_range"}:
+            if value is not None:
+                if not isinstance(value, list):
+                    raise ValueError(f"{key} must be a list or null")
+                value = tuple(value)
+        elif key == "reference_mz":
             if not isinstance(value, list) or any(
                 isinstance(v, bool) or not isinstance(v, (float, int)) for v in value
             ):

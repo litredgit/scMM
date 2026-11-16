@@ -557,3 +557,21 @@ QE/Orbitrap 的本地分辨率使用 `R(m)=R200*sqrt(200/m)`，FWHM 为 `m/R(m)`
 依据：[Thermo Exactive 系列手册](https://documents.thermofisher.com/TFS-Assets/CMD/manuals/man-bre0012255-exactive-series-manbre0012255-en.pdf)、[Q Exactive 技术论文](https://pmc.ncbi.nlm.nih.gov/articles/PMC3284220/)。
 
 离子 worker 的状态/时间/内存预算属于运维配置，见[部署说明](01-installation.md#离子后台资源)。预算不是实验阈值或错误率。
+
+
+## 新上游接入参数
+
+| 参数或控件 | 网页默认 | 含义与约束 |
+|---|---|---|
+| `rt_range` / `frame_range` | `None` / `None` | 正式提取的秒范围 / 原始零基帧范围，包含端点，同时指定取交集；不改变已保存旧参数 |
+| 目标相关性 | Pearson；保留零值；标注 10 项 | 每个特征按有限值逐对计算，少于 3 个有效细胞或变量恒定时结果未定义；CSV 保留完整特征及 n |
+| 数值关联 | 不选重复列；置换 0；置信水平 0.95；seed 42 | 置换必须选择重复单位，先按重复求均值，最多 10000 次，分析单位数乘置换次数最多 2000 万 |
+| 集合检出 | 强度 > 0；组内检出比例 ≥ 0 | 至少一项检出才进入集合；UpSet 默认最多显示 30 项，完整交集不随显示上限裁剪；Venn 限 2–3 组 |
+| 标签检出率 | 0.1 | 使用当前筛选前完整矩阵，或指定来源文件；不修改提取阶段阈值 |
+| 标签异常检测 | contamination 0.05；seed 42 | Isolation Forest 标签，不视为生物学异常结论；标签组合若清空任何轴则拒绝 |
+| 热图聚合 / 连接 / 距离 | mean / average / euclidean | 可选 median、sum；complete、single、ward；cityblock、cosine、correlation；Ward 仅支持欧氏距离，样本等权仅支持均值 |
+| 手工注释 ppm | 5 | 仅按 m/z 对齐时使用，以导入表参考质量为分母；按键匹配不自动选择最近候选 |
+| MS/MS 前体 / 碎片 ppm | 10 / 20 | 前体匹配以参考前体质量为分母；碎片一对一贪心匹配，包含质量容差端点 |
+| MS/MS 最低分数 / 匹配碎片 | 0.5 / 3 | 分数为平方根强度余弦；阈值只标记通过与否，未通过记录仍保留 |
+
+提取质心使用谷底分界后与原 FWHM 窗口相交；峰顶强度模式、当前 `snr_v1` 的最低净信号及参考离子阈值保持原定义。采集分辨率提示不自动覆盖实验参数。

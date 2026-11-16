@@ -213,3 +213,185 @@ def time_result(manager: Service, identity: Identity, key: str):
 @router.put("/workspace/analysis/settings")
 def settings(body: s.ViewSettings, manager: Service, identity: Identity):
     return manager.save_view_settings(identity, body.revision, body.analysis, body.legend)
+
+
+@router.post("/workspace/analysis/selection-labels")
+def selection_labels(body: s.SelectionLabel, manager: Service, identity: Identity):
+    from scMM.application.selection_labels import update
+    from scMM.application.web_projects import project_candidate
+
+    with manager.access(identity, operation="selection_labels") as workspace:
+        workspace.check(body.revision)
+        candidate = project_candidate(workspace.require_project())
+        update(candidate.workspace, **body.model_dump(exclude={"revision"}))
+        candidate.saved_reports = {}
+        candidate.views.pop("figures", None)
+        candidate.dirty = True
+        candidate.report_token = candidate.workspace.token
+        workspace.project = candidate
+        workspace.revision += 1
+        return manager.view(workspace)
+
+
+@router.get("/workspace/analysis/selection-labels")
+def selection_info(manager: Service, identity: Identity):
+    import json
+
+    from scMM.application.selection_labels import source
+
+    with manager.access(identity) as workspace:
+        state = workspace.require_project().workspace
+        data = source(state)
+        return {
+            "labels": json.loads(data.uns.get("scmm_selection_json", "{}")),
+            "cells": data.n_obs,
+            "features": data.n_vars,
+        }
+
+
+@router.post("/workspace/analysis/annotations/{action}")
+def annotation_table(
+    action: Literal["preview", "apply"],
+    body: s.AnnotationTable,
+    manager: Service,
+    identity: Identity,
+):
+    import json
+
+    from scMM.analysis.external_annotations import align_annotations, read_table, write_annotations
+    from scMM.application.web_projects import project_candidate
+    from scMM.application.web_support import table_view
+
+    frame = read_table(
+        body.content, format=body.format, header=body.header, transpose=body.transpose
+    )
+    with manager.access(identity, operation="manual_annotations") as workspace:
+        workspace.check(body.revision)
+        project = workspace.require_project()
+        if project.workspace._selection_source is not None:
+            raise ValueError("请先关闭全部标签筛选，再导入注释。")
+        table, matched = align_annotations(
+            project.workspace.require_data(),
+            frame,
+            **body.model_dump(
+                include={"mapping", "source_key", "target_key", "ppm", "mode", "row_positions"}
+            ),
+        )
+        if action == "preview":
+            return {
+                "workspace": manager.view(workspace),
+                "value": {
+                    "table": table_view(table),
+                    "matched": int(matched.sum()),
+                    "ambiguous": int((table.status == "ambiguous").sum()),
+                    "unmatched": int((table.status == "unmatched").sum()),
+                },
+            }
+        candidate = project_candidate(project)
+        candidate.workspace.data = write_annotations(
+            candidate.workspace.data,
+            table,
+            matched,
+            mapping=body.mapping,
+            clear_unmatched=body.clear_unmatched,
+        )
+        # The reset origin receives matching annotations by stable feature ID.
+        baseline = candidate.workspace._original
+        for key in body.mapping.values():
+            values = (
+                baseline.var[key].astype(object).copy()
+                if key in baseline.var
+                else __import__("pandas").Series("", index=baseline.var_names, dtype=object)
+            )
+            common = baseline.var_names.intersection(candidate.workspace.data.var_names)
+            values.loc[common] = candidate.workspace.data.var.loc[common, key]
+            baseline.var[key] = values
+        records = json.loads(candidate.workspace.data.uns.get("scmm_manual_annotations_json", "[]"))
+        import hashlib
+
+        records.append(
+            {
+                "source_sha256": hashlib.sha256(body.content.encode()).hexdigest(),
+                "mapping": body.mapping,
+                "mode": body.mode,
+                "source_key": body.source_key,
+                "target_key": body.target_key,
+                "ppm": body.ppm,
+                "matched": int(matched.sum()),
+                "clear_unmatched": body.clear_unmatched,
+            }
+        )
+        candidate.workspace.data.uns["scmm_manual_annotations_json"] = json.dumps(records)
+        candidate.views.pop("figures", None)
+        candidate.dirty = True
+        workspace.project = candidate
+        workspace.revision += 1
+        return {"workspace": manager.view(workspace), "value": {"matched": int(matched.sum())}}
+
+
+@router.post("/workspace/analysis/msms")
+def msms(body: s.MSMSSearch, manager: Service, identity: Identity):
+    from scMM.analysis.external_annotations import msms_search
+    from scMM.application.web_support import figure_view
+    from scMM.plot.presentation import style_figure
+
+    with manager.access(identity, operation="msms_input") as workspace:
+        workspace.check(body.revision)
+        project = workspace.require_project()
+        data = project.workspace.require_data().copy()
+        token = project.workspace.token
+    options = body.model_dump(exclude={"revision"})
+    figure = msms_search(data, **options)
+    figure.update_layout(
+        meta={
+            **figure.layout.meta,
+            "dataset_token": list(token),
+            "parameters": {k: v for k, v in options.items() if k not in {"measured", "library"}},
+        }
+    )
+    value = figure_view(style_figure(figure))
+    with manager.access(identity, operation="msms_collect") as workspace:
+        workspace.check(body.revision)
+        project = workspace.require_project()
+        if token != project.workspace.token:
+            raise ValueError("数据已改变，请重新运行 MS/MS 搜索。")
+        project.views.setdefault("figures", {})["msms_evidence"] = value
+        project.dirty = True
+        workspace.revision += 1
+        return {"workspace": manager.view(workspace), "value": value}
+
+
+@router.post("/workspace/analysis/selection-plot")
+def selection_plot(body: s.SelectionPlot, manager: Service, identity: Identity):
+    import plotly.graph_objects as go
+
+    from scMM.analysis.exploration import vector
+    from scMM.application.selection_labels import source
+    from scMM.application.web_support import figure_view
+
+    with manager.access(identity) as workspace:
+        workspace.check(body.revision)
+        state = workspace.require_project().workspace
+        data = source(state)
+        if data.n_obs > 100000:
+            raise ValueError("圈选图最多 10 万个细胞，请先使用分组或稳定编号选择。")
+        x, _ = vector(data, body.x)
+        y, _ = vector(data, body.y)
+        figure = go.Figure(
+            go.Scattergl(
+                x=x,
+                y=y,
+                mode="markers",
+                customdata=[[str(v)] for v in data.obs_names],
+                marker={"size": 5},
+                hovertemplate="Cell: %{customdata[0]}<br>x: %{x}<br>y: %{y}<extra></extra>",
+            )
+        )
+        figure.update_layout(
+            title="Cell selection",
+            xaxis_title=body.x,
+            yaxis_title=body.y,
+            dragmode="lasso",
+            meta={"dataset_token": list(state.token), "point_kind": "cell_selection"},
+        )
+        return {"workspace": manager.view(workspace), "value": figure_view(figure)}

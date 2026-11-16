@@ -71,6 +71,8 @@ export function useRawParameters(sample: Ref<string>) {
   const samples = computed(() => store.project?.manifest.samples ?? [])
   const basic = [
     'ref_mz',
+    'rt_range',
+    'frame_range',
     'mz_min',
     'mz_max',
     'cell_snr',

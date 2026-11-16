@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """Session-local datasets, revision-bound results and reversible preprocessing."""
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ class AnalysisWorkspace:
     def __init__(self):
         self.data = None
         self._original = None
+        self._selection_source = None
         self.dataset_id = ""
         self.revision = 0
         self.source = ""
@@ -93,6 +95,7 @@ class AnalysisWorkspace:
         self.source = str(source)
         self.data = candidate
         self._original = candidate.copy()
+        self._selection_source = None
         self.results.clear()
         self._result_identities.clear()
 
@@ -119,6 +122,14 @@ class AnalysisWorkspace:
         invalidate_derived(data)
 
     def _commit(self, candidate, operation, parameters, *, clear_derived=True, save_layer=True):
+        if self._selection_source is not None and operation not in {
+            "selection_labels",
+            "reset",
+            "reduce",
+            "cluster",
+            "latent",
+        }:
+            raise ValueError("请先关闭全部标签筛选再改变矩阵；或重置到预处理起点。")
         self._validate(candidate)
         states = intensity_states(candidate)
         semantics = value_states(candidate)
@@ -282,6 +293,7 @@ class AnalysisWorkspace:
     def reset(self):
         self.require_data()
         self._commit(self._original.copy(), "reset", {}, clear_derived=True)
+        self._selection_source = None
 
     def put_result(self, name, value, token):
         if token != self.token:
@@ -330,7 +342,13 @@ class AnalysisWorkspace:
         current_changes, baseline_changes = set(), set()
         current = self.data.copy()
         baseline = self._original.copy() if self._original is not None else None
-        for data, changed in ((current, current_changes), (baseline, baseline_changes)):
+        selection = self._selection_source.copy() if self._selection_source is not None else None
+        pool_changes = set()
+        for data, changed in (
+            (current, current_changes),
+            (baseline, baseline_changes),
+            (selection, pool_changes),
+        ):
             if data is None:
                 continue
             ids = (
@@ -374,21 +392,25 @@ class AnalysisWorkspace:
                     changed.add(column)
                     data.obs[column] = previous
                     data.obs.loc[update_mask, column] = values
-        if not current_changes and not baseline_changes:
+        if not current_changes and not baseline_changes and not pool_changes:
             return set()
         from scMM.util.lifecycle import (
             invalidate_observation_embeddings,
             invalidate_observation_reports,
         )
 
-        for data, changed in ((current, current_changes), (baseline, baseline_changes)):
+        for data, changed in (
+            (current, current_changes),
+            (baseline, baseline_changes),
+            (selection, pool_changes),
+        ):
             if data is not None:
                 changed.update(invalidate_observation_embeddings(data, changed))
                 invalidate_observation_reports(data, changed)
         values = {name: value for name, (_, value) in self.results.items()}
         stale = stale_metadata_results(values, current_changes)
         remaining = {name: value for name, value in values.items() if name not in stale}
-        self.data, self._original = current, baseline
+        self.data, self._original, self._selection_source = current, baseline, selection
         self.revision += 1
         self.results = {key: (self.token, value) for key, value in remaining.items()}
         self._result_identities = {

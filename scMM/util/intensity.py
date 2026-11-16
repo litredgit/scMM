@@ -16,6 +16,7 @@ def transformed_state(state, operation, parameters=None):
         return "normalized" if state in {"raw", "normalized"} else state
     if operation in {
         "filter",
+        "selection_labels",
         "subset",
         "outliers",
         "reduce",

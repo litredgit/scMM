@@ -102,7 +102,7 @@ def test_preprocess_records_gate_and_invalid_value_leaves_state_unchanged(method
     assert obj.file_meta == before[2]
 
 
-def test_defaults_and_saved_projects_preserve_explicit_or_historical_gate(tmp_path):
+def test_defaults_and_saved_projects_require_explicit_gate(tmp_path):
     assert load_defaults().processing.cell_min_signal == 1e5
     config = tmp_path / "defaults.json"
     config.write_text(json.dumps({"processing": {"cell_min_signal": 12345}}))
@@ -123,9 +123,11 @@ def test_defaults_and_saved_projects_preserve_explicit_or_historical_gate(tmp_pa
     path = project.folder / "project.json"
     write_json(path, project.manifest)
     before = path.read_bytes()
-    restored = store.open(project.folder)
-    assert restored.manifest["parameters"]["cell_min_signal"] == 0
-    assert restored.samples[0]["parameters"]["cell_min_signal"] == 0
+    with pytest.raises(ValueError, match="cell_min_signal"):
+        store.open(project.folder)
+    project.manifest["parameters"]["cell_min_signal"] = 1e5
+    project.samples[0]["parameters"]["cell_min_signal"] = 1e5
+    restored = project
     assert path.read_bytes() == before  # Opening never writes the project.
     restored.manifest["parameters"]["cell_min_signal"] = 23456
     restored.samples[0]["parameters"]["cell_min_signal"] = 34567

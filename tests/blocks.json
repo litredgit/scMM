@@ -3,6 +3,7 @@
     "spectra": {
       "kind": "python",
       "tests": [
+        "tests/domain/test_upstream_update.py",
         "tests/domain/test_io.py",
         "tests/domain/test_peak.py",
         "tests/domain/test_cell_min_signal.py",
@@ -12,6 +13,8 @@
         "tests/domain/test_thermo_pipeline.py"
       ],
       "sources": [
+        "scMM/file/selection.py",
+        "scMM/file/acquisition.py",
         "scMM/file/io.py",
         "scMM/file/_spectrum.py",
         "scMM/file/_alignment.py",
@@ -70,6 +73,8 @@
         "tests/domain/test_extended_analysis.py"
       ],
       "sources": [
+        "scMM/analysis/exploration.py",
+        "scMM/analysis/external_annotations.py",
         "scMM/analysis/*",
         "scMM/analysis/heatmap.py",
         "scMM/analysis/markers.py"
@@ -231,6 +236,7 @@
         "tests/application/test_maintenance_recovery.py"
       ],
       "sources": [
+        "scMM/application/selection_labels.py",
         "scMM/application/workbench.py",
         "scMM/application/data_views.py",
         "scMM/application/analysis_inputs.py",
@@ -255,6 +261,7 @@
     "api": {
       "kind": "python",
       "tests": [
+        "tests/api/test_upstream_update.py",
         "tests/api/test_web_api.py",
         "tests/api/test_web_workflow.py",
         "tests/api/test_merge_api.py",
@@ -491,7 +498,7 @@
     "browser-preprocessing": {
       "kind": "browser",
       "tests": ["frontend/tests/preprocessing.spec.ts"],
-      "sources": ["frontend/src/features/preprocess/PreprocessPage.vue"],
+      "sources": ["frontend/src/features/preprocess/PreprocessPage.vue", "frontend/src/features/preprocess/SelectionLabels.vue"],
       "downstream": ["browser-operations"],
       "extras": ["web", "plot", "cluster", "supervised"]
     },
@@ -518,7 +525,7 @@
     },
     "browser-analysis-journey": {
       "kind": "browser",
-      "tests": ["frontend/tests/analysis-journey.spec.ts"],
+      "tests": ["frontend/tests/analysis-journey.spec.ts", "frontend/tests/upstream-update.spec.ts"],
       "sources": ["frontend/src/features/analysis/*"],
       "downstream": [],
       "extras": ["web", "plot", "cluster", "supervised"]

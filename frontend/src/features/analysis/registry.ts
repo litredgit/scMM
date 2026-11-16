@@ -1,3 +1,5 @@
+import ExplorationPanel from './modules/ExplorationPanel.vue'
+import AnnotationEvidencePanel from './modules/AnnotationEvidencePanel.vue'
 import StabilityPanel from './modules/StabilityPanel.vue'
 import TimePanel from './modules/TimePanel.vue'
 import FeatureEmbeddingPanel from './modules/FeatureEmbeddingPanel.vue'
@@ -11,6 +13,20 @@ import NetworkPanel from './modules/network/NetworkPanel.vue'
 import SupervisedPanel from './modules/supervised/SupervisedPanel.vue'
 import type { AnalysisModule } from './types'
 export const analysisModules: readonly AnalysisModule[] = [
+  {
+    id: 'exploration',
+    name: '相关性与集合',
+    group: '统计比较',
+    component: ExplorationPanel,
+    requires: ['matrix'],
+  },
+  {
+    id: 'annotation_evidence',
+    name: '外部注释与谱图证据',
+    group: '候选注释',
+    component: AnnotationEvidencePanel,
+    requires: ['matrix'],
+  },
   {
     id: 'embedding',
     name: '降维',

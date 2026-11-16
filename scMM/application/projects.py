@@ -305,6 +305,13 @@ class ProjectStore:
             project.workspace._validate(baseline)
             write_intensity_states(baseline, intensity_states(baseline))
             project.workspace._original = baseline
+            if "selection" in artifacts:
+                selection = read_h5ad(child_path(folder, artifacts["selection"]))
+                project.workspace._validate(selection)
+                project.workspace._selection_source = selection
+                from .selection_labels import validate_pool
+
+                validate_pool(project.workspace)
             project.saved_reports = json.loads(
                 data.uns.get("scmm_workbench", {}).get("reports_json", "{}")
             )
@@ -384,6 +391,10 @@ class ProjectStore:
                     "baseline": str((snapshot / "baseline.h5ad").relative_to(folder)),
                     "views": str((snapshot / "views.json").relative_to(folder)),
                 }
+                if project.workspace._selection_source is not None:
+                    selection = snapshot / "selection.h5ad"
+                    project.workspace._selection_source.write_h5ad(selection)
+                    candidate["artifacts"]["selection"] = str(selection.relative_to(folder))
                 saved = read_h5ad(current)
                 saved_reports = json.loads(saved.uns["scmm_workbench"]["reports_json"])
             if snapshot is not None:

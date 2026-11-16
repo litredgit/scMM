@@ -215,3 +215,20 @@ def test_unsaved_inactive_source_reference_is_protected(tmp_path):
     )
     with pytest.raises(RuntimeError, match="会话"):
         manager.plan("results", external)
+
+
+def test_reversible_selection_pool_roundtrip_preserves_measurement_root(tmp_path):
+    from scMM.application.selection_labels import update
+
+    store, project, _ = project_with_branches(tmp_path)
+    root_before = next(iter(project.ion_state["roots"].values()))["data"].X.copy()
+    update(project.workspace, name="review", ids=["a"])
+    store.save(project)
+    reopened = store.open(project.folder)
+    assert list(reopened.workspace.data.obs_names) == ["a"]
+    assert reopened.workspace._selection_source.n_obs == 2
+    update(reopened.workspace, name="review", mode="toggle", enabled=False)
+    np.testing.assert_array_equal(reopened.workspace.data.X, root_before)
+    np.testing.assert_array_equal(
+        next(iter(reopened.ion_state["roots"].values()))["data"].X, root_before
+    )

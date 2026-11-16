@@ -18,6 +18,8 @@ def align_frame(
     aggregate: str = "max",
     dtype=np.float64,
     out=None,
+    rt_range=None,
+    frame_range=None,
     **kwargs,
 ):
     """Align each selected scan to target m/z values using nearest ppm matches."""
@@ -34,10 +36,12 @@ def align_frame(
             raise ValueError("out must be writable with shape (selected scans, targets)")
     rows, frame_ids, retention_times = [], [], []
     peak_options = _peak_options(kwargs)
-    with spectrum_iterator(exp) as spectra:
-        for frame_id, spectrum in enumerate(spectra):
-            if spectrum.getMSLevel() != ms_level:
-                continue
+    from .selection import selected_frames
+
+    with spectrum_iterator(
+        selected_frames(exp, ms_level=ms_level, rt_range=rt_range, frame_range=frame_range)
+    ) as spectra:
+        for frame_id, spectrum in spectra:
             row = np.zeros(len(targets), dtype=np.float32)
             mz, intensity = extract_peaks(spectrum, dtype=dtype, **peak_options)
             if mz.size:
@@ -54,6 +58,7 @@ def align_frame(
             rows.append(row)
             frame_ids.append(frame_id)
             retention_times.append(spectrum.getRT())
+            del spectrum
     if not rows:
         raise ValueError("No spectra found.")
     if out is None:

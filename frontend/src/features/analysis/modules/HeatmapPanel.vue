@@ -8,6 +8,9 @@ import PlotScope, { type Scope } from '../components/PlotScope.vue'
 import { useAnalysisContext } from '../composables/useAnalysisContext'
 import PlotView from '../../../components/PlotView.vue'
 import type { Figure } from '../../../api/types'
+const linkageMethod = ref('average'),
+  distance = ref('euclidean'),
+  aggregateMethod = ref('mean')
 const { store, info, selectedFeatures, refreshAnalysis } = useAnalysisContext()
 const scope = ref<Scope>({ group_key: 'group', groups: null, sample_key: 'sample', samples: null })
 const colorscale = ref('RdBu'),
@@ -28,6 +31,9 @@ const signature = computed(() =>
     colorscale.value,
     colorMin.value,
     colorMax.value,
+    linkageMethod.value,
+    distance.value,
+    aggregateMethod.value,
   ]),
 )
 const features = ref(''),
@@ -78,6 +84,9 @@ async function draw() {
     const value = await api.command<Figure>('/analysis/plot', {
       kind: 'heatmap',
       options: {
+        linkage_method: linkageMethod.value,
+        distance: distance.value,
+        aggregate_method: aggregateMethod.value,
         features: [
           ...new Set(
             features.value
@@ -113,6 +122,9 @@ async function readSaved() {
     const parameters = (value.layout.meta as { parameters?: Record<string, unknown> } | undefined)
       ?.parameters
     if (parameters) {
+      linkageMethod.value = String(parameters.linkage_method ?? 'average')
+      distance.value = String(parameters.distance ?? 'euclidean')
+      aggregateMethod.value = String(parameters.aggregate_method ?? 'mean')
       if (Array.isArray(parameters.features)) features.value = parameters.features.join('\n')
       group.value = typeof parameters.group_key === 'string' ? parameters.group_key : ''
       sample.value = typeof parameters.sample_key === 'string' ? parameters.sample_key : ''
@@ -145,6 +157,9 @@ watch(
   },
 )
 useViewState('heatmap', {
+  linkageMethod,
+  distance,
+  aggregateMethod,
   features,
   group,
   sample,
@@ -165,6 +180,30 @@ useViewState('heatmap', {
   <div class="card analysis-module-split">
     <CalculationPanel :has-result="!!figure">
       <h2>特征热图</h2>
+      <label
+        >聚类连接方法<select v-model="linkageMethod" :disabled="store.busy">
+          <option value="average">Average</option>
+          <option value="complete">Complete</option>
+          <option value="single">Single</option>
+          <option value="ward">Ward</option>
+        </select></label
+      >
+      <label
+        >聚类距离<select v-model="distance" :disabled="store.busy">
+          <option value="euclidean">欧氏距离</option>
+          <option value="cityblock">曼哈顿距离</option>
+          <option value="cosine">余弦距离</option>
+          <option value="correlation">相关距离</option>
+        </select></label
+      >
+      <label
+        >分组聚合<select v-model="aggregateMethod" :disabled="store.busy">
+          <option value="mean">均值</option>
+          <option value="median">中位数</option>
+          <option value="sum">总和</option>
+        </select></label
+      >
+
       <p>每行一个特征；标准分只用于展示。分组均值可选择细胞等权或样本等权。</p>
       <PlotScope
         v-model="scope"

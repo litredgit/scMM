@@ -39,9 +39,14 @@ class ProcessingParameters:
     noise_window: int = 51
     feature_block_size: int = 256
     cell_min_signal: float = 1e5
+    rt_range: tuple[float, float] | None = None
+    frame_range: tuple[int, int] | None = None
 
     def __post_init__(self) -> None:
         from scMM.file._dataset_loading import validate_mz_range
+        from scMM.file.selection import validate_selection
+
+        validate_selection(self.rt_range, self.frame_range)
 
         if not math.isfinite(self.ref_mz) or self.ref_mz <= 0:
             raise ValueError("ref_mz must be a positive finite number")

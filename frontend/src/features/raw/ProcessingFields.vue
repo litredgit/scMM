@@ -8,12 +8,25 @@ const store = useWorkspace()
 const groups = computed(() =>
   props.fields.includes('cell_snr') && props.fields.includes('ref_mz')
     ? [
-        { title: '参考与提取范围', fields: ['ref_mz', 'mz_min', 'mz_max'] },
+        {
+          title: '参考与提取范围',
+          fields: ['ref_mz', 'mz_min', 'mz_max', 'rt_range', 'frame_range'],
+        },
         { title: '细胞识别', fields: ['cell_snr', 'cell_min_signal'] },
         { title: '特征保留', fields: ['feature_snr_threshold', 'max_zero_frac'] },
       ]
     : [{ title: '', fields: props.fields }],
 )
+function rangeValue(key: string, index: number) {
+  return (model.value[key] as number[] | null)?.[index] ?? ''
+}
+function rangeEdit(key: string, index: number, event: Event) {
+  const text = (event.target as HTMLInputElement).value
+  const current = [...((model.value[key] as number[] | null) ?? [0, 0])]
+  current[index] = Number(text)
+  model.value[key] = text === '' ? null : current
+  emit('edited')
+}
 function help(key: string) {
   return store.configuration?.processing.find((p) => p.name === key)?.help ?? ''
 }
@@ -40,8 +53,22 @@ function unit(key: string) {
         >
           <FieldLabel :name="key" :text="help(key)" />
           <span class="parameter-input">
+            <template v-if="key === 'rt_range' || key === 'frame_range'">
+              <input
+                v-for="i in [0, 1]"
+                :key="i"
+                type="number"
+                min="0"
+                :step="key === 'frame_range' ? 1 : 'any'"
+                :aria-label="`${key}_${i}`"
+                :value="rangeValue(key, i)"
+                :disabled="disabled"
+                :placeholder="i === 0 ? '起点（空值全部）' : '终点'"
+                @input="rangeEdit(key, i, $event)"
+              />
+            </template>
             <select
-              v-if="key === 'reference_mode'"
+              v-else-if="key === 'reference_mode'"
               v-model="model[key]"
               :aria-label="key"
               :disabled="disabled"

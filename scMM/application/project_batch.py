@@ -70,6 +70,7 @@ def preflight(project, storage):
             }
         )
     return {
+        "peak_algorithm": "valley_centroid_v1",
         "project_folder": str(project.folder),
         "samples": samples,
         "parameters": asdict(base),
@@ -132,6 +133,7 @@ def submit(project, storage, *, retry_path=None):
 
         def scientific_request(value):
             return {
+                "peak_algorithm": value.get("peak_algorithm"),
                 "feature_strategy": value["feature_strategy"],
                 "parameters": value["parameters"],
                 "feature_merge_ppm": value["feature_merge_ppm"],
@@ -292,6 +294,8 @@ def run_batch(path):
                         resolution_200=base.resolution,
                         points_per_fwhm=base.resample_points_per_fwhm,
                         mz_range=(base.mz_min, base.mz_max),
+                        rt_range=sample["parameters"].get("rt_range"),
+                        frame_range=sample["parameters"].get("frame_range"),
                     )
                     mz, intensity = summed.get_peaks()
                     if grid is None:
@@ -372,12 +376,21 @@ def run_batch(path):
                     exp, meta = load_single_file(sample["path"])
                     row.update(stage="aligning", progress=None)
                     report(f"扫描峰对齐：{sample['name']}", stage="aligning")
-                    frame, obs = align_frame(exp, targets, ppm=params.ppm_tol)
+                    frame, obs = align_frame(
+                        exp,
+                        targets,
+                        ppm=params.ppm_tol,
+                        resolution_200=params.resolution,
+                        rt_range=params.rt_range,
+                        frame_range=params.frame_range,
+                    )
                     _annotate_single_file_frames(obs, meta)
                     meta.update(ref_mz=params.ref_mz, mz_range=[params.mz_min, params.mz_max])
                     kwargs = params.load_kwargs()
                     for key in (
                         "mz_range",
+                        "rt_range",
+                        "frame_range",
                         "ppm_tol",
                         "resolution",
                         "resample_points_per_fwhm",
@@ -395,7 +408,15 @@ def run_batch(path):
                     )
                     del exp, frame, obs
                 check_inputs(None if request["feature_strategy"] == "shared" else sample)
-                obj.file_meta.update(name=sample["name"], source_file=sample["path"])
+                obj.file_meta.update(
+                    name=sample["name"],
+                    source_file=sample["path"],
+                    peak_algorithm="valley_centroid_v1",
+                    scan_selection={
+                        "rt_seconds": params.rt_range,
+                        "original_frames": params.frame_range,
+                    },
+                )
                 identity = sample.get("input_identity") or file_identity(sample["path"])
                 obj.file_meta["input_identity"] = identity
                 obj.peak_meta["source_identity_json"] = json.dumps(identity, sort_keys=True)

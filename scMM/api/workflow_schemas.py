@@ -257,8 +257,43 @@ class Invalidate(RevisionRequest):
     names: list[Literal["differential", "markers", "network", "supervised", "shap"]]
 
 
+class TargetCorrelations(Controls):
+    target: str
+    layer: str | None = None
+    method: Literal["pearson", "spearman", "kendall"] = "pearson"
+    include_zeros: bool = True
+    label_count: int = Field(default=10, ge=0, le=100)
+
+
+class Association(Controls):
+    x: str
+    y: str
+    layer: str | None = None
+    replicate_key: str | None = None
+    permutations: int = Field(default=0, ge=0, le=10000)
+    confidence: float = Field(default=0.95, gt=0, lt=1)
+    seed: int = Field(default=42, ge=0)
+    include_zeros: bool = True
+
+
+class SetComparison(Controls):
+    entity: Literal["feature", "candidate"] = "feature"
+    group_key: str
+    groups: list[str] = Field(min_length=2, max_length=20)
+    layer: str | None = None
+    intensity_threshold: float = Field(default=0.0, ge=0)
+    detection_rate: float = Field(default=0.0, ge=0, le=1)
+    annotation_key: str | None = None
+    kind: Literal["upset", "venn"] = "upset"
+    top: int = Field(default=30, ge=1, le=200)
+
+
 class Plot(RevisionRequest):
     kind: Literal[
+        "msms_evidence",
+        "target_correlations",
+        "association",
+        "set_comparison",
         "embedding",
         "volcano",
         "violin",
@@ -388,6 +423,9 @@ class FeatureScatterPlot(ScopedPlot):
 
 
 class HeatmapPlot(ScopedPlot):
+    linkage_method: Literal["average", "complete", "single", "ward"] = "average"
+    distance: Literal["euclidean", "cityblock", "cosine", "correlation"] = "euclidean"
+    aggregate_method: Literal["mean", "median", "sum"] = "mean"
     features: list[str] = Field(min_length=1, max_length=1000)
     layer: str | None = None
     group_key: str | None = None
@@ -515,6 +553,9 @@ OPERATIONS = {
     "save_latent": Latent,
 }
 PLOTS = {
+    "target_correlations": TargetCorrelations,
+    "association": Association,
+    "set_comparison": SetComparison,
     "time_plot": TimePlot,
     "confusion": ConfusionPlot,
     "heatmap": HeatmapPlot,
@@ -551,3 +592,53 @@ class Presentation(RevisionRequest):
 class MatrixDownload(RevisionRequest):
     source: Literal["extracted", "current"]
     labels: dict[str, str] = Field(default_factory=dict, max_length=10000)
+
+
+class SelectionLabel(RevisionRequest):
+    name: str = Field(min_length=1, max_length=64)
+    axis: Literal["cell", "feature"] = "cell"
+    mode: Literal["ids", "detection", "outliers", "polygon", "toggle"] = "ids"
+    ids: list[str] | None = Field(default=None, max_length=1000000)
+    threshold: float = Field(default=0.1, ge=0, le=1)
+    source_file: str | None = None
+    x: str | None = None
+    y: str | None = None
+    polygon: list[list[float]] | None = Field(default=None, max_length=1000)
+    invert: bool = False
+    enabled: bool = True
+    contamination: float = Field(default=0.05, gt=0, le=0.5)
+    seed: int = Field(default=42, ge=0)
+
+
+class AnnotationTable(RevisionRequest):
+    content: str = Field(max_length=10_000_000)
+    format: Literal["csv", "tsv"] = "csv"
+    header: bool = True
+    transpose: bool = False
+    mapping: dict[str, str]
+    source_key: str = ""
+    target_key: str = "feature_id"
+    mode: Literal["key", "position"] = "key"
+    ppm: float = Field(default=5.0, gt=0, le=1000)
+    row_positions: list[int] | None = Field(default=None, max_length=1000000)
+    clear_unmatched: bool = False
+
+
+class MSMSSearch(RevisionRequest):
+    measured: str = Field(max_length=10_000_000)
+    library: str = Field(max_length=10_000_000)
+    measured_format: Literal["mgf", "msp"] = "mgf"
+    library_format: Literal["mgf", "msp"] = "mgf"
+    precursor_ppm: float = Field(default=10.0, gt=0, le=1000)
+    fragment_ppm: float = Field(default=20.0, gt=0, le=1000)
+    minimum_score: float = Field(default=0.5, ge=0, le=1)
+    minimum_matches: int = Field(default=3, ge=1)
+    sample_pool: str = Field(min_length=1, max_length=1000)
+    polarity: Literal["positive", "negative"]
+    collision_energy: str = Field(default="", max_length=200)
+    instrument: str = Field(default="", max_length=200)
+
+
+class SelectionPlot(RevisionRequest):
+    x: str
+    y: str

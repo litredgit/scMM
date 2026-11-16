@@ -241,6 +241,9 @@ class DataViewCatalog:
             branch.__dict__.update(deepcopy(entry["workspace"]))
             branch._validate(branch.require_data())
             branch._validate(branch._original)
+            from .selection_labels import validate_pool
+
+            validate_pool(branch)
             if entry["view_id"] not in candidate._views:
                 raise ValueError("unknown source view")
             view = candidate._views[entry["view_id"]]

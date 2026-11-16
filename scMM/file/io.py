@@ -175,6 +175,8 @@ def sum_spectrum_from_file(
     mz_range=(100.0, 1000.0),
     *,
     raw_timezone=None,
+    rt_range=None,
+    frame_range=None,
 ) -> oms.MSSpectrum:
     """Load one MS file and return its summed spectrum."""
     options = {"raw_timezone": raw_timezone} if raw_timezone is not None else {}
@@ -185,6 +187,8 @@ def sum_spectrum_from_file(
         resolution_200=resolution_200,
         points_per_fwhm=points_per_fwhm,
         mz_range=mz_range,
+        rt_range=rt_range,
+        frame_range=frame_range,
     )
 
 

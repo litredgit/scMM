@@ -222,6 +222,14 @@ def find_cell_peaks_snr(
         "reference_ratio": reference_ratio,
         "reference_indices": reference_indices,
         "reference_mz_matched": matched_reference_mz,
+        "reference_matches": [
+            {
+                "requested": float(requested),
+                "matched": float(mz_values[int(np.abs(mz_values - requested).argmin())]),
+                "ppm_error": float(error),
+            }
+            for requested, error in zip(references, errors, strict=True)
+        ],
         "peak_frames": peak_frames,
         "window_ranges": window_ranges,
         "feature_snr": feature_snr[:, keep_mask],

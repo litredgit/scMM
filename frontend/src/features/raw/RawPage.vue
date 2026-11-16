@@ -3,6 +3,7 @@ import { useRawWorkbench } from './composables/useRawWorkbench'
 import PlotView from '../../components/PlotView.vue'
 import ProjectArtifacts from '../../components/ProjectArtifacts.vue'
 import ProcessingFields from './ProcessingFields.vue'
+import ExtractionSelection from './ExtractionSelection.vue'
 import SignalDiagnostics from './SignalDiagnostics.vue'
 const {
   store,
@@ -163,6 +164,12 @@ const {
           v-model="parameters"
           :fields="basic"
           :disabled="store.busy"
+          @edited="edited"
+        />
+        <ExtractionSelection
+          v-model="parameters"
+          :sample="sample"
+          :summary="summary"
           @edited="edited"
         />
         <button
