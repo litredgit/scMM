@@ -94,7 +94,7 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
     <section id="personal-settings" class="task-section" aria-label="个人设置">
       <h2>个人设置</h2>
       <form class="card" @submit.prevent="change">
-        <h2>修改密码</h2>
+        <h3>修改密码</h3>
         <p>修改后所有设备需要重新登录。请先保存当前项目。</p>
         <label
           >当前密码<input
@@ -124,7 +124,7 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
     <section v-if="auth.admin" id="team-management" class="task-section" aria-label="团队管理">
       <h2>团队管理</h2>
       <form class="card" @submit.prevent="create">
-        <h2>创建账号</h2>
+        <h3>创建账号</h3>
         <label
           >新账号名称<input v-model="name" required minlength="3" maxlength="64" autocomplete="off"
         /></label>
@@ -137,7 +137,7 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
         <button class="primary" :disabled="store.busy">创建账号</button>
       </form>
       <div v-if="credential" class="card">
-        <h2>一次性登录凭据</h2>
+        <h3>一次性登录凭据</h3>
         <p>24 小时内有效，首次登录后设置密码。请通过可信渠道交给对应用户；关闭后不再显示。</p>
         <label>一次性凭据<input :value="credential" readonly autocomplete="off" /></label>
         <button @click="credential = ''" class="preview">关闭凭据显示</button>

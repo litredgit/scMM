@@ -2422,3 +2422,77 @@ progress {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Keep information and actions attached to their objects at every width. */
+.project-note {
+  max-width: 28rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.project-list td {
+  vertical-align: top;
+}
+.project-list td:last-child {
+  min-width: 12rem;
+}
+.project-info {
+  margin-bottom: 18px;
+}
+.project-form .grow {
+  min-width: min(100%, 240px);
+}
+.sample-toolbar,
+.browser-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.file-entry-row > input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 18px;
+  min-height: 18px;
+  margin: 0 8px;
+}
+.matrix-download {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+}
+.matrix-download details {
+  margin-top: 10px;
+}
+.parameter-section > summary {
+  font-weight: 600;
+  cursor: pointer;
+  padding: 10px 0;
+}
+.parameter-section:not([open]) {
+  padding-bottom: 4px;
+}
+.selection-labels > summary {
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.selection-labels[open] > summary {
+  margin-bottom: 16px;
+}
+.selection-labels .actions {
+  flex-wrap: wrap;
+}
+@media (max-width: 700px) {
+  .sample-toolbar > input {
+    width: 100%;
+  }
+  .sample-toolbar button,
+  .browser-toolbar button {
+    flex: 0 1 auto;
+  }
+  .matrix-download .download {
+    width: 100%;
+  }
+  .parameter-section .parameter-controls {
+    min-width: 0;
+  }
+}

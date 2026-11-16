@@ -387,7 +387,7 @@ class RawWorkflow:
         for sample in project.samples:
             if sample_parameters(project, sample)["extraction_method"] != "snr_v1":
                 raise ValueError(
-                    f"样本 {sample['name']} 仍使用 legacy 参数；请在第二步应用 snr 参数后再启动新批次。"
+                    f"样本 {sample['name']} 保存了不受支持的提取参数；请在第二步重新设置并应用 SNR 参数。"
                 )
 
     def extraction_preflight(self, identity, revision):

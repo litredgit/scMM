@@ -24,8 +24,23 @@ def matrix_csv(data, *, features=None, group_key="group", labels=None):
     return frame.to_csv().encode("utf-8")
 
 
-def export_matrix(project, source):
+def export_matrix(project, source, *, batch_path=None):
     """Select the complete measured root or the active processed matrix."""
+    if batch_path is not None:
+        if source != "extracted":
+            raise ValueError("只有提取矩阵可指定处理批次。")
+        from .project_batch import batches, read_batch, reviewed_dataset
+
+        path = next((p for p in batches(project) if str(p) == batch_path), None)
+        if path is None:
+            raise ValueError("批次不属于当前项目。")
+        state = read_batch(path)
+        if state["status"] in {"queued", "running"}:
+            raise ValueError("请等待所选批次停止后再下载提取矩阵。")
+        ids = [row["id"] for row in state["samples"] if row["status"] == "succeeded"]
+        if not ids:
+            raise ValueError("所选批次没有成功样本可下载。")
+        return reviewed_dataset(path, ids)
     if source == "current":
         return project.workspace.require_data()
     if source != "extracted":

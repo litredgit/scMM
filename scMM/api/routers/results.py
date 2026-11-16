@@ -202,13 +202,15 @@ def clear(body: RevisionRequest, manager: Service, identity: Identity):
 
 
 @router.get("/workspace/results/matrix")
-def matrix_info(manager: Service, identity: Identity, source: str = "current"):
+def matrix_info(
+    manager: Service, identity: Identity, source: str = "current", batch_path: str | None = None
+):
     from scMM.application.matrix_export import export_matrix, export_samples
 
     with manager.access(identity) as workspace:
         try:
             project = workspace.require_project()
-            data = export_matrix(project, source)
+            data = export_matrix(project, source, batch_path=batch_path)
             _, samples = export_samples(project, data)
         except ValueError as exc:
             return {"available": False, "reason": str(exc)}
@@ -229,5 +231,7 @@ def matrix_download(body: s.MatrixDownload, manager: Service, identity: Identity
     with manager.access(identity) as workspace:
         workspace.check(body.revision)
         project = workspace.require_project()
-        content = labeled_matrix(project, export_matrix(project, body.source), body.labels)
+        content = labeled_matrix(
+            project, export_matrix(project, body.source, batch_path=body.batch_path), body.labels
+        )
         return Response(content, media_type="text/csv; charset=utf-8")

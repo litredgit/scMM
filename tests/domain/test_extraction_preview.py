@@ -8,19 +8,17 @@ from scMM.file._dataset_loading import DatasetState
 from scMM.file.data import CyESIData
 from scMM.file.io import save_spectra
 from scMM.util._cell_snr import find_cell_peaks_snr
-from scMM.util.peak import find_cell_peaks
 
 
 def test_preprocess_preserves_existing_positional_parameter_order():
     import inspect
 
     parameters = list(inspect.signature(CyESIData.preprocess).parameters)
-    assert parameters[:14] == [
+    assert parameters[:13] == [
         "self",
         "baseline_filter",
         "baseline_filter_size",
         "cell_snr",
-        "peak_snr",
         "max_zero_frac",
         "debug_hook",
         "feature_block_size",
@@ -33,19 +31,15 @@ def test_preprocess_preserves_existing_positional_parameter_order():
     ]
 
 
-@pytest.mark.parametrize("snr", [False, True])
+@pytest.mark.parametrize("snr", [True])
 @pytest.mark.parametrize("cells", [False, True])
 def test_block_progress_preserves_results_and_propagates_failure(snr, cells):
     values = np.ones((31, 3))
     if cells:
         values[8] = 20
     data = pd.DataFrame(values, columns=[100.0, 200.0, 300.0])
-    function = find_cell_peaks_snr if snr else find_cell_peaks
-    kwargs = (
-        dict(baseline_window=5, noise_window=5, cell_min_signal=0, show_progress=False)
-        if snr
-        else dict(baseline_filter_size=5, cell_min_signal=0, n_jobs=1)
-    )
+    function = find_cell_peaks_snr
+    kwargs = dict(baseline_window=5, noise_window=5, cell_min_signal=0, show_progress=False)
     expected = function(data, 100.0, feature_block_size=2, **kwargs)
     events = []
     actual = function(
@@ -66,7 +60,7 @@ def test_block_progress_preserves_results_and_propagates_failure(snr, cells):
         function(data, 100.0, feature_block_size=2, progress_callback=cancel, **kwargs)
 
 
-@pytest.mark.parametrize("snr", [False, True])
+@pytest.mark.parametrize("snr", [True])
 @pytest.mark.parametrize("full", [False, True])
 def test_debug_baseline_is_opt_out_for_compatibility(snr, full):
     values = np.ones((31, 2))
@@ -80,7 +74,7 @@ def test_debug_baseline_is_opt_out_for_compatibility(snr, full):
             100.0,
         ),
         dict(
-            extraction_method="snr_v1" if snr else "legacy",
+            extraction_method="snr_v1",
             baseline_filter_size=5,
             cell_min_signal=0,
             noise_window=5,
@@ -94,9 +88,7 @@ def test_debug_baseline_is_opt_out_for_compatibility(snr, full):
     assert events[0]["cell_idx"].tolist() == [8]
 
 
-@pytest.mark.parametrize(
-    "method,mode", [("legacy", "union"), ("snr_v1", "union"), ("snr_v1", "intersection")]
-)
+@pytest.mark.parametrize("method,mode", [("snr_v1", "union"), ("snr_v1", "intersection")])
 @pytest.mark.parametrize("cell_min_signal", [0, 18, 19])
 def test_cached_preview_matches_real_file_processing(
     tmp_path, monkeypatch, method, mode, cell_min_signal
@@ -143,15 +135,7 @@ def test_cached_preview_matches_real_file_processing(
     result = preview.cell_detection(params, **options)
     again = preview.cell_detection(params, **options)
     assert result.cell_count == len(actual.data)
-    assert result.cell_count == (
-        0
-        if cell_min_signal == 19
-        else 1
-        if mode == "intersection"
-        else 2
-        if method == "legacy"
-        else 3
-    )
+    assert result.cell_count == (0 if cell_min_signal == 19 else 1 if mode == "intersection" else 3)
     np.testing.assert_array_equal(
         result.traces.loc[result.traces.cell_apex, "rt_seconds"],
         actual.peak_meta.rt,

@@ -28,7 +28,7 @@ const operation = ref('filter'),
   imputation = ref('median'),
   minTotal = ref(0),
   minDetected = ref(0.2),
-  fraction = ref(0),
+  fraction = ref(0.2),
   contamination = ref(0.05),
   layer = ref('')
 const advanced = ref({
@@ -206,7 +206,7 @@ useViewState('preprocess', {
   <section v-if="store.project?.dataset">
     <div class="page-title">
       <div>
-        <p class="eyebrow">STEP 04 / 预处理</p>
+        <p class="eyebrow">第 4 步 · 预处理</p>
         <h1>预处理与 QC</h1>
         <p>
           {{ store.project.dataset.cells }} 细胞 × {{ store.project.dataset.features }} 特征 ·
@@ -218,7 +218,16 @@ useViewState('preprocess', {
         ><span class="step-badge">04 / 06</span>
       </div>
     </div>
-    <MatrixDownload source="current" />
+    <section class="card current-matrix">
+      <div class="section-heading">
+        <div>
+          <h2>当前矩阵</h2>
+          <p>{{ store.project.dataset.cells }} 细胞 × {{ store.project.dataset.features }} 特征</p>
+        </div>
+        <span>已应用的处理结果</span>
+      </div>
+      <MatrixDownload source="current" embedded />
+    </section>
     <div class="card">
       <h2>处理当前矩阵</h2>
       <div class="field-grid">

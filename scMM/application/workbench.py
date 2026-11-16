@@ -204,7 +204,7 @@ class AnalysisWorkspace:
             {"method": method, "missing_values": 0, "effective_parameters": params},
         )
 
-    def filter(self, *, min_total=0.0, min_detected=0.2, min_feature_fraction=0.0):
+    def filter(self, *, min_total=0.0, min_detected=0.2, min_feature_fraction=0.2):
         data = self.require_data()
         if (
             not np.isfinite([min_total, min_detected, min_feature_fraction]).all()

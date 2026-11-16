@@ -49,7 +49,6 @@ NUMERIC_PARAMETERS = frozenset(
         "resample_points_per_fwhm",
         "ms_peak_snr_threshold",
         "cell_snr",
-        "peak_snr",
         "baseline_filter_size",
         "max_zero_frac",
         "feature_snr_threshold",
@@ -134,7 +133,7 @@ ENUM_PARAMETERS = {
     "metric": frozenset({"euclidean", "manhattan", "cosine"}),
     "learning_rate": frozenset({"auto"}),
     "reference_mode": frozenset({"union", "intersection"}),
-    "extraction_method": frozenset({"legacy", "snr_v1"}),
+    "extraction_method": frozenset({"snr_v1"}),
 }
 METRICS = frozenset({"accuracy", "balanced_accuracy", "f1_macro", "roc_auc"})
 

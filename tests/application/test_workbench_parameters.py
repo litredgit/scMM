@@ -26,9 +26,10 @@ def test_json_defaults_are_validated_and_isolated(tmp_path, monkeypatch):
     assert first.analysis["cv"] == 3
     first.analysis["cv"] = 99
     assert load_defaults().analysis["cv"] == 3
-    config.write_text(json.dumps({"processing": {"extraction_method": "legacy"}}))
-    assert load_defaults().processing.extraction_method == "legacy"
-    assert ProcessingParameters(ref_mz=150).extraction_method == "legacy"
+    config.write_text(json.dumps({"processing": {"extraction_method": "unsupported"}}))
+    with pytest.raises(ValueError, match="snr_v1"):
+        load_defaults()
+    assert ProcessingParameters(ref_mz=150).extraction_method == "snr_v1"
     for override in [
         {"unknown": {}},
         {"analysis": {"oops": 1}},
@@ -69,6 +70,7 @@ def test_extraction_range_reaches_all_loaders(tmp_path, strategy):
         resolution=5000.0,
         resample_points_per_fwhm=2.0,
         ppm_tol=500.0,
+        reference_ppm_tol=500.0,
         baseline_filter_size=5,
         cell_min_signal=0,
         n_jobs=1,
@@ -106,6 +108,7 @@ def test_preview_range_single_scan_and_multiple_eics(tmp_path):
         resolution=5000.0,
         resample_points_per_fwhm=2.0,
         ppm_tol=500.0,
+        reference_ppm_tol=500.0,
         baseline_filter_size=5,
         cell_min_signal=0,
     )

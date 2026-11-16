@@ -213,3 +213,25 @@ def test_historical_project_missing_signal_gate_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="cell_min_signal"):
         store.open(project.folder)
     assert path.read_bytes() == before
+
+
+def test_project_notes_creation_and_saved_times_do_not_change_on_open(tmp_path, monkeypatch):
+    from scMM.application import projects as module
+    from scMM.application.projects import ProjectStore, write_json
+
+    monkeypatch.setattr(module, "utc_now", lambda: "2026-11-16T10:00:00+00:00")
+    store = ProjectStore(tmp_path)
+    project = store.create("notes")
+    project.manifest["description"] = "实验备注"
+    monkeypatch.setattr(module, "utc_now", lambda: "2026-11-16T11:00:00+00:00")
+    store.save(project)
+    row = store.list()[0]
+    assert row["description"] == "实验备注"
+    assert row["created_at"] == "2026-11-16T10:00:00+00:00"
+    assert row["saved_at"] == "2026-11-16T11:00:00+00:00"
+    before = (project.folder / "project.json").read_bytes()
+    store.open(project.folder)
+    assert (project.folder / "project.json").read_bytes() == before
+    project.manifest.pop("created_at")
+    write_json(project.folder / "project.json", project.manifest)
+    assert store.list()[0]["created_at"] is None

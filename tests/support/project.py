@@ -38,6 +38,7 @@ def setup_project(tmp_path, *, storage_label="data", sample_names=("a", "b")):
             resample_points_per_fwhm=2.0,
             ppm_tol=500.0,
             baseline_filter_size=5,
+            reference_ppm_tol=500.0,
             cell_min_signal=0,
         )
     )

@@ -122,7 +122,7 @@ class Operation(RevisionRequest):
 class Filter(Controls):
     min_total: float = Field(default=0.0, ge=0)
     min_detected: float = Field(default=0.2, ge=0, le=1)
-    min_feature_fraction: float = Field(default=0.0, ge=0, le=1)
+    min_feature_fraction: float = Field(default=0.2, ge=0, le=1)
 
 
 class Subset(Controls):
@@ -590,6 +590,7 @@ class Presentation(RevisionRequest):
 
 
 class MatrixDownload(RevisionRequest):
+    batch_path: str | None = None
     source: Literal["extracted", "current"]
     labels: dict[str, str] = Field(default_factory=dict, max_length=10000)
 

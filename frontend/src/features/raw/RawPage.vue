@@ -41,7 +41,7 @@ const {
   strategy,
   mergePpm,
   autoRanges,
-  legacyParameters,
+  unsupportedParameters,
   samples,
   basic,
   expanded,
@@ -70,7 +70,7 @@ const {
   <section v-if="store.project">
     <div class="page-title">
       <div>
-        <p class="eyebrow">STEP 02 / 原始谱</p>
+        <p class="eyebrow">第 2 步 · 原始谱</p>
         <h1>原始谱与参数</h1>
         <p>检查采集信号，选择实验参考离子，再预览细胞窗口。</p>
       </div>
@@ -127,17 +127,17 @@ const {
         <p class="method-badge">
           <FieldLabel
             name="提取方法：snr"
-            text="固定使用 SNR 提取：按参考离子识别细胞窗口，扣除基线并以背景噪声衡量特征信号。内部标识 snr_v1 保留用于旧项目与产物兼容。"
+            text="固定使用 SNR 提取：按参考离子识别细胞窗口，扣除基线并以背景噪声衡量特征信号。"
           />
         </p>
-        <p v-if="legacyParameters" class="alert">
-          此项目或样本仍保存 legacy 参数。当前表单已切换为
-          snr，请检查并应用参数后启动新提取；旧产物保留原算法记录。
+        <p v-if="unsupportedParameters" class="alert">
+          此项目或样本的提取参数已不受支持。请核对当前 SNR
+          参数并应用后重新提取；已保存产物保留原始来源。
         </p>
         <h3>当前表单 · 按应用范围生效</h3>
         <div class="reference-preset">
           <label
-            ><FieldLabel name="Cell type" /><select
+            ><FieldLabel name="参考离子预设" /><select
               aria-label="Cell type"
               v-model="preset"
               :disabled="store.busy"

@@ -59,7 +59,7 @@ const resultStates = computed(() => {
   <section v-if="store.project?.dataset" class="analysis-page">
     <div class="page-title">
       <div>
-        <p class="eyebrow">STEP 05 / 分析</p>
+        <p class="eyebrow">第 5 步 · 分析</p>
         <h1>探索与分析</h1>
         <p>
           {{ store.project.dataset.cells }} 细胞 × {{ store.project.dataset.features }} 特征 ·

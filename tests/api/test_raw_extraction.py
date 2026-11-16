@@ -197,11 +197,11 @@ def test_failed_batch_submission_keeps_saved_workspace_revision_consistent(workf
     assert workflow[-1]("/project/save").status_code == 200
 
 
-def test_vue_snr_only_rejects_legacy_without_mutating_saved_project(workflow):
+def test_vue_snr_only_rejects_unsupported_without_mutating_saved_project(workflow):
     samples = raw_samples(workflow)
     before = workflow[-2]()
     params = deepcopy(workflow[6].manifest["parameters"])
-    params["extraction_method"] = "legacy"
+    params["extraction_method"] = "unsupported"
     rejected = workflow[-1]("/parameters", {"parameters": params}, "PUT")
     assert rejected.status_code == 400 and "snr" in rejected.text
     assert workflow[-2]() == before
@@ -214,7 +214,7 @@ def test_vue_snr_only_rejects_legacy_without_mutating_saved_project(workflow):
     assert workflow[-1]("/extraction/preflight").status_code == 400
     assert workflow[-1]("/extraction/start").status_code == 400
     assert not list((folder / "processing").glob("*/request.json"))
-    assert workflow[-2]()["project"]["manifest"]["parameters"]["extraction_method"] == "legacy"
+    assert workflow[-2]()["project"]["manifest"]["parameters"]["extraction_method"] == "unsupported"
     assert samples
 
 
@@ -315,3 +315,53 @@ def test_raw_diagnostic_rechecks_input_after_numeric_work(workflow, monkeypatch)
     )
     assert response.status_code == 400
     assert workflow[-2]() == before
+
+
+def test_batch_matrix_http_download_before_review_and_project_isolation(workflow):
+    import json
+
+    from scMM.application.project_batch import preflight, run_batch
+    from scMM.application.projects import write_json
+
+    client, headers, manager, _, _, _, reference, current, post = workflow
+    with manager.access(headers["X-SCMM-Workspace"]) as workspace:
+        project = workspace.project
+        project.manifest["parameters"] = dict(reference.manifest["parameters"])
+        project.add_files(manager.storage, "Raw", ["a.mzML", "b.mzML"])
+        request = preflight(project, manager.storage)
+        request["created_at"] = "2026-11-16T11:30:00Z"
+        folder = project.folder / "processing" / "download"
+        folder.mkdir()
+        write_json(folder / "request.json", request)
+    run_batch(folder / "state.json")
+    path = str(folder / "state.json")
+    before = current()
+    info = client.get(
+        "/api/v1/workspace/results/matrix",
+        headers=headers,
+        params={"source": "extracted", "batch_path": path},
+    )
+    assert info.status_code == 200 and info.json()["available"], info.text
+    result = post("/results/matrix/download", {"source": "extracted", "batch_path": path})
+    assert result.status_code == 200 and result.text.startswith("Sample,Label,")
+    assert current() == before and current()["project"]["dataset"] is None
+    result = post(
+        "/results/matrix/download",
+        {"source": "extracted", "batch_path": str(folder / "foreign.json")},
+    )
+    assert result.status_code == 400
+    assert json.loads(json.dumps(current())) == before
+
+
+def test_redetect_range_only_returns_a_form_candidate(workflow):
+    current, post = workflow[-2:]
+    assert post("/samples", {"root": "Raw", "paths": ["a.mzML"]}).status_code == 200
+    sample = current()["project"]["manifest"]["samples"][0]["id"]
+    assert post("/raw/open", {"sample_id": sample}).status_code == 200
+    before = current()
+    response = post("/raw/range", {"sample_id": sample})
+    assert response.status_code == 200, response.text
+    assert response.json()["value"]["range"] == [100, 200]
+    assert current() == before
+    assert post("/raw/range", {"sample_id": "unknown"}).status_code == 400
+    assert current() == before

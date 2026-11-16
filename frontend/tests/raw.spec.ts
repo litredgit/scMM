@@ -16,8 +16,8 @@ test('raw signal diagnostic stays independent and exports full numeric compariso
   await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
   await page.getByRole('link', { name: /原始谱与参数/ }).click()
   await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
-  await page.locator('summary').filter({ hasText: '独立原始信号诊断' }).click()
-  const run = page.getByRole('button', { name: '运行独立诊断', exact: true })
+  await page.locator('summary').filter({ hasText: '原始信号诊断（可选）' }).click()
+  const run = page.getByRole('button', { name: '运行信号诊断', exact: true })
   await expect(run).toBeDisabled()
   await page.getByLabel('诊断信号', { exact: true }).selectOption('eic')
   await page.getByLabel('诊断参考离子', { exact: true }).fill('150,151')
@@ -34,7 +34,7 @@ test('raw signal diagnostic stays independent and exports full numeric compariso
   expect(body.figure.layout.meta.export_tables['diagnostic.csv']).toContain('rank_residual')
   await expect(page.getByText('迭代噪声估计与残差标准差不同', { exact: false })).toBeVisible()
   await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('100000')
-  const panel = page.locator('details.card').filter({ hasText: '独立原始信号诊断' })
+  const panel = page.locator('details.card').filter({ hasText: '原始信号诊断（可选）' })
   await expect(panel.locator('.js-plotly-plot')).toBeVisible()
   await page.route('**/workspace/raw/diagnostic', (route) =>
     route.request().method() === 'POST'
@@ -62,7 +62,7 @@ test('raw signal diagnostic stays independent and exports full numeric compariso
   await page.getByRole('link', { name: /原始谱与参数/ }).click()
   // Restored read-only plots remain available without rerunning raw computation.
   if (!(await page.getByLabel('诊断基线', { exact: true }).isVisible()))
-    await page.locator('summary').filter({ hasText: '独立原始信号诊断' }).click()
+    await page.locator('summary').filter({ hasText: '原始信号诊断（可选）' }).click()
   await expect(page.getByLabel('诊断基线窗口', { exact: true })).toHaveValue('5')
   await expect(panel.locator('.js-plotly-plot')).toBeVisible()
   await page.getByLabel('诊断基线', { exact: true }).selectOption('zero')
@@ -205,6 +205,11 @@ test('failed clearing of a sample exception keeps the raw plot and unsaved param
   await page.getByRole('link', { name: /原始谱与参数/ }).click()
   await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
   await expect(page.locator('.js-plotly-plot')).toBeVisible()
+  if (!(await page.getByLabel('cell_min_signal', { exact: true }).isVisible()))
+    await page
+      .locator('summary')
+      .filter({ hasText: /^细胞识别$/ })
+      .click()
   await page.getByLabel('cell_min_signal', { exact: true }).fill('42')
   await page.route('**/workspace/parameters/clear', (route) =>
     route.fulfill({ status: 400, json: { error: { message: '合成例外清除失败' } } }),

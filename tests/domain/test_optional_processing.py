@@ -101,7 +101,9 @@ def test_sequential_file_boundaries_with_real_mzml(tmp_path, monkeypatch, strate
         n_jobs=1,
     )
     assert obj.data.shape == (2, 1)
-    np.testing.assert_allclose(obj.data, [[20.0], [20.0]])
+    np.testing.assert_allclose(
+        obj.data, [[19.0], [19.0]]
+    )  # SNR quantifies net signal above baseline 1.
     assert obj.peak_meta.source_file.tolist() == ["a.mzML", "b.mzML"]
     assert progress[-1] == 1.0
     assert progress == sorted(progress)

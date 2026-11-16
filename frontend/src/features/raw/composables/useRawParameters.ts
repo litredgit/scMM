@@ -64,9 +64,9 @@ export function useRawParameters(sample: Ref<string>) {
     mergePpm = ref(10),
     autoRanges = ref(true)
   let parameterGeneration = 0
-  const legacyParameters = computed(() => {
+  const unsupportedParameters = computed(() => {
     const item = samples.value.find((s) => s.id === sample.value)
-    return (item?.parameters ?? store.project?.manifest.parameters)?.extraction_method === 'legacy'
+    return (item?.parameters ?? store.project?.manifest.parameters)?.extraction_method !== 'snr_v1'
   })
   const samples = computed(() => store.project?.manifest.samples ?? [])
   const basic = [
@@ -308,7 +308,7 @@ export function useRawParameters(sample: Ref<string>) {
     strategy,
     mergePpm,
     autoRanges,
-    legacyParameters,
+    unsupportedParameters,
     samples,
     basic,
     expanded,

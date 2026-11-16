@@ -19,6 +19,15 @@ async function read() {
   )
   if (sample === props.sample && value) hints.value = value
 }
+async function detect() {
+  const sample = props.sample
+  const result = await store.command<{ range: number[] }>('/raw/range', { sample_id: sample })
+  if (result && sample === props.sample) {
+    model.value.mz_min = result.range[0]
+    model.value.mz_max = result.range[1]
+    emit('edited')
+  }
+}
 function bound(key: string, index: number, event: Event) {
   const bounds = [
     ...((model.value[key] as number[] | null) ??
@@ -33,8 +42,8 @@ function bound(key: string, index: number, event: Event) {
 }
 </script>
 <template>
-  <section v-if="sample" class="parameter-section">
-    <h4>逐文件提取范围与采集信息</h4>
+  <details v-if="sample" class="parameter-section">
+    <summary>逐文件范围与采集信息</summary>
     <p>
       滑块修改正式提取参数，需按页面所选作用域应用；不是原始图的显示缩放。RT 单位为秒，帧号从 0
       开始并包含 MS2 原始位置。
@@ -68,11 +77,20 @@ function bound(key: string, index: number, event: Event) {
           @input="bound(key, i, $event)"
         /></div
     ></template>
+    <p v-if="summary" class="muted">
+      原始检测范围 {{ summary.mz_min }}–{{ summary.mz_max }} m/z；当前表单 {{ model.mz_min }}–{{
+        model.mz_max
+      }}
+      m/z。重新检测按最近的 50 倍数填入表单，应用后才生效。
+    </p>
+    <button class="preview" :disabled="store.busy || !summary" @click="detect">
+      重新检测 m/z 范围
+    </button>
     <button class="preview" :disabled="store.busy" @click="read">读取采集信息</button
     ><template v-if="hints"
       ><p>采集质量窗：{{ hints.windows.map((v) => v.join('–')).join('；') || '未读取到' }} m/z</p>
       <p>分辨率记录值：{{ hints.resolutions.join('、') || '未读取到' }}</p>
       <p>{{ hints.note }}</p></template
     >
-  </section>
+  </details>
 </template>

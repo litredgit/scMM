@@ -4,7 +4,7 @@ async function openIons(page: Page, name: string) {
   await page.goto('/')
   await page.getByLabel('项目名称', { exact: true }).fill(name)
   await page.getByRole('button', { name: '创建并添加样本' }).click()
-  await page.getByRole('button', { name: '导入独立结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入 H5AD 数据', exact: true }).click()
   await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
   await page.getByRole('button', { name: /^(?:▤ )?lipids[.]h5ad\s/ }).click()
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()

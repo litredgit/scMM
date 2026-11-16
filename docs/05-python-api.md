@@ -20,7 +20,6 @@ data = CyESIData.load_from_file(
     ms_peak_snr_threshold=10,
     cell_snr=5,
     cell_min_signal=1e5,
-    peak_snr=3,
     baseline_filter_size=50,
     max_zero_frac=0.9,
 )
@@ -101,7 +100,6 @@ data = CyESIData.load_from_filelist(
     ppm_tol=10,
     n_jobs=4,
     cell_snr=5,
-    peak_snr=3,
 )
 ```
 

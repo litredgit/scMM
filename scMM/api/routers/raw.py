@@ -29,6 +29,24 @@ def raw_open(body: s.SampleRequest, manager: Service, identity: Identity):
     return manager.raw_open(identity, body.revision, body.sample_id)
 
 
+@router.post("/workspace/raw/range")
+def detect_range(body: s.SampleRequest, manager: Service, identity: Identity):
+    from scMM.application.parameters import automatic_mz_range
+    from scMM.application.preview_cache import file_identity
+
+    with manager.access(identity) as workspace:
+        workspace.check(body.revision)
+        sample = manager.sample(workspace.require_project(), body.sample_id)
+        if not workspace.raw or workspace.raw["sample_id"] != body.sample_id:
+            raise ValueError("请先打开当前样本的原始文件。")
+        preview = workspace.raw["preview"]
+        if preview.open_identity != file_identity(sample["path"]):
+            raise ValueError("原始文件已改变，请重新打开。")
+        summary = preview.summary
+        bounds = automatic_mz_range(summary.mz_min, summary.mz_max)
+        return {"workspace": manager.view(workspace), "value": {"range": bounds}}
+
+
 @router.post("/workspace/raw/plot")
 def raw_plot(body: s.RawPlot, manager: Service, identity: Identity):
     options = body.model_dump(exclude={"sample_id", "kind"})

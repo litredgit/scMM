@@ -74,6 +74,20 @@ watch(
   },
   { flush: 'sync' },
 )
+const selections = ref<Record<string, { ids: string[]; initialized: boolean }>>({})
+function rememberSelection() {
+  if (path.value) selections.value[path.value] = { ids: [...included.value], initialized: true }
+}
+function selectAllSuccesses() {
+  included.value = (selected.value?.samples ?? [])
+    .filter((s) => s.status === 'succeeded')
+    .map((s) => s.id)
+  rememberSelection()
+}
+function clearSelection() {
+  included.value = []
+  rememberSelection()
+}
 const selected = computed(() => batchList.value.find((b) => b.path === path.value))
 const active = computed(() => batchList.value.some((b) => ['queued', 'running'].includes(b.status)))
 const table = computed<DataTable>(() => ({
@@ -114,9 +128,18 @@ async function refresh(isCurrent: () => boolean) {
     if (running) store.task = `提取：${running.message}`
     else if (store.task.startsWith('提取：')) store.task = '提取已结束，等待人工审核'
     if (!result.some((b) => b.path === path.value)) path.value = result[0]?.path ?? ''
-    included.value = included.value.filter((id) =>
-      selected.value?.samples.some((s) => s.id === id && s.status === 'succeeded'),
-    )
+    const batch = selected.value
+    if (
+      batch &&
+      !['queued', 'running'].includes(batch.status) &&
+      !selections.value[path.value]?.initialized
+    ) {
+      included.value = batch.samples.filter((s) => s.status === 'succeeded').map((s) => s.id)
+      rememberSelection()
+    } else
+      included.value = included.value.filter((id) =>
+        batch?.samples.some((s) => s.id === id && s.status === 'succeeded'),
+      )
   }
 }
 const polling = serialPolling(refresh, 2000, (cause) => {
@@ -125,6 +148,7 @@ const polling = serialPolling(refresh, 2000, (cause) => {
 watch(
   () => store.project?.path,
   () => {
+    selections.value = {}
     path.value = ''
     included.value = []
     checked.value = undefined
@@ -137,7 +161,16 @@ watch(
 watch(path, () => {
   signalFigure.value = undefined
   signalSample.value = ''
-  included.value = []
+  included.value = [...(selections.value[path.value]?.ids ?? [])]
+  const batch = selected.value
+  if (
+    batch &&
+    !['queued', 'running'].includes(batch.status) &&
+    !selections.value[path.value]?.initialized
+  ) {
+    included.value = batch.samples.filter((s) => s.status === 'succeeded').map((s) => s.id)
+    rememberSelection()
+  }
   figures.value = []
 })
 watch(
@@ -203,19 +236,26 @@ const parameterTable = computed<DataTable>(() => {
     total: rows.length,
   }
 })
-useViewState('extraction', { path, included, checked, figures, signalSample, signalFigure })
+useViewState('extraction', {
+  path,
+  included,
+  checked,
+  figures,
+  signalSample,
+  signalFigure,
+  selections,
+})
 </script>
 <template>
   <section v-if="store.project" class="extraction-workspace" :class="{ 'has-batch': selected }">
     <div class="page-title">
       <div>
-        <p class="eyebrow">STEP 03 / 提取</p>
+        <p class="eyebrow">第 3 步 · 提取</p>
         <h1>提取与审核</h1>
         <p>检查完整参数，启动后台批次；结束后人工选择纳入样本。</p>
       </div>
       <span class="step-badge">03 / 06</span>
     </div>
-    <MatrixDownload source="extracted" />
     <div class="card">
       <div class="section-heading">
         <h2>项目任务</h2>
@@ -232,7 +272,14 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
             {{ formatTime(b.created_at) }} · {{ label(b.status) }} · {{ b.path.split('/').at(-2) }}
           </option>
         </select></label
-      ><template v-if="selected"
+      ><MatrixDownload
+        v-if="selected"
+        :key="`${path}:${selected.status}`"
+        source="extracted"
+        :batch-path="path"
+        embedded
+      />
+      <template v-if="selected"
         ><p role="status">{{ label(selected.status) }} · {{ selected.message }}</p>
         <div class="batch-progress" aria-label="提取进度">
           <div class="metric-strip">
@@ -300,7 +347,10 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
         <DataTableView :table="table" />
         <section class="batch-review" aria-label="样本审核">
           <h3>审核纳入样本</h3>
-          <p class="page-note">先查看信号与 QC，再选择样本建立当前数据集。提取成功不等于已纳入。</p>
+          <p class="page-note">
+            先查看信号与
+            QC，再选择样本建立当前数据集。成功样本默认选中，检查后点击建立当前数据集才会纳入。
+          </p>
           <div class="review-signal" v-if="counts.success">
             <h3>细胞提取信号</h3>
             <select aria-label="审核信号样本" v-model="signalSample" :disabled="store.busy">
@@ -317,12 +367,21 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
             ><PlotView v-if="signalFigure" :figure="signalFigure" name="extraction-signal" />
           </div>
 
-          <p>已选择 {{ included.length }} / {{ counts.success }} 个成功样本</p>
+          <div class="actions">
+            <p>已选择 {{ included.length }} / {{ counts.success }} 个成功样本</p>
+            <button class="preview" :disabled="store.busy || active" @click="selectAllSuccesses">
+              全选成功样本
+            </button>
+            <button :disabled="store.busy || active || !included.length" @click="clearSelection">
+              清空选择
+            </button>
+          </div>
           <p v-if="reviewPhase" role="status">{{ reviewPhase }}</p>
           <div class="check-list">
             <label v-for="s in selected.samples.filter((s) => s.status === 'succeeded')" :key="s.id"
               ><input
                 v-model="included"
+                @change="rememberSelection"
                 :aria-label="`${s.name} · ${s.cells} 细胞`"
                 type="checkbox"
                 :value="s.id"
@@ -395,7 +454,7 @@ useViewState('extraction', { path, included, checked, figures, signalSample, sig
       </p>
       <template v-if="checked"
         ><h3>逐样本完整参数</h3>
-        <DataTableView :table="parameterTable" />
+        <DataTableView :table="parameterTable" exact />
         <button class="save" @click="downloadPreflight">下载预检 JSON</button>
         <details>
           <summary>预检 JSON</summary>

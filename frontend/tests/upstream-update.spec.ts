@@ -53,24 +53,50 @@ test('reversible cell labels and lasso selection events', async ({ page }) => {
   test.setTimeout(90000)
   await importDataset(page, '可逆筛选合成检查')
   await page.getByRole('link', { name: /预处理/ }).click()
-  const panel = page.getByRole('heading', { name: '可逆筛选标签', exact: true }).locator('..')
+  const panel = page.locator('details.selection-labels')
+  await expect(panel).not.toHaveAttribute('open', '')
+  await panel.locator('summary').click()
   await panel.getByLabel('保留编号（每行一个）').fill('c0\nc1\nc2')
   await panel.getByRole('button', { name: '保存标签', exact: true }).click()
   await expect(panel.getByText('cell_keep_review · 已启用')).toBeVisible()
   await panel.getByRole('button', { name: '关闭筛选', exact: true }).click()
   await expect(panel.getByText('cell_keep_review · 未启用')).toBeVisible()
   await panel.getByLabel('标签来源').selectOption('lasso')
-  await panel.getByLabel('横轴变量').fill('feature:f0')
-  await panel.getByLabel('纵轴变量').fill('feature:f1')
+  await panel.getByLabel('圈选横轴变量').selectOption('feature:f0')
+  await panel.getByLabel('圈选纵轴变量').selectOption('feature:f1')
   await panel.getByRole('button', { name: '绘制圈选图' }).click()
   await expect(panel.locator('.js-plotly-plot')).toBeVisible()
-  await panel.locator('.js-plotly-plot').evaluate((graph) => {
-    ;(graph as unknown as { emit: (name: string, value: unknown) => void }).emit(
-      'plotly_selected',
-      { points: [{ customdata: ['c3'] }, { customdata: ['c4'] }] },
-    )
+  const graph = panel.locator('.js-plotly-plot')
+  await graph.scrollIntoViewIfNeeded()
+  const point = await graph.evaluate((element) => {
+    const g = element as unknown as {
+      _fullData: { x: number[]; y: number[] }[]
+      _fullLayout: {
+        dragmode: string
+        xaxis: { _offset: number; l2p: (v: number) => number }
+        yaxis: { _offset: number; l2p: (v: number) => number }
+      }
+    }
+    const layout = g._fullLayout
+    if (layout.dragmode !== 'lasso') throw new Error('Selection plot must start in lasso mode')
+    const box = element.getBoundingClientRect()
+    return {
+      x: box.left + layout.xaxis._offset + layout.xaxis.l2p(g._fullData[0]!.x[3]!),
+      y: box.top + layout.yaxis._offset + layout.yaxis.l2p(g._fullData[0]!.y[3]!),
+    }
   })
-  await expect(panel.getByText(/已选 2 个细胞/)).toBeVisible()
+  await page.mouse.move(point.x - 9, point.y - 9)
+  await page.mouse.down()
+  await page.mouse.move(point.x + 9, point.y - 9, { steps: 5 })
+  await page.mouse.move(point.x + 9, point.y + 9, { steps: 5 })
+  await page.mouse.move(point.x - 9, point.y + 9, { steps: 5 })
+  await page.mouse.move(point.x - 9, point.y - 9, { steps: 5 })
+  await page.mouse.up()
+  await expect(panel.getByText(/已选 [1-9]\d* 个细胞/)).toBeVisible()
+  const saved = page.waitForRequest(
+    (request) => request.url().endsWith('/selection-labels') && request.method() === 'POST',
+  )
   await panel.getByRole('button', { name: '保存标签', exact: true }).click()
+  expect((await saved).postDataJSON().ids).toContain('c3')
   await expect(panel.getByText('cell_keep_review · 已启用')).toBeVisible()
 })

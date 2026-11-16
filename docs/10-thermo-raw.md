@@ -66,6 +66,12 @@ reader 是单次上下文；数组为只读 bytes 视图，退出后仍有效，
 - stderr 仅诊断；stdout 不允许日志。缺失结束标志不算成功。
 - 不排序、去重、补零、裁剪或滤波；空 profile scan 保留。
 
+### 采集信息读取
+
+helper 的 `--acquisition file.raw` 模式只读取前 32 个 MS1 扫描的采集质量窗和分辨率附加记录，输出版本 1 JSON，不传输 profile 数组。质量窗来自扫描设置，分辨率仅接受明确的 FT Resolution / Orbitrap Resolution / Resolution 字段，排除带 ppm 的分辨率补偿值。缺失字段保留缺失，参考质量未知时不自动应用到 m/z 200 参数；超时、退出失败和无效 JSON 明确报错，不回退为固定提示。
+
+Python 与 helper 必须同步更新。开发服务使用独立 reader 发布目录，验证后发布时再同步生产所配置的 reader；不要用开发构建覆盖运行中的生产依赖。
+
 ## 真实文件验证
 
 2026-09-29 的 Q Exactive wt-1（4,302 scans、81,059,698 profile points）为单个真实样本证据。

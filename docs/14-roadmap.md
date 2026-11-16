@@ -2,7 +2,7 @@
 
 [任务导航](README.md) · [历史与验收](../CHANGELOG.md)
 
-当前仅保留以下暂缓事项；已验收进展见 [CHANGELOG](../CHANGELOG.md)。
+当前保留以下暂缓事项；已验收进展见 [CHANGELOG](../CHANGELOG.md)。
 
 ## 明确暂缓
 

@@ -32,11 +32,14 @@ const headerHelp: Record<string, string> = {
   at: '处理记录的时间戳；时间戳携带原始时区信息。',
   mean_abs_shap: '跨解释样本及类别平均的 SHAP 绝对贡献，不表示效应方向或因果。',
 }
-const props = withDefaults(defineProps<{ table: DataTable; qc?: boolean }>(), { qc: false })
+const props = withDefaults(defineProps<{ table: DataTable; qc?: boolean; exact?: boolean }>(), {
+  qc: false,
+})
 function formatted(value: unknown, key: string, row: Record<string, unknown>) {
   if (key === 'extraction_method' && value === 'snr_v1') return 'snr'
   if (value === null || value === undefined) return '—'
   if (typeof value === 'number') {
+    if (props.exact) return String(value)
     if (key === 'p_value' || key === 'fdr') return value === 0 ? '0' : value.toExponential(2)
     if (
       props.qc &&

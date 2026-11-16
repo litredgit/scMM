@@ -13,7 +13,7 @@ async function importAnalysis(page: Page, name: string, filename = 'analysis.h5a
   else await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
   await page.getByLabel('项目名称', { exact: true }).fill(name)
   await page.getByRole('button', { name: '创建并添加样本' }).click()
-  await page.getByRole('button', { name: '导入独立结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入 H5AD 数据', exact: true }).click()
   await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
   await page
     .getByRole('button', { name: new RegExp(`^(?:▤ )?${filename.replaceAll('.', '[.]')}\\s`) })

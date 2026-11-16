@@ -1,15 +1,21 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import PlotView from '../../components/PlotView.vue'
+import { useReadScope } from '../../api/readScope'
 import type { Figure } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
 const store = useWorkspace()
 const gateFigure = ref<Figure>()
+let gateGeneration = 0
 async function drawGate() {
-  gateFigure.value = await store.command<Figure>('/analysis/selection-plot', {
+  gateFigure.value = undefined
+  selected.value = ''
+  const token = ++gateGeneration
+  const value = await store.command<Figure>('/analysis/selection-plot', {
     x: x.value,
     y: y.value,
   })
+  if (token === gateGeneration) gateFigure.value = value
 }
 function selection(ids: string[]) {
   selected.value = ids.join('\n')
@@ -26,16 +32,52 @@ const name = ref('review'),
   y = ref(''),
   polygon = ref(''),
   contamination = ref(0.05)
+const axisSearch = ref('')
+const choices = ref<{ value: string; label: string }[]>([])
+const count = computed(() => selected.value.split(/[\n,;]+/).filter((v) => v.trim()).length)
+const context = () => [
+  store.current?.workspace_id,
+  store.project?.dataset?.id,
+  store.project?.dataset?.revision,
+]
+const reads = useReadScope(() => [context(), axisSearch.value])
+async function loadChoices() {
+  const accept = reads.begin()
+  const result = await store.read<{ options: typeof choices.value }>(
+    `/analysis/selection-axes?${new URLSearchParams({ query: axisSearch.value })}`,
+    undefined,
+    accept,
+  )
+  if (accept() && result) choices.value = result.options
+}
+watch([x, y, mode, axis], () => {
+  gateGeneration++
+  gateFigure.value = undefined
+  selected.value = ''
+})
+watch(axisSearch, () => void loadChoices())
 const labels = ref<Record<string, { axis: string; enabled: boolean }>>({})
 async function read() {
   const value = await store.read<{ labels: typeof labels.value }>('/analysis/selection-labels')
   if (value) labels.value = value.labels
 }
 watch(
-  () => [store.current?.workspace_id, store.project?.dataset?.id, store.project?.dataset?.revision],
+  () =>
+    JSON.stringify([
+      store.current?.workspace_id,
+      store.project?.dataset?.id,
+      store.project?.dataset?.revision,
+    ]),
   () => {
+    gateGeneration++
+    gateFigure.value = undefined
+    selected.value = ''
+    choices.value = []
     labels.value = {}
-    if (store.project?.dataset) void read()
+    if (store.project?.dataset) {
+      void read()
+      void loadChoices()
+    }
   },
   { immediate: true },
 )
@@ -79,8 +121,8 @@ async function apply(toggle?: string) {
 }
 </script>
 <template>
-  <section class="card">
-    <h2>可逆筛选标签</h2>
+  <details class="card selection-labels">
+    <summary>添加筛选标签</summary>
     <p>
       标签组合使用交集。关闭全部标签可恢复完整筛选前矩阵；启用期间请先关闭标签再归一化、插补或执行其他矩阵变换。
     </p>
@@ -125,17 +167,31 @@ async function apply(toggle?: string) {
         step=".01"
         :disabled="store.busy"
     /></label>
-    <template v-if="mode === 'polygon' || mode === 'lasso'"
+    <template v-if="mode === 'polygon' || mode === 'lasso'">
+      <label
+        >查找坐标变量<input
+          v-model="axisSearch"
+          aria-label="查找圈选变量"
+          placeholder="输入指标名、降维键或特征编号"
+          :disabled="store.busy"
+      /></label>
+      <p class="muted">选择细胞指标、已有降维分量或特征；每次最多显示 100 个匹配特征。</p>
+      <label
+        >横轴变量<select v-model="x" aria-label="圈选横轴变量" :disabled="store.busy">
+          <option value="" disabled>选择横轴</option>
+          <option v-if="x && !choices.some((c) => c.value === x)" :value="x">{{ x }}</option>
+          <option v-for="item in choices" :key="item.value" :value="item.value">
+            {{ item.label }}
+          </option>
+        </select></label
       ><label
-        >横轴变量<input
-          v-model="x"
-          placeholder="feature:特征编号 或 obs:数值列"
-          :disabled="store.busy" /></label
-      ><label
-        >纵轴变量<input
-          v-model="y"
-          placeholder="feature:特征编号 或 obs:数值列"
-          :disabled="store.busy" /></label
+        >纵轴变量<select v-model="y" aria-label="圈选纵轴变量" :disabled="store.busy">
+          <option value="" disabled>选择纵轴</option>
+          <option v-if="y && !choices.some((c) => c.value === y)" :value="y">{{ y }}</option>
+          <option v-for="item in choices" :key="item.value" :value="item.value">
+            {{ item.label }}
+          </option>
+        </select></label
       ><label v-if="mode === 'polygon'"
         >圈门顶点（每行 x,y）<textarea v-model="polygon" :disabled="store.busy" /></label
     ></template>
@@ -144,8 +200,8 @@ async function apply(toggle?: string) {
         绘制圈选图
       </button>
       <p>
-        在图上套索圈选后，点击保存标签。已选
-        {{ selected.split('\n').filter(Boolean).length }} 个细胞。
+        拖动鼠标圈选细胞，松开后点击“保存标签”。工具栏可切换缩放、框选与套索。已选
+        {{ count }} 个细胞。
       </p>
       <PlotView
         v-if="gateFigure"
@@ -166,12 +222,19 @@ async function apply(toggle?: string) {
         <option :value="false">只保存标签</option>
       </select></label
     >
-    <button class="primary" :disabled="store.busy" @click="apply()">保存标签</button>
+    <button
+      class="primary"
+      :disabled="store.busy || (mode === 'lasso' && (!gateFigure || !count))"
+      @click="apply()"
+    >
+      保存标签
+    </button>
+    <p v-if="mode === 'lasso' && !count" class="muted">请先绘图并圈选细胞，再保存标签。</p>
     <div v-for="(record, key) in labels" :key="key" class="actions">
       <span>{{ key }} · {{ record.enabled ? '已启用' : '未启用' }}</span
       ><button class="preview" :disabled="store.busy" @click="apply(String(key))">
         {{ record.enabled ? '关闭筛选' : '启用筛选' }}
       </button>
     </div>
-  </section>
+  </details>
 </template>

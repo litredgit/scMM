@@ -1,7 +1,9 @@
 # ruff: noqa: RUF001
 """Explicit XML acquisition hints; never infer a resolution reference mass."""
 
+import json
 import re
+import subprocess
 
 import numpy as np
 from defusedxml import ElementTree as ET
@@ -64,11 +66,7 @@ def _xml_settings(path, max_scans=32):
 
 def acquisition_hints(path):
     if path.suffix.lower() == ".raw":
-        return {
-            "windows": [],
-            "resolutions": [],
-            "note": "当前 RAW 协议不提供采集分辨率，请核对仪器记录；未自动更改参数。",
-        }
+        return raw_acquisition_hints(path)
     windows, resolutions, scans = _xml_settings(path)
     return {
         "windows": [list(v) for v in sorted(set(windows)) if 0 < v[0] < v[1]],
@@ -76,3 +74,55 @@ def acquisition_hints(path):
         "ms1_scans_inspected": scans,
         "note": "采集记录的分辨率未确认参考质量，不自动视为 m/z 200 处分辨率；请核对后手动填写。",
     }
+
+
+def raw_acquisition_hints(path, *, command=None, timeout=30):
+    """Read bounded acquisition metadata without consuming profile point arrays."""
+    from .readers.thermo_raw import ThermoRawError, reader_command
+
+    try:
+        result = subprocess.run(
+            [*(command or reader_command()), "--acquisition", str(path)],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ThermoRawError("RAW 采集信息读取超时，请稍后重试。") from exc
+    if result.returncode:
+        detail = result.stderr[-4096:].decode("utf-8", errors="replace")
+        raise ThermoRawError(f"RAW 采集信息读取失败：{detail}")
+    try:
+        if len(result.stdout) > 1_000_000:
+            raise ValueError("metadata exceeds size limit")
+        data = json.loads(result.stdout)
+        if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+            raise ValueError("unsupported acquisition metadata version")
+        count = data["ms1_scans_inspected"]
+        if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= 32:
+            raise ValueError("invalid scan count")
+        windows = np.asarray(data["windows"], dtype=float)
+        if windows.size == 0:
+            windows = np.empty((0, 2))
+        if windows.ndim != 2 or windows.shape[1] != 2:
+            raise ValueError("invalid mass window shape")
+        resolutions = np.asarray(data["resolutions"], dtype=float)
+        if (
+            not np.isfinite(windows).all()
+            or (windows <= 0).any()
+            or (windows[:, 0] >= windows[:, 1]).any()
+            or resolutions.ndim != 1
+            or not np.isfinite(resolutions).all()
+            or (resolutions <= 0).any()
+        ):
+            raise ValueError("invalid acquisition values")
+        return {
+            "windows": windows.tolist(),
+            "resolutions": resolutions.tolist(),
+            "resolution_records": data.get("resolution_records", []),
+            "ms1_scans_inspected": count,
+            "note": "读取 RAW 扫描设置与分辨率附加记录；未记录的字段显示未读取到。分辨率参考质量未经确认，请核对后手动填写。",
+        }
+    except (ValueError, KeyError, TypeError) as exc:
+        raise ThermoRawError(f"RAW 采集信息协议无效，请核对 reader 版本：{exc}") from exc

@@ -14,6 +14,7 @@ test('preprocessing preview applies and restores the full origin', async ({ page
   await importData(page, 'Vue 全部分析')
   await page.getByRole('link', { name: /预处理/ }).click()
   await expect(page.getByRole('heading', { name: '预处理与 QC' })).toBeVisible()
+  await expect(page.getByLabel('min_feature_fraction', { exact: true })).toHaveValue('0.2')
   await expect(page.getByRole('heading', { name: '操作前 · 当前数据', exact: true })).toBeVisible()
   await page.getByLabel('下一项操作', { exact: true }).selectOption('normalize')
   await page.getByRole('button', { name: '检查影响', exact: true }).click()

@@ -92,6 +92,8 @@ class WorkspaceView(BaseModel):
 
 
 class SavedProject(BaseModel):
+    created_at: str | None = None
+    description: str = ""
     data_state: Literal["configuration", "saved", "unavailable"] = "configuration"
     cells: int | None = None
     features: int | None = None

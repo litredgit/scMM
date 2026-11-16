@@ -25,13 +25,12 @@ class ProcessingParameters:
     resample_points_per_fwhm: float = 5.0
     ms_peak_snr_threshold: float = 10.0
     cell_snr: float = 5.0
-    peak_snr: float = 3.0
     baseline_filter_size: int = 50
     max_zero_frac: float = 0.9
     n_jobs: int = 1
     mz_min: float = 100.0
     mz_max: float = 1000.0
-    extraction_method: str = "legacy"
+    extraction_method: str = "snr_v1"
     reference_mz: tuple[float, ...] = ()
     reference_mode: str = "union"
     reference_ppm_tol: float = 10.0
@@ -51,12 +50,10 @@ class ProcessingParameters:
         if not math.isfinite(self.ref_mz) or self.ref_mz <= 0:
             raise ValueError("ref_mz must be a positive finite number")
         validate_mz_range((self.mz_min, self.mz_max), self.ref_mz)
-        if self.extraction_method not in {"legacy", "snr_v1"}:
-            raise ValueError("extraction_method must be legacy or snr_v1")
+        if self.extraction_method != "snr_v1":
+            raise ValueError("Only snr_v1 extraction is supported")
         if self.reference_mode not in {"union", "intersection"}:
             raise ValueError("reference_mode must be union or intersection")
-        if self.reference_mz and self.extraction_method != "snr_v1":
-            raise ValueError("multiple references require snr_v1")
         for reference in self.reference_mz:
             if not math.isfinite(reference):
                 raise ValueError("reference masses must be finite")
@@ -74,7 +71,6 @@ class ProcessingParameters:
             "resample_points_per_fwhm": self.resample_points_per_fwhm,
             "ms_peak_snr_threshold": self.ms_peak_snr_threshold,
             "cell_snr": self.cell_snr,
-            "peak_snr": self.peak_snr,
             "reference_ppm_tol": self.reference_ppm_tol,
             "feature_snr_threshold": self.feature_snr_threshold,
         }
@@ -103,13 +99,11 @@ class ProcessingParameters:
             "sensitive": {
                 "ms_peak_snr_threshold": 5.0,
                 "cell_snr": 3.0,
-                "peak_snr": 2.0,
                 "max_zero_frac": 0.95,
             },
             "strict": {
                 "ms_peak_snr_threshold": 15.0,
                 "cell_snr": 8.0,
-                "peak_snr": 5.0,
                 "max_zero_frac": 0.8,
             },
         }

@@ -14,23 +14,14 @@ from scMM.application.projects import ProjectStore, write_json
 from scMM.file._dataset_loading import DatasetState
 from scMM.file.data import CyESIData
 from scMM.util._cell_snr import find_cell_peaks_snr
-from scMM.util.peak import find_cell_peaks
 
 
 def extract(data, method, **kwargs):
-    if method == "snr_v1":
-        return find_cell_peaks_snr(data, 100.0, baseline_window=11, show_progress=False, **kwargs)
-    return find_cell_peaks(
-        data,
-        100.0,
-        baseline_filter_size=11,
-        n_jobs=1,
-        feature_block_size=1 if method == "legacy_block" else None,
-        **kwargs,
-    )
+    assert method == "snr_v1"
+    return find_cell_peaks_snr(data, 100.0, baseline_window=11, show_progress=False, **kwargs)
 
 
-@pytest.mark.parametrize("method", ["snr_v1", "legacy", "legacy_block"])
+@pytest.mark.parametrize("method", ["snr_v1"])
 def test_gate_removes_sparse_noise_and_cuts_window_per_scan(method):
     values = np.zeros(61)
     values[:25] = 20_000
@@ -49,7 +40,7 @@ def test_gate_removes_sparse_noise_and_cuts_window_per_scan(method):
     assert not extract(data, method, cell_min_signal=1e6)["cell_mask"].any()
 
 
-@pytest.mark.parametrize("method", ["snr_v1", "legacy", "legacy_block"])
+@pytest.mark.parametrize("method", ["snr_v1"])
 def test_original_ratio_condition_remains_required(method):
     data = pd.DataFrame({100.0: [130_001.0, 150_000.0, 150_001.0]})
     result = extract(
@@ -75,15 +66,15 @@ def test_multi_reference_requires_both_conditions_on_same_channel(mode, frames):
 
 
 @pytest.mark.parametrize("value", [-1, float("nan"), float("inf"), True, "100000"])
-def test_invalid_gate_rejected_at_application_and_both_algorithms(value):
+def test_invalid_gate_rejected_at_application_and_extraction(value):
     with pytest.raises(ValueError, match="cell_min_signal"):
         ProcessingParameters(ref_mz=100.0, cell_min_signal=value)
-    for method in ("snr_v1", "legacy", "legacy_block"):
+    for method in ("snr_v1",):
         with pytest.raises(ValueError, match="cell_min_signal"):
             extract(pd.DataFrame({100.0: [200_000.0]}), method, cell_min_signal=value)
 
 
-@pytest.mark.parametrize("method", ["legacy", "snr_v1"])
+@pytest.mark.parametrize("method", ["snr_v1"])
 def test_preprocess_records_gate_and_invalid_value_leaves_state_unchanged(method):
     state = DatasetState(
         pd.DataFrame({100.0: [0.0, 200_000.0, 0.0, 0.0, 0.0]}),

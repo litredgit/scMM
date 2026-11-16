@@ -596,6 +596,10 @@ def test_preprocess_failed_callback_or_metadata_keeps_all_state(monkeypatch, sta
             "baseline": np.zeros(frame.shape),
             "cell_mask": np.array([False, True, False]),
             "ref_mz_matched": 100.0,
+            "reference_mz_matched": [100.0],
+            "reference_signal": np.ones((3, 1)),
+            "reference_ratio": np.ones((3, 1)),
+            "feature_snr": np.ones((1, 2)),
         }
 
     def debug(name, payload):
@@ -604,7 +608,7 @@ def test_preprocess_failed_callback_or_metadata_keeps_all_state(monkeypatch, sta
         payload["frame_obs"]["tags"].iloc[0].append("changed")
         raise ValueError("debug failed")
 
-    monkeypatch.setattr(_dataset_processing, "find_cell_peaks", extract)
+    monkeypatch.setattr(_dataset_processing, "find_cell_peaks_snr", extract)
     with pytest.raises((ValueError, IndexError)):
         dataset.preprocess(debug_hook=debug if stage == "debug" else None)
     assert dataset.__dict__ is original

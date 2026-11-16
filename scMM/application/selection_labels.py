@@ -6,6 +6,7 @@ import re
 from copy import deepcopy
 
 import numpy as np
+import pandas as pd
 from matplotlib.path import Path
 from sklearn.ensemble import IsolationForest
 
@@ -157,3 +158,34 @@ def validate_pool(state):
         raise ValueError("筛选标签与当前轴不一致。")
     if not np.array_equal(matrix(pool[rows, columns]), matrix(data)):
         raise ValueError("筛选恢复矩阵与当前数值不一致。")
+
+
+def axis_choices(state, query=""):
+    data = source(state)
+    term = query.casefold().strip()
+    options = [
+        {"value": f"obs:{key}", "label": f"细胞指标 · {key}"}
+        for key in data.obs
+        if pd.api.types.is_numeric_dtype(data.obs[key])
+    ]
+    for key, values in data.obsm.items():
+        if getattr(values, "ndim", 0) == 2:
+            for component in range(values.shape[1]):
+                options.append(
+                    {
+                        "value": f"embedding:{key}:{component}",
+                        "label": f"降维坐标 · {key} 第 {component + 1} 维",
+                    }
+                )
+    options = [
+        row for row in options if term in row["label"].casefold() or term in row["value"].casefold()
+    ]
+    count = 0
+    for key in data.var_names:
+        if term and term not in str(key).casefold():
+            continue
+        options.append({"value": f"feature:{key}", "label": f"特征 · {key}"})
+        count += 1
+        if count >= 100:
+            break
+    return {"options": options}

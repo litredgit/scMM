@@ -605,7 +605,7 @@ function label(view: IonView) {
             </div>
           </details>
           <div class="field-grid">
-            <label>EC ID<input v-model="groupId" aria-label="EC ID" /></label>
+            <label>候选离子组编号（EC）<input v-model="groupId" aria-label="EC ID" /></label>
             <label title="hypothesis_id：必须明确选择，不默认接受首个解释"
               >离子角色解释<select
                 v-if="hypotheses.length"
@@ -704,7 +704,7 @@ function label(view: IonView) {
                 <option value="variables">固定变量，选择共同可量化细胞</option>
               </select></label
             >
-            <label>轴 ID（留空使用整轴）<textarea v-model="availabilityIds" /></label>
+            <label>变量编号（留空使用全部变量）<textarea v-model="availabilityIds" /></label>
             <div class="actions">
               <button
                 class="preview"
@@ -843,7 +843,7 @@ function label(view: IonView) {
             </button>
           </details>
           <h2>5. 分析敏感性与重复汇总</h2>
-          <label>比较分支 ID（逗号分隔）<textarea v-model="comparison" /></label
+          <label>参与比较的分析分支（编号，逗号分隔）<textarea v-model="comparison" /></label
           ><label
             >归一化基准<select v-model="comparisonMode">
               <option value="independent">各视图独立</option>

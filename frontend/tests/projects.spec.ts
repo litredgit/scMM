@@ -27,6 +27,13 @@ test('project, samples, metadata, save and reopen with no browser errors', async
   await page.getByLabel('alpha subject', { exact: true }).press('Tab')
   await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText('样本信息已更新。')
   await expect(page.getByText('已应用未保存', { exact: true })).toBeVisible()
+  await page.getByLabel('项目备注', { exact: true }).fill('用于首页检索的实验备注')
+  await page.getByRole('button', { name: '应用项目信息', exact: true }).click()
+  await page.getByRole('button', { name: '全选当前筛选结果', exact: true }).click()
+  await page.getByLabel('搜索样本', { exact: true }).fill('alpha')
+  await expect(page.getByText('（1 个不在当前筛选结果中）', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '清空样本选择', exact: true }).click()
+  await page.getByLabel('搜索样本', { exact: true }).fill('')
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
 
@@ -42,6 +49,9 @@ test('project, samples, metadata, save and reopen with no browser errors', async
   await page.getByRole('button', { name: '关闭项目', exact: true }).click()
   await page.getByRole('link', { name: '前往项目首页 →' }).click()
   const row = page.getByRole('row').filter({ hasText: '浏览器全流程' })
+  await expect(row.getByText('用于首页检索的实验备注', { exact: true })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: '创建时间（北京时间）' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: '最后修改时间（北京时间）' })).toBeVisible()
   await row.getByRole('button', { name: '打开项目 →' }).click()
   await expect(page.getByLabel('alpha group', { exact: true })).toHaveValue('对照')
   await expect(page.getByLabel('alpha subject', { exact: true })).toHaveValue('animal-1')
@@ -59,7 +69,7 @@ test('project, samples, metadata, save and reopen with no browser errors', async
 
 test('dataset import, mapping, CSV and snapshot reload', async ({ page }) => {
   await create(page, '导入与保存')
-  await page.getByRole('button', { name: '导入独立结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入 H5AD 数据', exact: true }).click()
   await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')
   await page.getByRole('button', { name: /^▤ example.h5ad/ }).click()
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()

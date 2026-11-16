@@ -12,7 +12,7 @@ import os
 import re
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from uuid import uuid4
 
@@ -169,15 +169,26 @@ class Project:
             if not re.fullmatch(r"[a-f0-9]{32}", sample["id"]):
                 raise ValueError("Invalid sample ID")
             if sample["parameters"] is not None:
-                ProcessingParameters(**sample["parameters"])
+                validate_stored_parameters(sample["parameters"])
+
+
+def operational_parameters(values):
+    """Keep stored provenance separate from the supported computation fields."""
+    keys = {item.name for item in fields(ProcessingParameters)}
+    return {key: value for key, value in values.items() if key in keys}
+
+
+def validate_stored_parameters(values):
+    if values.get("extraction_method") == "snr_v1":
+        ProcessingParameters(**operational_parameters(values))
 
 
 def sample_parameters(project, sample):
     """Resolve explicit overrides separately from automatic file-derived limits."""
     if sample and sample["parameters"] is not None:
-        return dict(sample["parameters"])
-    values = dict(project.manifest["parameters"])
-    if not project.manifest.get("manual_parameters"):
+        return operational_parameters(sample["parameters"])
+    values = operational_parameters(project.manifest["parameters"])
+    if project.manifest.get("auto_ranges", True) and not project.manifest.get("manual_parameters"):
         if project.manifest["feature_strategy"] == "shared":
             ranges = [s["auto_mz_range"] for s in project.samples if s.get("auto_mz_range")]
             if ranges:
@@ -216,6 +227,8 @@ class ProjectStore:
                     "path": str(path),
                     "name": manifest["name"],
                     "saved_at": manifest["saved_at"],
+                    "created_at": manifest.get("created_at"),
+                    "description": manifest.get("description", ""),
                     "samples": len(manifest["samples"]),
                     **saved_dataset_summary(path, manifest),
                 }
@@ -261,6 +274,7 @@ class ProjectStore:
                 "description": "",
                 "revision": 0,
                 "saved_at": created_at,
+                "created_at": created_at,
                 "samples": [],
                 "artifacts": {},
                 "parameters": asdict((defaults or load_defaults()).processing),
@@ -282,7 +296,7 @@ class ProjectStore:
             raise ValueError("不支持缺少 cell_min_signal 的历史项目格式，请重新提取并创建项目。")
         project = Project(folder, manifest)
         project.validate_samples()
-        ProcessingParameters(**manifest["parameters"])
+        validate_stored_parameters(manifest["parameters"])
         artifacts = manifest["artifacts"]
         if manifest["schema_version"] == 2:
             from .data_view_storage import install_catalog_state, read_catalog_snapshot

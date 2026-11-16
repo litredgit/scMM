@@ -1,4 +1,4 @@
-"""Opt-in baseline-corrected cell extraction; independent of legacy thresholds."""
+"""Baseline-corrected cell extraction with per-feature noise estimates."""
 
 import numpy as np
 import pandas as pd

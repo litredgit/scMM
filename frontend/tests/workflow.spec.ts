@@ -21,10 +21,19 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
   await expect(page.locator('.js-plotly-plot')).toBeVisible()
   await expect(page.getByLabel('baseline_filter_size', { exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('feature_snr_threshold', { exact: true })).not.toBeVisible()
+  await page
+    .locator('summary')
+    .filter({ hasText: /^特征保留$/ })
+    .click()
   await expect(page.getByLabel('feature_snr_threshold', { exact: true })).toBeVisible()
+  await page
+    .locator('summary')
+    .filter({ hasText: /^细胞识别$/ })
+    .click()
   await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('100000')
   const panel = page.locator('.raw-parameter-panel')
-  expect(await panel.locator('input[type="number"]').count()).toBe(7)
+  expect(await panel.locator('input[type="number"]').count()).toBe(11)
   for (const [label, value] of Object.entries({ ref_mz: '150', mz_min: '140', mz_max: '160' }))
     await page.getByLabel(label, { exact: true }).fill(value)
   await expect(page.getByRole('button', { name: '提取方法：snr说明', exact: true })).toBeVisible()
@@ -37,7 +46,7 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
       .toBe(true)
     await expect
       .poll(() =>
-        panel.locator('input').evaluateAll((inputs) =>
+        panel.locator('input:visible').evaluateAll((inputs) =>
           inputs.every((input) => {
             const box = input.getBoundingClientRect(),
               parent = input.closest('.raw-parameter-panel')!.getBoundingClientRect()
@@ -89,6 +98,11 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   await expect(page.getByText('检出 0 个细胞；预览不会直接建立当前数据。')).toBeVisible({
     timeout: 30000,
   })
+  if (!(await page.getByLabel('cell_min_signal', { exact: true }).isVisible()))
+    await page
+      .locator('summary')
+      .filter({ hasText: /^细胞识别$/ })
+      .click()
   await page.getByLabel('cell_min_signal', { exact: true }).fill('0')
   await page.getByRole('button', { name: '应用参数', exact: true }).click()
   await page.getByRole('button', { name: '预览细胞窗口', exact: true }).click()
@@ -137,6 +151,18 @@ test('two completed batches compare without replacing data, link signal axes and
     .getByRole('button', { name: '打开项目 →' })
     .click()
   await page.getByRole('link', { name: /提取与审核/ }).click()
+  const selectedBatch = page.getByLabel('处理批次', { exact: true })
+  const reviewSample = page.getByRole('checkbox', { name: /^中文样本 ·/ })
+  await expect(reviewSample).toBeChecked()
+  await reviewSample.uncheck()
+  await page.getByRole('button', { name: '刷新批次', exact: true }).click()
+  await expect(reviewSample).not.toBeChecked()
+  const matrixRequest = page.waitForRequest((r) => r.url().endsWith('/results/matrix/download'))
+  const matrixDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: '下载提取原始矩阵 CSV', exact: true }).click()
+  expect((await matrixRequest).postDataJSON().batch_path).toBe(await selectedBatch.inputValue())
+  expect((await matrixDownload).suggestedFilename()).toBe('extracted-matrix.csv')
+  await expect(page.getByRole('heading', { name: '当前矩阵', exact: true })).toHaveCount(0)
   const panel = page.locator('.batch-comparison')
   await panel.locator(':scope > summary').click()
   const compared = page.waitForResponse((r) => r.url().endsWith('/extraction/compare'))

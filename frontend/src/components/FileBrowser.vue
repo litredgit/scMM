@@ -63,6 +63,11 @@ function select(value: string) {
         : [...selection.value, value]
   emit('selected', root.value, [...selection.value])
 }
+const selectable = computed(() => directory.value?.entries.filter((item) => !item.directory) ?? [])
+function selectPage() {
+  selection.value = [...new Set([...selection.value, ...selectable.value.map((item) => item.path)])]
+  emit('selected', root.value, [...selection.value])
+}
 function clear() {
   selectedInfo.value = undefined
   selection.value = []
@@ -173,6 +178,15 @@ defineExpose({ clear })
     </div>
     <div class="browser-toolbar">
       <button
+        v-if="kind === 'raw'"
+        type="button"
+        class="preview"
+        :disabled="disabled || loading || !selectable.length"
+        @click="selectPage"
+      >
+        全选本页文件
+      </button>
+      <button
         type="button"
         :disabled="disabled || loading || !directory?.parent"
         @click="browse(directory!.parent!)"
@@ -203,6 +217,14 @@ defineExpose({ clear })
       </p>
       <template v-else>
         <div v-for="item in directory.entries" :key="item.path" class="file-entry-row">
+          <input
+            v-if="kind === 'raw' && !item.directory"
+            type="checkbox"
+            :aria-label="`选择文件 ${item.name}`"
+            :checked="selection.includes(item.path)"
+            :disabled="disabled || loading"
+            @change="select(item.path)"
+          />
           <button
             type="button"
             class="file-entry"

@@ -46,6 +46,8 @@ export interface WorkspaceView {
 }
 
 export interface SavedProject {
+  created_at?: string | null
+  description: string
   path: string
   name: string
   saved_at: string

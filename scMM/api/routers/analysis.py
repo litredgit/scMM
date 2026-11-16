@@ -361,6 +361,16 @@ def msms(body: s.MSMSSearch, manager: Service, identity: Identity):
         return {"workspace": manager.view(workspace), "value": value}
 
 
+@router.get("/workspace/analysis/selection-axes")
+def selection_axes(
+    manager: Service, identity: Identity, query: str = Query(default="", max_length=1000)
+):
+    from scMM.application.selection_labels import axis_choices
+
+    with manager.access(identity) as workspace:
+        return axis_choices(workspace.require_project().workspace, query)
+
+
 @router.post("/workspace/analysis/selection-plot")
 def selection_plot(body: s.SelectionPlot, manager: Service, identity: Identity):
     import plotly.graph_objects as go

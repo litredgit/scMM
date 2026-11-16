@@ -13,9 +13,9 @@ from scipy.ndimage import median_filter
 from sklearn.ensemble import IsolationForest
 from sklearn.impute import KNNImputer, SimpleImputer
 
+from ..util._cell_snr import find_cell_peaks_snr
 from ..util.intensity import dataset_intensity_state, merged_intensity_state, transformed_state
 from ..util.normalize import normalize
-from ..util.peak import find_cell_peaks
 from ._dataset_candidates import commit_candidate, prepare_candidate
 from ._dataset_loading import DatasetState, make_feature_metadata
 from ._deisotope import DeisotopeParams, analyze_isotopes, zero_is_missing
@@ -36,11 +36,10 @@ class DatasetProcessingMixin:
         baseline_filter=median_filter,
         baseline_filter_size: int = 50,
         cell_snr: float = 5.0,
-        peak_snr: float = 3.0,
         max_zero_frac: float = 0.9,
         debug_hook: DebugHook | None = None,
         feature_block_size: int | None = 256,
-        extraction_method: str = "legacy",
+        extraction_method: str = "snr_v1",
         reference_mz=None,
         reference_mode: str = "union",
         reference_ppm_tol: float = 10.0,
@@ -56,45 +55,25 @@ class DatasetProcessingMixin:
         frame_metadata = self.peak_meta.copy()
         if self.ref_mz is None or not np.isfinite(self.ref_mz) or self.ref_mz <= 0:
             raise ValueError("A positive finite ref_mz is required for preprocessing")
-        if extraction_method not in {"legacy", "snr_v1"}:
-            raise ValueError("extraction_method must be legacy or snr_v1")
-        if extraction_method == "legacy" and reference_mz is not None:
-            raise ValueError("reference_mz requires extraction_method='snr_v1'")
-        if extraction_method == "snr_v1":
-            from ..util._cell_snr import find_cell_peaks_snr
-
-            result = find_cell_peaks_snr(
-                signal,
-                self.ref_mz if reference_mz is None else reference_mz,
-                reference_mode=reference_mode,
-                reference_ppm_tol=reference_ppm_tol,
-                baseline_filter=baseline_filter,
-                baseline_window=baseline_filter_size,
-                cell_signal_threshold=cell_snr,
-                cell_min_signal=cell_min_signal,
-                feature_snr_threshold=feature_snr_threshold,
-                noise_window=noise_window,
-                max_zero_fraction=max_zero_frac,
-                feature_block_size=feature_block_size or self.data.shape[1],
-                return_full_baseline=debug_hook is not None and debug_full_baseline,
-                progress_callback=progress_callback,
-                **kwargs,
-            )
-        else:
-            result = find_cell_peaks(
-                signal,
-                self.ref_mz,
-                baseline_filter=baseline_filter,
-                baseline_filter_size=baseline_filter_size,
-                cell_snr=cell_snr,
-                cell_min_signal=cell_min_signal,
-                peak_snr=peak_snr,
-                max_zero_frac=max_zero_frac,
-                feature_block_size=feature_block_size,
-                return_full_baseline=debug_hook is not None and debug_full_baseline,
-                progress_callback=progress_callback,
-                **kwargs,
-            )
+        if extraction_method != "snr_v1":
+            raise ValueError("Only snr_v1 extraction is supported")
+        result = find_cell_peaks_snr(
+            signal,
+            self.ref_mz if reference_mz is None else reference_mz,
+            reference_mode=reference_mode,
+            reference_ppm_tol=reference_ppm_tol,
+            baseline_filter=baseline_filter,
+            baseline_window=baseline_filter_size,
+            cell_signal_threshold=cell_snr,
+            cell_min_signal=cell_min_signal,
+            feature_snr_threshold=feature_snr_threshold,
+            noise_window=noise_window,
+            max_zero_fraction=max_zero_frac,
+            feature_block_size=feature_block_size or self.data.shape[1],
+            return_full_baseline=debug_hook is not None and debug_full_baseline,
+            progress_callback=progress_callback,
+            **kwargs,
+        )
         if debug_hook is not None:
             debug_metadata = frame_metadata.copy()
             for column in debug_metadata.select_dtypes(include="object"):
@@ -136,32 +115,27 @@ class DatasetProcessingMixin:
             observations["cell_start_rt"] = times[windows[:, 0]]
             observations["cell_stop_rt"] = times[windows[:, 1]]
             observations["cell_scan_count"] = windows[:, 1] - windows[:, 0] + 1
-        if extraction_method == "snr_v1":
-            for i, mz in enumerate(result["reference_mz_matched"]):
-                observations[f"reference_intensity_{mz:.8g}"] = result["reference_signal"][
-                    frames, i
-                ]
-                observations[f"reference_ratio_{mz:.8g}"] = result["reference_ratio"][frames, i]
-            snr = pd.DataFrame(result["feature_snr"], index=data.index, columns=data.columns)
+        for i, mz in enumerate(result["reference_mz_matched"]):
+            observations[f"reference_intensity_{mz:.8g}"] = result["reference_signal"][frames, i]
+            observations[f"reference_ratio_{mz:.8g}"] = result["reference_ratio"][frames, i]
+        snr = pd.DataFrame(result["feature_snr"], index=data.index, columns=data.columns)
         metadata["processing"] = {
             "extraction_method": extraction_method,
             "baseline_filter_size": baseline_filter_size,
             "cell_snr": cell_snr,
             "cell_min_signal": cell_min_signal,
-            "peak_snr": peak_snr,
             "max_zero_frac": max_zero_frac,
         }
-        if extraction_method == "snr_v1":
-            metadata["processing"].update(
-                reference_mz=np.atleast_1d(
-                    self.ref_mz if reference_mz is None else reference_mz
-                ).tolist(),
-                reference_mode=reference_mode,
-                reference_matches=result["reference_matches"],
-                reference_ppm_tol=reference_ppm_tol,
-                feature_snr_threshold=feature_snr_threshold,
-                noise_window=noise_window,
-            )
+        metadata["processing"].update(
+            reference_mz=np.atleast_1d(
+                self.ref_mz if reference_mz is None else reference_mz
+            ).tolist(),
+            reference_mode=reference_mode,
+            reference_matches=result["reference_matches"],
+            reference_ppm_tol=reference_ppm_tol,
+            feature_snr_threshold=feature_snr_threshold,
+            noise_window=noise_window,
+        )
         metadata["length"] = data.shape[0]
         metadata["intensity_state"] = "transformed" if input_state == "normalized" else input_state
         variables = (

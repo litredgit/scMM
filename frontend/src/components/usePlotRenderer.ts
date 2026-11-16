@@ -111,7 +111,12 @@ export function usePlotRenderer({
           maxheight: below ? 0.3 : 1,
         },
         uirevision: `${props.name}:${figureRevision}`,
-        dragmode: props.selectRange ? 'select' : 'zoom',
+        dragmode: props.selectRange
+          ? 'select'
+          : (copy.layout.meta as Record<string, unknown> | undefined)?.point_kind ===
+              'cell_selection'
+            ? 'lasso'
+            : 'zoom',
         selectdirection: props.selectRange ? 'h' : undefined,
         margin: {
           ...((copy.layout.margin ?? {}) as object),

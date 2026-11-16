@@ -22,7 +22,9 @@ const projects = ref<SavedProject[]>([])
 const loading = ref(false)
 const filtered = computed(() =>
   projects.value.filter((item) =>
-    item.name.toLocaleLowerCase().includes(search.value.toLocaleLowerCase()),
+    [item.name, item.description].some((value) =>
+      (value ?? '').toLocaleLowerCase().includes(search.value.toLocaleLowerCase()),
+    ),
   ),
 )
 const listScope = useReadScope(
@@ -78,7 +80,7 @@ function date(value: string) {
   <section>
     <div class="page-title">
       <div>
-        <p class="eyebrow">PROJECTS / 项目</p>
+        <p class="eyebrow">项目首页</p>
         <h1>从一个实验项目开始</h1>
         <p>组织样本、检查原始谱，并将每一步分析保存在同一个项目中。</p>
       </div>
@@ -121,10 +123,10 @@ function date(value: string) {
           <h2>
             已保存项目 <span class="count">{{ projects.length }}</span>
           </h2>
-          <p>打开项目会恢复其最后主动保存的数据与预处理起点，无需再次导入结果。</p>
+          <p>打开项目继续已保存的工作；备注可在“项目与样本”中编辑。</p>
         </div>
         <div class="actions">
-          <input v-model="search" aria-label="搜索项目" placeholder="搜索项目名称" /><button
+          <input v-model="search" aria-label="搜索项目" placeholder="搜索项目名称或备注" /><button
             @click="load"
             :disabled="store.busy || loading"
             class="preview"
@@ -156,9 +158,11 @@ function date(value: string) {
           <thead>
             <tr>
               <th>项目名称</th>
+              <th>项目备注</th>
               <th>样本数</th>
               <th>数据状态</th>
-              <th>项目记录时间（北京时间）</th>
+              <th>创建时间（北京时间）</th>
+              <th>最后修改时间（北京时间）</th>
               <th><span class="sr-only">操作</span></th>
             </tr>
           </thead>
@@ -170,6 +174,7 @@ function date(value: string) {
                   >{{ item.path }} <HelpTip :text="item.path" label="项目完整路径"
                 /></small>
               </td>
+              <td class="project-note">{{ item.description || '—' }}</td>
               <td>{{ item.samples }}</td>
               <td>
                 <template v-if="item.data_state === 'saved'"
@@ -180,6 +185,7 @@ function date(value: string) {
                 >
                 <template v-else>尚未保存数据集</template>
               </td>
+              <td>{{ item.created_at ? date(item.created_at) : '未记录' }}</td>
               <td>{{ date(item.saved_at) }}</td>
               <td>
                 <button :disabled="store.busy" @click="open(item.path)">打开项目 →</button>

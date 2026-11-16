@@ -46,7 +46,7 @@ def preflight(project, storage):
         raise ValueError("Add at least one raw sample")
     if project.manifest["feature_strategy"] not in {"shared", "independent"}:
         raise ValueError("Unknown feature strategy")
-    base = ProcessingParameters(**project.manifest["parameters"])
+    base = ProcessingParameters(**sample_parameters(project, None))
     samples = []
     if project.manifest["feature_strategy"] == "shared":
         base = ProcessingParameters(**sample_parameters(project, None))

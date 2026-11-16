@@ -15,7 +15,7 @@ test('explicit result selection, detailed help, stable QC and readable narrow la
 }) => {
   test.setTimeout(60000)
   await create(page, '界面说明与默认结果')
-  await page.getByRole('button', { name: '导入独立结果', exact: true }).click()
+  await page.getByRole('button', { name: '导入 H5AD 数据', exact: true }).click()
   const listing = await page.request.get('/api/v1/storage/entries?root=Results&kind=results')
   const latest = (await listing.json()).latest.name as string
   await page.getByLabel('服务器存储', { exact: true }).selectOption('Results')

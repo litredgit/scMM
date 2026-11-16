@@ -48,6 +48,12 @@ const visibleSamples = computed(() =>
     ),
   ),
 )
+const hiddenSelected = computed(
+  () => selected.value.filter((id) => !visibleSamples.value.some((s) => s.id === id)).length,
+)
+function selectVisible() {
+  selected.value = [...new Set([...selected.value, ...visibleSamples.value.map((s) => s.id)])]
+}
 const projectEdited = computed(
   () =>
     !!store.project &&
@@ -275,7 +281,7 @@ async function applyMapping() {
   <section v-if="store.project">
     <div class="page-title">
       <div>
-        <p class="eyebrow">STEP 01 / 样本管理</p>
+        <p class="eyebrow">第 1 步 · 样本管理</p>
         <h1>项目与样本</h1>
         <p>建立样本清单，并标记实验分组、独立生物来源和采集批次。</p>
       </div>
@@ -297,6 +303,49 @@ async function applyMapping() {
         <span>已保存修订</span><strong>r{{ store.project.manifest.revision }}</strong>
       </div>
     </div>
+    <section class="card project-info">
+      <h2>项目信息</h2>
+      <form
+        class="project-form"
+        @submit.prevent="
+          store.mutate('/project', { name, description }, 'PATCH', '项目信息已应用。')
+        "
+      >
+        <label
+          ><FieldLabel name="项目名称" /><input
+            aria-label="项目名称"
+            v-model="name"
+            required
+            maxlength="200"
+            :disabled="store.busy" /></label
+        ><label class="grow"
+          ><FieldLabel name="项目备注" /><input
+            aria-label="项目备注"
+            v-model="description"
+            maxlength="20000"
+            :disabled="store.busy"
+            placeholder="记录实验目的与备注" /></label
+        ><button
+          class="primary"
+          :disabled="
+            store.busy ||
+            (name === store.project.manifest.name &&
+              description === store.project.manifest.description)
+          "
+        >
+          应用项目信息
+        </button>
+      </form>
+      <p class="state-note" role="status">
+        {{
+          projectEdited || sampleEdited
+            ? '未应用草稿：项目信息需点击应用；样本字段离开输入框后自动应用。'
+            : store.project.unsaved
+              ? '已应用未保存：请主动保存项目。'
+              : '已保存：当前项目信息与样本信息已写入项目。'
+        }}
+      </p>
+    </section>
     <section class="card">
       <div class="section-heading">
         <div>
@@ -307,7 +356,7 @@ async function applyMapping() {
           <button class="primary" :disabled="store.busy" @click="togglePicker('raw')">
             ＋ 添加原始文件</button
           ><button class="primary" :disabled="store.busy" @click="togglePicker('results')">
-            导入独立结果</button
+            导入 H5AD 数据</button
           ><button
             class="danger"
             :disabled="store.busy || !selected.length"
@@ -407,52 +456,31 @@ async function applyMapping() {
           >
         </div>
       </div>
-      <form
-        class="project-form"
-        @submit.prevent="
-          store.mutate('/project', { name, description }, 'PATCH', '项目信息已应用。')
-        "
-      >
-        <label
-          ><FieldLabel name="项目名称" /><input
-            aria-label="项目名称"
-            v-model="name"
-            required
-            maxlength="200"
-            :disabled="store.busy" /></label
-        ><label class="grow"
-          ><FieldLabel name="项目说明" /><input
-            aria-label="项目说明"
-            v-model="description"
-            maxlength="20000"
-            :disabled="store.busy"
-            placeholder="记录实验目的与备注" /></label
-        ><button
-          class="primary"
-          :disabled="
-            store.busy ||
-            (name === store.project.manifest.name &&
-              description === store.project.manifest.description)
-          "
-        >
-          应用项目信息
-        </button>
-      </form>
-      <p class="state-note" role="status">
-        {{
-          projectEdited || sampleEdited
-            ? '未应用草稿：项目信息需点击应用；样本字段离开输入框后自动应用。'
-            : store.project.unsaved
-              ? '已应用未保存：请主动保存项目。'
-              : '已保存：当前项目信息与样本信息已写入项目。'
-        }}
-      </p>
       <button v-if="imported" @click="router.push('/preprocess')" class="primary">
         导入完成，进入预处理 →
       </button>
       <div class="sample-toolbar">
-        <p class="muted">group：实验分组 · subject：独立生物来源 · batch：采集批次</p>
-        <input v-model="sampleSearch" aria-label="搜索样本" placeholder="搜索样本或分组" />
+        <p class="muted">填写实验分组、独立生物来源与采集批次，便于后续比较。</p>
+        <input
+          v-model="sampleSearch"
+          aria-label="搜索样本"
+          placeholder="搜索样本、分组、来源或批次"
+        />
+        <span role="status"
+          >已选 {{ selected.length }} / {{ samples.length }} 个<span v-if="hiddenSelected"
+            >（{{ hiddenSelected }} 个不在当前筛选结果中）</span
+          ></span
+        >
+        <button
+          class="preview"
+          :disabled="store.busy || !visibleSamples.length"
+          @click="selectVisible"
+        >
+          全选当前筛选结果
+        </button>
+        <button :disabled="store.busy || !selected.length" @click="selected = []">
+          清空样本选择
+        </button>
       </div>
       <div v-if="!samples.length" class="empty-state">
         <span class="empty-symbol">▤</span>
@@ -469,7 +497,8 @@ async function applyMapping() {
               <th><span class="sr-only">选择</span></th>
               <th>
                 <FieldLabel
-                  name="name"
+                  name="样本名称"
+                  help-key="name"
                   text="样本显示名称，项目内唯一；修改后仍以稳定 sample_id 同步已有数据。"
                 />
               </th>

@@ -248,6 +248,11 @@ test('a parameter read retried after page resume preserves edits made while its 
   try {
     await page.getByRole('link', { name: /原始谱与参数/ }).click()
     await pending
+    if (!(await page.getByLabel('cell_min_signal', { exact: true }).isVisible()))
+      await page
+        .locator('summary')
+        .filter({ hasText: /^细胞识别$/ })
+        .click()
     await page.getByLabel('cell_min_signal', { exact: true }).fill('42')
     await page.getByRole('link', { name: /项目与样本/ }).click()
     await page.getByRole('link', { name: /原始谱与参数/ }).click()

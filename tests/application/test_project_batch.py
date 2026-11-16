@@ -46,7 +46,7 @@ def test_batch_real_mzml_review_and_stop(tmp_path, strategy):
 
 
 @pytest.mark.parametrize("strategy", ["shared", "independent"])
-@pytest.mark.parametrize("method", ["legacy", "snr_v1"])
+@pytest.mark.parametrize("method", ["snr_v1"])
 def test_batch_uses_per_sample_net_signal_gate(tmp_path, strategy, method):
     project, catalog = setup_project(tmp_path)
     project.manifest["feature_strategy"] = strategy
@@ -281,3 +281,32 @@ def test_two_batch_comparison_matches_ids_and_preserves_inputs(tmp_path):
     write_json(paths[1], {"status": "running", "samples": []})
     with pytest.raises(ValueError, match="结束"):
         compare_batches(*paths)
+
+
+def test_batch_export_without_current_dataset_is_scoped_and_readonly(tmp_path):
+    import numpy as np
+
+    from scMM.application.matrix_export import export_matrix
+
+    project, catalog = setup_project(tmp_path)
+    request = preflight(project, catalog)
+    request["created_at"] = "2026-11-16T11:30:00Z"
+    folder = project.folder / "processing" / "export"
+    folder.mkdir()
+    write_json(folder / "request.json", request)
+    run_batch(folder / "state.json")
+    token = project.workspace.token
+    data = export_matrix(project, "extracted", batch_path=str(folder / "state.json"))
+    expected = reviewed_dataset(folder / "state.json", [s["id"] for s in project.samples])
+    np.testing.assert_array_equal(data.X, expected.X)
+    assert project.workspace.data is None and project.workspace.token == token
+    with pytest.raises(ValueError, match="不属于"):
+        export_matrix(project, "extracted", batch_path=str(tmp_path / "foreign/state.json"))
+    with pytest.raises(ValueError, match="只有提取"):
+        export_matrix(project, "current", batch_path=str(folder / "state.json"))
+    state = read_batch(folder / "state.json")
+    state["status"] = "running"
+    state["pid"] = None
+    write_json(folder / "state.json", state)
+    with pytest.raises(ValueError, match="停止"):
+        export_matrix(project, "extracted", batch_path=str(folder / "state.json"))

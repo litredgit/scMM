@@ -40,8 +40,13 @@ function unit(key: string) {
 </script>
 <template>
   <div class="parameter-sections">
-    <section v-for="(group, index) in groups" :key="index" class="parameter-section">
-      <h4 v-if="group.title">{{ group.title }}</h4>
+    <details
+      v-for="(group, index) in groups"
+      :key="group.title"
+      class="parameter-section"
+      :open="index === 0"
+    >
+      <summary>{{ group.title || '参数设置' }}</summary>
       <div class="parameter-controls">
         <label
           v-for="key in group.fields"
@@ -98,6 +103,6 @@ function unit(key: string) {
           </span>
         </label>
       </div>
-    </section>
+    </details>
   </div>
 </template>

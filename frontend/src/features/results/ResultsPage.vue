@@ -146,7 +146,7 @@ async function exportH5ad() {
   <section v-if="store.project">
     <div class="page-title">
       <div>
-        <p class="eyebrow">STEP 06 / 保存</p>
+        <p class="eyebrow">第 6 步 · 保存</p>
         <h1>结果与保存</h1>
         <p>主动保存当前项目，导出完整数据和可追溯报告。</p>
       </div>
@@ -155,7 +155,7 @@ async function exportH5ad() {
     <div class="card">
       <div class="section-heading">
         <div>
-          <h2>保存项目 · 继续完整工作</h2>
+          <h2>保存当前项目</h2>
           <p>{{ store.project.unsaved ? '当前工作区有未保存修改。' : '当前修改已保存。' }}</p>
         </div>
         <button

@@ -134,3 +134,57 @@ def test_missing_file_and_missing_runtime(tmp_path, monkeypatch):
     monkeypatch.setenv("SCMM_THERMO_READER", str(tmp_path / "absent-reader"))
     with pytest.raises(ThermoRawError, match="not installed"), ThermoRawReader(source):
         pass
+
+
+@pytest.mark.parametrize("invalid", ["json", "version", "window", "resolution", "count"])
+def test_acquisition_metadata_rejects_invalid_protocol(tmp_path, invalid):
+    import json
+
+    from scMM.file.acquisition import raw_acquisition_hints
+
+    payload = {
+        "schema_version": 1,
+        "windows": [[100, 1000]],
+        "resolutions": [35000],
+        "ms1_scans_inspected": 32,
+    }
+    if invalid == "version":
+        payload["schema_version"] = 2
+    if invalid == "window":
+        payload["windows"] = [[1000, 100]]
+    if invalid == "resolution":
+        payload["resolutions"] = [float("nan")]
+    if invalid == "count":
+        payload["ms1_scans_inspected"] = 33
+    content = "not json" if invalid == "json" else json.dumps(payload)
+    script = tmp_path / "metadata.py"
+    script.write_text(f"print({content!r})")
+    with pytest.raises(ThermoRawError, match="协议"):
+        raw_acquisition_hints(tmp_path / "test.raw", command=[sys.executable, str(script)])
+
+
+def test_acquisition_metadata_success_failure_and_timeout(tmp_path):
+    import json
+
+    from scMM.file.acquisition import raw_acquisition_hints
+
+    script = tmp_path / "metadata.py"
+    payload = {
+        "schema_version": 1,
+        "windows": [[500, 1000]],
+        "resolutions": [35000],
+        "ms1_scans_inspected": 32,
+    }
+    script.write_text(
+        f"import sys; assert sys.argv[1] == '--acquisition'; print({json.dumps(payload)!r})"
+    )
+    result = raw_acquisition_hints(tmp_path / "test.raw", command=[sys.executable, str(script)])
+    assert result["windows"] == [[500, 1000]] and result["resolutions"] == [35000]
+    script.write_text("import sys; print('reader failed', file=sys.stderr); sys.exit(1)")
+    with pytest.raises(ThermoRawError, match="reader failed"):
+        raw_acquisition_hints(tmp_path / "test.raw", command=[sys.executable, str(script)])
+    script.write_text("import time; time.sleep(5)")
+    with pytest.raises(ThermoRawError, match="超时"):
+        raw_acquisition_hints(
+            tmp_path / "test.raw", command=[sys.executable, str(script)], timeout=0.1
+        )

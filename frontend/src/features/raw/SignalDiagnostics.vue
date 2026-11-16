@@ -141,7 +141,7 @@ useViewState('rawDiagnostic', { options, result })
 </script>
 <template>
   <details class="card">
-    <summary>独立原始信号诊断</summary>
+    <summary>原始信号诊断（可选）</summary>
     <p class="page-note">
       明确选择信号和基线后，对照峰重构、秩一近似、残差及逐通道噪声。本工具仅诊断，不应用到提取。RT
       以秒筛选，计算保留扫描顺序；中位窗口按扫描数计算。单通道的秩一近似不提供多通道结构证据。
@@ -174,7 +174,7 @@ useViewState('rawDiagnostic', { options, result })
       /></label>
       <template v-if="options.signal === 'eic'"
         ><label
-          >参考离子（m/z，1–8 个）<input
+          >诊断离子（m/z，1–8 个）<input
             v-model="options.references"
             aria-label="诊断参考离子"
             :disabled="store.busy" /></label
@@ -267,7 +267,7 @@ useViewState('rawDiagnostic', { options, result })
         /></label>
       </div>
     </details>
-    <button class="preview" :disabled="store.busy || !ready" @click="diagnose">运行独立诊断</button>
+    <button class="preview" :disabled="store.busy || !ready" @click="diagnose">运行信号诊断</button>
     <p class="muted">
       迭代噪声估计与残差标准差不同，不作为提取
       SNR、空白对照或置信区间。秩一近似不保证全局最优。完整输入、基线、重构、残差与噪声表随图下载，表格仅预览前

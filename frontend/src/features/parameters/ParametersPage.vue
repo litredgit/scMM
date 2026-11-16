@@ -19,7 +19,7 @@ function format(value: unknown, name?: string) {
   <section>
     <div class="page-title">
       <div>
-        <p class="eyebrow">REFERENCE / 参数</p>
+        <p class="eyebrow">参数参考</p>
         <h1>参数参考</h1>
         <p>默认值和帮助从后端定义读取，已有项目保留创建时的参数。</p>
       </div>

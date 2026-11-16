@@ -172,7 +172,6 @@ class RawFilePreview:
                 "baseline_filter_size": parameters.baseline_filter_size,
                 "cell_snr": parameters.cell_snr,
                 "cell_min_signal": parameters.cell_min_signal,
-                "peak_snr": parameters.peak_snr,
                 "max_zero_frac": parameters.max_zero_frac,
                 "n_jobs": parameters.n_jobs,
                 "extraction_method": extraction_method or parameters.extraction_method,
