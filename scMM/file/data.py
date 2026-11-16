@@ -1,4 +1,4 @@
-"""Public CyESI dataset container assembled from focused capabilities."""
+"""Internal CyESI dataset container assembled from focused capabilities."""
 
 from __future__ import annotations
 
@@ -22,17 +22,15 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
     """Processed CyESI dataset and its observation/feature metadata.
 
     Construction lives here, while processing and interoperability methods are
-    grouped into private mixins.  The public class and method-chain API remain
-    stable for callers.
+    grouped into private mixins. Interfaces follow the server workbench needs.
     """
-
-    def __init__(self, result_dir: str | Path):
-        self._apply_state(load_processed_dataset(result_dir))
 
     @classmethod
     def load_from_processed(cls, result_dir: str | Path) -> Self:
-        """Load a dataset previously written by :meth:`save`."""
-        return cls(result_dir)
+        """Read the current internal worker artifact."""
+        obj = object.__new__(cls)
+        obj._apply_state(load_processed_dataset(result_dir))
+        return obj
 
     @classmethod
     def load_from_file(

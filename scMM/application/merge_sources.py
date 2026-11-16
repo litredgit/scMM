@@ -127,23 +127,9 @@ def identity(data):
 
 def files_identity(storage, specification):
     path = storage.resolve(specification["root"], specification["path"])
-    paths = (
-        [path]
-        if path.is_file()
-        else [
-            path / name
-            for name in (
-                ".meta",
-                "data.csv",
-                "peak_meta.csv",
-                "feature_meta.csv",
-                "feature_snr.csv",
-            )
-            if (path / name).exists()
-        ]
-    )
-    if not paths:
-        raise ValueError("请选择独立 H5AD 或 CSV 结果目录")
+    if not path.is_file() or path.suffix.lower() != ".h5ad":
+        raise ValueError("仅支持独立 H5AD 文件，不再支持历史结果目录")
+    paths = [path]
     if any(p.stat().st_size > 256 * 1024**2 for p in paths):
         raise ValueError("单输入文件超过 256 MiB 同步工程上限")
     result = []
@@ -204,7 +190,7 @@ def load_inputs(manager, project, specifications):
                     )
                 if sum(counts) + total_values > MAX_VALUES:
                     raise ValueError("H5AD 解码规模超过 2000 万存储值工程门限，未装载大矩阵")
-            data = read_dataset(manager.results, spec["root"], spec["path"], trust_pickle=False)
+            data = read_dataset(manager.results, spec["root"], spec["path"])
             if files_identity(manager.results, spec) != before:
                 raise ValueError("输入在读取中改变，未使用混合版本")
             baseline = data

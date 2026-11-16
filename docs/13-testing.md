@@ -35,7 +35,7 @@ tests/
   domain/        # 数值定义、数据容器、RAW/XML、统计、注释与绘图
   application/   # 参数、预览/提取、持久任务、项目、回收和结果生命周期
   api/           # HTTP 请求、权限、修订、下载及必要贯通检查；局部 conftest
-  tooling/       # 发布/回滚、扫描、快照、选择器、文档与 Notebook
+  tooling/       # 发布/回滚、扫描、快照、选择器、文档
   blocks.json    # 本地/CI 共用的文件 → 块及依赖方映射
 frontend/tests/  # fixtures.ts、server.py 和按交互划分的 spec
 ```
@@ -47,15 +47,15 @@ frontend/tests/  # fixtures.ts、server.py 和按交互划分的 spec
 | `analysis` | 统计、分组验证、监督诊断、统一降维 |
 | `ion-grouping` | 离子关系、竞争 EC、审阅/探索表示、根/轴/数值身份及数值空间 |
 | `annotation` | 质量候选、同位素、规则、数据库下载/完整性 |
-| `plotting` | Notebook 绘图、轨迹、趋势及网页显示精度 |
-| `processing` | 原始预览、参数、缓存、持久 worker、提取审核、质量产物及处理 CLI |
+| `plotting` | 内部绘图、轨迹、趋势及网页显示精度 |
+| `processing` | 原始预览、参数、缓存、持久 worker、提取审核、质量产物 |
 | `projects` | 项目/快照、恢复起点、修订冲突、路径与回收保护、UTF-8 持久边界 |
 | `workbench` | 变换事务、结果失效、历史层与潜变量持久化 |
 | `time` / `api-time` | 时间应用输入/依赖/登记、只读重载及 HTTP 修订、权限和下载身份 |
 | `api` / `api-raw` / `api-lipids` / `api-ions` | 工作区/样本/分析/保存下载、原始谱与提取、脂质 HTTP 契约 |
 | `auth` / `monitor` | 认证/服务器配置及管理员监控 |
 | `tooling` | 发布阻塞与回滚、扫描、上游快照、跨平台导入与分块选择 |
-| `docs` / `notebook` | 受影响文档的链接/锚点与 Python 示例；Notebook 清洁及语法 |
+| `docs` | 受影响文档的链接/锚点与 Python 示例 |
 | `browser-*` | 项目、工作流/分析、导航、登录/普通 HTTP、监控、脂质及 AI；实际 spec 与影响范围以 blocks.json 为准 |
 
 两批次比较的只读、ID/输入身份、摘要损坏与旧版证据边界在 `test_project_batch.py` 和 `test_web_api.py`；
@@ -74,7 +74,7 @@ analysis 验证三维视角导出和集中设置；这些仍是隔离合成检�
 - 纯前端变化不运行 Python 测试；按功能选浏览器 spec。共享组件、路由、状态/客户端及前端依赖会影响全部浏览器块。
   Prettier 配置单独变化只检查前端格式，不运行构建或浏览器测试；格式规则/前端依赖变化时检查全部前端格式输入。
 - 文档变化只检查相关文档；链接目标变化同时检查引用它的文档。文档检查器本身改变时检查全部维护文档。
-  Notebook 独立成块，普通 Markdown 改动不执行 Notebook 检查，更不执行其中的实验代码。
+  已移除 Notebook 交付及其专用检查。
 - 已知目录中的新文件若缺少细分映射，明确报告 `UNMAPPED` 并选择该区域的保守范围；其他未知路径报错，须补映射。
   不能静默当作无影响，也不把每次常规改动都退回全量。
 
@@ -164,38 +164,6 @@ python tools/benchmark_lipid_annotation.py --cells 10000 --samples 10 --features
 专项检查为 `tests/domain/test_lipid_annotation.py`、`tests/api/test_web_lipids.py` 和 `frontend/tests/lipids.spec.ts`，
 覆盖双侧比例边界、加合物组成、并列/重复质量、失败原子性、版本/预设、过期下载及保存重载；
 浏览器使用本地合成 SDF，不访问或下载真实数据库，也不打开用户项目。
-
-## Notebook 检查
-
-通用 notebook 应满足：
-
-- 所有用户路径和实验参数集中在参数单元。
-- 不包含个人主目录绝对路径。
-- 提交前清除大量执行输出和临时图。
-- 参数单元带 `parameters` 标签，便于 Papermill 等工具注入配置。
-- 示例默认值不执行不可逆或高风险步骤。
-- 文档中说明无法仅凭示例默认值确定的实验参数，尤其是 `REF_MZ`。
-
-基本结构和语法检查可以在没有科学计算依赖时完成：
-
-```bash
-uv run --locked python -m json.tool scMM_workflow.ipynb >/dev/null
-uv run --locked python - <<'PY'
-import ast
-import json
-
-with open("scMM_workflow.ipynb", encoding="utf-8") as handle:
-    notebook = json.load(handle)
-
-for number, cell in enumerate(notebook["cells"]):
-    if cell["cell_type"] == "code":
-        ast.parse("".join(cell["source"]), filename=f"cell-{number}")
-print("notebook syntax OK")
-PY
-```
-
-这不能代替在 uv 管理的项目环境中使用代表性 mzML 执行整个流程。
-
 
 ## 场景隔离与失败归属
 

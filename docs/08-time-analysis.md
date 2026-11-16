@@ -2,7 +2,7 @@
 
 [网页时间分析](02-workflow.md#伪时间与窗口轨迹) · [参数](04-parameters.md#网页时间分析参数)
 
-## Notebook 与 PlotEngine
+## 内部 PlotEngine
 
 ### 实验时间与伪时间
 
@@ -107,7 +107,7 @@ engine.compute_trajectory(
 | `store_key` | `trajectory` | 结果在 `adata.uns` 中的键 |
 | `min_cells_per_window` | `5` | 有效窗口/分支所需最少细胞 |
 
-Notebook 使用实验 `time` 而非 Palantir 伪时间，并采用更大的 1000/300 窗口作为高细胞数
+内部绘图层使用实验 `time` 而非 Palantir 伪时间，并采用更大的 1000/300 窗口作为高细胞数
 CyESI 数据的起点。
 
 ### 代谢速度

@@ -51,7 +51,7 @@ class _RawLoadConfig:
 
 
 def load_processed_dataset(result_dir: str | Path) -> DatasetState:
-    """Read a processed dataset, preferring pickle frames over CSV."""
+    """Read the complete current worker dataset; CSV files are exports only."""
     from ._dataset_persistence import dataset_directory
 
     with dataset_directory(Path(result_dir).expanduser().resolve(), read_only=True) as result_path:
@@ -64,12 +64,8 @@ def _load_processed_dataset(result_path: Path) -> DatasetState:
     data, peak_meta, feature_meta = _read_processed_frames(result_path)
     if data is None:
         raise FileNotFoundError(f"No processed data found in {result_path}")
-    if peak_meta is None:
-        peak_meta = pd.DataFrame(index=data.index.copy())
     feature_meta = _normalize_feature_metadata(data, feature_meta)
     snr = _read_optional_pickle(result_path / "feature_snr.pkl")
-    if snr is None:
-        snr = _read_optional_csv(result_path / "feature_snr.csv")
     if snr is not None:
         if snr.shape != data.shape:
             raise ValueError("feature_snr shape must match data")
@@ -78,33 +74,20 @@ def _load_processed_dataset(result_path: Path) -> DatasetState:
 
 
 def _read_processed_frames(path: Path):
-    if (path / "data.pkl").exists():
-        return (
-            pd.read_pickle(path / "data.pkl"),
-            _read_optional_pickle(path / "peak_meta.pkl"),
-            _read_optional_pickle(path / "feature_meta.pkl"),
-        )
-    return (
-        _read_optional_csv(path / "data.csv"),
-        _read_optional_csv(path / "peak_meta.csv"),
-        _read_optional_csv(path / "feature_meta.csv"),
-    )
+    required = [path / f"{name}.pkl" for name in ("data", "peak_meta", "feature_meta")]
+    if not all(item.is_file() for item in required):
+        raise ValueError("Unsupported processed dataset: complete current pickle frames required")
+    return tuple(pd.read_pickle(item) for item in required)
 
 
 def _read_optional_pickle(path: Path):
     return pd.read_pickle(path) if path.exists() else None
 
 
-def _read_optional_csv(path: Path):
-    return pd.read_csv(path, index_col=0) if path.exists() else None
-
-
 def _normalize_feature_metadata(
     data: pd.DataFrame,
     feature_meta: pd.DataFrame | None,
 ) -> pd.DataFrame:
-    if feature_meta is None:
-        return make_feature_metadata(data)
     if len(feature_meta) != data.shape[1]:
         raise ValueError(
             "feature_meta row count does not match the number of data features: "

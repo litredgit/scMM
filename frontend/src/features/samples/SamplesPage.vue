@@ -319,7 +319,7 @@ async function applyMapping() {
       </div>
       <div v-if="picker" class="picker-panel">
         <div class="section-heading">
-          <h3>{{ picker === 'raw' ? '选择原始文件' : '选择独立结果目录或 H5AD' }}</h3>
+          <h3>{{ picker === 'raw' ? '选择原始文件' : '选择独立 H5AD' }}</h3>
           <button :disabled="store.busy" @click="picker = null">收起</button>
         </div>
         <FileBrowser
@@ -402,8 +402,7 @@ async function applyMapping() {
             </button>
             <p class="muted">
               继续已有实验请使用“打开完整项目”，无需再次导入。此入口仅用于独立 H5AD
-              或兼容结果目录；旧 pickle
-              请先离线转换。导入会替换当前矩阵和预处理起点，请先保存需要保留的修改。
+              文件。导入会替换当前矩阵和预处理起点，请先保存需要保留的修改。
             </p></template
           >
         </div>

@@ -178,13 +178,13 @@ def test_home_paths_expand_for_preferences_and_systemd(tmp_path, monkeypatch):
     assert manager.unit_path(Path("/opt/scmm")) == "/opt/scmm"
 
 
-def test_existing_vue_config_migrates_without_retaining_frontend_switches(tmp_path):
+@pytest.mark.parametrize(
+    "old", [{"prod_frontend": "vue"}, {"dev_frontend": "vue"}, {"origins": ["*"]}]
+)
+def test_obsolete_environment_configuration_is_rejected(tmp_path, old):
     config = tmp_path / "config.json"
-    config.write_text(json.dumps({"prod_frontend": "vue", "dev_frontend": "vue", "origins": ["*"]}))
-    values = manager.settings(config)
-    assert not {"prod_frontend", "dev_frontend", "origins"} & values.keys()
-    config.write_text(json.dumps({"prod_frontend": "panel"}))
-    with pytest.raises(ValueError, match="Only Vue"):
+    config.write_text(json.dumps(old))
+    with pytest.raises(ValueError, match="Unknown environment configuration"):
         manager.settings(config)
 
 

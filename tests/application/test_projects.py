@@ -195,3 +195,21 @@ def test_extracted_matrix_retains_full_axes_and_active_root(tmp_path):
     project.ion_state["roots"] = {}
     with pytest.raises(ValueError, match="审核"):
         export_matrix(project, "extracted")
+
+
+def test_historical_project_missing_signal_gate_is_rejected(tmp_path):
+    import json
+
+    from scMM.application.projects import ProjectStore
+
+    store = ProjectStore(tmp_path)
+    project = store.create("historical")
+    manifest = dict(project.manifest)
+    manifest["parameters"] = dict(manifest["parameters"])
+    del manifest["parameters"]["cell_min_signal"]
+    path = project.folder / "project.json"
+    path.write_text(json.dumps(manifest))
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="cell_min_signal"):
+        store.open(project.folder)
+    assert path.read_bytes() == before

@@ -275,11 +275,11 @@ class ProjectStore:
     def open(self, folder):
         folder = self._folder(folder)
         manifest = self._manifest(folder)
-        # Saved projects predate the additional gate: retain their extraction behavior.
-        manifest["parameters"].setdefault("cell_min_signal", 0.0)
-        for sample in manifest["samples"]:
-            if sample.get("parameters") is not None:
-                sample["parameters"].setdefault("cell_min_signal", 0.0)
+        if "cell_min_signal" not in manifest["parameters"] or any(
+            sample.get("parameters") is not None and "cell_min_signal" not in sample["parameters"]
+            for sample in manifest["samples"]
+        ):
+            raise ValueError("不支持缺少 cell_min_signal 的历史项目格式，请重新提取并创建项目。")
         project = Project(folder, manifest)
         project.validate_samples()
         ProcessingParameters(**manifest["parameters"])

@@ -1,25 +1,26 @@
 # scMM
 
-`scMM` 是用于处理和分析 CyESI 单细胞质谱数据的 Python 包。它可以从
+`scMM` 是用于处理和分析 CyESI 单细胞质谱数据的服务器网页应用。它可以从
 Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵，并完成细胞事件识别、谱峰对齐、
 归一化、缺失值填补、去同位素、精确质量注释、降维聚类、时间轨迹和代谢趋势分析。
 
 ## 功能入口
+
+服务器网页是唯一正式使用入口。Python 模块服务网页内部计算，不提供公共 API、Notebook 或独立分析 CLI 支持。
 
 当前版本为 0.2.0（Alpha）。
 
 | 场景 | 文档 |
 |---|---|
 | 网页：提取审核、预处理、分析与项目保存 | [网页操作](docs/02-workflow.md) |
-| 脚本、Notebook 与命令行 | [Python/CLI](docs/05-python-api.md) · [Notebook](docs/02-workflow.md#notebook参数化流程) |
 | 质谱提取与候选注释 | [细胞与特征识别](docs/03-cell-feature-identification.md) · [离子归组](docs/02-workflow.md#离子归组与化合物证据) |
 | 统计、降维、监督模型与时间趋势 | [分析](docs/07-analysis.md) · [时间与趋势](docs/08-time-analysis.md) |
 | 查看文件、图表和矩阵导出格式 | [数据与输出](docs/06-data-output.md) |
 
 ## 从这里开始
 
-- [安装与部署](docs/01-installation.md) → [网页与 Notebook 工作流程](docs/02-workflow.md)
-- [参数参考](docs/04-parameters.md) · [Python/CLI](docs/05-python-api.md) · [分析](docs/07-analysis.md)
+- [安装与部署](docs/01-installation.md) → [网页工作流程](docs/02-workflow.md)
+- [参数参考](docs/04-parameters.md) · [内部计算参考](docs/05-python-api.md) · [分析](docs/07-analysis.md)
 - [排错](docs/11-troubleshooting.md) · [待办](docs/14-roadmap.md) · [完整文档索引](docs/README.md)
 
 ## 最短使用路径
@@ -37,17 +38,6 @@ scMM。后续命令统一通过 `uv run` 执行，无需手工激活环境。
 启动、发布与回滚见 [安装部署](docs/01-installation.md#开发与生产分离)。
 网页启动前必须完成仓库外资源配置和管理员初始化，不支持匿名启动；普通成员不能配置服务器路径。
 网页操作见 [Vue 六步流程](docs/02-workflow.md#vue-网页项目与样本)。
-自动化处理可直接使用命令行（参考离子必须按实验修改）：
-
-```bash
-uv run --locked scmm-process input.mzML results --ref-mz 734.5929
-uv run --locked scmm-process raw-data/ results --ref-mz 734.5929 --jobs 4
-```
-
-Python 调用、保存重载和目录处理见 [API 与批处理](docs/05-python-api.md)。
-需要逐步质控和绘图时打开 [scMM_workflow.ipynb](scMM_workflow.ipynb)，
-修改顶部参数单元后按 [Notebook 流程](docs/02-workflow.md#notebook参数化流程) 执行。
-
 ## 支持范围
 
 - Python：3.11–3.12；`.python-version` 将本地开发默认固定为 Python 3.12。

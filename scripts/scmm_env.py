@@ -37,11 +37,6 @@ def settings(config=CONFIG):
     }
     if config.exists():
         overrides = json.loads(config.read_text(encoding="utf-8"))
-        # Accept existing Vue deployment configs without retaining a frontend switch.
-        for key in ("dev_frontend", "prod_frontend"):
-            if overrides.pop(key, "vue") != "vue":
-                raise ValueError("Only Vue is supported; remove obsolete frontend settings")
-        overrides.pop("origins", None)  # Retired WebSocket configuration.
         if set(overrides) - set(values):
             raise ValueError("Unknown environment configuration keys")
         values.update(overrides)

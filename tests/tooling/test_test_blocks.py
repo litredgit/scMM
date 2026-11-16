@@ -42,7 +42,6 @@ def test_shared_frontend_changes_include_assistant_browser_checks():
         ("tests/domain/test_normalize.py", {"data"}),
         ("frontend/tests/lipids.spec.ts", {"browser-lipids"}),
         ("tests/support/lipids.py", {"annotation", "api-lipids"}),
-        ("scMM_workflow.ipynb", {"notebook"}),
     ],
 )
 def test_changes_select_only_affected_blocks(file, expected):

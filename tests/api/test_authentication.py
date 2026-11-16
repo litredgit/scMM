@@ -173,7 +173,7 @@ def test_shared_projects_but_workspace_owner_and_admin_boundaries(secured):
             headers=h,
             json={"revision": 1, "root": "项目结果", "path": ".", "trust_pickle": True},
         )
-        assert response.status_code == 403
+        assert response.status_code == 422
         assert client.get("/api/v1/workspace", headers=h).json() == before
         token = client.cookies.get("scmm_test")
         admin.patch(

@@ -60,7 +60,6 @@ class RelocateSample(RevisionRequest):
 class ImportDataset(RevisionRequest):
     root: str
     path: str
-    trust_pickle: bool = False
 
 
 class MapSamples(RevisionRequest):

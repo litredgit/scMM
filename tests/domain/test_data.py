@@ -214,7 +214,7 @@ def test_deisotope_rejects_invalid_missing_mask_shape() -> None:
         dataset.deisotope(missing_func=lambda values: values[:, 0], inplace=False)
 
 
-def test_load_processed_uses_csv_fallback_and_builds_metadata(tmp_path: Path) -> None:
+def test_load_processed_rejects_csv_only_legacy_directory(tmp_path: Path) -> None:
     result_dir = tmp_path / "csv-only"
     result_dir.mkdir()
     (result_dir / ".meta").write_text(
@@ -223,13 +223,8 @@ def test_load_processed_uses_csv_fallback_and_builds_metadata(tmp_path: Path) ->
     )
     pd.DataFrame([[1.0, 2.0]], columns=[100.0, 200.0]).to_csv(result_dir / "data.csv")
 
-    dataset = CyESIData.load_from_processed(result_dir)
-
-    assert dataset.get_name() == "csv-only"
-    assert dataset.peak_meta.empty
-    assert dataset.feature_meta["mz"].tolist() == [100.0, 200.0]
-    assert dataset.feature_meta.index.tolist() == dataset.data.columns.tolist()
-    assert dataset.feature_meta.index.name == "feature_id"
+    with pytest.raises(ValueError, match="complete current pickle frames"):
+        CyESIData.load_from_processed(result_dir)
 
 
 def test_load_processed_rejects_feature_metadata_dimension_mismatch(tmp_path: Path) -> None:
@@ -240,6 +235,7 @@ def test_load_processed_rejects_feature_metadata_dimension_mismatch(tmp_path: Pa
         encoding="utf-8",
     )
     pd.DataFrame([[1.0, 2.0]], columns=[100.0, 200.0]).to_pickle(result_dir / "data.pkl")
+    pd.DataFrame(index=[0]).to_pickle(result_dir / "peak_meta.pkl")
     pd.DataFrame({"mz": [100.0]}).to_pickle(result_dir / "feature_meta.pkl")
 
     with pytest.raises(ValueError, match="feature_meta row count"):

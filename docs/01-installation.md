@@ -39,19 +39,6 @@ reader 默认查找用户目录中的部署文件，也可用 `SCMM_THERMO_READE
 [Thermo RAW 技术说明](10-thermo-raw.md)。不会在直接读取失败时自动转换 mzML；
 旧 `--msconvert` / `msconvert_path` 参数及手动转换模块已移除。
 
-## 使用 Notebook
-
-完整同步已经包含 `notebook` extra。启动项目内的 JupyterLab：
-
-```bash
-uv run --locked python -m ipykernel install --user --name scmm --display-name scMM
-uv run --locked jupyter lab
-```
-
-打开项目根目录的 `scMM_workflow.ipynb`，选择显示名为 `scMM`、内部名称为 `scmm` 的内核。
-VS Code 也可直接选择仓库内的 `.venv/bin/python`。Notebook 的功能和参数见
-[参数化 Notebook 工作流](02-workflow.md)。
-
 ## 依赖分组
 
 | 分组 | 主要用途 |
@@ -61,7 +48,6 @@ VS Code 也可直接选择仓库内的 `.venv/bin/python`。Notebook 的功能�
 | `cluster` | Leiden 与 Louvain 聚类 |
 | `supervised` | 监督学习、SMOTE 和 SHAP |
 | `web` | FastAPI/Uvicorn、Plotly、Matplotlib、NetworkX、UMAP 及兼容依赖；Vue 构建工具由 npm 单独管理 |
-| `notebook` | JupyterLab 与项目内核 |
 | `dev` 依赖组 | pytest、Ruff、构建与覆盖率；不进入发布包依赖 |
 
 仅运行核心处理可使用：
@@ -330,7 +316,13 @@ python3 scripts/scmm_env.py serve dev
 
 ## 发布、更新与回滚
 
-发布授权见[协作约定](../AGENTS.md#协作约定)。先完成[分块验证](13-testing.md#完整验证)。发行包内容有变化时，用本次构建的 wheel 在受支持的独立环境中检查 `scmm-process --help`；提取或读取链变化时，补跑相应格式的端到端验证。
+用户确认验收通过后，将本任务实现、文档和已有验证结论放入同一任务提交；
+CHANGELOG 在该提交中记录用户验收通过，提交即标志开发验收完成。
+随后连续完成推送、生产部署、健康检查和 `main` 推送，无需部署后再次人工验收。
+发布结果通过聊天和仓库外运维记录反馈，不为补写提交号、部署状态或验收记录追加提交。
+开发验收完成与生产发布成功分别反馈；发布失败须如实报告，确需修正代码或文档时才追加修复提交。
+
+发布授权见[协作约定](../AGENTS.md#协作约定)。先完成[分块验证](13-testing.md#完整验证)。发行包内容有变化时，用本次构建的 wheel 在受支持的独立环境中检查 `scmm-web --help` 与 `scmm-admin --help`；提取或读取链变化时，补跑相应格式的端到端验证。
 
 在开发目录中使用同一个脚本：
 

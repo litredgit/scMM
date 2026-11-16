@@ -281,7 +281,7 @@ def test_merge_hardlink_and_decode_budget_reject_without_workspace_mutation(work
     assert workflow[-2]() == before
 
 
-def test_merge_legacy_csv_reads_safely_and_rejects_pickle(workflow):
+def test_merge_rejects_historical_csv_directory_without_changing_state(workflow):
     from scMM.file.data import CyESIData
 
     options, _, right = sources(workflow)
@@ -289,14 +289,8 @@ def test_merge_legacy_csv_reads_safely_and_rejects_pickle(workflow):
     for path in target.glob("*.pkl"):
         path.unlink()
     source = {**options["sources"][1], "path": target.name}
-    response = workflow[-1]("/dataset/merge/inspect", {"source": source})
-    assert response.status_code == 200, response.text
-    assert response.json()["value"]["cells"] == 1
-    options["sources"][1] = source
-    response = workflow[-1]("/dataset/merge/preview", options)
-    assert response.status_code == 200, response.text
-    # Presence of executable legacy frames is enough to reject; never unpickle them.
-    (target / "data.pkl").write_bytes(b"not executable input")
     before = workflow[-2]()
-    assert workflow[-1]("/dataset/merge/inspect", {"source": source}).status_code == 403
+    assert workflow[-1]("/dataset/merge/inspect", {"source": source}).status_code == 400
+    options["sources"][1] = source
+    assert workflow[-1]("/dataset/merge/preview", options).status_code == 400
     assert workflow[-2]() == before

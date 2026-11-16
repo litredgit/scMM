@@ -18,7 +18,6 @@ from scMM.analysis import SupervisedAnalyzer, differential_features
 from scMM.analysis.embedding import reduce_dimension
 from scMM.analysis.quality import quality_metrics
 from scMM.analysis.statistics import feature_correlation_network, marker_features
-from scMM.file.data import CyESIData
 from scMM.ion.semantics import transform_value_state, value_states, write_value_states
 from scMM.util.intensity import intensity_states, transformed_state, write_intensity_states
 from scMM.util.normalize import normalize
@@ -30,34 +29,12 @@ def dense(matrix):
     return matrix.toarray() if hasattr(matrix, "toarray") else np.asarray(matrix)
 
 
-def read_dataset(storage, label, selected_path, *, trust_pickle=False):
-    """Read only server-native paths within a configured storage root.
-
-    Legacy directories may contain executable pickle data: the UI must obtain
-    explicit trust confirmation. Child-file symlinks cannot escape the root.
-    """
+def read_dataset(storage, label, selected_path):
+    """Read an independent H5AD within a configured storage root."""
     path = storage.resolve(label, selected_path)
     if path.is_file() and path.suffix.lower() == ".h5ad":
         return read_h5ad(path)
-    if path.is_dir() and (path / ".meta").is_file():
-        for name in (
-            ".meta",
-            "data.pkl",
-            "peak_meta.pkl",
-            "feature_meta.pkl",
-            "feature_snr.pkl",
-            "data.csv",
-            "peak_meta.csv",
-            "feature_meta.csv",
-            "feature_snr.csv",
-        ):
-            child = path / name
-            if child.exists() or child.is_symlink():
-                storage.resolve(label, child)
-                if child.suffix == ".pkl" and not trust_pickle:
-                    raise PermissionError("Legacy pickle data requires explicit trust confirmation")
-        return CyESIData.load_from_processed(path).to_anndata()
-    raise ValueError("Select a processed result directory or an .h5ad file")
+    raise ValueError("仅支持独立 H5AD 文件; 不再支持历史结果目录")
 
 
 class AnalysisWorkspace:

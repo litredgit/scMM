@@ -245,9 +245,8 @@ useViewState('processed_merge', { sources, reference, mode, ppm, ambiguity, comm
   <details class="card">
     <summary>合并已处理矩阵</summary>
     <p>
-      明确选择当前工作区或独立 H5AD/CSV
-      结果，不自动选择最新文件。合并替换当前数据并重建完整起点，不是批次校正；不同来源的归一化值不保证直接可比。旧目录含
-      pickle 时请离线转换为 H5AD。
+      明确选择当前工作区或独立 H5AD
+      结果，不自动选择最新文件。合并替换当前数据并重建完整起点，不是批次校正；不同来源的归一化值不保证直接可比。历史结果目录不再支持。
     </p>
     <div class="actions">
       <button
@@ -281,7 +280,7 @@ useViewState('processed_merge', { sources, reference, mode, ppm, ambiguity, comm
             path = p[0] ?? ''
           }
         "
-        @project="store.error = '合并请选择独立 H5AD 或 CSV 结果；完整项目在项目首页打开。'"
+        @project="store.error = '合并请选择独立 H5AD；完整项目在项目首页打开。'"
       />
       <label
         >合并来源存储<select v-model="root" aria-label="合并来源存储" :disabled="store.busy">

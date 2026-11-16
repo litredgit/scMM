@@ -189,19 +189,13 @@ def test_lsqr_is_valid_classifier_without_latent_and_failed_training_preserves_r
     assert state.result("shap") == {"retained": True}
 
 
-def test_legacy_requires_trust_and_rejects_child_symlink(tmp_path):
+def test_historical_result_directory_is_rejected(tmp_path):
     from scMM.file.data import CyESIData
 
     result = CyESIData.from_anndata(example()).save(tmp_path)
     catalog = StorageCatalog([StorageRoot("Root", result)])
-    with pytest.raises(PermissionError, match="trust"):
+    with pytest.raises(ValueError, match="H5AD"):
         read_dataset(catalog, "Root", ".")
-    assert read_dataset(catalog, "Root", ".", trust_pickle=True).shape == (80, 5)
-    outside = tmp_path / "outside.pkl"
-    (result / "data.pkl").rename(outside)
-    (result / "data.pkl").symlink_to(outside)
-    with pytest.raises(PermissionError, match="outside"):
-        read_dataset(catalog, "Root", ".", trust_pickle=True)
 
 
 def test_metadata_preserves_matrix_layers_embedding_and_unrelated_results():

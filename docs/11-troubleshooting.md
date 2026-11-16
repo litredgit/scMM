@@ -37,8 +37,7 @@ uv run --locked python -c "import sys; print(sys.executable)"
 uv run --locked python -c "import pyopenms, numpy, pandas, anndata"
 ```
 
-解释器应位于仓库的 `.venv`。Notebook 中还应检查右上角内核是否为 `scMM`/`scmm`，或直接
-选择 `.venv/bin/python`；终端中的环境不会自动切换已经打开的 Notebook 内核。
+解释器应位于仓库的 `.venv`；正式使用通过服务器网页。
 
 ### 输入目录没有发现原始文件
 
@@ -172,7 +171,7 @@ display(audit["final_table"])
 
 ### UMAP 报近邻数错误
 
-`n_neighbors` 必须至少为 2 且小于细胞数。Notebook 会调整该值，网页及统一 API 明确报错，需手动设置：
+`n_neighbors` 必须至少为 2 且小于细胞数。内部绘图层会调整该值，网页及统一 API 明确报错，需手动设置：
 
 ```python
 n_neighbors = min(15, adata.n_obs - 1)
@@ -189,7 +188,7 @@ n_neighbors = min(15, adata.n_obs - 1)
 uv sync --locked --all-extras --dev
 ```
 
-然后重启 Notebook 内核。项目声明的是 `python-igraph`；不要手工安装另一个同名 `igraph` 包。
+然后重启开发解释器。项目声明的是 `python-igraph`；不要手工安装另一个同名 `igraph` 包。
 
 ### UMAP 每次变化
 

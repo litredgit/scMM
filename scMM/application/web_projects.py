@@ -8,7 +8,6 @@ from uuid import uuid4
 
 import pandas as pd
 
-from .identity import actor
 from .result_catalog import (
     INDEPENDENT_PLOTS,
     REPORT_PLOTS,
@@ -201,7 +200,7 @@ class ProjectWorkflow:
     def inspect_dataset(self, identity, root, path):
         with self.access(identity) as workspace:
             workspace.require_project()
-            data = read_dataset(self.results, root, path, trust_pickle=False)
+            data = read_dataset(self.results, root, path)
             return {
                 "cells": data.n_obs,
                 "features": data.n_vars,
@@ -352,14 +351,9 @@ class ProjectWorkflow:
 
         return self._update_samples(identity, revision, update)
 
-    def import_dataset(self, identity, revision, root, path, trust_pickle):
-        if trust_pickle and actor.get() is not None:
-            raise WorkspaceError(
-                "网页不支持导入可执行 pickle，请离线转换为 H5AD。", code="unsafe_import", status=403
-            )
-
+    def import_dataset(self, identity, revision, root, path):
         def action(workspace):
-            data = read_dataset(self.results, root, path, trust_pickle=trust_pickle)
+            data = read_dataset(self.results, root, path)
             candidate = project_candidate(workspace.project)
             if "scmm_source_view_json" in data.uns:
                 from scMM.file.ion_view import import_compound_source

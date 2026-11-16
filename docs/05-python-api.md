@@ -1,4 +1,6 @@
-# 05 Python API 与批处理
+# 05 内部计算参考
+
+本页仅供网页后端开发定位内部模块，不是公共 Python API 或脚本产品承诺。方法可以随网页实现调整；正式操作统一通过服务器网页。
 
 [返回文档索引](README.md) · [参数参考](04-parameters.md)
 
@@ -28,7 +30,7 @@ data = CyESIData.load_from_file(
 返回的对象可以通过 `len(data)` 查看细胞数，通过 `data.data.shape` 查看完整矩阵形状。
 `cell_min_signal` 在 `preprocess`、单文件及各目录入口均可调，默认 `1e5`。
 逐扫描参考离子必须同时通过原倍数条件和扣基线后的最低净信号条件；0 关闭附加条件。
-两种提取算法均适用，定义、单位及旧项目兼容见[参数说明](04-parameters.md#细胞逐扫描最低净信号)。
+定义和单位见[参数说明](04-parameters.md#细胞逐扫描最低净信号)。
 
 ### Thermo profile RAW 直接读取
 
@@ -111,7 +113,6 @@ RAW 的自动并发与其他目录策略见 [批处理模式](#目录处理与�
 
 ```python
 data = CyESIData.load_from_processed("results/sample")
-# 等价的兼容写法：data = CyESIData("results/sample")
 ```
 
 目录中必须有 `.meta`，并至少有 `data.pkl` 或 `data.csv`。读取时优先使用 pickle；pickle 能更
@@ -135,7 +136,7 @@ data = (
 ### 检查去同位素结果而不修改数据
 
 本节是原 Python 回归/强度上限算法；网页数据库分子式天然分布标记保留所有峰和候选，
-与本方法的删峰/求和语义不同，见[网页操作](02-workflow.md#注释与同位素)。原接口和 Notebook 默认值不改变。
+与本方法的删峰/求和语义不同，见[网页操作](02-workflow.md#注释与同位素)。内部算法与网页同名功能应按各自明确的科学定义使用。
 
 ```python
 audit = data.deisotope(
@@ -165,10 +166,7 @@ hits = data.get_annotation(
 hits.to_csv("results/annotation_candidates.csv", index=False)
 ```
 
-`get_annotation()` 只返回候选表，不自动修改 `feature_meta`。参数化 Notebook 会额外把每个 m/z
-误差最小的候选映射到特征元数据。
-批量 `search()` 即使没有命中也会返回带稳定候选列的空 DataFrame，便于直接拼接或写出；候选
-生成、ppm 排序和每个查询的数量限制对自定义单/多电荷加合物采用相同流程。
+`get_annotation()` 只返回候选表，不自动修改 `feature_meta`。网页候选注释按应用层登记与保存。
 
 若只需查询少量质量，可直接使用：
 
@@ -280,22 +278,6 @@ left.alignwith(right, ppm_tol=5, mz_merge_options="union")
 - `ref`：只保留 `left` 的特征轴。
 
 这只是 m/z 对齐和行拼接，不会自动进行批次校正、重新归一化或时间重标定。
-
-## 命令行批处理
-
-```bash
-uv run --locked scmm-process raw-data/ results \
-  --ref-mz 734.5929 \
-  --ppm-tol 10 \
-  --resolution 35000 \
-  --cell-snr 5 \
-  --peak-snr 3 \
-  --jobs 4 \
-  --verbose
-```
-
-CLI 的目录模式调用 `load_from_filelist()`，不是 `batch_process()`；可用 `--processing-strategy`
-选择表中的 legacy/shared/independent。它输出一个合并数据集；完整选项见 [CLI 参数](04-parameters.md#cli-参数)。
 
 ## 底层谱工具
 
@@ -447,4 +429,4 @@ result = project.workspace.differential(
 
 `file.ion_bundle.export_project_bundle/import_project_bundle` 处理完整项目内存包，
 `file.ion_view.export_compound_source/import_compound_source` 处理单源 L2；正式项目用 `ProjectStore.save/open`。
-正式保存没有可执行模型；维护恢复模型继续采用已有白名单及输入验证。完整示例在无输出 Notebook 的可选离子分支中，默认关闭。
+正式保存没有可执行模型；维护恢复模型继续采用已有白名单及输入验证。内部接入按上述领域与应用接口组织。

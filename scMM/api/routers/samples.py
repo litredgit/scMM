@@ -36,7 +36,7 @@ def relocate_sample(body: s.RelocateSample, manager: Service, identity: Identity
 
 @router.post("/dataset/import", response_model=s.WorkspaceView)
 def import_dataset(body: s.ImportDataset, manager: Service, identity: Identity):
-    return manager.import_dataset(identity, body.revision, body.root, body.path, body.trust_pickle)
+    return manager.import_dataset(identity, body.revision, body.root, body.path)
 
 
 @router.get("/samples/mapping", response_model=s.MappingView)

@@ -2,7 +2,7 @@
 
 [返回文档索引](README.md) · [Python API](05-python-api.md)
 
-标准数据集、Notebook 图和网页项目分别写入不同目录。网页操作见[保存和离开](02-workflow.md#保存和离开)。
+内部 worker 数据集和网页项目分别写入不同目录。网页操作见[保存和离开](02-workflow.md#保存和离开)。
 
 网页工作区修订用于当前会话；主动保存才更新 `project.json` 的磁盘修订。未保存状态的边界见[网页会话](02-workflow.md#vue-网页项目与样本)。
 
@@ -11,7 +11,7 @@
 ![L0 保留测量特征；同一测量根可构建去冗余的 L1 和采用固定代表离子的 L2。三种表示分别支持独立分析，L3 候选与证据单独存放。](images/ion-data-views.svg)
 
 普通项目仍沿用版本 1；显式建立离子目录后，主动保存使用版本 2。
-新程序兼容两种格式，旧程序会拒绝版本 2，不能用旧版本打开后保存来丢弃新分支。
+两种结构均由当前网页写出，不是历史迁移链；当前版本不提供旧项目格式自动迁移。
 网页入口见[离子归组与证据](02-workflow.md#离子归组与化合物证据)。
 
 版本 2 的 `artifacts.data_catalog` 指向完整目录：测量根、L1/L2 源矩阵、逐分支的 current/baseline/views、
@@ -68,7 +68,7 @@ pandas DataFrame，行是细胞事件，列是 m/z 特征，值是对应强度�
 - `isotope_slope_A`、`isotope_r_square`、`isotope_ppm_error`。
 - `isotope_children` 和每阶 M+n 的详细字段。
 
-参数化 Notebook 注释后还可能包括：
+内部注释结果还可能包括：
 
 - `annotation_name`
 - `annotation_formula`
@@ -85,7 +85,7 @@ pandas DataFrame，行是细胞事件，列是 m/z 特征，值是对应强度�
 - 仪器和采集时间，或多文件的 `per_file_meta`
 - 去同位素处理参数和删除数量
 
-它不能自动记录 Notebook 中的所有分析开关。正式分析建议额外保存参数单元、运行日志和 Git
+正式分析建议额外保存参数、运行日志和 Git
 提交 ID。
 
 ## 保存目录
@@ -116,7 +116,7 @@ results/
 | `peak_meta.pkl/.csv` | 细胞元数据 |
 | `feature_meta.pkl/.csv` | 特征元数据 |
 
-Python 离线读取可信旧结果时优先选择 pickle；网页拒绝 pickle，应先离线转换为 H5AD。CSV 主要用于交换。CSV 往返可能把数值列名或可空数据类型转换成字符串。
+内部 worker 仅从受控产物目录读取当前 pickle 表；独立网页导入仅支持 H5AD，不支持历史目录。CSV 主要用于交换。CSV 往返可能把数值列名或可空数据类型转换成字符串。
 
 `save()` 默认拒绝覆盖；显式 `overwrite=True` 时，先在结果根下的同文件系统临时目录
 写完 JSON、pickle、CSV，并回读校验 pickle，再发布完整目录。覆盖保留用户附加文件，
@@ -128,7 +128,7 @@ Python 离线读取可信旧结果时优先选择 pickle；网页拒绝 pickle�
 目标已存在而备份仍在时，表示新目录已发布；备份清理失败只记录警告，下次显式覆盖前重试清理。
 恢复失败则报错，不能逐文件拼接两个版本。首次保存失败不发布半成品目录。
 
-旧格式内容和读取方式保持兼容；只读介质无法创建锁文件时，读取前后检查目录身份，
+当前内部目录要求 data.pkl、peak_meta.pkl、feature_meta.pkl 完整；不再回退 CSV 或补造缺失元数据。只读介质无法创建锁文件时，读取前后检查目录身份，
 发生替换时报错；需要恢复备份但无写权限时须先恢复写权限。进程强制退出可能留下
 `.scmm-dataset-stage-*` 候选目录，它不会自动成为当前结果；确认无活动读写后再审阅清理，
 不要将其中产物手动混入当前目录。外部逐文件读取、旧版 scMM、云盘同步与不支持本地锁/重命名语义的
@@ -145,31 +145,6 @@ Python 离线读取可信旧结果时优先选择 pickle；网页拒绝 pickle�
 | `embedding.csv` | 固定种子的 PCA，以及依赖与数据规模允许时的 UMAP 坐标 |
 
 这些文件不改变 `CyESIData.load_from_processed()` 所需的标准文件，可按需要与标准结果一起归档。
-
-## Notebook 输出
-
-默认目录关系：
-
-```text
-results/
-├── <数据集名>/
-│   └── scMM 标准数据文件
-├── figures/
-│   ├── umap.svg
-│   ├── trajectory.svg
-│   ├── metabolic_velocity_speed.svg
-│   ├── metabolite_trends_top<N>.svg
-│   ├── leiden_<key>_umap.svg
-│   ├── trend_clusters_<method>_<metric>.svg
-│   ├── stability_monitor_boxplot.svg
-│   ├── stability_cell_counts.svg
-│   ├── stability_median_correlation.svg
-│   └── feature_ratio_umap.svg
-├── annotation_candidates.csv
-└── total_sum_spec.mzML
-```
-
-只有启用相应功能时才会生成对应文件。`total_sum_spec.mzML` 仅适用于原始目录输入。
 
 ## AnnData 映射
 
@@ -466,7 +441,7 @@ Vue 默认收起内部快照、提取产物和缓存，优先打开项目以完�
 1. 原始 Thermo RAW / mzML / mzXML 的只读副本或校验和。
 2. `uv.lock` 和 `pyproject.toml`。
 3. Git 提交 ID：`git rev-parse HEAD`。
-4. Notebook 参数单元或单独的参数 YAML/JSON。
+4. 网页参数与处理来源记录。
 5. 日志输出。
 6. scMM 标准结果目录。
 7. 完整候选注释，而不只保留最佳候选。
@@ -488,8 +463,7 @@ project/
 └── run-parameters/     # 每次分析的参数快照
 ```
 
-本仓库根目录的 `scMM_workflow.ipynb` 是通用模板；实验专用副本可以放到分析项目中，避免把
-大量执行输出和本地路径写回软件仓库。
+实验记录由用户另行管理；本工程不再交付 Notebook 模板。
 
 下一步：[常见问题与调优](11-troubleshooting.md)。
 
@@ -569,13 +543,13 @@ ROC/PR/校准图只复用身份匹配的已存图，不重新训练模型。
 筛选矩阵只裁选特征，不按页面分页截断细胞。精确 m/z 与候选注释通过稳定特征 ID 对应，不能把候选物质名称当作唯一列名。
 这不是多因素／时间序列元数据表，也不将单细胞当作独立生物重复。
 
-旧目录内部 `data.csv` 与 `peak_meta.csv` 保持分离布局，以兼容保存／重载；该内部文件不是上述网页矩阵下载契约。
+旧目录内部 `data.csv` 与 `peak_meta.csv` 保持分离布局，供内部 worker 保存／重载；该内部文件不是上述网页矩阵下载契约。
 H5AD、嵌入坐标、QC、统计结果及作图 ZIP 内源表各保留原有用途和字段，不额外插入 `Label`。
 事件、时间和保留峰的完整方法见[细胞事件与特征峰确认流程](03-cell-feature-identification.md)。
 
 ## 合并矩阵与完整起点
 
-合并当前矩阵按明确的 union/ref 规则构造；完整预处理起点独立以 union 合并各输入实际起点。当前工作区使用完整 `_original`，独立 H5AD/旧 CSV 目录使用自身装载的数据。两者分别验证、一次性替换，失败不污染工作区，不写入源文件或正式项目；主动保存沿用快照原子发布与磁盘修订检查。
+合并当前矩阵按明确的 union/ref 规则构造；完整预处理起点独立以 union 合并各输入实际起点。当前工作区使用完整 `_original`，独立 H5AD使用自身装载的数据。两者分别验证、一次性替换，失败不污染工作区，不写入源文件或正式项目；主动保存沿用快照原子发布与磁盘修订检查。
 
 细胞/特征稳定 ID 加 `mN:` 来源前缀；目标 sample_id 由本轮合并身份及目标样本名生成。原 obs/var 列按 `mN__` 保留类型和精度，原始表与 uns 归档在 `uns['scmm_merge_sources']`。只有显式声明的共同 obs 列形成共同字段，group/subject/batch 默认保留逐细胞原值，可在映射中覆盖；同名目标样本主动合并，异质样本字段不会被静默统一。
 
@@ -594,3 +568,6 @@ X 缺少目标特征补 0。每个输入层独立存为 `merge_mN_layer_K`：自
 不能扩大为所有 reset 错误。恢复须携带真实来源，未知来源不能按非负值或层名猜测。
 矩阵 normalize 后曾保留旧 `X_pca`/参数；因此变换须统一处理已知下游结果，纯往返继续保留模板信息，
 不能删除整个导入模板绕过依赖判断。任意外部 uns 的依赖不可自动推断。
+
+
+当前项目缺少 `cell_min_signal` 时明确拒绝打开，不再自动补为 0。已有磁盘数据不批量改写或删除。

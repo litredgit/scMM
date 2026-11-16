@@ -79,8 +79,21 @@
     },
     "ion-grouping": {
       "kind": "python",
-      "tests": ["tests/domain/test_ion_identity.py", "tests/domain/test_ion_relations.py", "tests/domain/test_ion_representation.py"],
-      "sources": ["scMM/ion/__init__.py", "scMM/ion/contracts.py", "scMM/ion/identity.py", "scMM/ion/semantics.py", "scMM/ion/species.py", "scMM/ion/relations.py", "scMM/ion/hypotheses.py", "scMM/ion/representation.py"],
+      "tests": [
+        "tests/domain/test_ion_identity.py",
+        "tests/domain/test_ion_relations.py",
+        "tests/domain/test_ion_representation.py"
+      ],
+      "sources": [
+        "scMM/ion/__init__.py",
+        "scMM/ion/contracts.py",
+        "scMM/ion/identity.py",
+        "scMM/ion/semantics.py",
+        "scMM/ion/species.py",
+        "scMM/ion/relations.py",
+        "scMM/ion/hypotheses.py",
+        "scMM/ion/representation.py"
+      ],
       "downstream": ["annotation", "workbench"],
       "extras": []
     },
@@ -97,26 +110,15 @@
         "scMM/application/ion_jobs.py",
         "scMM/application/ion_worker.py"
       ],
-      "downstream": [
-        "browser-ions"
-      ],
-      "extras": [
-        "web"
-      ]
+      "downstream": ["browser-ions"],
+      "extras": ["web"]
     },
     "browser-ions": {
       "kind": "browser",
-      "tests": [
-        "frontend/tests/ions.spec.ts"
-      ],
-      "sources": [
-        "frontend/src/features/ions/*",
-        "frontend/src/api/ions.ts"
-      ],
+      "tests": ["frontend/tests/ions.spec.ts"],
+      "sources": ["frontend/src/features/ions/*", "frontend/src/api/ions.ts"],
       "downstream": [],
-      "extras": [
-        "web"
-      ]
+      "extras": ["web"]
     },
     "annotation": {
       "kind": "python",
@@ -164,7 +166,6 @@
         "tests/application/test_workbench_parameters.py",
         "tests/application/test_preview_cache.py",
         "tests/application/test_quality_application.py",
-        "tests/application/test_cli.py",
         "tests/application/test_display_controls.py"
       ],
       "sources": [
@@ -179,7 +180,6 @@
         "scMM/application/parameters.py",
         "scMM/application/preferences.py",
         "scMM/application/quality.py",
-        "scMM/cli.py",
         "scMM/application/lipid_sorting.py"
       ],
       "downstream": ["api-raw", "api", "tooling"],
@@ -209,7 +209,14 @@
         "scMM/application/naming.py",
         "scMM/application/storage.py"
       ],
-      "downstream": ["api-ions", "processing", "workbench", "api", "api-raw", "monitor"],
+      "downstream": [
+        "api-ions",
+        "processing",
+        "workbench",
+        "api",
+        "api-raw",
+        "monitor"
+      ],
       "extras": []
     },
     "workbench": {
@@ -264,7 +271,8 @@
         "scMM/api/routers/preferences.py",
         "scMM/api/routers/maintenance.py"
       ],
-      "downstream": ["api-ions",
+      "downstream": [
+        "api-ions",
         "browser-projects",
         "browser-workflow",
         "browser-navigation",
@@ -367,13 +375,6 @@
       "kind": "docs",
       "tests": ["tests/tooling/test_documentation.py"],
       "sources": ["*.md", "docs/*"],
-      "downstream": [],
-      "extras": []
-    },
-    "notebook": {
-      "kind": "docs",
-      "tests": ["tests/tooling/test_notebook.py"],
-      "sources": ["scMM_workflow.ipynb"],
       "downstream": [],
       "extras": []
     },
@@ -524,7 +525,8 @@
     }
   },
   "support": {
-    "tests/support/auth.py": ["api-ions",
+    "tests/support/auth.py": [
+      "api-ions",
       "spectra",
       "api",
       "api-raw",
@@ -533,7 +535,8 @@
       "ai",
       "api-time"
     ],
-    "tests/support/project.py": ["api-ions",
+    "tests/support/project.py": [
+      "api-ions",
       "processing",
       "api",
       "api-raw",
@@ -543,14 +546,21 @@
       "api-time"
     ],
     "tests/support/lipids.py": ["annotation", "api-lipids"],
-    "tests/support/workflow.py": ["api-ions",
+    "tests/support/workflow.py": [
+      "api-ions",
       "api",
       "api-raw",
       "api-lipids",
       "ai",
       "api-time"
     ],
-    "tests/api/conftest.py": ["api-ions", "api", "api-raw", "api-lipids", "api-time"],
+    "tests/api/conftest.py": [
+      "api-ions",
+      "api",
+      "api-raw",
+      "api-lipids",
+      "api-time"
+    ],
     "frontend/tests/fixtures.ts": [
       "browser-projects",
       "browser-workflow",
@@ -595,11 +605,11 @@
       "auth",
       "monitor",
       "tooling",
-      "docs",
-      "notebook"
+      "docs"
     ],
     "tests/support/maintenance.py": ["api"],
-    "tests/support/time_analysis.py": ["time"]
+    "tests/support/time_analysis.py": ["time"],
+    "scMM_workflow.ipynb": ["tooling"]
   },
   "shared": {
     "scMM/application/preview_cache.py": ["processing", "projects"],
@@ -660,7 +670,6 @@
       "monitor",
       "tooling",
       "docs",
-      "notebook",
       "browser-projects",
       "browser-workflow",
       "browser-navigation",
@@ -1214,7 +1223,7 @@
       "monitor",
       "api-time"
     ],
-    "tests/tooling/": ["tooling", "docs", "notebook"],
+    "tests/tooling/": ["tooling", "docs"],
     "tests/support/": [
       "spectra",
       "data",

@@ -101,7 +101,7 @@ def test_environment_config_and_task_metadata_use_utf8(tmp_path):
     config = tmp_path / "config.json"
     write_json(
         config,
-        {"prod_results": str(root), "state": str(tmp_path / "state"), "origins": ["中文.invalid"]},
+        {"prod_results": str(root), "state": str(tmp_path / "state"), "address": "中文.invalid"},
     )
     ascii_process(
         """
@@ -109,7 +109,7 @@ import sys
 from pathlib import Path
 from scripts import scmm_env as manager
 values = manager.settings(Path(sys.argv[1]))
-assert 'origins' not in values
+assert values['address'].endswith('.invalid')
 manager.run = lambda *args, **kwargs: ''
 manager.web_idle = lambda *_args, **_kwargs: None
 manager.idle(values)

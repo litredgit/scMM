@@ -421,7 +421,7 @@ def test_static_routes_and_assets_are_served_without_api_fallback(api, tmp_path)
         assert "scMM Vue" not in client.get("/api/v1/missing").text
 
 
-def test_explicit_trust_is_required_for_legacy_pickle(api):
+def test_historical_pickle_directory_is_rejected_without_loading(api):
     client, _, _, _, results = api
     legacy = results / "legacy"
     legacy.mkdir()
@@ -434,7 +434,7 @@ def test_explicit_trust_is_required_for_legacy_pickle(api):
         headers=headers,
         json={"revision": 1, "root": "Results", "path": "legacy"},
     )
-    assert response.status_code == 403
+    assert response.status_code == 400
     assert client.get("/api/v1/workspace", headers=headers).json() == before
 
 
