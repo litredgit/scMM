@@ -4,6 +4,9 @@
 Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵，并完成细胞事件识别、谱峰对齐、
 归一化、缺失值填补、去同位素、精确质量注释、降维聚类、时间轨迹和代谢趋势分析。
 
+核心目标是模仿 MetaboAnalyst 的 UI，为新手提供友好的分步分析工作流；以普通 1920×1080 桌面屏幕为目标，
+采用清晰的小字号和紧凑布局充分展示内容。界面设计与维护范围见[项目约定](AGENTS.md#网页界面设计)。
+
 ## 功能入口
 
 服务器网页是唯一正式使用入口。Python 模块服务网页内部计算，不提供公共 API、Notebook 或独立分析 CLI 支持。
@@ -49,7 +52,8 @@ scMM。后续命令统一通过 `uv run` 执行，无需手工激活环境。
 - 核心依赖：PyOpenMS、NumPy、pandas、SciPy、scikit-learn、AnnData。
 - 可选分析：Matplotlib、Seaborn、UMAP、Palantir、Leiden/Louvain。
 - Vue 网页：Vue 3、TypeScript、FastAPI；Python 使用 `web` extra，前端需 Node.js 构建，
-  运行入口为 `scmm-web`。网页功能与构建步骤见[安装部署](docs/01-installation.md#vuefastapi-网页)。
+  运行入口为 `scmm-web`。专门适配和验收以 1080p 桌面为准，停止手机、平板和其他非目标视口的兼容性维护。
+  网页功能与构建步骤见[安装部署](docs/01-installation.md#vuefastapi-网页)。
 
 正式分析前应使用标准样品和实验质控数据验证
 参考离子、ppm 容差、SNR 阈值及归一化方案。

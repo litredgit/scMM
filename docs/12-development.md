@@ -5,6 +5,8 @@
 本页维护架构职责及跨模块契约。按[任务导航](README.md#按任务阅读)选择代码、必读主题和测试；
 检查入口见[测试指南](13-testing.md)，服务操作见[安装与部署](01-installation.md#发布更新与回滚)。
 默认只读根规则和任务相关主题，跨模块时沿调用和状态依赖追查；历史不作为每次任务的必读材料。
+任务调查无需另行授权，修改与发布的授权边界见[协作约定](../AGENTS.md#协作约定)。
+网页实现优先遵循[新手交互、1080p 桌面与紧凑布局目标](../AGENTS.md#网页界面设计)，不再将手机或其他非目标视口适配列为开发要求。
 
 ## 代码结构
 
@@ -343,7 +345,7 @@ RawPage 保留原 DOM、参数键、视图键和展示入口，只组装 `featur
 | 类型 | 修改位置与边界 | 验证重点 |
 |---|---|---|
 | 已有参数扩展 | 对应 `modules/*/*Panel.vue`；`useAnalysisSettings` 的默认值、序列化、恢复；计算参数再检查 `workflow_schemas.py` 对应模型、`parameters.py` 帮助/预设与领域函数 | 默认值、非法值、旧设置恢复、参数归属及依赖失效；纯提示修改无需重走算法流程 |
-| 新图形或展示 | 模块模板、既有 `PlotView`/`DataTable`；只有新增服务端图时修改 `Plot.kind`、`PLOTS`、`analysis_plot`、`plot/workbench.py`、`PlotKind` 和结果图映射 | 绘图失败重试、展示不重算检验、保存只读图、过期图不能下载、响应式布局 |
+| 新图形或展示 | 模块模板、既有 `PlotView`/`DataTable`；只有新增服务端图时修改 `Plot.kind`、`PLOTS`、`analysis_plot`、`plot/workbench.py`、`PlotKind` 和结果图映射 | 绘图失败重试、展示不重算检验、保存只读图、过期图不能下载、1080p 桌面内容密度与操作可见性 |
 | 完整分析能力 | 按下述领域 → 应用 → API → Vue → 保存重载与导出逐层接入；按需创建模块 | 数值、原子性、依赖生命周期、严格接口、交互、保存导出贯通 |
 
 例如调整现有网络 `top_features` 的表单，不要求再造一个算法或导航模块；火山图的 `labels` 是展示参数，
@@ -355,7 +357,7 @@ RawPage 保留原 DOM、参数键、视图键和展示入口，只组装 `featur
 
 | 文件/符号（均在 `frontend/src/`） | 职责 |
 |---|---|
-| `features/analysis/AnalysisPage.vue` | 页面标题、公共图例/设置、宽屏导航与窄屏选择；提供页面级上下文；不放领域表单 |
+| `features/analysis/AnalysisPage.vue` | 页面标题、公共图例/设置和分析导航；提供页面级上下文；不放领域表单 |
 | `features/analysis/registry.ts::analysisModules` | 稳定 ID、中文名称、分组、组件入口及输入要求说明 |
 | `features/analysis/types.ts` | 操作/结果/图形类型、模块与传输接口、`analysisKey` |
 | `features/analysis/composables/useAnalysisSettings.ts::useAnalysisSettings` | 表单默认值、`settings` 序列化、`resetSettings` 和 `restoreSettings` 旧设置兼容 |
