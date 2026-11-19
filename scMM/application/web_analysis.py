@@ -20,6 +20,7 @@ from scMM.plot.workbench import (
     violin_figure,
     volcano_figure,
 )
+from scMM.util.observations import observation_kind
 
 from .result_catalog import (
     PLOT_RESULTS,
@@ -50,10 +51,15 @@ ANALYSES = {
 
 def quality_view(state, *, preview_of=None):
     qc = state.qc()
+    unit = observation_kind(state.require_data())
+    unit_name = "样本" if unit == "sample" else "细胞"
     files = qc_file_table(qc["file"])
     files.insert(0, "source_path", files.attrs["source_paths"])
+    if unit == "sample":
+        files = files.rename(columns={"cells": "samples"})
     cell_frame = qc["cell"].copy()
-    cell_frame["cell_id"] = state.require_data().obs_names.astype(str)
+    identifier = "observation_id" if unit == "sample" else "cell_id"
+    cell_frame[identifier] = state.require_data().obs_names.astype(str)
     figure = px.scatter(
         cell_frame,
         x="total_intensity",
@@ -64,8 +70,8 @@ def quality_view(state, *, preview_of=None):
             "total_intensity": "Total intensity",
             "detected_features": "Detected features",
         },
-        title="Cell quality control · current matrix",
-        custom_data=["cell_id", "source_file"],
+        title=f"{unit.title()} quality control · current matrix",
+        custom_data=[identifier, "source_file"],
     )
     names = Counter(PureWindowsPath(str(trace.name)).name for trace in figure.data)
     occurrences = Counter()
@@ -80,7 +86,8 @@ def quality_view(state, *, preview_of=None):
     figure.update_layout(
         legend_title_text="",
         meta={
-            "point_kind": "cell",
+            "point_kind": unit,
+            "observation_kind": unit,
             "dataset_token": list(state.token)
             if preview_of is None
             else preview_of["source_token"],
@@ -91,7 +98,7 @@ def quality_view(state, *, preview_of=None):
                 if preview_of is None
                 else "unapplied candidate; detected >0"
             },
-            "export_tables": {"cells": cell_frame.to_csv(), "files": files.to_csv(index=False)},
+            "export_tables": {f"{unit}s": cell_frame.to_csv(), "files": files.to_csv(index=False)},
         },
     )
     style_figure(figure)
@@ -105,7 +112,7 @@ def quality_view(state, *, preview_of=None):
         else "QC 基于未应用的预览候选；检出特征按强度 > 0 计数，不代表当前矩阵。"
     ]
     if preview_of is not None:
-        figure.update_layout(title="Cell quality control · unapplied preview")
+        figure.update_layout(title=f"{unit.title()} quality control · unapplied preview")
     totals = qc["cell"]["total_intensity"].to_numpy(dtype=float)
     nonzero = totals[totals != 0]
     if (
@@ -119,7 +126,7 @@ def quality_view(state, *, preview_of=None):
             hoverformat=".1e",
         )
         notes.append(
-            "非零细胞总强度约为 1；横轴采用稳定范围，避免浮点求和误差形成假分群。零总和细胞仍显示在 0，下载保留完整数值精度。"
+            f"非零{unit_name}总强度约为 1；横轴采用稳定范围，避免浮点求和误差形成假分群。零总和{unit_name}仍显示在 0，下载保留完整数值精度。"
         )
     return {
         "notes": notes,

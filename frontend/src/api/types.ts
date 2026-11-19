@@ -18,6 +18,8 @@ export interface DatasetSummary {
   features: number
   observation_columns: string[]
   source: string
+  quantitation_available?: boolean
+  observation_kind?: 'cell' | 'sample'
 }
 
 export interface ProjectView {

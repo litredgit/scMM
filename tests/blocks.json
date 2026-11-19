@@ -50,7 +50,8 @@
         "scMM/util/intensity.py",
         "scMM/util/denoise.py",
         "scMM/util/lifecycle.py",
-        "scMM/util/time_results.py"
+        "scMM/util/time_results.py",
+        "scMM/util/observations.py"
       ],
       "downstream": [
         "processing",
@@ -131,7 +132,8 @@
         "tests/domain/test_annotation.py",
         "tests/domain/test_lipid_annotation.py",
         "tests/domain/test_compound_candidates.py",
-        "tests/application/test_compound_database.py"
+        "tests/application/test_compound_database.py",
+        "tests/domain/test_lipid_spectrum.py"
       ],
       "sources": [
         "scMM/util/*adduct*.py",
@@ -143,7 +145,8 @@
         "scMM/ion/annotation.py",
         "scMM/ion/evidence.py",
         "tools/benchmark_lipid_annotation.py",
-        "rules/lipids/*"
+        "rules/lipids/*",
+        "scMM/resources/lipid_databases/*"
       ],
       "downstream": ["api-lipids"],
       "extras": []
@@ -233,7 +236,8 @@
         "tests/application/test_processed_merge.py",
         "tests/application/test_ion_merge.py",
         "tests/application/test_result_catalog.py",
-        "tests/application/test_maintenance_recovery.py"
+        "tests/application/test_maintenance_recovery.py",
+        "tests/application/test_module_exchange.py"
       ],
       "sources": [
         "scMM/application/selection_labels.py",
@@ -253,7 +257,8 @@
         "scMM/application/maintenance_closure.py",
         "scMM/application/maintenance_runner.py",
         "scMM/application/deployment_maintenance.py",
-        "scMM/application/deployment_client.py"
+        "scMM/application/deployment_client.py",
+        "scMM/application/module_exchange.py"
       ],
       "downstream": ["api-ions", "api", "api-lipids", "plotting", "time"],
       "extras": []
@@ -267,7 +272,8 @@
         "tests/api/test_merge_api.py",
         "tests/api/test_web_cli.py",
         "tests/api/test_maintenance.py",
-        "tests/api/test_deployment_maintenance.py"
+        "tests/api/test_deployment_maintenance.py",
+        "tests/api/test_module_exchange.py"
       ],
       "sources": [
         "scMM/api/cli.py",
@@ -276,7 +282,10 @@
         "scMM/api/routers/samples.py",
         "scMM/api/routers/storage.py",
         "scMM/api/routers/preferences.py",
-        "scMM/api/routers/maintenance.py"
+        "scMM/api/routers/maintenance.py",
+        "scMM/api/exchange_schemas.py",
+        "scMM/api/routers/exchange.py",
+        "scMM/application/data_inspection.py"
       ],
       "downstream": [
         "api-ions",
@@ -420,8 +429,16 @@
     },
     "browser-navigation": {
       "kind": "browser",
-      "tests": ["frontend/tests/navigation.spec.ts"],
-      "sources": ["frontend/src/features/parameters/*"],
+      "tests": [
+        "frontend/tests/navigation.spec.ts",
+        "frontend/tests/compact-ui.spec.ts",
+        "frontend/tests/layout-editor.spec.ts"
+      ],
+      "sources": [
+        "frontend/src/features/parameters/*",
+        "frontend/src/features/modules/*",
+        "frontend/src/api/moduleExchange.ts"
+      ],
       "downstream": [],
       "extras": ["web"]
     },
@@ -448,10 +465,15 @@
     },
     "browser-lipids": {
       "kind": "browser",
-      "tests": ["frontend/tests/lipids.spec.ts"],
+      "tests": [
+        "frontend/tests/lipids.spec.ts",
+        "frontend/tests/annotation-spectrum.spec.ts"
+      ],
       "sources": [
         "frontend/src/features/preprocess/*Lipid*",
-        "frontend/src/features/preprocess/useLipid*.ts"
+        "frontend/src/features/preprocess/useLipid*.ts",
+        "frontend/src/features/annotation/*",
+        "frontend/src/features/preprocess/lipids.ts"
       ],
       "downstream": [],
       "extras": ["web"]
@@ -497,8 +519,15 @@
     },
     "browser-preprocessing": {
       "kind": "browser",
-      "tests": ["frontend/tests/preprocessing.spec.ts"],
-      "sources": ["frontend/src/features/preprocess/PreprocessPage.vue", "frontend/src/features/preprocess/SelectionLabels.vue"],
+      "tests": [
+        "frontend/tests/preprocessing.spec.ts",
+        "frontend/tests/dense-workspace.spec.ts"
+      ],
+      "sources": [
+        "frontend/src/features/preprocess/PreprocessPage.vue",
+        "frontend/src/features/preprocess/SelectionLabels.vue",
+        "frontend/src/features/preprocess/DataInspection.vue"
+      ],
       "downstream": ["browser-operations"],
       "extras": ["web", "plot", "cluster", "supervised"]
     },
@@ -525,7 +554,10 @@
     },
     "browser-analysis-journey": {
       "kind": "browser",
-      "tests": ["frontend/tests/analysis-journey.spec.ts", "frontend/tests/upstream-update.spec.ts"],
+      "tests": [
+        "frontend/tests/analysis-journey.spec.ts",
+        "frontend/tests/upstream-update.spec.ts"
+      ],
       "sources": ["frontend/src/features/analysis/*"],
       "downstream": [],
       "extras": ["web", "plot", "cluster", "supervised"]

@@ -73,6 +73,32 @@ class RawWorkflow:
 
         return self.mutate(identity, revision, action)
 
+    def edit_parameter_rows(self, identity, revision, edits):
+        def action(workspace):
+            project = workspace.require_project()
+            validated = [
+                (self.sample(project, key), validated_parameters(value))
+                for key, value in edits.items()
+            ]
+            if set(edits) == {sample["id"] for sample in project.samples}:
+                from .project_batch import SHARED_FIELDS
+
+                first = validated[0][1]
+                if all(
+                    all(values[key] == first[key] for key in SHARED_FIELDS)
+                    for _, values in validated
+                ):
+                    base = sample_parameters(project, None)
+                    base.update({key: deepcopy(first[key]) for key in SHARED_FIELDS})
+                    project.manifest.update(
+                        parameters=validated_parameters(base), manual_parameters=True
+                    )
+            for sample, values in validated:
+                sample.update(parameters=values, manual_parameters=True)
+            project.dirty = True
+
+        return self.mutate(identity, revision, action)
+
     @staticmethod
     def sample(project, sample_id):
         sample = next((s for s in project.samples if s["id"] == sample_id), None)

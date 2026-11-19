@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DataViewSelector from '../ions/DataViewSelector.vue'
 import CellSpectraPanel from './components/CellSpectraPanel.vue'
-import { computed, provide } from 'vue'
+import { computed, provide, watch } from 'vue'
 import { useAnalysis } from './composables/useAnalysis'
 import { analysisKey } from './types'
 import { analysisModules } from './registry'
@@ -19,6 +19,13 @@ const {
   retryPresentation,
 } = analysis
 const moduleGroups = [...new Set(analysisModules.map((entry) => entry.group))]
+watch(
+  tab,
+  (value) => {
+    if (!analysisModules.some((entry) => entry.id === value)) tab.value = 'embedding'
+  },
+  { immediate: true },
+)
 const names: Record<string, string> = {
   differential: '差异分析',
   markers: 'Marker',
@@ -56,17 +63,20 @@ const resultStates = computed(() => {
 </script>
 <template>
   <DataViewSelector />
-  <section v-if="store.project?.dataset" class="analysis-page">
+  <section
+    v-if="store.project?.dataset && store.project.dataset.quantitation_available !== false"
+    class="analysis-page"
+  >
     <div class="page-title">
       <div>
-        <p class="eyebrow">第 5 步 · 分析</p>
         <h1>探索与分析</h1>
         <p>
-          {{ store.project.dataset.cells }} 细胞 × {{ store.project.dataset.features }} 特征 ·
-          结果随数据与依赖字段失效。
+          {{ store.project.dataset.cells }}
+          {{ store.project.dataset.observation_kind === 'sample' ? '样本' : '细胞' }} ×
+          {{ store.project.dataset.features }} 特征 · 结果随数据与依赖字段失效。
         </p>
       </div>
-      <span class="step-badge">05 / 06</span>
+      <RouterLink to="/annotation" class="muted">查看特征注释 →</RouterLink>
     </div>
     <div class="analysis-toolbar actions" aria-label="分析视图工具">
       <div>
@@ -107,23 +117,25 @@ const resultStates = computed(() => {
     </div>
     <p v-if="!info" role="status">正在读取当前数据的分析状态…</p>
     <div v-else class="analysis-layout">
-      <nav class="analysis-navigation" aria-label="分析功能">
-        <div v-for="group in moduleGroups" :key="group" class="analysis-group">
-          <span class="analysis-group-name">{{ group }}</span>
-          <div class="actions">
-            <button
-              v-for="entry in analysisModules.filter((entry) => entry.group === group)"
-              :key="entry.id"
-              :aria-label="entry.name"
-              :class="{ selected: tab === entry.id }"
-              :aria-current="tab === entry.id ? 'page' : undefined"
-              @click="tab = entry.id"
-            >
-              {{ entry.name }}
-            </button>
+      <Teleport to="#method-menu"
+        ><nav class="analysis-navigation" aria-label="分析功能">
+          <div v-for="group in moduleGroups" :key="group" class="analysis-group">
+            <h2 class="analysis-group-name">{{ group }}</h2>
+            <div class="actions">
+              <button
+                v-for="entry in analysisModules.filter((entry) => entry.group === group)"
+                :key="entry.id"
+                :aria-label="entry.name"
+                :class="{ selected: tab === entry.id }"
+                :aria-current="tab === entry.id ? 'page' : undefined"
+                @click="tab = entry.id"
+              >
+                {{ entry.name }}
+              </button>
+            </div>
           </div>
-        </div>
-      </nav>
+        </nav></Teleport
+      >
       <label class="analysis-mobile field"
         >分析功能<select aria-label="分析功能" v-model="tab">
           <option v-for="entry in analysisModules" :key="entry.id" :value="entry.id">
@@ -143,55 +155,90 @@ const resultStates = computed(() => {
     <CellSpectraPanel />
   </section>
   <div v-else class="card empty-state">
-    <h1>尚未建立当前数据集</h1>
-    <RouterLink to="/extraction">前往提取审核 →</RouterLink>
+    <h1>{{ store.project?.dataset ? '当前仅有特征表' : '尚未建立当前数据集' }}</h1>
+    <p>统计分析需要定量矩阵及相应元数据。可直接导入外部矩阵，或使用审核纳入的提取结果。</p>
+    <RouterLink to="/statistics">选择或导入统计数据 →</RouterLink>
   </div>
 </template>
 <style scoped>
 .analysis-layout {
   display: grid;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
 }
 .analysis-navigation {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
   position: static;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: #fff;
+  overflow: hidden;
 }
 .analysis-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  padding: 0 0 8px;
+}
+.analysis-group + .analysis-group {
+  border-top: 1px solid var(--border);
 }
 .analysis-group-name {
-  color: var(--muted);
+  margin: 0 0 5px;
+  padding: 9px 12px;
+  background: var(--panel-soft);
+  color: #42535b;
   font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 .analysis-group .actions {
-  gap: 4px;
+  display: grid;
+  gap: 1px;
+  margin: 0;
 }
 .analysis-navigation button {
-  min-height: 30px;
-  padding: 4px 9px;
-  font-size: 14px;
+  justify-content: flex-start;
+  min-height: 34px;
+  margin: 0 6px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-size: 13px;
+  text-align: left;
 }
 .analysis-navigation .selected {
-  color: var(--blue);
-  border-color: var(--blue);
-  background: #eff6ff;
+  color: var(--teal);
+  border-color: #cee3e7;
+  background: #edf7f8;
+  font-weight: 600;
 }
 .analysis-content {
   min-width: 0;
 }
+.analysis-toolbar {
+  gap: 8px;
+  align-items: center;
+  background: var(--panel-soft);
+}
+.analysis-toolbar .field {
+  margin: 0;
+}
 .analysis-mobile {
   display: none;
 }
-@media (max-width: 800px) {
-  .analysis-navigation {
-    display: none;
+@media (max-width: 1050px) {
+  .analysis-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
   }
+
   .analysis-mobile {
     display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--panel-soft);
   }
 }
 </style>

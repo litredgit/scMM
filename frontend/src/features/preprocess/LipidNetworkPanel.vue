@@ -573,7 +573,7 @@ const { image } = useLipidImageExport({
               stroke-width="2"
             >
               <title>
-                {{ n.id }} · m/z {{ n.mz }} · {{ n.label }} · {{ n.classification }} ·
+                {{ n.id }} · m/z {{ n.mz.toFixed(4) }} · {{ n.label }} · {{ n.classification }} ·
                 {{ n.review }}
               </title>
             </circle>
@@ -612,7 +612,8 @@ const { image } = useLipidImageExport({
         </div>
         <div v-if="node" class="card">
           <p>
-            {{ node.id }} · m/z {{ node.mz }} · {{ node.label }} · {{ node.classification }} ·
+            {{ node.id }} · m/z {{ node.mz.toFixed(4) }} · {{ node.label }} ·
+            {{ node.classification }} ·
             {{ node.review }}
           </p>
           <div class="actions">

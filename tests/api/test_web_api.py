@@ -415,6 +415,8 @@ def test_static_routes_and_assets_are_served_without_api_fallback(api, tmp_path)
     with TestClient(app, headers={"X-SCMM-Client": "web"}) as client:
         login_client(client, credential)
         assert client.get("/samples").text == "<html>scMM Vue</html>"
+        for page in ("/cell-extraction", "/annotation", "/annotation/evidence", "/statistics"):
+            assert client.get(page).text == "<html>scMM Vue</html>"
         assert client.get("/assets/app.js").status_code == 200
         assert client.get("/api/v1/missing").status_code == 404
         assert client.get("/assets/missing.js").status_code == 404
@@ -638,3 +640,133 @@ def test_two_batch_comparison_http_is_read_only_and_project_scoped(api):
         assert client.post(
             "/api/v1/workspace/extraction/compare", headers=headers, json=body
         ).is_error
+
+
+def test_parameter_rows_validate_all_before_applying(api):
+    client, *_ = api
+    headers = session(client)
+    create(client, headers)
+    state = add(client, headers)
+    ids = [row["id"] for row in state["project"]["manifest"]["samples"]]
+    params = client.get("/api/v1/workspace/parameters", headers=headers).json()
+    edited = {**params, "cell_min_signal": 123456.789}
+    bad = client.put(
+        "/api/v1/workspace/parameters/rows",
+        headers=headers,
+        json={"revision": 2, "edits": {ids[0]: edited, "missing": edited}},
+    )
+    assert bad.status_code == 400
+    assert client.get("/api/v1/workspace", headers=headers).json() == state
+    result = client.put(
+        "/api/v1/workspace/parameters/rows",
+        headers=headers,
+        json={"revision": 2, "edits": {key: edited for key in ids}},
+    )
+    assert result.status_code == 200, result.text
+    assert all(
+        row["parameters"]["cell_min_signal"] == 123456.789
+        for row in result.json()["project"]["manifest"]["samples"]
+    )
+
+
+def test_data_inspection_is_read_only_and_metadata_edits_preserve_matrix(api):
+    client, _manager, _, _, results = api
+    data = write_dataset(results)
+    headers = session(client)
+    create(client, headers)
+    imported = client.post(
+        "/api/v1/workspace/dataset/import",
+        headers=headers,
+        json={"revision": 1, "root": "Results", "path": "input.h5ad"},
+    ).json()
+    view = client.get("/api/v1/workspace/analysis/data-inspection", headers=headers)
+    assert view.status_code == 200, view.text
+    assert view.json()["observations"] == 6
+    assert (
+        view.json()["values"]
+        == data.X[:, data.var_names.get_indexer(view.json()["feature_ids"])].tolist()
+    )
+    assert client.get("/api/v1/workspace", headers=headers).json() == imported
+    sample = imported["project"]["manifest"]["samples"][0]
+    edit = {key: sample[key] for key in ("id", "name", "group", "subject", "batch")}
+    edit["group"] = "reviewed"
+    response = client.patch(
+        "/api/v1/workspace/samples",
+        headers=headers,
+        json={"revision": imported["revision"], "samples": [edit]},
+    )
+    assert response.status_code == 200, response.text
+    inspected = client.get("/api/v1/workspace/analysis/data-inspection", headers=headers).json()
+    assert (
+        inspected["values"]
+        == data.X[:, data.var_names.get_indexer(inspected["feature_ids"])].tolist()
+    )
+    assert inspected["metadata_history"][-1]["changes"][0]["after"]["group"] == "reviewed"
+    bad = client.patch(
+        "/api/v1/workspace/samples",
+        headers=headers,
+        json={"revision": response.json()["revision"], "samples": [edit], "matrix": [[0]]},
+    )
+    assert bad.status_code == 422
+    key = data.var_names[0]
+    renamed = client.post(
+        "/api/v1/workspace/analysis/annotations/apply",
+        headers=headers,
+        json={
+            "revision": response.json()["revision"],
+            "content": f"feature_id,name\n{key},reviewed feature\n",
+            "format": "csv",
+            "mapping": {"name": "display_name"},
+            "source_key": "feature_id",
+            "target_key": "feature_id",
+            "mode": "key",
+        },
+    )
+    assert renamed.status_code == 200, renamed.text
+    checked = client.get("/api/v1/workspace/analysis/data-inspection", headers=headers).json()
+    assert (
+        checked["values"] == data.X[:, data.var_names.get_indexer(checked["feature_ids"])].tolist()
+    )
+    assert checked["feature_rows"][0]["name"] == "reviewed feature"
+    assert checked["feature_history"][-1]["changes"] == [
+        {"feature_id": key, "before": "", "after": "reviewed feature"}
+    ]
+    with _manager.access(headers["X-SCMM-Workspace"]) as workspace:
+        origin = workspace.project.workspace._original
+        np.testing.assert_array_equal(origin.X, data.X)
+        assert json.loads(origin.uns["scmm_manual_annotations_json"])[-1]["changes"]
+
+
+def test_inspection_handles_sparse_explicit_zeros_and_feature_only_tables():
+    from anndata import AnnData
+    from scipy import sparse
+
+    from scMM.application.data_inspection import inspect_data
+
+    matrix = sparse.csr_matrix(([0.0, 2.0], ([0, 1], [0, 1])), shape=(2, 3))
+    data = AnnData(matrix)
+    result = inspect_data(data)
+    assert result["values"] == [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]]
+    assert "存在 1 个全零观测。" in result["warnings"]
+    assert "存在 2 个全零特征。" in result["warnings"]
+    assert matrix.nnz == 2
+    feature_only = inspect_data(AnnData(sparse.csr_matrix((0, 3))))
+    assert feature_only["values"] == []
+    assert not any("全零特征" in message for message in feature_only["warnings"])
+
+
+def test_inspection_samples_and_ranks_full_matrix_without_writing():
+    from scMM.application.data_inspection import inspect_data
+
+    matrix = np.arange(300, dtype=float).reshape(20, 15)
+    data = AnnData(matrix.copy())
+    data.var["display_name"] = ["target" if i == 12 else "" for i in range(15)]
+    view = inspect_data(data, feature_query="target", name_filter="named")
+    assert view["feature_rows"] == [{"id": "12", "name": "target"}]
+    assert len(view["observation_ids"]) == 10
+    assert view["feature_ids"] == [str(i) for i in range(14, 4, -1)]
+    assert inspect_data(data)["observation_ids"] == view["observation_ids"]
+    np.testing.assert_array_equal(data.X, matrix)
+    data.X[:, 0] = -10000
+    assert inspect_data(data)["feature_ids"][0] == "0"
+    assert inspect_data(data)["preview_basis"] == "absolute_total"

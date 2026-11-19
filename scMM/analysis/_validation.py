@@ -5,12 +5,16 @@ import json
 from copy import deepcopy
 
 from scMM.util.intensity import intensity_states
+from scMM.util.observations import observation_kind
 
 
 def preprocessing_audit(data, layer):
     """Describe recorded history without asserting that every step affects this layer."""
+    unit = observation_kind(data)
     warnings = [
-        "细胞数不等于生物重复；所选分组列的不同值只代表分组单位，不能证明生物学独立。",
+        "细胞数不等于生物重复；所选分组列的不同值只代表分组单位，不能证明生物学独立。"
+        if unit == "cell"
+        else "样本的生物学独立性须依据实验设计；所选分组列的不同值只代表分组单位，不能证明生物学独立。",
         "分组划分不能消除在全数据上插补、选特征等上游处理造成的泄漏。",
         "反复查看留出结果或据此调参后，该留出集不再是独立测试；本报告不追踪所有外部调参。",
     ]
@@ -58,6 +62,7 @@ def preprocessing_audit(data, layer):
         state = "unknown"
         warnings.append("强度来源无法核实，不据此推断上游处理范围。")
     return {
+        "statistical_unit": unit,
         "input_layer": layer or "X",
         "input_intensity_state": state,
         "recorded_steps": steps,

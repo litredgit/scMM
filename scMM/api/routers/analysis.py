@@ -25,11 +25,19 @@ def _check_figure_identity(metadata, manager, identity):
         raise ValueError("图的计算结果身份不明或已失效，请重新绘图。")
     if not any(
         metadata.get(key)
-        for key in ("dataset_token", "result_name", "sample_id", "time_result_key")
+        for key in ("dataset_token", "result_name", "sample_id", "time_result_key", "lipid_version")
     ):
         return
     with manager.access(identity) as workspace:
         project = workspace.require_project()
+        if metadata.get("lipid_version"):
+            from scMM.application.web_lipids import selected_version
+
+            _, version = selected_version(
+                project.workspace.require_features(), metadata["lipid_version"]
+            )
+            if metadata.get("lipid_review_revision") != version.get("review_revision", 0):
+                raise ValueError("注释审核已改变，请重新读取谱图后导出。")
         if metadata.get("time_result_key"):
             from scMM.util.time_results import valid_time_figure
 
@@ -257,6 +265,7 @@ def annotation_table(
     identity: Identity,
 ):
     import json
+    from datetime import UTC, datetime
 
     from scMM.analysis.external_annotations import align_annotations, read_table, write_annotations
     from scMM.application.web_projects import project_candidate
@@ -271,7 +280,7 @@ def annotation_table(
         if project.workspace._selection_source is not None:
             raise ValueError("请先关闭全部标签筛选，再导入注释。")
         table, matched = align_annotations(
-            project.workspace.require_data(),
+            project.workspace.require_features(),
             frame,
             **body.model_dump(
                 include={"mapping", "source_key", "target_key", "ppm", "mode", "row_positions"}
@@ -288,6 +297,7 @@ def annotation_table(
                 },
             }
         candidate = project_candidate(project)
+        previous_names = candidate.workspace.data.var.get("display_name")
         candidate.workspace.data = write_annotations(
             candidate.workspace.data,
             table,
@@ -311,6 +321,24 @@ def annotation_table(
 
         records.append(
             {
+                "at": datetime.now(UTC).isoformat(),
+                "workspace_id": identity,
+                "user_id": workspace.owner_id,
+                "changes": [
+                    {
+                        "feature_id": str(key),
+                        "before": str(previous_names.loc[key])
+                        if previous_names is not None
+                        else "",
+                        "after": str(value),
+                    }
+                    for key, value in candidate.workspace.data.var.loc[
+                        candidate.workspace.data.var_names[matched], "display_name"
+                    ].items()
+                    if previous_names is None or str(previous_names.loc[key]) != str(value)
+                ]
+                if "display_name" in body.mapping.values()
+                else [],
                 "source_sha256": hashlib.sha256(body.content.encode()).hexdigest(),
                 "mapping": body.mapping,
                 "mode": body.mode,
@@ -322,6 +350,7 @@ def annotation_table(
             }
         )
         candidate.workspace.data.uns["scmm_manual_annotations_json"] = json.dumps(records)
+        baseline.uns["scmm_manual_annotations_json"] = json.dumps(records)
         candidate.views.pop("figures", None)
         candidate.dirty = True
         workspace.project = candidate
@@ -405,3 +434,30 @@ def selection_plot(body: s.SelectionPlot, manager: Service, identity: Identity):
             meta={"dataset_token": list(state.token), "point_kind": "cell_selection"},
         )
         return {"workspace": manager.view(workspace), "value": figure_view(figure)}
+
+
+@router.get("/workspace/analysis/data-inspection")
+def data_inspection(
+    manager: Service,
+    identity: Identity,
+    feature_offset: int = Query(default=0, ge=0),
+    feature_query: str = Query(default="", max_length=200),
+    name_filter: Literal["all", "named", "unnamed"] = "all",
+):
+    from scMM.application.data_inspection import inspect_data
+
+    with manager.access(identity) as workspace:
+        return inspect_data(
+            workspace.require_project().workspace.require_features(),
+            feature_offset,
+            feature_query,
+            name_filter,
+        )
+
+
+@router.get("/workspace/analysis/workflow-status")
+def workflow_status(manager: Service, identity: Identity):
+    from scMM.application.data_inspection import workflow_status as status
+
+    with manager.access(identity) as workspace:
+        return status(workspace.require_project().workspace)

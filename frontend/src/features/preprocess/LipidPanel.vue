@@ -6,6 +6,8 @@ import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
 import LipidNetworkOptions from './LipidNetworkOptions.vue'
 import LipidNetworkPanel from './LipidNetworkPanel.vue'
+import AnnotationSpectrum from '../annotation/AnnotationSpectrum.vue'
+import { ms2Label } from './lipids'
 import { useLipidPanel } from './useLipidPanel'
 const {
   store,
@@ -21,6 +23,8 @@ const {
   label,
   feature,
   selection,
+  annotationName,
+  syncRelated,
   offset,
   relationOffset,
   ruleOffset,
@@ -65,20 +69,26 @@ const {
   <section class="card lipid-panel" aria-labelledby="lipid-title">
     <div class="section-heading">
       <h2 id="lipid-title">注释与同位素</h2>
-      <span class="muted">在筛选细胞与特征后进行候选注释与核对</span>
+      <span class="muted">从谱图选择峰，核对候选与关联关系</span>
     </div>
-    <p class="muted">
-      一级精确质量候选注释。评分只用于排序，同位素命中只作标记；所有特征、强度和候选均保留。
-    </p>
+    <details class="inline-explanation">
+      <summary>查看说明</summary>
+      <p>一级精确质量候选注释。评分只用于排序，同位素命中只作标记；所有特征、强度和候选均保留。</p>
+    </details>
     <SectionNav
       :items="[
         { id: 'lipid-compute', label: '新建计算与规则' },
         { id: 'lipid-view', label: '查看注释版本' },
+        { id: 'annotation-spectrum', label: '谱图与关联峰', available: !!results },
         { id: 'lipid-review', label: '人工核对', available: !!results },
         { id: 'lipid-export', label: '下载结果', available: !!results },
       ]"
     />
-    <CalculationPanel result-target="lipid-charts" id="lipid-compute" :has-result="!!results">
+    <CalculationPanel
+      result-target="annotation-spectrum"
+      id="lipid-compute"
+      :has-result="!!results"
+    >
       <fieldset :disabled="store.busy">
         <legend>数据库与匹配</legend>
         <p class="lipid-path">数据库目录：{{ info?.database.directory }}</p>
@@ -92,6 +102,16 @@ const {
               v-model="options.database"
             >
               <option value="">自动选择本地数据库</option>
+              <optgroup v-if="info?.database.presets?.length" label="内置候选数据库">
+                <option
+                  v-for="database in info?.database.presets"
+                  :key="database.id"
+                  :value="database.id"
+                  :disabled="!database.available"
+                >
+                  {{ database.label }} · {{ database.records }} 条候选
+                </option>
+              </optgroup>
               <option
                 v-for="file in info?.database.files"
                 :key="file.filename"
@@ -130,6 +150,45 @@ const {
               maxlength="200"
           /></label>
         </div>
+        <p v-if="options.database.startsWith('preset:')" class="muted">
+          {{
+            info?.database.presets?.find((database) => database.id === options.database)
+              ?.description || '用户提供的脂质候选预设。数据库条目与谱图实测匹配分别记录。'
+          }}
+        </p>
+        <details
+          v-if="(info?.database.presets?.length ?? 0) + (info?.database.files.length ?? 0) > 1"
+        >
+          <summary>附加数据库（可多选）</summary>
+          <label
+            >同时检索的附加数据库<select
+              v-model="options.databases"
+              multiple
+              aria-label="附加注释数据库"
+            >
+              <option
+                v-for="database in info?.database.presets"
+                :key="database.id"
+                :value="database.id"
+                :disabled="!database.available || options.database === database.id"
+              >
+                {{ database.label }}
+              </option>
+              <option
+                v-for="file in info?.database.files"
+                :key="file.filename"
+                :value="file.filename"
+                :disabled="options.database === file.filename"
+              >
+                {{ file.filename }}
+              </option>
+            </select></label
+          >
+          <details class="inline-explanation">
+            <summary>查看说明</summary>
+            <p>不同数据库的候选与二级证据分别保留来源，不按名称或质量强制合并。</p>
+          </details>
+        </details>
         <div class="lipid-adducts">
           <label
             v-for="(spec, name) in info?.adducts"
@@ -138,17 +197,24 @@ const {
             ><input type="checkbox" :value="name" v-model="options.adducts" />{{ name }}</label
           >
         </div>
-        <button class="secondary save" @click="prepare">
+        <button
+          class="secondary save"
+          @click="prepare"
+          :disabled="options.database.startsWith('preset:')"
+        >
           {{ info?.database.available ? '检查本地数据库' : '准备数据库（缺失时官方下载）' }}
         </button>
       </fieldset>
 
       <fieldset :disabled="store.busy">
         <legend>评分规则与预设</legend>
-        <p class="muted">
-          先按绝对 ppm 的 0–2、&gt;2–5、&gt;5
-          三档排序，档内按类别分＋加合物分排序，同分并列。没有内置评分规则。
-        </p>
+        <details class="inline-explanation">
+          <summary>查看说明</summary>
+          <p>
+            先按绝对 ppm 的 0–2、&gt;2–5、&gt;5
+            三档排序，档内按类别分＋加合物分排序，同分并列。没有内置评分规则。
+          </p>
+        </details>
         <div class="field-grid">
           <label
             ><FieldLabel
@@ -214,78 +280,98 @@ const {
               规则下一页
             </button>
           </div>
-          <p class="muted">
-            类别支持 CATEGORY、MAIN_CLASS、SUB_CLASS、LIPID_CLASS；较具体规则覆盖同项的通用规则。
-          </p>
+          <details class="inline-explanation">
+            <summary>查看说明</summary>
+            <p>
+              类别支持 CATEGORY、MAIN_CLASS、SUB_CLASS、LIPID_CLASS；较具体规则覆盖同项的通用规则。
+            </p>
+          </details>
         </details>
       </fieldset>
 
       <fieldset :disabled="store.busy">
-        <legend>天然同位素设置</legend>
-        <LipidNetworkOptions v-model="options.network" :info="info" />
-        <div class="field-grid">
-          <label
-            ><FieldLabel
-              name="intensity_layer"
-              text="选择未归一化、未插补的强度层。导入数据的初始层未必是原始强度，请按来源核对。"
-            /><select aria-label="脂质 intensity_layer" v-model="options.intensity_layer">
-              <option v-for="item in info?.layers" :key="item" :value="item">{{ item }}</option>
-            </select></label
+        <legend>候选与强度证据</legend>
+        <label
+          >候选与证据模式<select
+            v-model="options.mass_only"
+            aria-label="注释证据模式"
+            :disabled="info?.quantitation_available === false"
           >
-          <label
-            ><FieldLabel
-              name="isotope_ppm"
-              text="观测特征与预测同位素 m/z 的匹配容差；与仪器能否分开相邻峰的分辨率分开设置。" /><input
-              aria-label="isotope_ppm"
-              v-model.number="options.isotope_ppm"
-              type="number"
-              min="0"
-              max="1000"
-              step="any"
-          /></label>
-          <label
-            ><FieldLabel
-              name="max_isotope_order"
-              text="检查 M+1 至 M+n，默认 3；增加阶数会增加关系证据量。" /><input
-              aria-label="max_isotope_order"
-              v-model.number="options.max_isotope_order"
-              type="number"
-              min="1"
-              max="10"
-          /></label>
-          <label
-            ><FieldLabel
-              name="isotope_tolerance"
-              text="相对理论比例的双侧容差；0.2 表示理论比例的 80%–120%，不是相差 20 个百分点。" /><input
-              aria-label="isotope_tolerance"
-              v-model.number="options.isotope_tolerance"
-              type="number"
-              min="0"
-              max="1"
-              step="0.01"
-          /></label>
-          <label
-            ><FieldLabel
-              name="min_valid_cells"
-              text="每个样本至少有这么多母峰强度为正、子峰强度非负的有限细胞对。子峰的零值参与统计。" /><input
-              aria-label="脂质 min_valid_cells"
-              v-model.number="options.min_valid_cells"
-              type="number"
-              min="1"
-          /></label>
-          <label
-            ><FieldLabel
-              name="resolution"
-              text="m/z 200 处的分辨率，用于估计理论细结构是否合峰；初值来自项目参数，请核对实际采集设置。" /><input
-              aria-label="脂质 resolution"
-              v-model.number="options.resolution"
-              type="number"
-              min="1"
-              step="any"
-          /></label>
-        </div>
+            <option :value="false" :disabled="!info?.layers.length">
+              精确质量、天然同位素与相关证据
+            </option>
+            <option :value="true">仅精确质量候选</option>
+          </select></label
+        >
+        <p v-if="options.mass_only" class="state-note">
+          当前模式按 m/z 检索候选。可在谱图中审核候选和加合关系，强度来源与矩阵值随数据保留。
+        </p>
+        <template v-else>
+          <LipidNetworkOptions v-model="options.network" :info="info" />
+          <div class="field-grid">
+            <label
+              ><FieldLabel
+                name="intensity_layer"
+                text="选择未归一化、未插补的强度层。导入数据的初始层未必是原始强度，请按来源核对。"
+              /><select aria-label="脂质 intensity_layer" v-model="options.intensity_layer">
+                <option v-for="item in info?.layers" :key="item" :value="item">{{ item }}</option>
+              </select></label
+            >
+            <label
+              ><FieldLabel
+                name="isotope_ppm"
+                text="观测特征与预测同位素 m/z 的匹配容差；与仪器能否分开相邻峰的分辨率分开设置。" /><input
+                aria-label="isotope_ppm"
+                v-model.number="options.isotope_ppm"
+                type="number"
+                min="0"
+                max="1000"
+                step="any"
+            /></label>
+            <label
+              ><FieldLabel
+                name="max_isotope_order"
+                text="检查 M+1 至 M+n，默认 3；增加阶数会增加关系证据量。" /><input
+                aria-label="max_isotope_order"
+                v-model.number="options.max_isotope_order"
+                type="number"
+                min="1"
+                max="10"
+            /></label>
+            <label
+              ><FieldLabel
+                name="isotope_tolerance"
+                text="相对理论比例的双侧容差；0.2 表示理论比例的 80%–120%，不是相差 20 个百分点。" /><input
+                aria-label="isotope_tolerance"
+                v-model.number="options.isotope_tolerance"
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+            /></label>
+            <label
+              ><FieldLabel
+                name="min_valid_cells"
+                text="每个样本至少有这么多母峰强度为正、子峰强度非负的有限细胞对。子峰的零值参与统计。" /><input
+                aria-label="脂质 min_valid_cells"
+                v-model.number="options.min_valid_cells"
+                type="number"
+                min="1"
+            /></label>
+            <label
+              ><FieldLabel
+                name="resolution"
+                text="m/z 200 处的分辨率，用于估计理论细结构是否合峰；初值来自项目参数，请核对实际采集设置。" /><input
+                aria-label="脂质 resolution"
+                v-model.number="options.resolution"
+                type="number"
+                min="1"
+                step="any"
+            /></label>
+          </div>
+        </template>
         <button :disabled="!options.adducts.length" @click="run" class="primary">
-          运行注释与同位素标记
+          {{ options.mass_only ? '运行精确质量候选注释' : '运行注释与同位素标记' }}
         </button>
       </fieldset>
     </CalculationPanel>
@@ -321,9 +407,12 @@ const {
         <p v-if="version && !validVersion" class="muted">
           该版本输入已改变，不能作为当前结果下载，请重新运行。
         </p>
-        <p class="muted">
-          切换只改变注释和标记，不改变矩阵或使数值分析失效。请主动保存项目以保留版本和核对进度。
-        </p>
+        <details class="inline-explanation">
+          <summary>查看说明</summary>
+          <p>
+            切换只改变注释和标记，不改变矩阵或使数值分析失效。请主动保存项目以保留版本和核对进度。
+          </p>
+        </details>
       </fieldset>
 
       <p class="result-state" role="status">
@@ -335,9 +424,21 @@ const {
               : '已失效：输入或依赖改变，需重新运行；此版本不可下载。'
         }}
       </p>
+      <AnnotationSpectrum
+        v-if="results"
+        :version="version"
+        :feature-id="feature"
+        :samples="info?.samples ?? []"
+        @select="selectFeature"
+        @review="reviewRelation"
+      />
       <LipidNetworkPanel
         id="lipid-charts"
-        v-if="results"
+        v-if="
+          results &&
+          !results.parameters.mass_only &&
+          store.project?.dataset?.quantitation_available !== false
+        "
         :results="results"
         :filters="{
           ...filters,
@@ -411,10 +512,15 @@ const {
               v-model="filters.adduct_mode"
             >
               <option value="all">全部加合物</option>
-              <option value="strongest">每种物质保留最强加合物峰</option>
+              <option value="strongest" :disabled="!!results?.parameters.mass_only">
+                每种物质保留最强加合物峰
+              </option>
               <option value="specified">仅指定加合物</option>
             </select></label
           >
+          <p v-if="results?.parameters.mass_only" class="muted">
+            仅精确质量模式可按加合形式筛选，最强峰选择需要适用的原始强度证据。
+          </p>
           <div v-if="filters.adduct_mode === 'specified'" class="lipid-adducts">
             <label v-for="(_, name) in info?.adducts" :key="name"
               ><input type="checkbox" :value="name" v-model="filters.adducts" />{{ name }}</label
@@ -452,7 +558,10 @@ const {
             </select></label
           >
         </div>
-        <p class="muted">全部结果排序后分页，缺失值置后；不改变规则推荐和人工核对。</p>
+        <details class="inline-explanation">
+          <summary>查看说明</summary>
+          <p>全部结果排序后分页，缺失值置后；不改变规则推荐和人工核对。</p>
+        </details>
         <p>
           {{ results.features.length }} / {{ results.total_features }} 特征 ·
           {{ results.candidates.total }} 条候选 · {{ results.isotopes.total }} 条关系证据
@@ -470,13 +579,36 @@ const {
             >
               <option value="">查看全部特征</option>
               <option v-for="item in results.features" :key="item.id" :value="item.id">
-                {{ item.id }} · m/z {{ item.mz.toPrecision(10) }} · {{ item.candidates }} 候选{{
+                {{ item.id }} · m/z {{ item.mz.toFixed(4) }} · {{ item.candidates }} 候选{{
                   item.isotope ? ' · 同位素命中' : ''
                 }}{{ item.reviewed ? ' · 已核对' : '' }}
               </option>
             </select></label
           >
         </div>
+        <div v-if="feature" class="field-grid">
+          <label
+            >人工注释名称<input
+              v-model="annotationName"
+              aria-label="人工注释名称"
+              :disabled="store.busy"
+              maxlength="500"
+              placeholder="留空使用候选名称"
+          /></label>
+          <label
+            >审核修改范围<select
+              v-model="syncRelated"
+              aria-label="审核修改范围"
+              :disabled="store.busy"
+            >
+              <option :value="true">同步已确认关联组</option>
+              <option :value="false">仅当前峰</option>
+            </select></label
+          >
+        </div>
+        <p v-if="feature" class="muted">
+          保存后同步所选候选与名称；关联峰保留各自的加合形式和同位素序号，实测质量与强度保留。
+        </p>
         <div class="actions">
           <button
             class="secondary restore"
@@ -509,6 +641,7 @@ const {
                 <th>实测 m/z</th>
                 <th>理论 m/z</th>
                 <th>物质名</th>
+                <th>当前数据库二级匹配</th>
                 <th>主类</th>
                 <th>数据库 ID</th>
                 <th>分子式</th>
@@ -532,13 +665,13 @@ const {
                 v-for="group in results.candidate_groups || []"
                 :key="group.feature_id + group.label + group.formula + group.adduct"
                 ><tr>
-                  <td colspan="17">
+                  <td colspan="18">
                     <details>
                       <summary>
                         {{ group.feature_id }} · {{ group.label }} · {{ group.adduct }}（{{
                           group.rows.length
                         }}
-                        个候选） · m/z {{ Number(group.rows[0]?.query_mz).toPrecision(10) }} · |ppm|
+                        个候选） · m/z {{ Number(group.rows[0]?.query_mz).toFixed(4) }} · |ppm|
                         {{ number(Math.abs(Number(group.rows[0]?.ppm_error))) }} · 规则分
                         {{ group.rows[0]?.scored ? group.rows[0]?.rule_score : '未评分' }} ·
                         网络支持
@@ -557,7 +690,7 @@ const {
                           :aria-label="`指定 ${row.database_id} ${row.adduct}`"
                           :disabled="store.busy"
                         />{{ row.name }} · {{ row.database_id }} · {{ row.formula }} · 误差
-                        {{ number(row.ppm_error) }} ppm
+                        {{ number(row.ppm_error) }} ppm · {{ ms2Label(row.ms2_status) }}
                       </p>
                       <details>
                         <summary>完整匹配与评分字段</summary>
@@ -586,12 +719,13 @@ const {
                   />
                 </td>
                 <td>{{ row.feature_id }}</td>
-                <td>{{ Number(row.query_mz).toPrecision(10) }}</td>
+                <td>{{ Number(row.query_mz).toFixed(4) }}</td>
                 <td>
-                  {{ Number(row.theoretical_mz).toPrecision(10)
+                  {{ Number(row.theoretical_mz).toFixed(4)
                   }}<HelpTip :text="String(row.theoretical_mz)" label="完整理论质量" />
                 </td>
                 <td>{{ row.name }}</td>
+                <td>{{ ms2Label(row.ms2_status) }}</td>
                 <td>{{ row.MAIN_CLASS }}</td>
                 <td>{{ row.database_id }}</td>
                 <td>{{ row.formula }}</td>
@@ -669,10 +803,16 @@ const {
             </select></label
           >
         </div>
-        <p class="muted">全部结果排序后分页，缺失值置后；不改变规则推荐和人工核对。</p>
-        <p class="muted">
-          同一特征可有多个来源解释；每个样本分别记录。命中表示质量和双侧比例条件通过，不证明该峰只有同位素贡献。
-        </p>
+        <details class="inline-explanation">
+          <summary>查看说明</summary>
+          <p>全部结果排序后分页，缺失值置后；不改变规则推荐和人工核对。</p>
+        </details>
+        <details class="inline-explanation">
+          <summary>查看说明</summary>
+          <p>
+            同一特征可有多个来源解释；每个样本分别记录。命中表示质量和双侧比例条件通过，不证明该峰只有同位素贡献。
+          </p>
+        </details>
         <div class="data-table">
           <table>
             <thead>
@@ -704,10 +844,10 @@ const {
                     查看截谱
                   </button>
                 </td>
-                <td>{{ Number(row.parent_mz).toPrecision(10) }}</td>
+                <td>{{ Number(row.parent_mz).toFixed(4) }}</td>
                 <td>
-                  {{ Number(row.isotope_mz).toPrecision(10) }} /
-                  {{ Number(row.predicted_mz).toPrecision(10) }}
+                  {{ Number(row.isotope_mz).toFixed(4) }} /
+                  {{ Number(row.predicted_mz).toFixed(4) }}
                 </td>
                 <td>{{ row.name }} {{ row.adduct }}</td>
                 <td>M+{{ row.order }}</td>
@@ -789,7 +929,10 @@ const {
     </div>
     <section v-if="results" id="lipid-export" class="task-section">
       <h3>下载注释与核对结果</h3>
-      <p class="muted">CSV 使用当前筛选条件，包含全部细胞；不会只导出当前页或选中特征。</p>
+      <details class="inline-explanation">
+        <summary>查看说明</summary>
+        <p>CSV 使用当前筛选条件，包含全部细胞；不会只导出当前页或选中特征。</p>
+      </details>
       <div class="lipid-downloads">
         <button class="save" :disabled="store.busy || !validVersion" @click="download('matrix')">
           导出筛选矩阵 CSV</button

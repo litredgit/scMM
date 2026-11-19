@@ -11,6 +11,7 @@ import {
 import type { Figure } from '../api/types'
 import { applyViewport, readViewport } from './plotViewport'
 import { applyLegend } from './plotPresentation'
+import { isMassSpectrum, type SpectrumSettings } from './spectrumPresentation'
 import type { useWorkspace } from '../stores/workspace'
 
 type RenderOptions = {
@@ -18,7 +19,7 @@ type RenderOptions = {
   store: ReturnType<typeof useWorkspace>
   element: Ref<HTMLElement | undefined>
   failure: Ref<string>
-  orderedFigure: () => Figure
+  orderedFigure: (viewport?: Record<string, unknown>) => Figure
   viewport: Ref<Record<string, unknown>>
   position: ComputedRef<string>
   chartWidth: Ref<number>
@@ -32,10 +33,25 @@ type RenderOptions = {
     (event: 'select', value: string): void
     (event: 'range', value: [number, number]): void
     (event: 'viewport', value: Record<string, unknown>): void
+    (
+      event: 'point-click',
+      value: {
+        points: {
+          customdata?: unknown
+          x?: number
+          y?: number
+          pointIndex?: number
+          pointNumber?: number
+          curveNumber?: number
+        }[]
+      },
+    ): void
   }
   legendItems: Ref<string[]>
   pointOpacity: Ref<number>
   traceVisibility: Ref<(boolean | string)[]>
+  spectrumSettings: Ref<SpectrumSettings>
+  spectrumHistory: Ref<Record<string, unknown>[]>
 }
 
 export function usePlotRenderer({
@@ -56,6 +72,8 @@ export function usePlotRenderer({
   legendItems,
   pointOpacity,
   traceVisibility,
+  spectrumSettings,
+  spectrumHistory,
 }: RenderOptions) {
   let plotly: (typeof import('plotly.js-dist-min'))['default'] | undefined
   let observer: ResizeObserver | undefined
@@ -68,8 +86,12 @@ export function usePlotRenderer({
     try {
       plotly ??= (await import('plotly.js-dist-min')).default
       if (!active || !element.value || token !== generation) return
-      const copy = orderedFigure()
-      applyViewport(copy, viewport.value)
+      const copy = orderedFigure(viewport.value)
+      const spectrum = isMassSpectrum(copy)
+      const nativeStyle =
+        spectrum ||
+        (copy.layout.meta as Record<string, unknown> | undefined)?.scmm_chromatogram === true
+      if (!spectrum) applyViewport(copy, viewport.value)
       const selectedPosition = position.value
       const outside = selectedPosition === 'right'
       const narrow = chartWidth.value < 680
@@ -77,7 +99,7 @@ export function usePlotRenderer({
       const below = outside && narrow
       const originalTitle = copy.layout.title as { text?: string } | string | undefined
       const title = (typeof originalTitle === 'string' ? originalTitle : originalTitle?.text) ?? ''
-      const wrap = Math.max(12, Math.floor((chartWidth.value - 35) / 18))
+      const wrap = Math.max(12, Math.floor((chartWidth.value - 35) / (spectrum ? 7.5 : 18)))
       const titleText =
         narrow && !title.includes('<br>')
           ? title.match(new RegExp(`.{1,${wrap}}`, 'g'))?.join('<br>')
@@ -88,16 +110,18 @@ export function usePlotRenderer({
         width: undefined,
         height: chartHeight.value,
         font: {
-          family: 'Inter, Microsoft YaHei, system-ui, sans-serif',
-          size: 14,
-          color: '#21304a',
+          family: nativeStyle
+            ? 'Arial, sans-serif'
+            : 'Inter, Microsoft YaHei, system-ui, sans-serif',
+          size: nativeStyle ? 12 : 14,
+          color: spectrum ? '#222222' : '#21304a',
         },
         title: {
           ...(typeof copy.layout.title === 'object'
             ? (copy.layout.title as object)
             : { text: copy.layout.title }),
           text: titleText,
-          font: { size: 20 },
+          font: { size: nativeStyle ? 13 : 20 },
           x: 0.02,
           xanchor: 'left',
           automargin: true,
@@ -116,14 +140,20 @@ export function usePlotRenderer({
           : (copy.layout.meta as Record<string, unknown> | undefined)?.point_kind ===
               'cell_selection'
             ? 'lasso'
-            : 'zoom',
+            : spectrum
+              ? spectrumSettings.value.interaction
+              : 'zoom',
         selectdirection: props.selectRange ? 'h' : undefined,
         margin: {
           ...((copy.layout.margin ?? {}) as object),
-          l: 80,
+          l: spectrum ? 65 : 80,
           r: inside || below ? 35 : Math.min(260, Math.max(120, chartWidth.value * 0.24)),
-          t: narrow && titleText?.includes('<br>') ? 100 : 75,
-          b: below ? 130 : 70,
+          t: spectrum
+            ? 40 + (titleText?.match(/<br>/g)?.length ?? 0) * 16
+            : narrow && titleText?.includes('<br>')
+              ? 100
+              : 75,
+          b: below ? 130 : spectrum ? 55 : 70,
         },
       }
       for (const [key, value] of Object.entries(copy.layout)) {
@@ -204,7 +234,14 @@ export function usePlotRenderer({
             on?: (
               name: string,
               callback: (data: {
-                points?: { customdata?: string[] }[]
+                points?: {
+                  customdata?: unknown
+                  x?: number
+                  y?: number
+                  pointIndex?: number
+                  pointNumber?: number
+                  curveNumber?: number
+                }[]
                 range?: { x?: [number, number] }
               }) => void,
             ) => void
@@ -214,8 +251,13 @@ export function usePlotRenderer({
           graph.on?.('plotly_relayout', () => {
             const layout = (graph as unknown as { layout?: Record<string, unknown> }).layout
             if (layout) {
-              viewport.value = readViewport(layout)
+              const next = readViewport(layout)
+              const changed = JSON.stringify(viewport.value) !== JSON.stringify(next)
+              if (spectrum && changed)
+                spectrumHistory.value = [...spectrumHistory.value.slice(-19), { ...viewport.value }]
+              viewport.value = next
               emit('viewport', viewport.value)
+              if (spectrum && changed) void draw()
             }
           })
           graph.removeAllListeners?.('plotly_restyle')
@@ -226,10 +268,18 @@ export function usePlotRenderer({
           })
           graph.removeAllListeners?.('plotly_click')
           graph.on?.('plotly_click', (data) => {
-            const id = data.points?.[0]?.customdata?.[0]
+            if (!fresh.value) return
+            emit('point-click', { points: data.points ?? [] })
+            const customdata = data.points?.[0]?.customdata
+            const id = Array.isArray(customdata)
+              ? customdata[0]
+              : typeof customdata === 'string'
+                ? customdata
+                : undefined
             if (id) {
               const meta = props.figure.layout.meta as Record<string, unknown> | undefined
-              if (meta?.point_kind === 'cell' && fresh.value) store.selectCell(id)
+              if (['cell', 'sample'].includes(String(meta?.point_kind)) && fresh.value)
+                store.selectCell(id)
               else emit('select', id)
             }
           })
@@ -241,7 +291,9 @@ export function usePlotRenderer({
               emit(
                 'selection',
                 (data.points ?? [])
-                  .map((point) => point.customdata?.[0])
+                  .map((point) =>
+                    Array.isArray(point.customdata) ? point.customdata[0] : undefined,
+                  )
                   .filter((id): id is string => !!id),
               )
             }

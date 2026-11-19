@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fixtures'
+import { navigate, test, expect, type Page } from './fixtures'
 import { importDataset as importData } from './support/project'
 
 test.use({ actionTimeout: 15000 })
@@ -20,7 +20,7 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
   page.on('pageerror', (e) => errors.push(e.message))
   await importData(page, '独立分析与重载')
   // This journey owns its preprocessing origin and retained input layer.
-  await page.getByRole('link', { name: /预处理/ }).click()
+  await navigate(page, '/preprocess')
   await page.getByRole('button', { name: '检查影响', exact: true }).click()
   await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
   await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText(
@@ -31,7 +31,7 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
   await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText(
     '已恢复完整预处理起点。',
   )
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await navigate(page, '/analysis')
   await page.getByRole('button', { name: '固定参数区', exact: true }).first().click()
   await page.getByRole('button', { name: '运行降维', exact: true }).click()
   await expect(page.getByLabel('查看嵌入', { exact: true })).toHaveValue('X_pca')
@@ -105,7 +105,7 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     .toBe(true)
   await page.screenshot({ path: test.info().outputPath('analysis-700.png'), fullPage: true })
-  await page.getByRole('link', { name: /结果与保存/ }).click()
+  await navigate(page, '/results')
   await page.getByLabel('H5AD 文件名', { exact: true }).fill('vue-export.h5ad')
   await page.getByRole('combobox', { name: '保存存储', exact: true }).selectOption('Results')
   await page.getByRole('button', { name: '导出当前 H5AD（不覆盖）', exact: true }).click()
@@ -123,8 +123,8 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
     .filter({ hasText: '独立分析与重载' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
+  await navigate(page, '/analysis')
   await analysisModule(page, 'supervised', '监督与 SHAP')
   await expect(
     page.getByRole('button', { name: '解释当前模型（SHAP）', exact: true }),
@@ -149,7 +149,7 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
   await analysisModule(page, 'network', '相关网络')
   await expect(page.getByRole('combobox', { name: 'layer', exact: true })).toHaveValue('当前矩阵')
   await expect(page.getByRole('button', { name: '读取相关网络', exact: true })).toBeVisible()
-  await page.getByRole('link', { name: /结果与保存/ }).click()
+  await navigate(page, '/results')
   await expect(
     page
       .getByRole('combobox', { name: '下载内容', exact: true })

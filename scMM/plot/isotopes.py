@@ -50,6 +50,7 @@ def isotope_spectrum(data, version, relation_id):
         y=[0, theoretical],
         mode="lines",
         name="Theoretical isotope peaks (scaled to parent)",
+        meta={"spectrum_role": "reference"},
         line={"color": "#CC79A7", "dash": "dash"},
     )
     colors = {
@@ -83,7 +84,7 @@ def isotope_spectrum(data, version, relation_id):
             x=[None], y=[None], mode="lines", line={"color": c, "dash": d}, name=status_label
         )
     figure.update_traces(
-        hovertemplate="m/z=%{x:.5f}<br>Intensity=%{y:.1e}<extra>%{fullData.name}</extra>"
+        hovertemplate="m/z=%{x:.4f}<br>Intensity=%{y:.1e}<extra>%{fullData.name}</extra>"
     )
     figure.update_layout(
         title=f"Natural isotope spectrum · {label}",

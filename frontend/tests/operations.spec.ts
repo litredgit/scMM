@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fixtures'
+import { navigate, test, expect, type Page } from './fixtures'
 import { readFile } from 'node:fs/promises'
 import { createProject as create } from './support/project'
 import { serialPolling } from '../src/api/polling'
@@ -26,7 +26,8 @@ test('explicit result selection, detailed help, stable QC and readable narrow la
   await expect(page.getByRole('heading', { name: '结果与样本关联' })).toHaveCount(0)
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
   await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
-  await page.getByRole('link', { name: /预处理/ }).click()
+  await navigate(page, '/preprocess')
+  await page.getByLabel('下一项操作', { exact: true }).selectOption('filter')
   const helper = page.getByRole('button', { name: 'min_detected说明', exact: true })
   await helper.hover()
   await expect(page.getByRole('tooltip')).toContainText('等于阈值保留')
@@ -55,7 +56,7 @@ test('explicit result selection, detailed help, stable QC and readable narrow la
         ),
     )
     .toEqual([0.95, 1.05])
-  expect(await page.evaluate(() => getComputedStyle(document.body).fontSize)).toBe('16px')
+  expect(await page.evaluate(() => getComputedStyle(document.body).fontSize)).toBe('13px')
   const plotSize = await page
     .locator('.js-plotly-plot')
     .first()
@@ -216,7 +217,7 @@ test('duplicate extraction review cannot report success or clear the running pha
     }),
   )
   await create(page, '重复审核操作')
-  await page.getByRole('link', { name: /提取与审核/ }).click()
+  await navigate(page, '/extraction')
   await page.getByLabel('待审核输入 · 2 细胞', { exact: true }).check()
   let release!: () => void
   const held = new Promise<void>((resolve) => {

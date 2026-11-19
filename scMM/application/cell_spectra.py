@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 from scipy import sparse
 
 from scMM.plot.raw import _peak_preserving_downsample
+from scMM.util.observations import observation_kind
 
 from .preview_cache import file_identity
 from .raw_preview import RawPreviewService
@@ -31,6 +32,9 @@ def cell_spectra(
         workspace.check(revision)
         project = workspace.require_project()
         data = project.workspace.require_data()
+        unit = observation_kind(data)
+        if unit == "sample" and source != "matrix":
+            raise ValueError("普通样本矩阵可查看当前特征谱；原始窗口和峰顶谱仅适用于已提取细胞。")
         token = project.workspace.token
         snapshots = []
         for cell in cells:
@@ -121,10 +125,10 @@ def cell_spectra(
         tables[f"{index + 1}_display.csv"] = frame.assign(intensity=display).to_csv(index=False)
         provenance.append({"cell": cell, **detail})
     figure.update_traces(
-        hovertemplate="m/z=%{x:.5f}<br>Intensity=%{y:.1e}<extra>%{fullData.name}</extra>"
+        hovertemplate="m/z=%{x:.4f}<br>Intensity=%{y:.1e}<extra>%{fullData.name}</extra>"
     )
     figure.update_layout(
-        title="Cell mass spectra",
+        title="Sample feature spectra" if unit == "sample" else "Cell mass spectra",
         xaxis_title="m/z",
         yaxis={
             "title": "Intensity" if normalization == "raw" else "Normalized intensity",
@@ -132,6 +136,7 @@ def cell_spectra(
             "hoverformat": ".1e",
         },
         meta={
+            "observation_kind": unit,
             "provenance": provenance,
             "parameters": {
                 "cells": cells,

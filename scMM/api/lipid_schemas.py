@@ -35,6 +35,8 @@ class LipidChartOptions(Controls):
 
 class LipidOptions(Controls):
     database: str = ""
+    databases: list[str] = Field(default_factory=list, max_length=16)
+    mass_only: bool = False
     polarity: Literal["pos", "neg", "both"] = "pos"
     adducts: list[str] = Field(min_length=1, max_length=16)
     annotation_ppm: float = Field(default=10.0, ge=0, le=1000)
@@ -43,7 +45,7 @@ class LipidOptions(Controls):
     isotope_tolerance: float = Field(default=0.2, ge=0, le=1)
     min_valid_cells: int = Field(default=20, ge=1)
     intensity_layer: str = ""
-    resolution: float = Field(gt=0, le=1e8)
+    resolution: float | None = Field(default=None, gt=0, le=1e8)
     network: LipidNetworkOptions = Field(default_factory=LipidNetworkOptions)
 
 
@@ -76,11 +78,18 @@ class IsotopeSpectrum(LipidActivate):
     relation_id: str
 
 
+class LipidSpectrum(LipidActivate):
+    feature_id: str = Field(default="", max_length=1000)
+    sample: str = Field(default="", max_length=1000)
+
+
 class LipidReview(LipidActivate):
     feature_id: str | None = None
     candidate_ids: list[str] | None = Field(default=None, max_length=10000)
     relation_id: str | None = None
     review: Literal["pending", "accepted", "rejected"] = "pending"
+    sync_related: bool = True
+    annotation_name: str | None = Field(default=None, max_length=1000)
 
 
 class LipidFilters(Controls):

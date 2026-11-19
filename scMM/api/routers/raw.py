@@ -2,6 +2,7 @@
 """Feature routes for the remaining five workbench stages."""
 
 from fastapi import APIRouter
+from pydantic import BaseModel, ConfigDict, Field
 
 from .. import workflow_schemas as s
 from .projects import Identity, Service
@@ -96,3 +97,14 @@ def acquisition(manager: Service, identity: Identity, sample_id: str):
     if file_identity(path) != before:
         raise ValueError("原始文件在读取采集信息时发生改变，请重新打开。")
     return result
+
+
+class ParameterRows(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: int
+    edits: dict[str, dict] = Field(min_length=1, max_length=10000)
+
+
+@router.put("/workspace/parameters/rows")
+def edit_parameter_rows(body: ParameterRows, manager: Service, identity: Identity):
+    return manager.edit_parameter_rows(identity, body.revision, body.edits)

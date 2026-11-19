@@ -110,7 +110,7 @@ const questions = ['当前进行到哪一步了？', '当前结果说明什么�
 }
 .ai-toggle {
   float: right;
-  box-shadow: 0 3px 16px #0002;
+  box-shadow: 0 2px 8px #173b4518;
 }
 .ai-body {
   clear: both;
@@ -122,8 +122,8 @@ const questions = ['当前进行到哪一步了？', '当前结果说明什么�
   background: var(--surface, white);
   color: var(--text, #172b32);
   border: 1px solid #d2dfdc;
-  border-radius: 14px;
-  box-shadow: 0 8px 35px #0002;
+  border-radius: 3px;
+  box-shadow: 0 5px 20px #173b4524;
 }
 @media (min-width: 1800px) {
   .ai-assistant.open {
@@ -183,7 +183,7 @@ const questions = ['当前进行到哪一步了？', '当前结果说明什么�
   overflow: auto;
 }
 .ai-messages article {
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 0.7rem;
   margin: 0.6rem 0;
   background: #f0f5f3;

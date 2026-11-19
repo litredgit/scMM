@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
-import { useAnalysisContext } from '../composables/useAnalysisContext'
+import { inject, nextTick, ref, watch } from 'vue'
+import { analysisKey } from '../types'
+import { useWorkspace } from '../../../stores/workspace'
 const props = defineProps<{ hasResult: boolean; resultTarget?: string }>()
-const { parametersPinned, store } = useAnalysisContext()
+const context = inject(analysisKey, null)
+const parametersPinned = context?.parametersPinned ?? ref(true)
+const store = useWorkspace()
 const open = ref(!props.hasResult)
 function toggle() {
   open.value = !(open.value || parametersPinned.value)
@@ -49,7 +52,7 @@ watch(
     class="analysis-calculation"
     :class="{ 'parameters-pinned': parametersPinned, 'has-result': hasResult }"
   >
-    <div class="calculation-heading actions">
+    <div class="calculation-heading actions" aria-label="计算参数工具">
       <button :aria-expanded="open || parametersPinned" @click="toggle">
         {{ open || parametersPinned ? '收起计算参数' : '展开计算参数' }}
       </button>
@@ -65,3 +68,52 @@ watch(
     <div v-show="open || parametersPinned" class="calculation-body"><slot /></div>
   </section>
 </template>
+<style scoped>
+.calculation-heading {
+  justify-content: flex-end;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel-soft);
+}
+.calculation-heading button {
+  min-height: 28px;
+  padding: 4px 8px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 12px;
+}
+.calculation-heading button:hover {
+  border-color: var(--border);
+  background: white;
+}
+.calculation-heading .selected {
+  border-color: #badce1;
+  background: #e8f4f6;
+  color: var(--teal);
+}
+.calculation-heading [role='status'] {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+.calculation-body {
+  min-width: 0;
+}
+.calculation-body :deep(> h2) {
+  margin-bottom: 12px;
+  font-size: 19px;
+}
+.calculation-body :deep(> h3) {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+@media (max-width: 600px) {
+  .calculation-heading {
+    justify-content: flex-start;
+  }
+}
+</style>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SavedItems from '../../components/SavedItems.vue'
 import { displayName } from '../../help/labels'
 import { ref, watch, computed } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
@@ -146,11 +147,11 @@ async function exportH5ad() {
   <section v-if="store.project">
     <div class="page-title">
       <div>
-        <p class="eyebrow">第 6 步 · 保存</p>
+        <p class="eyebrow">共享 · 结果与保存</p>
         <h1>结果与保存</h1>
         <p>主动保存当前项目，导出完整数据和可追溯报告。</p>
       </div>
-      <span class="step-badge">06 / 06</span>
+      <span class="step-badge">项目保存</span>
     </div>
     <div class="card">
       <div class="section-heading">
@@ -374,4 +375,5 @@ async function exportH5ad() {
     <h1>还没有打开项目</h1>
     <RouterLink to="/projects" class="button primary">前往项目首页 →</RouterLink>
   </div>
+  <SavedItems />
 </template>

@@ -12,6 +12,8 @@ import time
 from contextlib import contextmanager
 from copy import deepcopy
 
+from scMM.util.observations import observation_kind
+
 from .identity import actor
 from .projects import ProjectStore
 from .storage import StorageCatalog
@@ -147,6 +149,8 @@ class WebWorkspaceService(
                     "features": data.n_vars,
                     "observation_columns": list(map(str, data.obs.columns)),
                     "source": project.workspace.source,
+                    "quantitation_available": data.n_obs > 0,
+                    "observation_kind": observation_kind(data),
                 },
             }
         return {"workspace_id": workspace.id, "revision": workspace.revision, "project": payload}

@@ -1,0 +1,6175 @@
+{
+  "schema_version": 1,
+  "id": "preset:mammalian_cells",
+  "label": "哺乳动物细胞数据库",
+  "source": "user_supplied_lipid_annotation_table",
+  "source_filename": "脂质注释_20261117_115527.csv",
+  "source_sha256": "b069ecb72c0555b3e352564041ac5c8fbda096e98473570afc5d70adad6fcb01",
+  "intended_context": "mammalian_cells",
+  "taxon_evidence": "not_supplied",
+  "identification_status": "mass_candidates_not_structural_identifications",
+  "ms2_status": "not_supplied",
+  "mass_definition": "neutral monoisotopic mass calculated from supplied molecular formula",
+  "records": [
+    {
+      "record_id": "MC-69203930d1de1a51",
+      "COMMON_NAME": "SPB19:0;O2",
+      "FORMULA": "C19H41NO2",
+      "EXACT_MASS": 315.3137303079,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "SPB",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "SPB19:0;O2",
+      "INCHI_KEY": "",
+      "species": "SPB19:0;O2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 142,
+          "peak_id": "S21_8698_P0141",
+          "observed_mz": 316.320225793,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；按本实验ESI正模式注释约定排除游离脂肪酸FA；原实测峰保留待定。",
+          "original_annotation": "SPB19:0;O2",
+          "formula_adduct_ppm_error": -2.468906187824693
+        }
+      ]
+    },
+    {
+      "record_id": "MC-cb1db2b10b1676c0",
+      "COMMON_NAME": "SPB20:0;O2",
+      "FORMULA": "C20H43NO2",
+      "EXACT_MASS": 329.3293803717,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "SPB",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "SPB20:0;O2",
+      "INCHI_KEY": "",
+      "species": "SPB20:0;O2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 146,
+          "peak_id": "S21_8698_P0145",
+          "observed_mz": 330.336188796,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；按本实验ESI正模式注释约定排除游离脂肪酸FA；原实测峰保留待定。",
+          "original_annotation": "SPB20:0;O2",
+          "formula_adduct_ppm_error": -1.4168203293918324
+        }
+      ]
+    },
+    {
+      "record_id": "MC-b1938b1ab2fa7e51",
+      "COMMON_NAME": "Chol",
+      "FORMULA": "C27H46O",
+      "EXACT_MASS": 386.3548664674,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "Chol",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "Chol",
+      "INCHI_KEY": "",
+      "species": "Chol",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 174,
+          "peak_id": "S21_8698_P0173",
+          "observed_mz": 369.350810472,
+          "adduct": "[M+H-H2O]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "Chol",
+          "formula_adduct_ppm_error": -2.077650772203121
+        }
+      ]
+    },
+    {
+      "record_id": "MC-b55b1da8282faddf",
+      "COMMON_NAME": "LPC16:0",
+      "FORMULA": "C24H50NO7P",
+      "EXACT_MASS": 495.332492085,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "LPC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "LPC16:0",
+      "INCHI_KEY": "",
+      "species": "LPC16:0",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 225,
+          "peak_id": "S21_8698_P0224",
+          "observed_mz": 496.338843316,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "LPC16:0",
+          "formula_adduct_ppm_error": -1.8640879687614742
+        }
+      ]
+    },
+    {
+      "record_id": "MC-c4a681ea36fea63a",
+      "COMMON_NAME": "LPC18:1",
+      "FORMULA": "C26H52NO7P",
+      "EXACT_MASS": 521.3481421488,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "LPC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "LPC18:1",
+      "INCHI_KEY": "",
+      "species": "LPC18:1",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 254,
+          "peak_id": "S21_8698_P0253",
+          "observed_mz": 522.354094789,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -2.5343123547516555
+        }
+      ]
+    },
+    {
+      "record_id": "MC-5d3f8c18d695d0a8",
+      "COMMON_NAME": "LPC18:0",
+      "FORMULA": "C26H54NO7P",
+      "EXACT_MASS": 523.3637922126001,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "LPC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "LPC18:0",
+      "INCHI_KEY": "",
+      "species": "LPC18:0",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 257,
+          "peak_id": "S21_8698_P0256",
+          "observed_mz": 524.369961201,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "LPC18:0",
+          "formula_adduct_ppm_error": -2.111984541364187
+        }
+      ]
+    },
+    {
+      "record_id": "MC-68515f01afee95de",
+      "COMMON_NAME": "DG34:3",
+      "FORMULA": "C37H66O5",
+      "EXACT_MASS": 590.4910271054,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DG34:3",
+      "INCHI_KEY": "",
+      "species": "DG34:3",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 283,
+          "peak_id": "S21_8698_P0282",
+          "observed_mz": 573.485991447,
+          "adduct": "[M+H-H2O]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -3.0463538691627434
+        }
+      ]
+    },
+    {
+      "record_id": "MC-4dd30cad6e42b1ff",
+      "COMMON_NAME": "DG34:2",
+      "FORMULA": "C37H68O5",
+      "EXACT_MASS": 592.5066771692,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DG34:2",
+      "INCHI_KEY": "",
+      "species": "DG34:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 285,
+          "peak_id": "S21_8698_P0284",
+          "observed_mz": 575.502275109,
+          "adduct": "[M+H-H2O]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DG34:2",
+          "formula_adduct_ppm_error": -1.9347382015366676
+        },
+        {
+          "row": 321,
+          "peak_id": "S21_8698_P0320",
+          "observed_mz": 610.538855323,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -2.698254880084683
+        }
+      ]
+    },
+    {
+      "record_id": "MC-a4bfc339b80e421a",
+      "COMMON_NAME": "DG34:1",
+      "FORMULA": "C37H70O5",
+      "EXACT_MASS": 594.5223272329999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DG34:1",
+      "INCHI_KEY": "",
+      "species": "DG34:1",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 288,
+          "peak_id": "S21_8698_P0287",
+          "observed_mz": 577.517166834,
+          "adduct": "[M+H-H2O]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DG34:1",
+          "formula_adduct_ppm_error": -3.2410830911322464
+        },
+        {
+          "row": 325,
+          "peak_id": "S21_8698_P0324",
+          "observed_mz": 612.552663545,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "DG34:2 [M+NH4]+ 的M+2；观测/预计高度比4.61；同位素不能解释全部信号，保留同链长双键候选",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -5.696189116832784
+        }
+      ]
+    },
+    {
+      "record_id": "MC-2bd556ca416bb5c2",
+      "COMMON_NAME": "DG36:5",
+      "FORMULA": "C39H66O5",
+      "EXACT_MASS": 614.4910271054,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DG36:5",
+      "INCHI_KEY": "",
+      "species": "DG36:5",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 331,
+          "peak_id": "S21_8698_P0330",
+          "observed_mz": 615.494597259,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DG36:5",
+          "formula_adduct_ppm_error": -6.021622431018336
+        }
+      ]
+    },
+    {
+      "record_id": "MC-da7d59a212a5d868",
+      "COMMON_NAME": "DG36:4",
+      "FORMULA": "C39H68O5",
+      "EXACT_MASS": 616.5066771692,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DG36:4",
+      "INCHI_KEY": "",
+      "species": "DG36:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 307,
+          "peak_id": "S21_8698_P0306",
+          "observed_mz": 599.502394424,
+          "adduct": "[M+H-H2O]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DG36:4",
+          "formula_adduct_ppm_error": -1.6582615042226578
+        },
+        {
+          "row": 334,
+          "peak_id": "S21_8698_P0333",
+          "observed_mz": 617.511451157,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -4.052482014738068
+        },
+        {
+          "row": 361,
+          "peak_id": "S21_8698_P0360",
+          "observed_mz": 634.539207898,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DG36:4",
+          "formula_adduct_ppm_error": -2.0405614542529094
+        },
+        {
+          "row": 367,
+          "peak_id": "S21_8698_P0366",
+          "observed_mz": 639.494901842,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DG36:4",
+          "formula_adduct_ppm_error": -1.5575208445195443
+        }
+      ]
+    },
+    {
+      "record_id": "MC-a85860ab0c4326b7",
+      "COMMON_NAME": "DG36:3",
+      "FORMULA": "C39H70O5",
+      "EXACT_MASS": 618.5223272329999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DG36:3",
+      "INCHI_KEY": "",
+      "species": "DG36:3",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 309,
+          "peak_id": "S21_8698_P0308",
+          "observed_mz": 601.51751668,
+          "adduct": "[M+H-H2O]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DG36:3",
+          "formula_adduct_ppm_error": -2.5301629594798314
+        },
+        {
+          "row": 337,
+          "peak_id": "S21_8698_P0336",
+          "observed_mz": 619.527098777,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -4.04324180147686
+        },
+        {
+          "row": 363,
+          "peak_id": "S21_8698_P0362",
+          "observed_mz": 636.554277171,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -2.946495266331617
+        },
+        {
+          "row": 371,
+          "peak_id": "S21_8698_P0370",
+          "observed_mz": 641.510258246,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DG36:3",
+          "formula_adduct_ppm_error": -2.01038936087361
+        }
+      ]
+    },
+    {
+      "record_id": "MC-ef99c2915ef8ef0a",
+      "COMMON_NAME": "DG36:2",
+      "FORMULA": "C39H72O5",
+      "EXACT_MASS": 620.5379772967999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DG36:2",
+      "INCHI_KEY": "",
+      "species": "DG36:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 312,
+          "peak_id": "S21_8698_P0311",
+          "observed_mz": 603.532405327,
+          "adduct": "[M+H-H2O]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DG36:2",
+          "formula_adduct_ppm_error": -3.783308621163606
+        },
+        {
+          "row": 366,
+          "peak_id": "S21_8698_P0365",
+          "observed_mz": 638.568387882,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "DG36:3 [M+NH4]+ 的M+2；观测/预计高度比4.50；同位素不能解释全部信号，保留同链长双键候选",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -5.347812846778766
+        },
+        {
+          "row": 373,
+          "peak_id": "S21_8698_P0372",
+          "observed_mz": 643.525069612,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -3.307375037842064
+        }
+      ]
+    },
+    {
+      "record_id": "MC-40fa88d8391a7b05",
+      "COMMON_NAME": "DGO-38:8",
+      "FORMULA": "C41H66O4",
+      "EXACT_MASS": 622.4961121054,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DGO",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DGO-38:8",
+      "INCHI_KEY": "",
+      "species": "DGO-38:8",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 343,
+          "peak_id": "S21_8698_P0342",
+          "observed_mz": 623.502255987,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DGO-38:8",
+          "formula_adduct_ppm_error": -1.8164622866967406
+        }
+      ]
+    },
+    {
+      "record_id": "MC-039ad3fd909bc93a",
+      "COMMON_NAME": "DG36:1",
+      "FORMULA": "C39H74O5",
+      "EXACT_MASS": 622.5536273606,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DG36:1",
+      "INCHI_KEY": "",
+      "species": "DG36:1",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 315,
+          "peak_id": "S21_8698_P0314",
+          "observed_mz": 605.544989616,
+          "adduct": "[M+H-H2O]+",
+          "charge": 1,
+          "source_note": "DG36:2 [M+H-H2O]+ 的M+2；观测/预计高度比1.94；同位素不能解释全部信号，保留同链长双键候选",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -8.833506397021296
+        }
+      ]
+    },
+    {
+      "record_id": "MC-0c7e2ed135928f8b",
+      "COMMON_NAME": "DG38:6",
+      "FORMULA": "C41H68O5",
+      "EXACT_MASS": 640.5066771692,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DG38:6",
+      "INCHI_KEY": "",
+      "species": "DG38:6",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 396,
+          "peak_id": "S21_8698_P0395",
+          "observed_mz": 658.539849454,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -0.9919858965368178
+        }
+      ]
+    },
+    {
+      "record_id": "MC-ba150d9b5fa4a9ae",
+      "COMMON_NAME": "DG38:5",
+      "FORMULA": "C41H70O5",
+      "EXACT_MASS": 642.5223272329999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DG38:5",
+      "INCHI_KEY": "",
+      "species": "DG38:5",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 345,
+          "peak_id": "S21_8698_P0344",
+          "observed_mz": 625.516063621,
+          "adduct": "[M+H-H2O]+",
+          "charge": 1,
+          "source_note": "DGO-38:8 [M+H]+ 的M+2；观测/预计高度比5.34；同位素不能解释全部信号，保留同链长双键候选",
+          "original_annotation": "DG38:5",
+          "formula_adduct_ppm_error": -4.756050587251259
+        }
+      ]
+    },
+    {
+      "record_id": "MC-a1f8182c18d6d65b",
+      "COMMON_NAME": "DG38:4",
+      "FORMULA": "C41H72O5",
+      "EXACT_MASS": 644.5379772967999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DG38:4",
+      "INCHI_KEY": "",
+      "species": "DG38:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 348,
+          "peak_id": "S21_8698_P0347",
+          "observed_mz": 627.53337018,
+          "adduct": "[M+H-H2O]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DG38:4",
+          "formula_adduct_ppm_error": -2.101087023032022
+        }
+      ]
+    },
+    {
+      "record_id": "MC-80d208c53b4345d2",
+      "COMMON_NAME": "Cer42:2;O2",
+      "FORMULA": "C42H81NO3",
+      "EXACT_MASS": 647.6216465839,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "Cer",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "Cer42:2;O2",
+      "INCHI_KEY": "",
+      "species": "Cer42:2;O2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 413,
+          "peak_id": "S21_8698_P0412",
+          "observed_mz": 670.61066468,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "Cer42:2;O2",
+          "formula_adduct_ppm_error": -0.3021199040942335
+        }
+      ]
+    },
+    {
+      "record_id": "MC-d4530e1b1de1959f",
+      "COMMON_NAME": "Cer42:2",
+      "FORMULA": "C42H81NO3",
+      "EXACT_MASS": 647.6216465839,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "Cer",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "Cer42:2",
+      "INCHI_KEY": "",
+      "species": "Cer42:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 353,
+          "peak_id": "S21_8698_P0352",
+          "observed_mz": 630.617187596,
+          "adduct": "[M+H-H2O]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -1.8559182050070788
+        }
+      ]
+    },
+    {
+      "record_id": "MC-f5c6aa4e172d83ef",
+      "COMMON_NAME": "DGO-40:8",
+      "FORMULA": "C43H70O4",
+      "EXACT_MASS": 650.527412233,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DGO",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DGO-40:8",
+      "INCHI_KEY": "",
+      "species": "DGO-40:8",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 386,
+          "peak_id": "S21_8698_P0385",
+          "observed_mz": 651.533039768,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DGO-40:8",
+          "formula_adduct_ppm_error": -2.5308199541607124
+        }
+      ]
+    },
+    {
+      "record_id": "MC-13383d3dff842f4f",
+      "COMMON_NAME": "DG40:7",
+      "FORMULA": "C43H70O5",
+      "EXACT_MASS": 666.5223272329999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "DG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "DG40:7",
+      "INCHI_KEY": "",
+      "species": "DG40:7",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 382,
+          "peak_id": "S21_8698_P0381",
+          "observed_mz": 649.517191946,
+          "adduct": "[M+H-H2O]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -2.8431425117547704
+        },
+        {
+          "row": 408,
+          "peak_id": "S21_8698_P0407",
+          "observed_mz": 667.52665349,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "",
+          "original_annotation": "DG40:7",
+          "formula_adduct_ppm_error": -4.419571768332631
+        }
+      ]
+    },
+    {
+      "record_id": "MC-622fe7f47b1a403d",
+      "COMMON_NAME": "SM34:1",
+      "FORMULA": "C39H79N2O6P",
+      "EXACT_MASS": 702.5675770100999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "SM",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "SM34:1",
+      "INCHI_KEY": "",
+      "species": "SM34:1",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 438,
+          "peak_id": "S21_8698_P0437",
+          "observed_mz": 703.573374898,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高0.4%，主贡献SM34:1 / SM34:2 M+2",
+          "original_annotation": "SM34:1",
+          "formula_adduct_ppm_error": -2.1015021834935865
+        }
+      ]
+    },
+    {
+      "record_id": "MC-90d7fe0c8f9a28db",
+      "COMMON_NAME": "PE34:2",
+      "FORMULA": "C39H74NO8P",
+      "EXACT_MASS": 715.5152078506001,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PE",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PE34:2",
+      "INCHI_KEY": "",
+      "species": "PE34:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 449,
+          "peak_id": "S21_8698_P0448",
+          "observed_mz": 716.520992833,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高0.0%，主贡献PE34:2",
+          "original_annotation": "PE34:2",
+          "formula_adduct_ppm_error": -2.0815391332806854
+        }
+      ]
+    },
+    {
+      "record_id": "MC-8954a0ef43995974",
+      "COMMON_NAME": "PA38:6",
+      "FORMULA": "C41H69O8P",
+      "EXACT_MASS": 720.4730086911001,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PA",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PA38:6",
+      "INCHI_KEY": "",
+      "species": "PA38:6",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 455,
+          "peak_id": "S21_8698_P0454",
+          "observed_mz": 721.476559594,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高0.0%，主贡献PA38:6",
+          "original_annotation": "PA38:6",
+          "formula_adduct_ppm_error": -5.163757302417693
+        }
+      ]
+    },
+    {
+      "record_id": "MC-de476c8ee7476f2d",
+      "COMMON_NAME": "PC32:2",
+      "FORMULA": "C40H76NO8P",
+      "EXACT_MASS": 729.5308579144,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC32:2",
+      "INCHI_KEY": "",
+      "species": "PC32:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 464,
+          "peak_id": "S21_8698_P0463",
+          "observed_mz": 730.536778255,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高0.0%，主贡献PC32:2",
+          "original_annotation": "PC32:2",
+          "formula_adduct_ppm_error": -1.8563184140951705
+        }
+      ]
+    },
+    {
+      "record_id": "MC-6438b2aa6bc4c916",
+      "COMMON_NAME": "SM36:1",
+      "FORMULA": "C41H83N2O6P",
+      "EXACT_MASS": 730.5988771377001,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "SM",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "SM36:1",
+      "INCHI_KEY": "",
+      "species": "SM36:1",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 466,
+          "peak_id": "S21_8698_P0465",
+          "observed_mz": 731.605540952,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高0.0%，主贡献SM36:1",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -0.8373872856237696
+        }
+      ]
+    },
+    {
+      "record_id": "MC-2b23b1cb986286fd",
+      "COMMON_NAME": "PC32:1",
+      "FORMULA": "C40H78NO8P",
+      "EXACT_MASS": 731.5465079782,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC32:1",
+      "INCHI_KEY": "",
+      "species": "PC32:1",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 467,
+          "peak_id": "S21_8698_P0466",
+          "observed_mz": 732.551577434,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC32:2 [M+H]+ 的M+2；观测/预计高度比14.96；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高5.0%，主贡献PC32:1 / PC32:2 M+2 / SM36:1 M+1",
+          "original_annotation": "PC32:1",
+          "formula_adduct_ppm_error": -3.012742869956675
+        }
+      ]
+    },
+    {
+      "record_id": "MC-12b45d70eb0615a4",
+      "COMMON_NAME": "PC32:0",
+      "FORMULA": "C40H80NO8P",
+      "EXACT_MASS": 733.562158042,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC32:0",
+      "INCHI_KEY": "",
+      "species": "PC32:0",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 471,
+          "peak_id": "S21_8698_P0470",
+          "observed_mz": 734.567944709,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高2.6%，主贡献PC32:0 / PC32:1 M+2",
+          "original_annotation": "PC32:0",
+          "formula_adduct_ppm_error": -2.0281064265770254
+        }
+      ]
+    },
+    {
+      "record_id": "MC-2a9e6c504afc0889",
+      "COMMON_NAME": "PE36:4",
+      "FORMULA": "C41H74NO8P",
+      "EXACT_MASS": 739.5152078506001,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PE",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PE36:4",
+      "INCHI_KEY": "",
+      "species": "PE36:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 476,
+          "peak_id": "S21_8698_P0475",
+          "observed_mz": 740.521083212,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高0.7%，主贡献PE36:4 / PE34:2 M+2",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -1.8920297771840566
+        }
+      ]
+    },
+    {
+      "record_id": "MC-c9817345d527bb7f",
+      "COMMON_NAME": "PE36:3",
+      "FORMULA": "C41H76NO8P",
+      "EXACT_MASS": 741.5308579144,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PE",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PE36:3",
+      "INCHI_KEY": "",
+      "species": "PE36:3",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 478,
+          "peak_id": "S21_8698_P0477",
+          "observed_mz": 742.533985545,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PE36:4 [M+H]+ 的M+2；观测/预计高度比3.29；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高30.0%，主贡献PE36:3 / PE36:4 M+2",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -5.587351273983465
+        },
+        {
+          "row": 508,
+          "peak_id": "S21_8698_P0507",
+          "observed_mz": 764.520537696,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高0.4%，主贡献PE38:6 / PE38:7 M+2",
+          "original_annotation": "PE36:3",
+          "formula_adduct_ppm_error": 0.6004820827243407
+        }
+      ]
+    },
+    {
+      "record_id": "MC-2b46847d22548096",
+      "COMMON_NAME": "PE36:2",
+      "FORMULA": "C41H78NO8P",
+      "EXACT_MASS": 743.5465079782,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PE",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PE36:2",
+      "INCHI_KEY": "",
+      "species": "PE36:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 480,
+          "peak_id": "S21_8698_P0479",
+          "observed_mz": 744.552443493,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高6.3%，主贡献PE36:2 / PE36:3 M+2 / PE36:4 M+4",
+          "original_annotation": "PE36:2",
+          "formula_adduct_ppm_error": -1.8009943928420924
+        },
+        {
+          "row": 512,
+          "peak_id": "S21_8698_P0511",
+          "observed_mz": 766.533956297,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "PE36:3 [M+Na]+ 的M+2；观测/预计高度比3.24；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高33.2%，主贡献PE38:5 / PE38:6 M+2",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -2.3121977549278583
+        }
+      ]
+    },
+    {
+      "record_id": "MC-83342adaedb11806",
+      "COMMON_NAME": "PE36:1",
+      "FORMULA": "C41H80NO8P",
+      "EXACT_MASS": 745.562158042,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PE",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PE36:1",
+      "INCHI_KEY": "",
+      "species": "PE36:1",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 514,
+          "peak_id": "S21_8698_P0513",
+          "observed_mz": 768.552158776,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高2.1%，主贡献PE38:4 / PE38:5 M+2 / PE38:6 M+4",
+          "original_annotation": "PE36:1",
+          "formula_adduct_ppm_error": 1.0149393141478669
+        }
+      ]
+    },
+    {
+      "record_id": "MC-f5dd79cd390403e5",
+      "COMMON_NAME": "PE36:0",
+      "FORMULA": "C41H82NO8P",
+      "EXACT_MASS": 747.5778081058,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PE",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PE36:0",
+      "INCHI_KEY": "",
+      "species": "PE36:0",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 519,
+          "peak_id": "S21_8698_P0518",
+          "observed_mz": 770.561234957,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "PE36:1 [M+Na]+ 的M+2；观测/预计高度比1.28；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高81.3%，主贡献PE38:4 M+2 / PE38:3 / PE38:5 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -7.51894329031888
+        },
+        {
+          "row": 549,
+          "peak_id": "S21_8698_P0548",
+          "observed_mz": 792.551586749,
+          "adduct": "[M+2Na-H]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高8.4%，主贡献PE40:6 / PE40:7 M+2",
+          "original_annotation": "PE36:0",
+          "formula_adduct_ppm_error": 3.297831803195095
+        }
+      ]
+    },
+    {
+      "record_id": "MC-e677ed39f53795da",
+      "COMMON_NAME": "PC34:4",
+      "FORMULA": "C42H76NO8P",
+      "EXACT_MASS": 753.5308579144,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC34:4",
+      "INCHI_KEY": "",
+      "species": "PC34:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 493,
+          "peak_id": "S21_8698_P0492",
+          "observed_mz": 754.536997315,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC34_H DB4（条件性峰形模型）；；天然比例联合模型：同位素占模型峰高1.6%，主贡献PC34:4 / PC34:5 M+2",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -1.5069501979603217
+        }
+      ]
+    },
+    {
+      "record_id": "MC-33bb8218985ff285",
+      "COMMON_NAME": "PC34:3",
+      "FORMULA": "C42H78NO8P",
+      "EXACT_MASS": 755.5465079782,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC34:3",
+      "INCHI_KEY": "",
+      "species": "PC34:3",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 496,
+          "peak_id": "S21_8698_P0495",
+          "observed_mz": 756.552551848,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC34_H DB3（条件性峰形模型）；；天然比例联合模型：同位素占模型峰高0.8%，主贡献PC34:3 / PC34:4 M+2",
+          "original_annotation": "PC32:0",
+          "formula_adduct_ppm_error": -1.6292062987588452
+        }
+      ]
+    },
+    {
+      "record_id": "MC-d7b4da2c2d259615",
+      "COMMON_NAME": "PC34:2",
+      "FORMULA": "C42H80NO8P",
+      "EXACT_MASS": 757.562158042,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC34:2",
+      "INCHI_KEY": "",
+      "species": "PC34:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 499,
+          "peak_id": "S21_8698_P0498",
+          "observed_mz": 758.566956096,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC34_H DB2（条件性峰形模型）；；天然比例联合模型：同位素占模型峰高0.4%，主贡献PC34:2 / PC34:3 M+2",
+          "original_annotation": "PC34:2",
+          "formula_adduct_ppm_error": -3.2671999137257046
+        },
+        {
+          "row": 529,
+          "peak_id": "S21_8698_P0528",
+          "observed_mz": 780.550306882,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "PC36:6 [M+H]+ 的M+2；观测/预计高度比155.93；PC36_H DB5（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高0.6%，主贡献PC36:5 / PC34:2 / PC36:6 M+2",
+          "original_annotation": "PC34:2",
+          "formula_adduct_ppm_error": -1.3732100411223414
+        },
+        {
+          "row": 555,
+          "peak_id": "S21_8698_P0554",
+          "observed_mz": 796.51989272,
+          "adduct": "[M+K]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高1.6%，主贡献PC36:8 / PE40:4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -6.8088508689001515
+        }
+      ]
+    },
+    {
+      "record_id": "MC-9e4f37bbee086303",
+      "COMMON_NAME": "PC34:1",
+      "FORMULA": "C42H82NO8P",
+      "EXACT_MASS": 759.5778081058,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC34:1",
+      "INCHI_KEY": "",
+      "species": "PC34:1",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 502,
+          "peak_id": "S21_8698_P0501",
+          "observed_mz": 760.580115354,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC34:2 [M+H]+ 的M+2；观测/预计高度比2.90；PC34_H DB1（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高30.9%，主贡献PC34:1 / PC34:2 M+2 / PC34:3 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -6.53339631806471
+        }
+      ]
+    },
+    {
+      "record_id": "MC-2221110491eb0261",
+      "COMMON_NAME": "PC34:0",
+      "FORMULA": "C42H84NO8P",
+      "EXACT_MASS": 761.5934581696,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC34:0",
+      "INCHI_KEY": "",
+      "species": "PC34:0",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 505,
+          "peak_id": "S21_8698_P0504",
+          "observed_mz": 762.590131352,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC34:1 [M+H]+ 的M+2；观测/预计高度比0.84；PC34_H DB0（条件性峰形模型）；高度或质量间距不符合纯同位素，不能仅按同位素删去；PC34:0成分可能与PC34:1 M+2及PC34:2 M+4重叠，尚不作独立确定标签；天然比例联合模型：同位素占模型峰高89.6%，主贡献PC34:1 M+2 / PC34:0 / PC34:2 M+4；全DB联合模型提示该候选单同位素组分，五种模板拟合峰高范围0.362–0.450%原始基峰。混合峰质心可偏离单个组分，非独立精确质量确认。",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -13.904090449434747
+        }
+      ]
+    },
+    {
+      "record_id": "MC-53d86e0eebb4d433",
+      "COMMON_NAME": "PE38:4",
+      "FORMULA": "C43H78NO8P",
+      "EXACT_MASS": 767.5465079782,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PE",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PE38:4",
+      "INCHI_KEY": "",
+      "species": "PE38:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 544,
+          "peak_id": "S21_8698_P0543",
+          "observed_mz": 790.536130613,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高1.0%，主贡献PE40:7 / PE40:8 M+2",
+          "original_annotation": "PE38:4",
+          "formula_adduct_ppm_error": 0.5084321865744812
+        }
+      ]
+    },
+    {
+      "record_id": "MC-b3f1a9d3b4cad9e5",
+      "COMMON_NAME": "PE38:2",
+      "FORMULA": "C43H82NO8P",
+      "EXACT_MASS": 771.5778081058,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PE",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PE38:2",
+      "INCHI_KEY": "",
+      "species": "PE38:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 521,
+          "peak_id": "S21_8698_P0520",
+          "observed_mz": 772.583109785,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高4.1%，主贡献PE38:2 / PE38:3 M+2 / PE38:4 M+4",
+          "original_annotation": "PE38:2",
+          "formula_adduct_ppm_error": -2.5560586535133822
+        },
+        {
+          "row": 552,
+          "peak_id": "S21_8698_P0551",
+          "observed_mz": 794.566763151,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高64.6%，主贡献PE40:6 M+2 / PE40:5 / PE40:7 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -0.3343403153222013
+        }
+      ]
+    },
+    {
+      "record_id": "MC-579ee2292b826f33",
+      "COMMON_NAME": "PE38:1",
+      "FORMULA": "C43H84NO8P",
+      "EXACT_MASS": 773.5934581696,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PE",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PE38:1",
+      "INCHI_KEY": "",
+      "species": "PE38:1",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 524,
+          "peak_id": "S21_8698_P0523",
+          "observed_mz": 774.594457485,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PE38:2 [M+H]+ 的M+2；观测/预计高度比2.53；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高36.8%，主贡献PE38:1 / PE38:2 M+2",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -8.103705961493013
+        },
+        {
+          "row": 556,
+          "peak_id": "S21_8698_P0555",
+          "observed_mz": 796.58717703,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高4.3%，主贡献PE40:4 / PE40:5 M+2 / PE40:6 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": 5.6468205100745905
+        }
+      ]
+    },
+    {
+      "record_id": "MC-07cd67074c855477",
+      "COMMON_NAME": "PC36:6",
+      "FORMULA": "C44H76NO8P",
+      "EXACT_MASS": 777.5308579144,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC36:6",
+      "INCHI_KEY": "",
+      "species": "PC36:6",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 527,
+          "peak_id": "S21_8698_P0526",
+          "observed_mz": 778.537093792,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC36_H DB6（条件性峰形模型）；；天然比例联合模型：同位素占模型峰高0.4%，主贡献PC36:6 / PC36:7 M+2",
+          "original_annotation": "PC36:6",
+          "formula_adduct_ppm_error": -1.3365747226767866
+        }
+      ]
+    },
+    {
+      "record_id": "MC-c0a415a19cacfc96",
+      "COMMON_NAME": "PC36:4",
+      "FORMULA": "C44H80NO8P",
+      "EXACT_MASS": 781.562158042,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC36:4",
+      "INCHI_KEY": "",
+      "species": "PC36:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 533,
+          "peak_id": "S21_8698_P0532",
+          "observed_mz": 782.566997825,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC36_H DB4（条件性峰形模型）；已修订上版候选，H/Na或结构歧义见其他候选；天然比例联合模型：同位素占模型峰高1.4%，主贡献PC36:4 / PC36:5 M+2 / PC34:2 M+2",
+          "original_annotation": "PC34:1",
+          "formula_adduct_ppm_error": -3.1136776923457177
+        },
+        {
+          "row": 570,
+          "peak_id": "S21_8698_P0569",
+          "observed_mz": 804.55049433,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "PC38_H DB7（条件性峰形模型）；已修订上版候选，H/Na或结构歧义见其他候选；天然比例联合模型：同位素占模型峰高0.4%，主贡献PC38:7 / PE37:1 / PC38:8 M+2",
+          "original_annotation": "PE37:1",
+          "formula_adduct_ppm_error": -1.0992622898609028
+        }
+      ]
+    },
+    {
+      "record_id": "MC-1e901fd7d31bcf91",
+      "COMMON_NAME": "PC36:3",
+      "FORMULA": "C44H82NO8P",
+      "EXACT_MASS": 783.5778081058,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC36:3",
+      "INCHI_KEY": "",
+      "species": "PC36:3",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 535,
+          "peak_id": "S21_8698_P0534",
+          "observed_mz": 784.580228358,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC36:4 [M+H]+ 的M+2；观测/预计高度比2.80；PC36_H DB3（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高31.8%，主贡献PC36:3 / PC36:4 M+2 / PC36:5 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -6.189513268362035
+        }
+      ]
+    },
+    {
+      "record_id": "MC-d6fffea1b7e1bdb2",
+      "COMMON_NAME": "PC36:2",
+      "FORMULA": "C44H84NO8P",
+      "EXACT_MASS": 785.5934581696,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC36:2",
+      "INCHI_KEY": "",
+      "species": "PC36:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 538,
+          "peak_id": "S21_8698_P0537",
+          "observed_mz": 786.598144329,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC36:3 [M+H]+ 的M+2；观测/预计高度比10.65；PC36_H DB2（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高4.9%，主贡献PC36:2 / PC36:3 M+2 / PC36:4 M+4",
+          "original_annotation": "PC36:2",
+          "formula_adduct_ppm_error": -3.2930208134773764
+        }
+      ]
+    },
+    {
+      "record_id": "MC-54683079527c4adb",
+      "COMMON_NAME": "PC36:1",
+      "FORMULA": "C44H86NO8P",
+      "EXACT_MASS": 787.6091082334,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC36:1",
+      "INCHI_KEY": "",
+      "species": "PC36:1",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 541,
+          "peak_id": "S21_8698_P0540",
+          "observed_mz": 788.608735593,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC36:2 [M+H]+ 的M+2；观测/预计高度比1.58；PC36_H DB1（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高62.9%，主贡献PC36:2 M+2 / PC36:1 / PC36:3 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -9.699383045402854
+        }
+      ]
+    },
+    {
+      "record_id": "MC-deab3649665d967e",
+      "COMMON_NAME": "PEO-40:7;O",
+      "FORMULA": "C45H78NO8P",
+      "EXACT_MASS": 791.5465079782,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PEO",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PEO-40:7;O",
+      "INCHI_KEY": "",
+      "species": "PEO-40:7;O",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 583,
+          "peak_id": "S21_8698_P0582",
+          "observed_mz": 814.533683365,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高16.0%，主贡献PE40:6 / PEO-40:7;O / PE40:7 M+2",
+          "original_annotation": "PEO-40:7;O",
+          "formula_adduct_ppm_error": -2.51101838621981
+        }
+      ]
+    },
+    {
+      "record_id": "MC-a22a490a1a8fa86f",
+      "COMMON_NAME": "SM41:1;O2",
+      "FORMULA": "C46H93N2O6P",
+      "EXACT_MASS": 800.6771274567002,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "SM",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "SM41:1;O2",
+      "INCHI_KEY": "",
+      "species": "SM41:1;O2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 565,
+          "peak_id": "S21_8698_P0564",
+          "observed_mz": 801.683491232,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高1.9%，主贡献SM41:1 / SM41:1;O2 / SM41:2 M+2",
+          "original_annotation": "SM41:1;O2",
+          "formula_adduct_ppm_error": -1.1384488541876792
+        }
+      ]
+    },
+    {
+      "record_id": "MC-6b744126bc546feb",
+      "COMMON_NAME": "TG48:3",
+      "FORMULA": "C51H92O6",
+      "EXACT_MASS": 800.6893929347999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG48:3",
+      "INCHI_KEY": "",
+      "species": "TG48:3",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 593,
+          "peak_id": "S21_8698_P0592",
+          "observed_mz": 818.721678919,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "尚缺少本谱加合物/双键系列支持；未强制标入主图；天然比例联合模型：同位素占模型峰高23.6%，主贡献TG48:3 / SM42:1 / SM42:1;O2 M+3 / SM42:0 M+1；全DB联合模型提示该候选单同位素组分，五种模板拟合峰高范围0.139–0.156%原始基峰。混合峰质心可偏离单个组分，非独立精确质量确认。",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -1.8804443994158149
+        }
+      ]
+    },
+    {
+      "record_id": "MC-322e1481e0debd75",
+      "COMMON_NAME": "TG48:2",
+      "FORMULA": "C51H94O6",
+      "EXACT_MASS": 802.7050429986,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG48:2",
+      "INCHI_KEY": "",
+      "species": "TG48:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 598,
+          "peak_id": "S21_8698_P0597",
+          "observed_mz": 820.735633571,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高9.8%，主贡献TG48:2 / TG48:3 M+2",
+          "original_annotation": "TG48:2",
+          "formula_adduct_ppm_error": -3.941540257179632
+        }
+      ]
+    },
+    {
+      "record_id": "MC-a0c853b1089c1851",
+      "COMMON_NAME": "PC38:6",
+      "FORMULA": "C46H80NO8P",
+      "EXACT_MASS": 805.562158042,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC38:6",
+      "INCHI_KEY": "",
+      "species": "PC38:6",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 572,
+          "peak_id": "S21_8698_P0571",
+          "observed_mz": 806.56675481,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC38_H DB6（条件性峰形模型）；已修订上版候选，H/Na或结构歧义见其他候选；天然比例联合模型：同位素占模型峰高0.9%，主贡献PC38:6 / PC38:7 M+2 / PE37:1 M+2",
+          "original_annotation": "PC36:3",
+          "formula_adduct_ppm_error": -3.3223227614564976
+        },
+        {
+          "row": 611,
+          "peak_id": "S21_8698_P0610",
+          "observed_mz": 828.549395464,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高0.2%，主贡献PC38:6 / PC38:7 M+2",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -2.3936704974802936
+        }
+      ]
+    },
+    {
+      "record_id": "MC-aea6a98e58f7fca3",
+      "COMMON_NAME": "PC38:5",
+      "FORMULA": "C46H82NO8P",
+      "EXACT_MASS": 807.5778081058,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC38:5",
+      "INCHI_KEY": "",
+      "species": "PC38:5",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 574,
+          "peak_id": "S21_8698_P0573",
+          "observed_mz": 808.57889426,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC38:6 [M+H]+ 的M+2；观测/预计高度比2.13；PC38_H DB5（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高45.7%，主贡献PC38:5 / PC38:6 M+2 / PC38:7 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -7.655716027010762
+        },
+        {
+          "row": 614,
+          "peak_id": "S21_8698_P0613",
+          "observed_mz": 830.565265644,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "PC38:6 [M+Na]+ 的M+2；观测/预计高度比5.87；同位素不能解释全部信号，保留同链长双键候选；已修订上版候选，H/Na或结构歧义见其他候选；天然比例联合模型：同位素占模型峰高19.6%，主贡献PC40:8 / PC38:6 M+2 / TG48:8 M+1",
+          "original_annotation": "PE39:2",
+          "formula_adduct_ppm_error": -2.1228422629748778
+        }
+      ]
+    },
+    {
+      "record_id": "MC-5434b4f514f923f9",
+      "COMMON_NAME": "PC38:4",
+      "FORMULA": "C46H84NO8P",
+      "EXACT_MASS": 809.5934581696,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC38:4",
+      "INCHI_KEY": "",
+      "species": "PC38:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 576,
+          "peak_id": "S21_8698_P0575",
+          "observed_mz": 810.598081703,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC38:5 [M+H]+ 的M+2；观测/预计高度比11.26；PC38_H DB4（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；已修订上版候选，H/Na或结构歧义见其他候选；天然比例联合模型：同位素占模型峰高4.7%，主贡献PC38:4 / PC38:5 M+2 / PC38:6 M+4",
+          "original_annotation": "PC36:1",
+          "formula_adduct_ppm_error": -3.272780886520721
+        },
+        {
+          "row": 618,
+          "peak_id": "S21_8698_P0617",
+          "observed_mz": 832.582521884,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "已修订上版候选，H/Na或结构歧义见其他候选；天然比例联合模型：同位素占模型峰高4.2%，主贡献PC40:7 / PC40:8 M+2 / TG48:8 M+3",
+          "original_annotation": "PE39:1",
+          "formula_adduct_ppm_error": -0.188553755609
+        }
+      ]
+    },
+    {
+      "record_id": "MC-5288df3aeb9b21f8",
+      "COMMON_NAME": "PC38:3",
+      "FORMULA": "C46H86NO8P",
+      "EXACT_MASS": 811.6091082334,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC38:3",
+      "INCHI_KEY": "",
+      "species": "PC38:3",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 579,
+          "peak_id": "S21_8698_P0578",
+          "observed_mz": 812.608263191,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC38:4 [M+H]+ 的M+2；观测/预计高度比1.22；PC38_H DB3（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高76.0%，主贡献PC38:4 M+2 / PC38:3 / PC38:5 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -9.99425380043828
+        }
+      ]
+    },
+    {
+      "record_id": "MC-c1fd1c5326beb0c7",
+      "COMMON_NAME": "SM42:2",
+      "FORMULA": "C47H93N2O6P",
+      "EXACT_MASS": 812.6771274567002,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "SM",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "SM42:2",
+      "INCHI_KEY": "",
+      "species": "SM42:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 582,
+          "peak_id": "S21_8698_P0581",
+          "observed_mz": 813.683101507,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高1.6%，主贡献SM42:2 / SM42:3 M+2 / TG48:7 M+3",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -1.6006226553066938
+        }
+      ]
+    },
+    {
+      "record_id": "MC-036cf52345b66679",
+      "COMMON_NAME": "SM42:1;O2",
+      "FORMULA": "C47H95N2O6P",
+      "EXACT_MASS": 814.6927775205002,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "SM",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "SM42:1;O2",
+      "INCHI_KEY": "",
+      "species": "SM42:1;O2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 587,
+          "peak_id": "S21_8698_P0586",
+          "observed_mz": 815.695691651,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "SM42:2 [M+H]+ 的M+2；观测/预计高度比2.99；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高29.9%，主贡献SM42:1 / SM42:1;O2 / SM42:2 M+2",
+          "original_annotation": "SM42:1;O2",
+          "formula_adduct_ppm_error": -5.347948023204374
+        }
+      ]
+    },
+    {
+      "record_id": "MC-05b73b669fee8412",
+      "COMMON_NAME": "TG50:4",
+      "FORMULA": "C53H94O6",
+      "EXACT_MASS": 826.7050429986,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG50:4",
+      "INCHI_KEY": "",
+      "species": "TG50:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 633,
+          "peak_id": "S21_8698_P0632",
+          "observed_mz": 844.736505238,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高4.0%，主贡献TG50:4 / TG50:5 M+2",
+          "original_annotation": "TG50:4",
+          "formula_adduct_ppm_error": -2.7976791160400083
+        }
+      ]
+    },
+    {
+      "record_id": "MC-6ecaf4a552af6137",
+      "COMMON_NAME": "TG50:3",
+      "FORMULA": "C53H96O6",
+      "EXACT_MASS": 828.7206930624,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG50:3",
+      "INCHI_KEY": "",
+      "species": "TG50:3",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 637,
+          "peak_id": "S21_8698_P0636",
+          "observed_mz": 846.751497201,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG50:4 [M+NH4]+ 的M+2；观测/预计高度比9.95；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高7.1%，主贡献TG50:3 / TG50:4 M+2",
+          "original_annotation": "TG50:3",
+          "formula_adduct_ppm_error": -3.568223168048945
+        }
+      ]
+    },
+    {
+      "record_id": "MC-830cc662de30b86d",
+      "COMMON_NAME": "TG50:2",
+      "FORMULA": "C53H98O6",
+      "EXACT_MASS": 830.7363431261999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG50:2",
+      "INCHI_KEY": "",
+      "species": "TG50:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 641,
+          "peak_id": "S21_8698_P0640",
+          "observed_mz": 848.767695156,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG50:3 [M+NH4]+ 的M+2；观测/预计高度比7.04；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高11.4%，主贡献TG50:2 / TG50:3 M+2 / TG50:4 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -2.9142375430613043
+        }
+      ]
+    },
+    {
+      "record_id": "MC-af698b21a6957763",
+      "COMMON_NAME": "PC40:7",
+      "FORMULA": "C48H82NO8P",
+      "EXACT_MASS": 831.5778081058,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC40:7",
+      "INCHI_KEY": "",
+      "species": "PC40:7",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 651,
+          "peak_id": "S21_8698_P0650",
+          "observed_mz": 854.566026489,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "已修订上版候选，H/Na或结构歧义见其他候选；天然比例联合模型：同位素占模型峰高5.4%，主贡献PC40:7 / PC40:8 M+2 / TG50:10 M+1",
+          "original_annotation": "PE41:4",
+          "formula_adduct_ppm_error": -1.1728954630862987
+        }
+      ]
+    },
+    {
+      "record_id": "MC-4627c3cbac488e40",
+      "COMMON_NAME": "TG50:1",
+      "FORMULA": "C53H100O6",
+      "EXACT_MASS": 832.7519931899999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG50:1",
+      "INCHI_KEY": "",
+      "species": "TG50:1",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 644,
+          "peak_id": "S21_8698_P0643",
+          "observed_mz": 850.780213285,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG50:2 [M+NH4]+ 的M+2；观测/预计高度比2.04；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高42.9%，主贡献TG50:1 / TG50:2 M+2 / TG50:3 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -6.588559150255691
+        },
+        {
+          "row": 654,
+          "peak_id": "S21_8698_P0653",
+          "observed_mz": 855.739493349,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高22.4%，主贡献TG50:1 / TG50:2 M+2 / TG51:6 M+1",
+          "original_annotation": "TG50:1",
+          "formula_adduct_ppm_error": -2.0105868022701756
+        }
+      ]
+    },
+    {
+      "record_id": "MC-68d5580ee60e33ad",
+      "COMMON_NAME": "PC40:6",
+      "FORMULA": "C48H84NO8P",
+      "EXACT_MASS": 833.5934581696,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC40:6",
+      "INCHI_KEY": "",
+      "species": "PC40:6",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 620,
+          "peak_id": "S21_8698_P0619",
+          "observed_mz": 834.598290235,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "已修订上版候选，H/Na或结构歧义见其他候选；天然比例联合模型：同位素占模型峰高5.9%，主贡献PC40:6 / PC40:7 M+2 / TG48:6 M+1",
+          "original_annotation": "PC38:3",
+          "formula_adduct_ppm_error": -2.928809536784094
+        },
+        {
+          "row": 656,
+          "peak_id": "S21_8698_P0655",
+          "observed_mz": 856.580115631,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "PC40:7 [M+Na]+ 的M+2；观测/预计高度比12.34；同位素不能解释全部信号，保留同链长双键候选；已修订上版候选，H/Na或结构歧义见其他候选；天然比例联合模型：同位素占模型峰高6.9%，主贡献PC40:6 / PC40:7 M+2",
+          "original_annotation": "PE41:3",
+          "formula_adduct_ppm_error": -2.9924018476457093
+        }
+      ]
+    },
+    {
+      "record_id": "MC-245b72d0e094621c",
+      "COMMON_NAME": "PC40:5",
+      "FORMULA": "C48H86NO8P",
+      "EXACT_MASS": 835.6091082334,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC40:5",
+      "INCHI_KEY": "",
+      "species": "PC40:5",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 622,
+          "peak_id": "S21_8698_P0621",
+          "observed_mz": 836.60870203,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC40:6 [M+H]+ 的M+2；观测/预计高度比1.27；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高71.8%，主贡献PC40:6 M+2 / PC40:5 / PC40:7 M+4；按本实验ESI正模式注释约定排除游离脂肪酸FA；原实测峰保留待定。",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -9.183008522817282
+        }
+      ]
+    },
+    {
+      "record_id": "MC-5450bea280482c36",
+      "COMMON_NAME": "PC40:4",
+      "FORMULA": "C48H88NO8P",
+      "EXACT_MASS": 837.6247582972001,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PC",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PC40:4",
+      "INCHI_KEY": "",
+      "species": "PC40:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 627,
+          "peak_id": "S21_8698_P0626",
+          "observed_mz": 838.626643723,
+          "adduct": "[M+H]+",
+          "charge": 1,
+          "source_note": "PC40:5 [M+H]+ 的M+2；观测/预计高度比0.86；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高58.5%，主贡献PC40:4 / PC40:5 M+2 / TG48:4 M+1",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -6.428357095411563
+        }
+      ]
+    },
+    {
+      "record_id": "MC-41b9640d4a973118",
+      "COMMON_NAME": "PIO-36:5",
+      "FORMULA": "C45H79O12P",
+      "EXACT_MASS": 842.5309190101,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "PIO",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "PIO-36:5",
+      "INCHI_KEY": "",
+      "species": "PIO-36:5",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 669,
+          "peak_id": "S21_8698_P0668",
+          "observed_mz": 865.527915047,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高0.0%，主贡献PIO-36:5",
+          "original_annotation": "PIO-36:5",
+          "formula_adduct_ppm_error": 8.983425748620988
+        }
+      ]
+    },
+    {
+      "record_id": "MC-ebbfb5c0cb073b1e",
+      "COMMON_NAME": "TG52:8",
+      "FORMULA": "C55H90O6",
+      "EXACT_MASS": 846.673742871,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG52:8",
+      "INCHI_KEY": "",
+      "species": "TG52:8",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 668,
+          "peak_id": "S21_8698_P0667",
+          "observed_mz": 864.71989642,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高0.0%，主贡献TG52:8；全DB联合模型提示该候选单同位素组分，五种模板拟合峰高范围0.157–0.171%原始基峰。混合峰质心可偏离单个组分，非独立精确质量确认。",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": 14.256844463211849
+        }
+      ]
+    },
+    {
+      "record_id": "MC-a4001ff275b5c1cf",
+      "COMMON_NAME": "TG52:6",
+      "FORMULA": "C55H94O6",
+      "EXACT_MASS": 850.7050429986,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG52:6",
+      "INCHI_KEY": "",
+      "species": "TG52:6",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 671,
+          "peak_id": "S21_8698_P0670",
+          "observed_mz": 868.73717729,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG52_NH4 DB6（条件性峰形模型）；尚缺少本谱加合物/双键系列支持；未强制标入主图；天然比例联合模型：同位素占模型峰高0.3%，主贡献TG52:6；全DB联合模型提示该候选单同位素组分，五种模板拟合峰高范围0.213–0.237%原始基峰。混合峰质心可偏离单个组分，非独立精确质量确认。",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -1.9467947760531956
+        }
+      ]
+    },
+    {
+      "record_id": "MC-c3d2fe4bc9dfa608",
+      "COMMON_NAME": "TG52:5",
+      "FORMULA": "C55H96O6",
+      "EXACT_MASS": 852.7206930624,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG52:5",
+      "INCHI_KEY": "",
+      "species": "TG52:5",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 673,
+          "peak_id": "S21_8698_P0672",
+          "observed_mz": 870.751850834,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG52_NH4 DB5（条件性峰形模型）；；天然比例联合模型：同位素占模型峰高4.6%，主贡献TG52:5 / TG52:6 M+2",
+          "original_annotation": "TG52:5",
+          "formula_adduct_ppm_error": -3.0637522216991897
+        }
+      ]
+    },
+    {
+      "record_id": "MC-b064cc0a71dc9ecf",
+      "COMMON_NAME": "TG52:4",
+      "FORMULA": "C55H98O6",
+      "EXACT_MASS": 854.7363431261999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG52:4",
+      "INCHI_KEY": "",
+      "species": "TG52:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 676,
+          "peak_id": "S21_8698_P0675",
+          "observed_mz": 872.767795147,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG52:5 [M+NH4]+ 的M+2；观测/预计高度比18.97；TG52_NH4 DB4（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高4.7%，主贡献TG52:4 / TG52:5 M+2 / TG52:6 M+4",
+          "original_annotation": "TG52:4",
+          "formula_adduct_ppm_error": -2.7195325597029196
+        },
+        {
+          "row": 683,
+          "peak_id": "S21_8698_P0682",
+          "observed_mz": 877.721222103,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高3.7%，主贡献TG52:4 / TG52:5 M+2",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -4.946562308094649
+        },
+        {
+          "row": 702,
+          "peak_id": "S21_8698_P0701",
+          "observed_mz": 893.700798701,
+          "adduct": "[M+K]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高8.6%，主贡献TG52:4 / TG54:8 M+1",
+          "original_annotation": "TG52:4",
+          "formula_adduct_ppm_error": 1.451801984186929
+        }
+      ]
+    },
+    {
+      "record_id": "MC-0f4d25d058275024",
+      "COMMON_NAME": "TG52:3",
+      "FORMULA": "C55H100O6",
+      "EXACT_MASS": 856.7519931899999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG52:3",
+      "INCHI_KEY": "",
+      "species": "TG52:3",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 678,
+          "peak_id": "S21_8698_P0677",
+          "observed_mz": 874.782291704,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG52:4 [M+NH4]+ 的M+2；观测/预计高度比6.64；TG52_NH4 DB3（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高14.3%，主贡献TG52:3 / TG52:4 M+2 / TG52:5 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -4.0318825651475265
+        },
+        {
+          "row": 687,
+          "peak_id": "S21_8698_P0686",
+          "observed_mz": 879.738907554,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "TG52:4 [M+Na]+ 的M+2；观测/预计高度比8.57；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高10.2%，主贡献TG52:3 / TG52:4 M+2",
+          "original_annotation": "TG52:3",
+          "formula_adduct_ppm_error": -2.6216084394459216
+        },
+        {
+          "row": 704,
+          "peak_id": "S21_8698_P0703",
+          "observed_mz": 895.719480427,
+          "adduct": "[M+K]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高53.8%，主贡献TG52:3 / TG52:4 M+2 / TG54:7 M+1",
+          "original_annotation": "TG52:3",
+          "formula_adduct_ppm_error": 4.833162532635882
+        }
+      ]
+    },
+    {
+      "record_id": "MC-10ca3cf05db810fc",
+      "COMMON_NAME": "TG52:2",
+      "FORMULA": "C55H102O6",
+      "EXACT_MASS": 858.7676432538,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG52:2",
+      "INCHI_KEY": "",
+      "species": "TG52:2",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 682,
+          "peak_id": "S21_8698_P0681",
+          "observed_mz": 876.795579433,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG52:3 [M+NH4]+ 的M+2；观测/预计高度比2.44；TG52_NH4 DB2（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高38.3%，主贡献TG52:2 / TG52:3 M+2 / TG52:4 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -6.716877994139558
+        },
+        {
+          "row": 690,
+          "peak_id": "S21_8698_P0689",
+          "observed_mz": 881.752223318,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "TG52:3 [M+Na]+ 的M+2；观测/预计高度比2.93；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高31.0%，主贡献TG52:2 / TG52:3 M+2 / TG52:4 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -5.2629437666817935
+        }
+      ]
+    },
+    {
+      "record_id": "MC-a1d7efa233d79ba0",
+      "COMMON_NAME": "TG54:7",
+      "FORMULA": "C57H96O6",
+      "EXACT_MASS": 876.7206930624,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG54:7",
+      "INCHI_KEY": "",
+      "species": "TG54:7",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 703,
+          "peak_id": "S21_8698_P0702",
+          "observed_mz": 894.747924712,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG54_NH4 DB7（条件性峰形模型）；；天然比例联合模型：同位素占模型峰高8.8%，主贡献TG54:7 / TG54:8 M+2 / TG52:4 M+1",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -7.369505214849248
+        }
+      ]
+    },
+    {
+      "record_id": "MC-b49bfb75dccbe5bd",
+      "COMMON_NAME": "TG54:6",
+      "FORMULA": "C57H98O6",
+      "EXACT_MASS": 878.7363431261999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG54:6",
+      "INCHI_KEY": "",
+      "species": "TG54:6",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 705,
+          "peak_id": "S21_8698_P0704",
+          "observed_mz": 896.766745073,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG54:7 [M+NH4]+ 的M+2；观测/预计高度比21.43；TG54_NH4 DB6（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高3.9%，主贡献TG54:6 / TG54:7 M+2 / TG52:3 M+1",
+          "original_annotation": "TG54:6",
+          "formula_adduct_ppm_error": -3.8177015811990955
+        }
+      ]
+    },
+    {
+      "record_id": "MC-00622841159d6df8",
+      "COMMON_NAME": "TG54:5",
+      "FORMULA": "C57H100O6",
+      "EXACT_MASS": 880.7519931899999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG54:5",
+      "INCHI_KEY": "",
+      "species": "TG54:5",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 707,
+          "peak_id": "S21_8698_P0706",
+          "observed_mz": 898.782555575,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG54:6 [M+NH4]+ 的M+2；观测/预计高度比7.67；TG54_NH4 DB5（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高12.0%，主贡献TG54:5 / TG54:6 M+2 / TG54:7 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -3.6306343768055527
+        },
+        {
+          "row": 715,
+          "peak_id": "S21_8698_P0714",
+          "observed_mz": 903.736146302,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高10.6%，主贡献TG54:5 / TG54:6 M+2",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -5.6073452366911525
+        }
+      ]
+    },
+    {
+      "record_id": "MC-da532c99633d5609",
+      "COMMON_NAME": "TG54:4",
+      "FORMULA": "C57H102O6",
+      "EXACT_MASS": 882.7676432538,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG54:4",
+      "INCHI_KEY": "",
+      "species": "TG54:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 709,
+          "peak_id": "S21_8698_P0708",
+          "observed_mz": 900.797638887,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG54:5 [M+NH4]+ 的M+2；观测/预计高度比4.24；TG54_NH4 DB4（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高18.3%，主贡献TG54:4 / TG54:5 M+2 / TG54:6 M+4",
+          "original_annotation": "TG54:4",
+          "formula_adduct_ppm_error": -4.251674340705058
+        },
+        {
+          "row": 721,
+          "peak_id": "S21_8698_P0720",
+          "observed_mz": 905.75193907,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "TG54:5 [M+Na]+ 的M+2；观测/预计高度比4.69；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高19.0%，主贡献TG54:4 / TG54:5 M+2 / TG54:6 M+4",
+          "original_annotation": "TG54:4",
+          "formula_adduct_ppm_error": -5.4373143465458185
+        }
+      ]
+    },
+    {
+      "record_id": "MC-81243174f2a3487c",
+      "COMMON_NAME": "TG54:3",
+      "FORMULA": "C57H104O6",
+      "EXACT_MASS": 884.7832933175999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG54:3",
+      "INCHI_KEY": "",
+      "species": "TG54:3",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 714,
+          "peak_id": "S21_8698_P0713",
+          "observed_mz": 902.81187642,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG54:4 [M+NH4]+ 的M+2；观测/预计高度比2.62；TG54_NH4 DB3（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高35.2%，主贡献TG54:3 / TG54:4 M+2 / TG54:5 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -5.806763276217097
+        },
+        {
+          "row": 725,
+          "peak_id": "S21_8698_P0724",
+          "observed_mz": 907.766223182,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "TG54:4 [M+Na]+ 的M+2；观测/预计高度比2.86；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高31.4%，主贡献TG54:3 / TG54:4 M+2 / TG54:5 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -6.929970332580915
+        }
+      ]
+    },
+    {
+      "record_id": "MC-6cb56216920fd3ac",
+      "COMMON_NAME": "TG56:9",
+      "FORMULA": "C59H96O6",
+      "EXACT_MASS": 900.7206930624,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG56:9",
+      "INCHI_KEY": "",
+      "species": "TG56:9",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 733,
+          "peak_id": "S21_8698_P0732",
+          "observed_mz": 918.745742226,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG56_NH4 DB9（条件性峰形模型）；尚缺少本谱加合物/双键系列支持；未强制标入主图；天然比例联合模型：同位素占模型峰高5.8%，主贡献TG56:9 / TG54:6 M+1；全DB联合模型提示该候选单同位素组分，五种模板拟合峰高范围0.103–0.115%原始基峰。混合峰质心可偏离单个组分，非独立精确质量确认。",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -9.552479920627022
+        }
+      ]
+    },
+    {
+      "record_id": "MC-7cecb5781c9ec459",
+      "COMMON_NAME": "TG56:8",
+      "FORMULA": "C59H98O6",
+      "EXACT_MASS": 902.7363431261999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG56:8",
+      "INCHI_KEY": "",
+      "species": "TG56:8",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 736,
+          "peak_id": "S21_8698_P0735",
+          "observed_mz": 920.766935074,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG56_NH4 DB8（条件性峰形模型）；；天然比例联合模型：同位素占模型峰高3.7%，主贡献TG56:8 / TG56:9 M+2 / TG54:5 M+1",
+          "original_annotation": "TG56:8",
+          "formula_adduct_ppm_error": -3.511842586734204
+        }
+      ]
+    },
+    {
+      "record_id": "MC-b25e57ce3a506305",
+      "COMMON_NAME": "TG56:7",
+      "FORMULA": "C59H100O6",
+      "EXACT_MASS": 904.7519931899999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG56:7",
+      "INCHI_KEY": "",
+      "species": "TG56:7",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 738,
+          "peak_id": "S21_8698_P0737",
+          "observed_mz": 922.781089759,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG56:8 [M+NH4]+ 的M+2；观测/预计高度比5.76；TG56_NH4 DB7（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高15.6%，主贡献TG56:7 / TG56:8 M+2 / TG54:4 M+1",
+          "original_annotation": "TG56:7",
+          "formula_adduct_ppm_error": -5.124676381917936
+        },
+        {
+          "row": 745,
+          "peak_id": "S21_8698_P0744",
+          "observed_mz": 927.735710188,
+          "adduct": "[M+Na]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高13.7%，主贡献TG56:7 / TG56:8 M+2",
+          "original_annotation": "TG56:7",
+          "formula_adduct_ppm_error": -5.932368755900974
+        }
+      ]
+    },
+    {
+      "record_id": "MC-0b7411268d088cb0",
+      "COMMON_NAME": "TG56:6",
+      "FORMULA": "C59H102O6",
+      "EXACT_MASS": 906.7676432538,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG56:6",
+      "INCHI_KEY": "",
+      "species": "TG56:6",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 740,
+          "peak_id": "S21_8698_P0739",
+          "observed_mz": 924.795532299,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG56:7 [M+NH4]+ 的M+2；观测/预计高度比2.91；TG56_NH4 DB6（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高26.2%，主贡献TG56:6 / TG56:7 M+2 / TG56:8 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -6.419218276820793
+        }
+      ]
+    },
+    {
+      "record_id": "MC-3b0e5ce6e295b571",
+      "COMMON_NAME": "TG56:5",
+      "FORMULA": "C59H104O6",
+      "EXACT_MASS": 908.7832933175999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG56:5",
+      "INCHI_KEY": "",
+      "species": "TG56:5",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 744,
+          "peak_id": "S21_8698_P0743",
+          "observed_mz": 926.813827082,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG56:6 [M+NH4]+ 的M+2；观测/预计高度比2.42；TG56_NH4 DB5（条件性峰形模型）；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高32.6%，主贡献TG56:5 / TG56:6 M+2 / TG56:7 M+4",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -3.551707477011945
+        }
+      ]
+    },
+    {
+      "record_id": "MC-3f68d6afcbba06ad",
+      "COMMON_NAME": "TG56:4",
+      "FORMULA": "C59H106O6",
+      "EXACT_MASS": 910.7989433813999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG56:4",
+      "INCHI_KEY": "",
+      "species": "TG56:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 748,
+          "peak_id": "S21_8698_P0747",
+          "observed_mz": 928.831096689,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG56:5 [M+NH4]+ 的M+2；观测/预计高度比2.67；高度或质量间距不符合纯同位素，不能仅按同位素删去；天然比例联合模型：同位素占模型峰高24.8%，主贡献TG56:4 / TG56:5 M+2 / TG56:6 M+4；全DB联合模型提示该候选单同位素组分，五种模板拟合峰高范围0.135–0.155%原始基峰。混合峰质心可偏离单个组分，非独立精确质量确认。",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -1.8003672423994033
+        }
+      ]
+    },
+    {
+      "record_id": "MC-28f6f4e109bf1aa7",
+      "COMMON_NAME": "TG58:10",
+      "FORMULA": "C61H98O6",
+      "EXACT_MASS": 926.7363431261999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG58:10",
+      "INCHI_KEY": "",
+      "species": "TG58:10",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 758,
+          "peak_id": "S21_8698_P0757",
+          "observed_mz": 944.766761929,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "尚缺少本谱加合物/双键系列支持；未强制标入主图；天然比例联合模型：同位素占模型峰高2.9%，主贡献TG58:10 / TG56:7 M+1；全DB联合模型提示该候选单同位素组分，五种模板拟合峰高范围0.186–0.207%原始基峰。混合峰质心可偏离单个组分，非独立精确质量确认。",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -3.6058980309450206
+        }
+      ]
+    },
+    {
+      "record_id": "MC-ed15a687d158f431",
+      "COMMON_NAME": "TG58:9",
+      "FORMULA": "C61H100O6",
+      "EXACT_MASS": 928.7519931899999,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG58:9",
+      "INCHI_KEY": "",
+      "species": "TG58:9",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 760,
+          "peak_id": "S21_8698_P0759",
+          "observed_mz": 946.780302038,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高13.9%，主贡献TG58:9 / TG58:10 M+2",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -5.826766288352658
+        }
+      ]
+    },
+    {
+      "record_id": "MC-800484e23fe2c78c",
+      "COMMON_NAME": "TG58:8",
+      "FORMULA": "C61H102O6",
+      "EXACT_MASS": 930.7676432538,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG58:8",
+      "INCHI_KEY": "",
+      "species": "TG58:8",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 762,
+          "peak_id": "S21_8698_P0761",
+          "observed_mz": 948.797785388,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG58:9 [M+NH4]+ 的M+2；观测/预计高度比3.62；同位素不能解释全部信号，保留同链长双键候选；天然比例联合模型：同位素占模型峰高23.4%，主贡献TG58:8 / TG58:9 M+2 / TG58:10 M+4",
+          "original_annotation": "TG58:8",
+          "formula_adduct_ppm_error": -3.882175156899592
+        }
+      ]
+    },
+    {
+      "record_id": "MC-2f329e8b34db6909",
+      "COMMON_NAME": "TG58:5",
+      "FORMULA": "C61H108O6",
+      "EXACT_MASS": 936.8145934452,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG58:5",
+      "INCHI_KEY": "",
+      "species": "TG58:5",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 769,
+          "peak_id": "S21_8698_P0768",
+          "observed_mz": 954.84633418,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "；天然比例联合模型：同位素占模型峰高5.4%，主贡献TG58:5 / TG58:6 M+2",
+          "original_annotation": "TG58:5",
+          "formula_adduct_ppm_error": -2.1833967041029467
+        }
+      ]
+    },
+    {
+      "record_id": "MC-1f857a111b5ae7ba",
+      "COMMON_NAME": "TG58:4",
+      "FORMULA": "C61H110O6",
+      "EXACT_MASS": 938.830243509,
+      "mass_source": "neutral_formula_pyopenms",
+      "MAIN_CLASS": "TG",
+      "CATEGORY": "",
+      "SUB_CLASS": "",
+      "LM_ID": "",
+      "ABBREVIATION": "TG58:4",
+      "INCHI_KEY": "",
+      "species": "TG58:4",
+      "ms2_status": "not_supplied",
+      "ms2_evidence": [],
+      "source_observations": [
+        {
+          "row": 772,
+          "peak_id": "S21_8698_P0771",
+          "observed_mz": 956.857825612,
+          "adduct": "[M+NH4]+",
+          "charge": 1,
+          "source_note": "TG58:5 [M+NH4]+ 的M+2；观测/预计高度比4.74；高度或质量间距不符合纯同位素，不能仅按同位素删去；天然比例联合模型：同位素占模型峰高15.3%，主贡献TG58:4 / TG58:5 M+2；全DB联合模型提示该候选单同位素组分，五种模板拟合峰高范围0.188–0.208%原始基峰。混合峰质心可偏离单个组分，非独立精确质量确认。",
+          "original_annotation": "",
+          "formula_adduct_ppm_error": -6.524902431581658
+        }
+      ]
+    }
+  ],
+  "curation": {
+    "source_rows": 791,
+    "named_rows": 121,
+    "formula_rows": 436,
+    "searchable_records": 88,
+    "excluded_rows": [
+      {
+        "row": 2,
+        "peak_id": "S21_8698_P0001",
+        "reason": "unannotated"
+      },
+      {
+        "row": 3,
+        "peak_id": "S21_8698_P0002",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 4,
+        "peak_id": "S21_8698_P0003",
+        "reason": "unannotated"
+      },
+      {
+        "row": 5,
+        "peak_id": "S21_8698_P0004",
+        "reason": "unannotated"
+      },
+      {
+        "row": 6,
+        "peak_id": "S21_8698_P0005",
+        "reason": "unannotated"
+      },
+      {
+        "row": 7,
+        "peak_id": "S21_8698_P0006",
+        "reason": "unannotated"
+      },
+      {
+        "row": 8,
+        "peak_id": "S21_8698_P0007",
+        "reason": "unannotated"
+      },
+      {
+        "row": 9,
+        "peak_id": "S21_8698_P0008",
+        "reason": "unannotated"
+      },
+      {
+        "row": 10,
+        "peak_id": "S21_8698_P0009",
+        "reason": "unannotated"
+      },
+      {
+        "row": 11,
+        "peak_id": "S21_8698_P0010",
+        "reason": "unannotated"
+      },
+      {
+        "row": 12,
+        "peak_id": "S21_8698_P0011",
+        "reason": "unannotated"
+      },
+      {
+        "row": 13,
+        "peak_id": "S21_8698_P0012",
+        "reason": "unannotated"
+      },
+      {
+        "row": 14,
+        "peak_id": "S21_8698_P0013",
+        "reason": "unannotated"
+      },
+      {
+        "row": 15,
+        "peak_id": "S21_8698_P0014",
+        "reason": "unannotated"
+      },
+      {
+        "row": 16,
+        "peak_id": "S21_8698_P0015",
+        "reason": "unannotated"
+      },
+      {
+        "row": 17,
+        "peak_id": "S21_8698_P0016",
+        "reason": "unannotated"
+      },
+      {
+        "row": 18,
+        "peak_id": "S21_8698_P0017",
+        "reason": "unannotated"
+      },
+      {
+        "row": 19,
+        "peak_id": "S21_8698_P0018",
+        "reason": "unannotated"
+      },
+      {
+        "row": 20,
+        "peak_id": "S21_8698_P0019",
+        "reason": "unannotated"
+      },
+      {
+        "row": 21,
+        "peak_id": "S21_8698_P0020",
+        "reason": "unannotated"
+      },
+      {
+        "row": 22,
+        "peak_id": "S21_8698_P0021",
+        "reason": "unannotated"
+      },
+      {
+        "row": 23,
+        "peak_id": "S21_8698_P0022",
+        "reason": "unannotated"
+      },
+      {
+        "row": 24,
+        "peak_id": "S21_8698_P0023",
+        "reason": "unannotated"
+      },
+      {
+        "row": 25,
+        "peak_id": "S21_8698_P0024",
+        "reason": "unannotated"
+      },
+      {
+        "row": 26,
+        "peak_id": "S21_8698_P0025",
+        "reason": "unannotated"
+      },
+      {
+        "row": 27,
+        "peak_id": "S21_8698_P0026",
+        "reason": "unannotated"
+      },
+      {
+        "row": 28,
+        "peak_id": "S21_8698_P0027",
+        "reason": "unannotated"
+      },
+      {
+        "row": 29,
+        "peak_id": "S21_8698_P0028",
+        "reason": "unannotated"
+      },
+      {
+        "row": 30,
+        "peak_id": "S21_8698_P0029",
+        "reason": "unannotated"
+      },
+      {
+        "row": 31,
+        "peak_id": "S21_8698_P0030",
+        "reason": "unannotated"
+      },
+      {
+        "row": 32,
+        "peak_id": "S21_8698_P0031",
+        "reason": "unannotated"
+      },
+      {
+        "row": 33,
+        "peak_id": "S21_8698_P0032",
+        "reason": "unannotated"
+      },
+      {
+        "row": 34,
+        "peak_id": "S21_8698_P0033",
+        "reason": "unannotated"
+      },
+      {
+        "row": 35,
+        "peak_id": "S21_8698_P0034",
+        "reason": "unannotated"
+      },
+      {
+        "row": 36,
+        "peak_id": "S21_8698_P0035",
+        "reason": "unannotated"
+      },
+      {
+        "row": 37,
+        "peak_id": "S21_8698_P0036",
+        "reason": "unannotated"
+      },
+      {
+        "row": 38,
+        "peak_id": "S21_8698_P0037",
+        "reason": "unannotated"
+      },
+      {
+        "row": 39,
+        "peak_id": "S21_8698_P0038",
+        "reason": "unannotated"
+      },
+      {
+        "row": 40,
+        "peak_id": "S21_8698_P0039",
+        "reason": "unannotated"
+      },
+      {
+        "row": 41,
+        "peak_id": "S21_8698_P0040",
+        "reason": "unannotated"
+      },
+      {
+        "row": 42,
+        "peak_id": "S21_8698_P0041",
+        "reason": "unannotated"
+      },
+      {
+        "row": 43,
+        "peak_id": "S21_8698_P0042",
+        "reason": "unannotated"
+      },
+      {
+        "row": 44,
+        "peak_id": "S21_8698_P0043",
+        "reason": "unannotated"
+      },
+      {
+        "row": 45,
+        "peak_id": "S21_8698_P0044",
+        "reason": "unannotated"
+      },
+      {
+        "row": 46,
+        "peak_id": "S21_8698_P0045",
+        "reason": "unannotated"
+      },
+      {
+        "row": 47,
+        "peak_id": "S21_8698_P0046",
+        "reason": "unannotated"
+      },
+      {
+        "row": 48,
+        "peak_id": "S21_8698_P0047",
+        "reason": "unannotated"
+      },
+      {
+        "row": 49,
+        "peak_id": "S21_8698_P0048",
+        "reason": "unannotated"
+      },
+      {
+        "row": 50,
+        "peak_id": "S21_8698_P0049",
+        "reason": "unannotated"
+      },
+      {
+        "row": 51,
+        "peak_id": "S21_8698_P0050",
+        "reason": "unannotated"
+      },
+      {
+        "row": 52,
+        "peak_id": "S21_8698_P0051",
+        "reason": "unannotated"
+      },
+      {
+        "row": 53,
+        "peak_id": "S21_8698_P0052",
+        "reason": "unannotated"
+      },
+      {
+        "row": 54,
+        "peak_id": "S21_8698_P0053",
+        "reason": "unannotated"
+      },
+      {
+        "row": 55,
+        "peak_id": "S21_8698_P0054",
+        "reason": "unannotated"
+      },
+      {
+        "row": 56,
+        "peak_id": "S21_8698_P0055",
+        "reason": "unannotated"
+      },
+      {
+        "row": 57,
+        "peak_id": "S21_8698_P0056",
+        "reason": "unannotated"
+      },
+      {
+        "row": 58,
+        "peak_id": "S21_8698_P0057",
+        "reason": "unannotated"
+      },
+      {
+        "row": 59,
+        "peak_id": "S21_8698_P0058",
+        "reason": "unannotated"
+      },
+      {
+        "row": 60,
+        "peak_id": "S21_8698_P0059",
+        "reason": "unannotated"
+      },
+      {
+        "row": 61,
+        "peak_id": "S21_8698_P0060",
+        "reason": "unannotated"
+      },
+      {
+        "row": 62,
+        "peak_id": "S21_8698_P0061",
+        "reason": "unannotated"
+      },
+      {
+        "row": 63,
+        "peak_id": "S21_8698_P0062",
+        "reason": "unannotated"
+      },
+      {
+        "row": 64,
+        "peak_id": "S21_8698_P0063",
+        "reason": "unannotated"
+      },
+      {
+        "row": 65,
+        "peak_id": "S21_8698_P0064",
+        "reason": "unannotated"
+      },
+      {
+        "row": 66,
+        "peak_id": "S21_8698_P0065",
+        "reason": "unannotated"
+      },
+      {
+        "row": 67,
+        "peak_id": "S21_8698_P0066",
+        "reason": "unannotated"
+      },
+      {
+        "row": 68,
+        "peak_id": "S21_8698_P0067",
+        "reason": "unannotated"
+      },
+      {
+        "row": 69,
+        "peak_id": "S21_8698_P0068",
+        "reason": "unannotated"
+      },
+      {
+        "row": 70,
+        "peak_id": "S21_8698_P0069",
+        "reason": "unannotated"
+      },
+      {
+        "row": 71,
+        "peak_id": "S21_8698_P0070",
+        "reason": "unannotated"
+      },
+      {
+        "row": 72,
+        "peak_id": "S21_8698_P0071",
+        "reason": "unannotated"
+      },
+      {
+        "row": 73,
+        "peak_id": "S21_8698_P0072",
+        "reason": "unannotated"
+      },
+      {
+        "row": 74,
+        "peak_id": "S21_8698_P0073",
+        "reason": "unannotated"
+      },
+      {
+        "row": 75,
+        "peak_id": "S21_8698_P0074",
+        "reason": "unannotated"
+      },
+      {
+        "row": 76,
+        "peak_id": "S21_8698_P0075",
+        "reason": "unannotated"
+      },
+      {
+        "row": 77,
+        "peak_id": "S21_8698_P0076",
+        "reason": "unannotated"
+      },
+      {
+        "row": 78,
+        "peak_id": "S21_8698_P0077",
+        "reason": "unannotated"
+      },
+      {
+        "row": 79,
+        "peak_id": "S21_8698_P0078",
+        "reason": "unannotated"
+      },
+      {
+        "row": 80,
+        "peak_id": "S21_8698_P0079",
+        "reason": "unannotated"
+      },
+      {
+        "row": 81,
+        "peak_id": "S21_8698_P0080",
+        "reason": "unannotated"
+      },
+      {
+        "row": 82,
+        "peak_id": "S21_8698_P0081",
+        "reason": "unannotated"
+      },
+      {
+        "row": 83,
+        "peak_id": "S21_8698_P0082",
+        "reason": "unannotated"
+      },
+      {
+        "row": 84,
+        "peak_id": "S21_8698_P0083",
+        "reason": "unannotated"
+      },
+      {
+        "row": 85,
+        "peak_id": "S21_8698_P0084",
+        "reason": "unannotated"
+      },
+      {
+        "row": 86,
+        "peak_id": "S21_8698_P0085",
+        "reason": "unannotated"
+      },
+      {
+        "row": 87,
+        "peak_id": "S21_8698_P0086",
+        "reason": "unannotated"
+      },
+      {
+        "row": 88,
+        "peak_id": "S21_8698_P0087",
+        "reason": "unannotated"
+      },
+      {
+        "row": 89,
+        "peak_id": "S21_8698_P0088",
+        "reason": "unannotated"
+      },
+      {
+        "row": 90,
+        "peak_id": "S21_8698_P0089",
+        "reason": "unannotated"
+      },
+      {
+        "row": 91,
+        "peak_id": "S21_8698_P0090",
+        "reason": "unannotated"
+      },
+      {
+        "row": 92,
+        "peak_id": "S21_8698_P0091",
+        "reason": "unannotated"
+      },
+      {
+        "row": 93,
+        "peak_id": "S21_8698_P0092",
+        "reason": "unannotated"
+      },
+      {
+        "row": 94,
+        "peak_id": "S21_8698_P0093",
+        "reason": "unannotated"
+      },
+      {
+        "row": 95,
+        "peak_id": "S21_8698_P0094",
+        "reason": "unannotated"
+      },
+      {
+        "row": 96,
+        "peak_id": "S21_8698_P0095",
+        "reason": "unannotated"
+      },
+      {
+        "row": 97,
+        "peak_id": "S21_8698_P0096",
+        "reason": "unannotated"
+      },
+      {
+        "row": 98,
+        "peak_id": "S21_8698_P0097",
+        "reason": "unannotated"
+      },
+      {
+        "row": 99,
+        "peak_id": "S21_8698_P0098",
+        "reason": "unannotated"
+      },
+      {
+        "row": 100,
+        "peak_id": "S21_8698_P0099",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 101,
+        "peak_id": "S21_8698_P0100",
+        "reason": "unannotated"
+      },
+      {
+        "row": 102,
+        "peak_id": "S21_8698_P0101",
+        "reason": "unannotated"
+      },
+      {
+        "row": 103,
+        "peak_id": "S21_8698_P0102",
+        "reason": "unannotated"
+      },
+      {
+        "row": 104,
+        "peak_id": "S21_8698_P0103",
+        "reason": "unannotated"
+      },
+      {
+        "row": 105,
+        "peak_id": "S21_8698_P0104",
+        "reason": "unannotated"
+      },
+      {
+        "row": 106,
+        "peak_id": "S21_8698_P0105",
+        "reason": "unannotated"
+      },
+      {
+        "row": 107,
+        "peak_id": "S21_8698_P0106",
+        "reason": "unannotated"
+      },
+      {
+        "row": 108,
+        "peak_id": "S21_8698_P0107",
+        "reason": "unannotated"
+      },
+      {
+        "row": 109,
+        "peak_id": "S21_8698_P0108",
+        "reason": "unannotated"
+      },
+      {
+        "row": 110,
+        "peak_id": "S21_8698_P0109",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 111,
+        "peak_id": "S21_8698_P0110",
+        "reason": "unannotated"
+      },
+      {
+        "row": 112,
+        "peak_id": "S21_8698_P0111",
+        "reason": "unannotated"
+      },
+      {
+        "row": 113,
+        "peak_id": "S21_8698_P0112",
+        "reason": "unannotated"
+      },
+      {
+        "row": 114,
+        "peak_id": "S21_8698_P0113",
+        "reason": "unannotated"
+      },
+      {
+        "row": 115,
+        "peak_id": "S21_8698_P0114",
+        "reason": "unannotated"
+      },
+      {
+        "row": 116,
+        "peak_id": "S21_8698_P0115",
+        "reason": "unannotated"
+      },
+      {
+        "row": 117,
+        "peak_id": "S21_8698_P0116",
+        "reason": "unannotated"
+      },
+      {
+        "row": 118,
+        "peak_id": "S21_8698_P0117",
+        "reason": "unannotated"
+      },
+      {
+        "row": 119,
+        "peak_id": "S21_8698_P0118",
+        "reason": "unannotated"
+      },
+      {
+        "row": 120,
+        "peak_id": "S21_8698_P0119",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 121,
+        "peak_id": "S21_8698_P0120",
+        "reason": "unannotated"
+      },
+      {
+        "row": 122,
+        "peak_id": "S21_8698_P0121",
+        "reason": "unannotated"
+      },
+      {
+        "row": 123,
+        "peak_id": "S21_8698_P0122",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 124,
+        "peak_id": "S21_8698_P0123",
+        "reason": "unannotated"
+      },
+      {
+        "row": 125,
+        "peak_id": "S21_8698_P0124",
+        "reason": "unannotated"
+      },
+      {
+        "row": 126,
+        "peak_id": "S21_8698_P0125",
+        "reason": "unannotated"
+      },
+      {
+        "row": 127,
+        "peak_id": "S21_8698_P0126",
+        "reason": "unannotated"
+      },
+      {
+        "row": 128,
+        "peak_id": "S21_8698_P0127",
+        "reason": "unannotated"
+      },
+      {
+        "row": 129,
+        "peak_id": "S21_8698_P0128",
+        "reason": "unannotated"
+      },
+      {
+        "row": 130,
+        "peak_id": "S21_8698_P0129",
+        "reason": "unannotated"
+      },
+      {
+        "row": 131,
+        "peak_id": "S21_8698_P0130",
+        "reason": "unannotated"
+      },
+      {
+        "row": 132,
+        "peak_id": "S21_8698_P0131",
+        "reason": "unannotated"
+      },
+      {
+        "row": 133,
+        "peak_id": "S21_8698_P0132",
+        "reason": "unannotated"
+      },
+      {
+        "row": 134,
+        "peak_id": "S21_8698_P0133",
+        "reason": "unannotated"
+      },
+      {
+        "row": 135,
+        "peak_id": "S21_8698_P0134",
+        "reason": "unannotated"
+      },
+      {
+        "row": 136,
+        "peak_id": "S21_8698_P0135",
+        "reason": "unannotated"
+      },
+      {
+        "row": 137,
+        "peak_id": "S21_8698_P0136",
+        "reason": "unannotated"
+      },
+      {
+        "row": 138,
+        "peak_id": "S21_8698_P0137",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 139,
+        "peak_id": "S21_8698_P0138",
+        "reason": "unannotated"
+      },
+      {
+        "row": 140,
+        "peak_id": "S21_8698_P0139",
+        "reason": "unannotated"
+      },
+      {
+        "row": 141,
+        "peak_id": "S21_8698_P0140",
+        "reason": "unannotated"
+      },
+      {
+        "row": 143,
+        "peak_id": "S21_8698_P0142",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 144,
+        "peak_id": "S21_8698_P0143",
+        "reason": "unannotated"
+      },
+      {
+        "row": 145,
+        "peak_id": "S21_8698_P0144",
+        "reason": "unannotated"
+      },
+      {
+        "row": 147,
+        "peak_id": "S21_8698_P0146",
+        "reason": "unannotated"
+      },
+      {
+        "row": 148,
+        "peak_id": "S21_8698_P0147",
+        "reason": "unannotated"
+      },
+      {
+        "row": 149,
+        "peak_id": "S21_8698_P0148",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 150,
+        "peak_id": "S21_8698_P0149",
+        "reason": "unannotated"
+      },
+      {
+        "row": 151,
+        "peak_id": "S21_8698_P0150",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 152,
+        "peak_id": "S21_8698_P0151",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 153,
+        "peak_id": "S21_8698_P0152",
+        "reason": "unannotated"
+      },
+      {
+        "row": 154,
+        "peak_id": "S21_8698_P0153",
+        "reason": "unannotated"
+      },
+      {
+        "row": 155,
+        "peak_id": "S21_8698_P0154",
+        "reason": "unannotated"
+      },
+      {
+        "row": 156,
+        "peak_id": "S21_8698_P0155",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 157,
+        "peak_id": "S21_8698_P0156",
+        "reason": "unannotated"
+      },
+      {
+        "row": 158,
+        "peak_id": "S21_8698_P0157",
+        "reason": "unannotated"
+      },
+      {
+        "row": 159,
+        "peak_id": "S21_8698_P0158",
+        "reason": "unannotated"
+      },
+      {
+        "row": 160,
+        "peak_id": "S21_8698_P0159",
+        "reason": "unannotated"
+      },
+      {
+        "row": 161,
+        "peak_id": "S21_8698_P0160",
+        "reason": "unannotated"
+      },
+      {
+        "row": 162,
+        "peak_id": "S21_8698_P0161",
+        "reason": "unannotated"
+      },
+      {
+        "row": 163,
+        "peak_id": "S21_8698_P0162",
+        "reason": "unannotated"
+      },
+      {
+        "row": 164,
+        "peak_id": "S21_8698_P0163",
+        "reason": "unannotated"
+      },
+      {
+        "row": 165,
+        "peak_id": "S21_8698_P0164",
+        "reason": "unannotated"
+      },
+      {
+        "row": 166,
+        "peak_id": "S21_8698_P0165",
+        "reason": "unannotated"
+      },
+      {
+        "row": 167,
+        "peak_id": "S21_8698_P0166",
+        "reason": "unannotated"
+      },
+      {
+        "row": 168,
+        "peak_id": "S21_8698_P0167",
+        "reason": "unannotated"
+      },
+      {
+        "row": 169,
+        "peak_id": "S21_8698_P0168",
+        "reason": "unannotated"
+      },
+      {
+        "row": 170,
+        "peak_id": "S21_8698_P0169",
+        "reason": "unannotated"
+      },
+      {
+        "row": 171,
+        "peak_id": "S21_8698_P0170",
+        "reason": "unannotated"
+      },
+      {
+        "row": 172,
+        "peak_id": "S21_8698_P0171",
+        "reason": "unannotated"
+      },
+      {
+        "row": 173,
+        "peak_id": "S21_8698_P0172",
+        "reason": "unannotated"
+      },
+      {
+        "row": 175,
+        "peak_id": "S21_8698_P0174",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 176,
+        "peak_id": "S21_8698_P0175",
+        "reason": "unannotated"
+      },
+      {
+        "row": 177,
+        "peak_id": "S21_8698_P0176",
+        "reason": "unannotated"
+      },
+      {
+        "row": 178,
+        "peak_id": "S21_8698_P0177",
+        "reason": "unannotated"
+      },
+      {
+        "row": 179,
+        "peak_id": "S21_8698_P0178",
+        "reason": "unannotated"
+      },
+      {
+        "row": 180,
+        "peak_id": "S21_8698_P0179",
+        "reason": "unannotated"
+      },
+      {
+        "row": 181,
+        "peak_id": "S21_8698_P0180",
+        "reason": "unannotated"
+      },
+      {
+        "row": 182,
+        "peak_id": "S21_8698_P0181",
+        "reason": "unannotated"
+      },
+      {
+        "row": 183,
+        "peak_id": "S21_8698_P0182",
+        "reason": "unannotated"
+      },
+      {
+        "row": 184,
+        "peak_id": "S21_8698_P0183",
+        "reason": "unannotated"
+      },
+      {
+        "row": 185,
+        "peak_id": "S21_8698_P0184",
+        "reason": "unannotated"
+      },
+      {
+        "row": 186,
+        "peak_id": "S21_8698_P0185",
+        "reason": "unannotated"
+      },
+      {
+        "row": 187,
+        "peak_id": "S21_8698_P0186",
+        "reason": "unannotated"
+      },
+      {
+        "row": 188,
+        "peak_id": "S21_8698_P0187",
+        "reason": "unannotated"
+      },
+      {
+        "row": 189,
+        "peak_id": "S21_8698_P0188",
+        "reason": "unannotated"
+      },
+      {
+        "row": 190,
+        "peak_id": "S21_8698_P0189",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 191,
+        "peak_id": "S21_8698_P0190",
+        "reason": "unannotated"
+      },
+      {
+        "row": 192,
+        "peak_id": "S21_8698_P0191",
+        "reason": "unannotated"
+      },
+      {
+        "row": 193,
+        "peak_id": "S21_8698_P0192",
+        "reason": "unannotated"
+      },
+      {
+        "row": 194,
+        "peak_id": "S21_8698_P0193",
+        "reason": "unannotated"
+      },
+      {
+        "row": 195,
+        "peak_id": "S21_8698_P0194",
+        "reason": "unannotated"
+      },
+      {
+        "row": 196,
+        "peak_id": "S21_8698_P0195",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 197,
+        "peak_id": "S21_8698_P0196",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 198,
+        "peak_id": "S21_8698_P0197",
+        "reason": "unannotated"
+      },
+      {
+        "row": 199,
+        "peak_id": "S21_8698_P0198",
+        "reason": "unannotated"
+      },
+      {
+        "row": 200,
+        "peak_id": "S21_8698_P0199",
+        "reason": "unannotated"
+      },
+      {
+        "row": 201,
+        "peak_id": "S21_8698_P0200",
+        "reason": "unannotated"
+      },
+      {
+        "row": 202,
+        "peak_id": "S21_8698_P0201",
+        "reason": "unannotated"
+      },
+      {
+        "row": 203,
+        "peak_id": "S21_8698_P0202",
+        "reason": "unannotated"
+      },
+      {
+        "row": 204,
+        "peak_id": "S21_8698_P0203",
+        "reason": "unannotated"
+      },
+      {
+        "row": 205,
+        "peak_id": "S21_8698_P0204",
+        "reason": "unannotated"
+      },
+      {
+        "row": 206,
+        "peak_id": "S21_8698_P0205",
+        "reason": "unannotated"
+      },
+      {
+        "row": 207,
+        "peak_id": "S21_8698_P0206",
+        "reason": "unannotated"
+      },
+      {
+        "row": 208,
+        "peak_id": "S21_8698_P0207",
+        "reason": "unannotated"
+      },
+      {
+        "row": 209,
+        "peak_id": "S21_8698_P0208",
+        "reason": "unannotated"
+      },
+      {
+        "row": 210,
+        "peak_id": "S21_8698_P0209",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 211,
+        "peak_id": "S21_8698_P0210",
+        "reason": "unannotated"
+      },
+      {
+        "row": 212,
+        "peak_id": "S21_8698_P0211",
+        "reason": "unannotated"
+      },
+      {
+        "row": 213,
+        "peak_id": "S21_8698_P0212",
+        "reason": "unannotated"
+      },
+      {
+        "row": 214,
+        "peak_id": "S21_8698_P0213",
+        "reason": "unannotated"
+      },
+      {
+        "row": 215,
+        "peak_id": "S21_8698_P0214",
+        "reason": "unannotated"
+      },
+      {
+        "row": 216,
+        "peak_id": "S21_8698_P0215",
+        "reason": "unannotated"
+      },
+      {
+        "row": 217,
+        "peak_id": "S21_8698_P0216",
+        "reason": "unannotated"
+      },
+      {
+        "row": 218,
+        "peak_id": "S21_8698_P0217",
+        "reason": "unannotated"
+      },
+      {
+        "row": 219,
+        "peak_id": "S21_8698_P0218",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 220,
+        "peak_id": "S21_8698_P0219",
+        "reason": "unannotated"
+      },
+      {
+        "row": 221,
+        "peak_id": "S21_8698_P0220",
+        "reason": "unannotated"
+      },
+      {
+        "row": 222,
+        "peak_id": "S21_8698_P0221",
+        "reason": "unannotated"
+      },
+      {
+        "row": 223,
+        "peak_id": "S21_8698_P0222",
+        "reason": "unannotated"
+      },
+      {
+        "row": 224,
+        "peak_id": "S21_8698_P0223",
+        "reason": "unannotated"
+      },
+      {
+        "row": 226,
+        "peak_id": "S21_8698_P0225",
+        "reason": "unannotated"
+      },
+      {
+        "row": 227,
+        "peak_id": "S21_8698_P0226",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 228,
+        "peak_id": "S21_8698_P0227",
+        "reason": "unannotated"
+      },
+      {
+        "row": 229,
+        "peak_id": "S21_8698_P0228",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 230,
+        "peak_id": "S21_8698_P0229",
+        "reason": "unannotated"
+      },
+      {
+        "row": 231,
+        "peak_id": "S21_8698_P0230",
+        "reason": "unannotated"
+      },
+      {
+        "row": 232,
+        "peak_id": "S21_8698_P0231",
+        "reason": "unannotated"
+      },
+      {
+        "row": 233,
+        "peak_id": "S21_8698_P0232",
+        "reason": "unannotated"
+      },
+      {
+        "row": 234,
+        "peak_id": "S21_8698_P0233",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 235,
+        "peak_id": "S21_8698_P0234",
+        "reason": "unannotated"
+      },
+      {
+        "row": 236,
+        "peak_id": "S21_8698_P0235",
+        "reason": "unannotated"
+      },
+      {
+        "row": 237,
+        "peak_id": "S21_8698_P0236",
+        "reason": "unannotated"
+      },
+      {
+        "row": 238,
+        "peak_id": "S21_8698_P0237",
+        "reason": "unannotated"
+      },
+      {
+        "row": 239,
+        "peak_id": "S21_8698_P0238",
+        "reason": "unannotated"
+      },
+      {
+        "row": 240,
+        "peak_id": "S21_8698_P0239",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 241,
+        "peak_id": "S21_8698_P0240",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 242,
+        "peak_id": "S21_8698_P0241",
+        "reason": "unannotated"
+      },
+      {
+        "row": 243,
+        "peak_id": "S21_8698_P0242",
+        "reason": "unannotated"
+      },
+      {
+        "row": 244,
+        "peak_id": "S21_8698_P0243",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 245,
+        "peak_id": "S21_8698_P0244",
+        "reason": "unannotated"
+      },
+      {
+        "row": 246,
+        "peak_id": "S21_8698_P0245",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 247,
+        "peak_id": "S21_8698_P0246",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 248,
+        "peak_id": "S21_8698_P0247",
+        "reason": "unannotated"
+      },
+      {
+        "row": 249,
+        "peak_id": "S21_8698_P0248",
+        "reason": "unannotated"
+      },
+      {
+        "row": 250,
+        "peak_id": "S21_8698_P0249",
+        "reason": "unannotated"
+      },
+      {
+        "row": 251,
+        "peak_id": "S21_8698_P0250",
+        "reason": "unannotated"
+      },
+      {
+        "row": 252,
+        "peak_id": "S21_8698_P0251",
+        "reason": "unannotated"
+      },
+      {
+        "row": 253,
+        "peak_id": "S21_8698_P0252",
+        "reason": "unannotated"
+      },
+      {
+        "row": 255,
+        "peak_id": "S21_8698_P0254",
+        "reason": "unannotated"
+      },
+      {
+        "row": 256,
+        "peak_id": "S21_8698_P0255",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 258,
+        "peak_id": "S21_8698_P0257",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 259,
+        "peak_id": "S21_8698_P0258",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 260,
+        "peak_id": "S21_8698_P0259",
+        "reason": "unannotated"
+      },
+      {
+        "row": 261,
+        "peak_id": "S21_8698_P0260",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 262,
+        "peak_id": "S21_8698_P0261",
+        "reason": "unannotated"
+      },
+      {
+        "row": 263,
+        "peak_id": "S21_8698_P0262",
+        "reason": "unannotated"
+      },
+      {
+        "row": 264,
+        "peak_id": "S21_8698_P0263",
+        "reason": "unannotated"
+      },
+      {
+        "row": 265,
+        "peak_id": "S21_8698_P0264",
+        "reason": "unannotated"
+      },
+      {
+        "row": 266,
+        "peak_id": "S21_8698_P0265",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 267,
+        "peak_id": "S21_8698_P0266",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 268,
+        "peak_id": "S21_8698_P0267",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 269,
+        "peak_id": "S21_8698_P0268",
+        "reason": "unannotated"
+      },
+      {
+        "row": 270,
+        "peak_id": "S21_8698_P0269",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 271,
+        "peak_id": "S21_8698_P0270",
+        "reason": "unannotated"
+      },
+      {
+        "row": 272,
+        "peak_id": "S21_8698_P0271",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 273,
+        "peak_id": "S21_8698_P0272",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 274,
+        "peak_id": "S21_8698_P0273",
+        "reason": "unannotated"
+      },
+      {
+        "row": 275,
+        "peak_id": "S21_8698_P0274",
+        "reason": "unannotated"
+      },
+      {
+        "row": 276,
+        "peak_id": "S21_8698_P0275",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 277,
+        "peak_id": "S21_8698_P0276",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 278,
+        "peak_id": "S21_8698_P0277",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 279,
+        "peak_id": "S21_8698_P0278",
+        "reason": "unannotated"
+      },
+      {
+        "row": 280,
+        "peak_id": "S21_8698_P0279",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 281,
+        "peak_id": "S21_8698_P0280",
+        "reason": "unannotated"
+      },
+      {
+        "row": 282,
+        "peak_id": "S21_8698_P0281",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 284,
+        "peak_id": "S21_8698_P0283",
+        "reason": "unannotated"
+      },
+      {
+        "row": 286,
+        "peak_id": "S21_8698_P0285",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 287,
+        "peak_id": "S21_8698_P0286",
+        "reason": "unannotated"
+      },
+      {
+        "row": 289,
+        "peak_id": "S21_8698_P0288",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 290,
+        "peak_id": "S21_8698_P0289",
+        "reason": "unannotated"
+      },
+      {
+        "row": 291,
+        "peak_id": "S21_8698_P0290",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 292,
+        "peak_id": "S21_8698_P0291",
+        "reason": "unannotated"
+      },
+      {
+        "row": 293,
+        "peak_id": "S21_8698_P0292",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 294,
+        "peak_id": "S21_8698_P0293",
+        "reason": "unannotated"
+      },
+      {
+        "row": 295,
+        "peak_id": "S21_8698_P0294",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 296,
+        "peak_id": "S21_8698_P0295",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 297,
+        "peak_id": "S21_8698_P0296",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 298,
+        "peak_id": "S21_8698_P0297",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 299,
+        "peak_id": "S21_8698_P0298",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 300,
+        "peak_id": "S21_8698_P0299",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 301,
+        "peak_id": "S21_8698_P0300",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 302,
+        "peak_id": "S21_8698_P0301",
+        "reason": "unannotated"
+      },
+      {
+        "row": 303,
+        "peak_id": "S21_8698_P0302",
+        "reason": "unannotated"
+      },
+      {
+        "row": 304,
+        "peak_id": "S21_8698_P0303",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 305,
+        "peak_id": "S21_8698_P0304",
+        "reason": "unannotated"
+      },
+      {
+        "row": 306,
+        "peak_id": "S21_8698_P0305",
+        "reason": "unannotated"
+      },
+      {
+        "row": 308,
+        "peak_id": "S21_8698_P0307",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 310,
+        "peak_id": "S21_8698_P0309",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 311,
+        "peak_id": "S21_8698_P0310",
+        "reason": "unannotated"
+      },
+      {
+        "row": 313,
+        "peak_id": "S21_8698_P0312",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 314,
+        "peak_id": "S21_8698_P0313",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 316,
+        "peak_id": "S21_8698_P0315",
+        "reason": "unannotated"
+      },
+      {
+        "row": 317,
+        "peak_id": "S21_8698_P0316",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 318,
+        "peak_id": "S21_8698_P0317",
+        "reason": "unannotated"
+      },
+      {
+        "row": 319,
+        "peak_id": "S21_8698_P0318",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 320,
+        "peak_id": "S21_8698_P0319",
+        "reason": "unannotated"
+      },
+      {
+        "row": 322,
+        "peak_id": "S21_8698_P0321",
+        "reason": "unannotated"
+      },
+      {
+        "row": 323,
+        "peak_id": "S21_8698_P0322",
+        "reason": "unannotated"
+      },
+      {
+        "row": 324,
+        "peak_id": "S21_8698_P0323",
+        "reason": "unannotated"
+      },
+      {
+        "row": 326,
+        "peak_id": "S21_8698_P0325",
+        "reason": "unannotated"
+      },
+      {
+        "row": 327,
+        "peak_id": "S21_8698_P0326",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 328,
+        "peak_id": "S21_8698_P0327",
+        "reason": "unannotated"
+      },
+      {
+        "row": 329,
+        "peak_id": "S21_8698_P0328",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 330,
+        "peak_id": "S21_8698_P0329",
+        "reason": "unannotated"
+      },
+      {
+        "row": 332,
+        "peak_id": "S21_8698_P0331",
+        "reason": "unannotated"
+      },
+      {
+        "row": 333,
+        "peak_id": "S21_8698_P0332",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 335,
+        "peak_id": "S21_8698_P0334",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 336,
+        "peak_id": "S21_8698_P0335",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 338,
+        "peak_id": "S21_8698_P0337",
+        "reason": "unannotated"
+      },
+      {
+        "row": 339,
+        "peak_id": "S21_8698_P0338",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 340,
+        "peak_id": "S21_8698_P0339",
+        "reason": "unannotated"
+      },
+      {
+        "row": 341,
+        "peak_id": "S21_8698_P0340",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 342,
+        "peak_id": "S21_8698_P0341",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 344,
+        "peak_id": "S21_8698_P0343",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 346,
+        "peak_id": "S21_8698_P0345",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 347,
+        "peak_id": "S21_8698_P0346",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 349,
+        "peak_id": "S21_8698_P0348",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 350,
+        "peak_id": "S21_8698_P0349",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 351,
+        "peak_id": "S21_8698_P0350",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 352,
+        "peak_id": "S21_8698_P0351",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 354,
+        "peak_id": "S21_8698_P0353",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 355,
+        "peak_id": "S21_8698_P0354",
+        "reason": "unannotated"
+      },
+      {
+        "row": 356,
+        "peak_id": "S21_8698_P0355",
+        "reason": "unannotated"
+      },
+      {
+        "row": 357,
+        "peak_id": "S21_8698_P0356",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 358,
+        "peak_id": "S21_8698_P0357",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 359,
+        "peak_id": "S21_8698_P0358",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 360,
+        "peak_id": "S21_8698_P0359",
+        "reason": "unannotated"
+      },
+      {
+        "row": 362,
+        "peak_id": "S21_8698_P0361",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 364,
+        "peak_id": "S21_8698_P0363",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 365,
+        "peak_id": "S21_8698_P0364",
+        "reason": "unannotated"
+      },
+      {
+        "row": 368,
+        "peak_id": "S21_8698_P0367",
+        "reason": "unannotated"
+      },
+      {
+        "row": 369,
+        "peak_id": "S21_8698_P0368",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 370,
+        "peak_id": "S21_8698_P0369",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 372,
+        "peak_id": "S21_8698_P0371",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 374,
+        "peak_id": "S21_8698_P0373",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 375,
+        "peak_id": "S21_8698_P0374",
+        "reason": "unannotated"
+      },
+      {
+        "row": 376,
+        "peak_id": "S21_8698_P0375",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 377,
+        "peak_id": "S21_8698_P0376",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 378,
+        "peak_id": "S21_8698_P0377",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 379,
+        "peak_id": "S21_8698_P0378",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 380,
+        "peak_id": "S21_8698_P0379",
+        "reason": "unannotated"
+      },
+      {
+        "row": 381,
+        "peak_id": "S21_8698_P0380",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 383,
+        "peak_id": "S21_8698_P0382",
+        "reason": "unannotated"
+      },
+      {
+        "row": 384,
+        "peak_id": "S21_8698_P0383",
+        "reason": "unannotated"
+      },
+      {
+        "row": 385,
+        "peak_id": "S21_8698_P0384",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 387,
+        "peak_id": "S21_8698_P0386",
+        "reason": "unannotated"
+      },
+      {
+        "row": 388,
+        "peak_id": "S21_8698_P0387",
+        "reason": "unannotated"
+      },
+      {
+        "row": 389,
+        "peak_id": "S21_8698_P0388",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 390,
+        "peak_id": "S21_8698_P0389",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 391,
+        "peak_id": "S21_8698_P0390",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 392,
+        "peak_id": "S21_8698_P0391",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 393,
+        "peak_id": "S21_8698_P0392",
+        "reason": "unannotated"
+      },
+      {
+        "row": 394,
+        "peak_id": "S21_8698_P0393",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 395,
+        "peak_id": "S21_8698_P0394",
+        "reason": "unannotated"
+      },
+      {
+        "row": 397,
+        "peak_id": "S21_8698_P0396",
+        "reason": "unannotated"
+      },
+      {
+        "row": 398,
+        "peak_id": "S21_8698_P0397",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 399,
+        "peak_id": "S21_8698_P0398",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 400,
+        "peak_id": "S21_8698_P0399",
+        "reason": "unannotated"
+      },
+      {
+        "row": 401,
+        "peak_id": "S21_8698_P0400",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 402,
+        "peak_id": "S21_8698_P0401",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 403,
+        "peak_id": "S21_8698_P0402",
+        "reason": "unannotated"
+      },
+      {
+        "row": 404,
+        "peak_id": "S21_8698_P0403",
+        "reason": "unannotated"
+      },
+      {
+        "row": 405,
+        "peak_id": "S21_8698_P0404",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 406,
+        "peak_id": "S21_8698_P0405",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 407,
+        "peak_id": "S21_8698_P0406",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 409,
+        "peak_id": "S21_8698_P0408",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 410,
+        "peak_id": "S21_8698_P0409",
+        "reason": "unannotated"
+      },
+      {
+        "row": 411,
+        "peak_id": "S21_8698_P0410",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 412,
+        "peak_id": "S21_8698_P0411",
+        "reason": "unannotated"
+      },
+      {
+        "row": 414,
+        "peak_id": "S21_8698_P0413",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 415,
+        "peak_id": "S21_8698_P0414",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 416,
+        "peak_id": "S21_8698_P0415",
+        "reason": "unannotated"
+      },
+      {
+        "row": 417,
+        "peak_id": "S21_8698_P0416",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 418,
+        "peak_id": "S21_8698_P0417",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 419,
+        "peak_id": "S21_8698_P0418",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 420,
+        "peak_id": "S21_8698_P0419",
+        "reason": "unannotated"
+      },
+      {
+        "row": 421,
+        "peak_id": "S21_8698_P0420",
+        "reason": "unannotated"
+      },
+      {
+        "row": 422,
+        "peak_id": "S21_8698_P0421",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 423,
+        "peak_id": "S21_8698_P0422",
+        "reason": "unannotated"
+      },
+      {
+        "row": 424,
+        "peak_id": "S21_8698_P0423",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 425,
+        "peak_id": "S21_8698_P0424",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 426,
+        "peak_id": "S21_8698_P0425",
+        "reason": "unannotated"
+      },
+      {
+        "row": 427,
+        "peak_id": "S21_8698_P0426",
+        "reason": "unannotated"
+      },
+      {
+        "row": 428,
+        "peak_id": "S21_8698_P0427",
+        "reason": "unannotated"
+      },
+      {
+        "row": 429,
+        "peak_id": "S21_8698_P0428",
+        "reason": "unannotated"
+      },
+      {
+        "row": 430,
+        "peak_id": "S21_8698_P0429",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 431,
+        "peak_id": "S21_8698_P0430",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 432,
+        "peak_id": "S21_8698_P0431",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 433,
+        "peak_id": "S21_8698_P0432",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 434,
+        "peak_id": "S21_8698_P0433",
+        "reason": "unannotated"
+      },
+      {
+        "row": 435,
+        "peak_id": "S21_8698_P0434",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 436,
+        "peak_id": "S21_8698_P0435",
+        "reason": "unannotated"
+      },
+      {
+        "row": 437,
+        "peak_id": "S21_8698_P0436",
+        "reason": "unannotated"
+      },
+      {
+        "row": 439,
+        "peak_id": "S21_8698_P0438",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 440,
+        "peak_id": "S21_8698_P0439",
+        "reason": "unannotated"
+      },
+      {
+        "row": 441,
+        "peak_id": "S21_8698_P0440",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 442,
+        "peak_id": "S21_8698_P0441",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 443,
+        "peak_id": "S21_8698_P0442",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 444,
+        "peak_id": "S21_8698_P0443",
+        "reason": "unannotated"
+      },
+      {
+        "row": 445,
+        "peak_id": "S21_8698_P0444",
+        "reason": "unannotated"
+      },
+      {
+        "row": 446,
+        "peak_id": "S21_8698_P0445",
+        "reason": "unannotated"
+      },
+      {
+        "row": 447,
+        "peak_id": "S21_8698_P0446",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 448,
+        "peak_id": "S21_8698_P0447",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 450,
+        "peak_id": "S21_8698_P0449",
+        "reason": "unannotated"
+      },
+      {
+        "row": 451,
+        "peak_id": "S21_8698_P0450",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 452,
+        "peak_id": "S21_8698_P0451",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 453,
+        "peak_id": "S21_8698_P0452",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 454,
+        "peak_id": "S21_8698_P0453",
+        "reason": "unannotated"
+      },
+      {
+        "row": 456,
+        "peak_id": "S21_8698_P0455",
+        "reason": "unannotated"
+      },
+      {
+        "row": 457,
+        "peak_id": "S21_8698_P0456",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 458,
+        "peak_id": "S21_8698_P0457",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 459,
+        "peak_id": "S21_8698_P0458",
+        "reason": "unannotated"
+      },
+      {
+        "row": 460,
+        "peak_id": "S21_8698_P0459",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 461,
+        "peak_id": "S21_8698_P0460",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 462,
+        "peak_id": "S21_8698_P0461",
+        "reason": "unannotated"
+      },
+      {
+        "row": 463,
+        "peak_id": "S21_8698_P0462",
+        "reason": "unannotated"
+      },
+      {
+        "row": 465,
+        "peak_id": "S21_8698_P0464",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 468,
+        "peak_id": "S21_8698_P0467",
+        "reason": "unannotated"
+      },
+      {
+        "row": 469,
+        "peak_id": "S21_8698_P0468",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 470,
+        "peak_id": "S21_8698_P0469",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 472,
+        "peak_id": "S21_8698_P0471",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 473,
+        "peak_id": "S21_8698_P0472",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 474,
+        "peak_id": "S21_8698_P0473",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 475,
+        "peak_id": "S21_8698_P0474",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 477,
+        "peak_id": "S21_8698_P0476",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 479,
+        "peak_id": "S21_8698_P0478",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 481,
+        "peak_id": "S21_8698_P0480",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 482,
+        "peak_id": "S21_8698_P0481",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 483,
+        "peak_id": "S21_8698_P0482",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 484,
+        "peak_id": "S21_8698_P0483",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 485,
+        "peak_id": "S21_8698_P0484",
+        "reason": "unannotated"
+      },
+      {
+        "row": 486,
+        "peak_id": "S21_8698_P0485",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 487,
+        "peak_id": "S21_8698_P0486",
+        "reason": "unannotated"
+      },
+      {
+        "row": 488,
+        "peak_id": "S21_8698_P0487",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 489,
+        "peak_id": "S21_8698_P0488",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 490,
+        "peak_id": "S21_8698_P0489",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 491,
+        "peak_id": "S21_8698_P0490",
+        "reason": "unannotated"
+      },
+      {
+        "row": 492,
+        "peak_id": "S21_8698_P0491",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 494,
+        "peak_id": "S21_8698_P0493",
+        "reason": "unannotated"
+      },
+      {
+        "row": 495,
+        "peak_id": "S21_8698_P0494",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 497,
+        "peak_id": "S21_8698_P0496",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 498,
+        "peak_id": "S21_8698_P0497",
+        "reason": "unannotated"
+      },
+      {
+        "row": 500,
+        "peak_id": "S21_8698_P0499",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 501,
+        "peak_id": "S21_8698_P0500",
+        "reason": "unannotated"
+      },
+      {
+        "row": 503,
+        "peak_id": "S21_8698_P0502",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 504,
+        "peak_id": "S21_8698_P0503",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 506,
+        "peak_id": "S21_8698_P0505",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 507,
+        "peak_id": "S21_8698_P0506",
+        "reason": "unannotated"
+      },
+      {
+        "row": 509,
+        "peak_id": "S21_8698_P0508",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 510,
+        "peak_id": "S21_8698_P0509",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 511,
+        "peak_id": "S21_8698_P0510",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 513,
+        "peak_id": "S21_8698_P0512",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 515,
+        "peak_id": "S21_8698_P0514",
+        "reason": "unannotated"
+      },
+      {
+        "row": 516,
+        "peak_id": "S21_8698_P0515",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 517,
+        "peak_id": "S21_8698_P0516",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 518,
+        "peak_id": "S21_8698_P0517",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 520,
+        "peak_id": "S21_8698_P0519",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 522,
+        "peak_id": "S21_8698_P0521",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 523,
+        "peak_id": "S21_8698_P0522",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 525,
+        "peak_id": "S21_8698_P0524",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 526,
+        "peak_id": "S21_8698_P0525",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 528,
+        "peak_id": "S21_8698_P0527",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 530,
+        "peak_id": "S21_8698_P0529",
+        "reason": "unannotated"
+      },
+      {
+        "row": 531,
+        "peak_id": "S21_8698_P0530",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 532,
+        "peak_id": "S21_8698_P0531",
+        "reason": "unannotated"
+      },
+      {
+        "row": 534,
+        "peak_id": "S21_8698_P0533",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 536,
+        "peak_id": "S21_8698_P0535",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 537,
+        "peak_id": "S21_8698_P0536",
+        "reason": "unannotated"
+      },
+      {
+        "row": 539,
+        "peak_id": "S21_8698_P0538",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 540,
+        "peak_id": "S21_8698_P0539",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 542,
+        "peak_id": "S21_8698_P0541",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 543,
+        "peak_id": "S21_8698_P0542",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 545,
+        "peak_id": "S21_8698_P0544",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 546,
+        "peak_id": "S21_8698_P0545",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 547,
+        "peak_id": "S21_8698_P0546",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 548,
+        "peak_id": "S21_8698_P0547",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 550,
+        "peak_id": "S21_8698_P0549",
+        "reason": "unannotated"
+      },
+      {
+        "row": 551,
+        "peak_id": "S21_8698_P0550",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 553,
+        "peak_id": "S21_8698_P0552",
+        "reason": "unannotated"
+      },
+      {
+        "row": 554,
+        "peak_id": "S21_8698_P0553",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 557,
+        "peak_id": "S21_8698_P0556",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 558,
+        "peak_id": "S21_8698_P0557",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 559,
+        "peak_id": "S21_8698_P0558",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 560,
+        "peak_id": "S21_8698_P0559",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 561,
+        "peak_id": "S21_8698_P0560",
+        "reason": "unannotated"
+      },
+      {
+        "row": 562,
+        "peak_id": "S21_8698_P0561",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 563,
+        "peak_id": "S21_8698_P0562",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 564,
+        "peak_id": "S21_8698_P0563",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 566,
+        "peak_id": "S21_8698_P0565",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 567,
+        "peak_id": "S21_8698_P0566",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 568,
+        "peak_id": "S21_8698_P0567",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 569,
+        "peak_id": "S21_8698_P0568",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 571,
+        "peak_id": "S21_8698_P0570",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 573,
+        "peak_id": "S21_8698_P0572",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 575,
+        "peak_id": "S21_8698_P0574",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 577,
+        "peak_id": "S21_8698_P0576",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 578,
+        "peak_id": "S21_8698_P0577",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 580,
+        "peak_id": "S21_8698_P0579",
+        "reason": "unannotated"
+      },
+      {
+        "row": 581,
+        "peak_id": "S21_8698_P0580",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 584,
+        "peak_id": "S21_8698_P0583",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 585,
+        "peak_id": "S21_8698_P0584",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 586,
+        "peak_id": "S21_8698_P0585",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 588,
+        "peak_id": "S21_8698_P0587",
+        "reason": "unannotated"
+      },
+      {
+        "row": 589,
+        "peak_id": "S21_8698_P0588",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 590,
+        "peak_id": "S21_8698_P0589",
+        "reason": "unannotated"
+      },
+      {
+        "row": 591,
+        "peak_id": "S21_8698_P0590",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 592,
+        "peak_id": "S21_8698_P0591",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 594,
+        "peak_id": "S21_8698_P0593",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 595,
+        "peak_id": "S21_8698_P0594",
+        "reason": "unannotated"
+      },
+      {
+        "row": 596,
+        "peak_id": "S21_8698_P0595",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 597,
+        "peak_id": "S21_8698_P0596",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 599,
+        "peak_id": "S21_8698_P0598",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 600,
+        "peak_id": "S21_8698_P0599",
+        "reason": "unannotated"
+      },
+      {
+        "row": 601,
+        "peak_id": "S21_8698_P0600",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 602,
+        "peak_id": "S21_8698_P0601",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 603,
+        "peak_id": "S21_8698_P0602",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 604,
+        "peak_id": "S21_8698_P0603",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 605,
+        "peak_id": "S21_8698_P0604",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 606,
+        "peak_id": "S21_8698_P0605",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 607,
+        "peak_id": "S21_8698_P0606",
+        "reason": "unannotated"
+      },
+      {
+        "row": 608,
+        "peak_id": "S21_8698_P0607",
+        "reason": "unannotated"
+      },
+      {
+        "row": 609,
+        "peak_id": "S21_8698_P0608",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 610,
+        "peak_id": "S21_8698_P0609",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 612,
+        "peak_id": "S21_8698_P0611",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 613,
+        "peak_id": "S21_8698_P0612",
+        "reason": "unannotated"
+      },
+      {
+        "row": 615,
+        "peak_id": "S21_8698_P0614",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 616,
+        "peak_id": "S21_8698_P0615",
+        "reason": "unannotated"
+      },
+      {
+        "row": 617,
+        "peak_id": "S21_8698_P0616",
+        "reason": "unannotated"
+      },
+      {
+        "row": 619,
+        "peak_id": "S21_8698_P0618",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 621,
+        "peak_id": "S21_8698_P0620",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 623,
+        "peak_id": "S21_8698_P0622",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 624,
+        "peak_id": "S21_8698_P0623",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 625,
+        "peak_id": "S21_8698_P0624",
+        "reason": "unannotated"
+      },
+      {
+        "row": 626,
+        "peak_id": "S21_8698_P0625",
+        "reason": "unannotated"
+      },
+      {
+        "row": 628,
+        "peak_id": "S21_8698_P0627",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 629,
+        "peak_id": "S21_8698_P0628",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 630,
+        "peak_id": "S21_8698_P0629",
+        "reason": "unannotated"
+      },
+      {
+        "row": 631,
+        "peak_id": "S21_8698_P0630",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 632,
+        "peak_id": "S21_8698_P0631",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 634,
+        "peak_id": "S21_8698_P0633",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 635,
+        "peak_id": "S21_8698_P0634",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 636,
+        "peak_id": "S21_8698_P0635",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 638,
+        "peak_id": "S21_8698_P0637",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 639,
+        "peak_id": "S21_8698_P0638",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 640,
+        "peak_id": "S21_8698_P0639",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 642,
+        "peak_id": "S21_8698_P0641",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 643,
+        "peak_id": "S21_8698_P0642",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 645,
+        "peak_id": "S21_8698_P0644",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 646,
+        "peak_id": "S21_8698_P0645",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 647,
+        "peak_id": "S21_8698_P0646",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 648,
+        "peak_id": "S21_8698_P0647",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 649,
+        "peak_id": "S21_8698_P0648",
+        "reason": "unannotated"
+      },
+      {
+        "row": 650,
+        "peak_id": "S21_8698_P0649",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 652,
+        "peak_id": "S21_8698_P0651",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 653,
+        "peak_id": "S21_8698_P0652",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 655,
+        "peak_id": "S21_8698_P0654",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 657,
+        "peak_id": "S21_8698_P0656",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 658,
+        "peak_id": "S21_8698_P0657",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 659,
+        "peak_id": "S21_8698_P0658",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 660,
+        "peak_id": "S21_8698_P0659",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 661,
+        "peak_id": "S21_8698_P0660",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 662,
+        "peak_id": "S21_8698_P0661",
+        "reason": "unannotated"
+      },
+      {
+        "row": 663,
+        "peak_id": "S21_8698_P0662",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 664,
+        "peak_id": "S21_8698_P0663",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 665,
+        "peak_id": "S21_8698_P0664",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 666,
+        "peak_id": "S21_8698_P0665",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 667,
+        "peak_id": "S21_8698_P0666",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 670,
+        "peak_id": "S21_8698_P0669",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 672,
+        "peak_id": "S21_8698_P0671",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 674,
+        "peak_id": "S21_8698_P0673",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 675,
+        "peak_id": "S21_8698_P0674",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 677,
+        "peak_id": "S21_8698_P0676",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 679,
+        "peak_id": "S21_8698_P0678",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 680,
+        "peak_id": "S21_8698_P0679",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 681,
+        "peak_id": "S21_8698_P0680",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 684,
+        "peak_id": "S21_8698_P0683",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 685,
+        "peak_id": "S21_8698_P0684",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 686,
+        "peak_id": "S21_8698_P0685",
+        "reason": "unannotated"
+      },
+      {
+        "row": 688,
+        "peak_id": "S21_8698_P0687",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 689,
+        "peak_id": "S21_8698_P0688",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 691,
+        "peak_id": "S21_8698_P0690",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 692,
+        "peak_id": "S21_8698_P0691",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 693,
+        "peak_id": "S21_8698_P0692",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 694,
+        "peak_id": "S21_8698_P0693",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 695,
+        "peak_id": "S21_8698_P0694",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 696,
+        "peak_id": "S21_8698_P0695",
+        "reason": "unannotated"
+      },
+      {
+        "row": 697,
+        "peak_id": "S21_8698_P0696",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 698,
+        "peak_id": "S21_8698_P0697",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 699,
+        "peak_id": "S21_8698_P0698",
+        "reason": "unannotated"
+      },
+      {
+        "row": 700,
+        "peak_id": "S21_8698_P0699",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 701,
+        "peak_id": "S21_8698_P0700",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 706,
+        "peak_id": "S21_8698_P0705",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 708,
+        "peak_id": "S21_8698_P0707",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 710,
+        "peak_id": "S21_8698_P0709",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 711,
+        "peak_id": "S21_8698_P0710",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 712,
+        "peak_id": "S21_8698_P0711",
+        "reason": "unannotated"
+      },
+      {
+        "row": 713,
+        "peak_id": "S21_8698_P0712",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 716,
+        "peak_id": "S21_8698_P0715",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 717,
+        "peak_id": "S21_8698_P0716",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 718,
+        "peak_id": "S21_8698_P0717",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 719,
+        "peak_id": "S21_8698_P0718",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 720,
+        "peak_id": "S21_8698_P0719",
+        "reason": "unannotated"
+      },
+      {
+        "row": 722,
+        "peak_id": "S21_8698_P0721",
+        "reason": "unannotated"
+      },
+      {
+        "row": 723,
+        "peak_id": "S21_8698_P0722",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 724,
+        "peak_id": "S21_8698_P0723",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 726,
+        "peak_id": "S21_8698_P0725",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 727,
+        "peak_id": "S21_8698_P0726",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 728,
+        "peak_id": "S21_8698_P0727",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 729,
+        "peak_id": "S21_8698_P0728",
+        "reason": "unannotated"
+      },
+      {
+        "row": 730,
+        "peak_id": "S21_8698_P0729",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 731,
+        "peak_id": "S21_8698_P0730",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 732,
+        "peak_id": "S21_8698_P0731",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 734,
+        "peak_id": "S21_8698_P0733",
+        "reason": "unannotated"
+      },
+      {
+        "row": 735,
+        "peak_id": "S21_8698_P0734",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 737,
+        "peak_id": "S21_8698_P0736",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 739,
+        "peak_id": "S21_8698_P0738",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 741,
+        "peak_id": "S21_8698_P0740",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 742,
+        "peak_id": "S21_8698_P0741",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 743,
+        "peak_id": "S21_8698_P0742",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 746,
+        "peak_id": "S21_8698_P0745",
+        "reason": "unannotated"
+      },
+      {
+        "row": 747,
+        "peak_id": "S21_8698_P0746",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 749,
+        "peak_id": "S21_8698_P0748",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 750,
+        "peak_id": "S21_8698_P0749",
+        "reason": "unannotated"
+      },
+      {
+        "row": 751,
+        "peak_id": "S21_8698_P0750",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 752,
+        "peak_id": "S21_8698_P0751",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 753,
+        "peak_id": "S21_8698_P0752",
+        "reason": "unannotated"
+      },
+      {
+        "row": 754,
+        "peak_id": "S21_8698_P0753",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 755,
+        "peak_id": "S21_8698_P0754",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 756,
+        "peak_id": "S21_8698_P0755",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 757,
+        "peak_id": "S21_8698_P0756",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 759,
+        "peak_id": "S21_8698_P0758",
+        "reason": "unannotated"
+      },
+      {
+        "row": 761,
+        "peak_id": "S21_8698_P0760",
+        "reason": "unannotated"
+      },
+      {
+        "row": 763,
+        "peak_id": "S21_8698_P0762",
+        "reason": "unannotated"
+      },
+      {
+        "row": 764,
+        "peak_id": "S21_8698_P0763",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 765,
+        "peak_id": "S21_8698_P0764",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 766,
+        "peak_id": "S21_8698_P0765",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 767,
+        "peak_id": "S21_8698_P0766",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 768,
+        "peak_id": "S21_8698_P0767",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 770,
+        "peak_id": "S21_8698_P0769",
+        "reason": "unannotated"
+      },
+      {
+        "row": 771,
+        "peak_id": "S21_8698_P0770",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 773,
+        "peak_id": "S21_8698_P0772",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 774,
+        "peak_id": "S21_8698_P0773",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 775,
+        "peak_id": "S21_8698_P0774",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 776,
+        "peak_id": "S21_8698_P0775",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 777,
+        "peak_id": "S21_8698_P0776",
+        "reason": "unannotated"
+      },
+      {
+        "row": 778,
+        "peak_id": "S21_8698_P0777",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 779,
+        "peak_id": "S21_8698_P0778",
+        "reason": "unannotated"
+      },
+      {
+        "row": 780,
+        "peak_id": "S21_8698_P0779",
+        "reason": "unannotated"
+      },
+      {
+        "row": 781,
+        "peak_id": "S21_8698_P0780",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 782,
+        "peak_id": "S21_8698_P0781",
+        "reason": "unnamed_formula"
+      },
+      {
+        "row": 783,
+        "peak_id": "S21_8698_P0782",
+        "reason": "unannotated"
+      },
+      {
+        "row": 784,
+        "peak_id": "S21_8698_P0783",
+        "reason": "unannotated"
+      },
+      {
+        "row": 785,
+        "peak_id": "S21_8698_P0784",
+        "reason": "unannotated"
+      },
+      {
+        "row": 786,
+        "peak_id": "S21_8698_P0785",
+        "reason": "unannotated"
+      },
+      {
+        "row": 787,
+        "peak_id": "S21_8698_P0786",
+        "reason": "unannotated"
+      },
+      {
+        "row": 788,
+        "peak_id": "S21_8698_P0787",
+        "reason": "unannotated"
+      },
+      {
+        "row": 789,
+        "peak_id": "S21_8698_P0788",
+        "reason": "unannotated"
+      },
+      {
+        "row": 790,
+        "peak_id": "S21_8698_P0789",
+        "reason": "unannotated"
+      },
+      {
+        "row": 791,
+        "peak_id": "S21_8698_P0790",
+        "reason": "unannotated"
+      },
+      {
+        "row": 792,
+        "peak_id": "S21_8698_P0791",
+        "reason": "unannotated"
+      }
+    ],
+    "conflicts": [],
+    "rules": [
+      "Observed m/z is retained as provenance and is never used as neutral exact mass.",
+      "Only named records with a usable neutral formula enter the search library.",
+      "Identical names and formulas share one record; different names remain distinct.",
+      "Source notes are data, not filtering instructions or structural evidence.",
+      "Missing MS/MS and taxonomic evidence are not inferred."
+    ]
+  }
+}

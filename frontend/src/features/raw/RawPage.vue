@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ScientificInput from '../../components/ScientificInput.vue'
+import MassListInput from '../../components/MassListInput.vue'
 import { useRawWorkbench } from './composables/useRawWorkbench'
 import PlotView from '../../components/PlotView.vue'
 import ProjectArtifacts from '../../components/ProjectArtifacts.vue'
@@ -62,94 +64,68 @@ const {
   apply,
   clearParameters,
   startPreview,
-  usePreset,
   savePresets,
 } = useRawWorkbench()
 </script>
 <template>
-  <section v-if="store.project">
+  <section v-if="store.project" class="raw-page">
     <div class="page-title">
       <div>
-        <p class="eyebrow">第 2 步 · 原始谱</p>
-        <h1>原始谱与参数</h1>
+        <h1>预览</h1>
         <p>检查采集信号，选择实验参考离子，再预览细胞窗口。</p>
       </div>
-      <span class="step-badge">02 / 06</span>
-    </div>
-    <div class="card raw-sample-toolbar">
-      <div class="field-grid">
-        <label
-          ><FieldLabel name="当前样本" /><select
-            aria-label="当前样本"
-            v-model="sample"
-            :disabled="store.busy"
-          >
-            <option value="" disabled>选择样本</option>
-            <option v-for="s in samples" :key="s.id" :value="s.id">
-              {{ s.name }}{{ s.parameters ? ' · 样本例外' : '' }}
-            </option>
-          </select></label
-        >
-      </div>
-      <div class="actions">
-        <button class="primary" :disabled="!sample || store.busy" @click="open">
-          打开原始文件
-        </button>
-      </div>
-      <details v-if="summary" class="raw-file-details">
-        <summary>
-          原始文件详情 · {{ summary.scan_count }} 扫描 · {{ summary.instrument || '仪器未标注' }}
-        </summary>
-        <dl class="detail-list">
-          <div>
-            <dt>原始文件</dt>
-            <dd>{{ summary.path }}</dd>
-          </div>
-          <div>
-            <dt>扫描 / 仪器</dt>
-            <dd>{{ summary.scan_count }} / {{ summary.instrument || '—' }}</dd>
-          </div>
-          <div>
-            <dt>RT / m/z</dt>
-            <dd>
-              {{ summary.rt_min_seconds }}–{{ summary.rt_max_seconds }} 秒 / {{ summary.mz_min }}–{{
-                summary.mz_max
-              }}
-            </dd>
-          </div>
-        </dl>
-      </details>
     </div>
     <div class="workflow-columns raw-workflow">
       <div class="card raw-parameter-panel">
+        <div class="card raw-sample-toolbar">
+          <div class="field-grid">
+            <label
+              ><FieldLabel name="当前样本" /><select
+                aria-label="当前样本"
+                v-model="sample"
+                :disabled="store.busy"
+              >
+                <option value="" disabled>选择样本</option>
+                <option v-for="s in samples" :key="s.id" :value="s.id">
+                  {{ s.name }}{{ s.parameters ? ' · 样本例外' : '' }}
+                </option>
+              </select></label
+            >
+          </div>
+          <div class="actions">
+            <button class="primary" :disabled="!sample || store.busy" @click="open">
+              打开原始文件
+            </button>
+          </div>
+          <details v-if="summary" class="raw-file-details">
+            <summary>
+              原始文件详情 · {{ summary.scan_count }} 扫描 ·
+              {{ summary.instrument || '仪器未标注' }}
+            </summary>
+            <dl class="detail-list">
+              <div>
+                <dt>原始文件</dt>
+                <dd>{{ summary.path }}</dd>
+              </div>
+              <div>
+                <dt>扫描 / 仪器</dt>
+                <dd>{{ summary.scan_count }} / {{ summary.instrument || '—' }}</dd>
+              </div>
+              <div>
+                <dt>RT / m/z</dt>
+                <dd>
+                  {{ summary.rt_min_seconds }}–{{ summary.rt_max_seconds }} 秒 /
+                  {{ Number(summary.mz_min).toFixed(4) }}–{{ Number(summary.mz_max).toFixed(4) }}
+                </dd>
+              </div>
+            </dl>
+          </details>
+        </div>
         <h2>提取参数</h2>
-        <p class="muted">参考离子须依据实验明确选择。显示范围单独设置。</p>
-        <p class="method-badge">
-          <FieldLabel
-            name="提取方法：snr"
-            text="固定使用 SNR 提取：按参考离子识别细胞窗口，扣除基线并以背景噪声衡量特征信号。"
-          />
-        </p>
         <p v-if="unsupportedParameters" class="alert">
           此项目或样本的提取参数已不受支持。请核对当前 SNR
           参数并应用后重新提取；已保存产物保留原始来源。
         </p>
-        <h3>当前表单 · 按应用范围生效</h3>
-        <div class="reference-preset">
-          <label
-            ><FieldLabel name="参考离子预设" /><select
-              aria-label="Cell type"
-              v-model="preset"
-              :disabled="store.busy"
-            >
-              <option v-for="(mass, name) in preferences?.presets" :key="name" :value="name">
-                {{ name }} · {{ mass }}
-              </option>
-            </select></label
-          >
-
-          <button :disabled="store.busy" @click="usePreset">使用所选参考离子</button>
-        </div>
         <p v-if="preferencesError" class="alert" role="alert">
           {{ preferencesError }}
           <button
@@ -163,6 +139,8 @@ const {
         <ProcessingFields
           v-model="parameters"
           :fields="basic"
+          :reference-presets="preferences?.presets"
+          @preset-selected="preset = $event"
           :disabled="store.busy"
           @edited="edited"
         />
@@ -324,7 +302,7 @@ const {
         </p>
         <ProjectArtifacts scope="previews" :refresh-key="cellCount" />
       </div>
-      <div class="card">
+      <div class="card raw-signal-panel">
         <h2>原始信号</h2>
         <div class="tabs">
           <button
@@ -364,7 +342,7 @@ const {
               :disabled="store.busy" /></label
           ><template v-if="kind === 'eic'"
             ><label
-              ><FieldLabel name="reference m/z" /><input
+              ><FieldLabel name="reference m/z" /><MassListInput
                 aria-label="reference m/z"
                 v-model="refs"
                 :disabled="store.busy" /></label
@@ -377,18 +355,16 @@ const {
                 :disabled="store.busy" /></label></template
           ><template v-if="kind === 'sum'"
             ><label
-              ><FieldLabel name="display mz_min" /><input
+              ><FieldLabel name="display mz_min" /><ScientificInput
                 aria-label="display mz_min"
-                v-model.number="mzMin"
-                type="number"
-                step="any"
+                v-model="mzMin"
+                :decimals="4"
                 :disabled="store.busy" /></label
             ><label
-              ><FieldLabel name="display mz_max" /><input
+              ><FieldLabel name="display mz_max" /><ScientificInput
                 aria-label="display mz_max"
-                v-model.number="mzMax"
-                type="number"
-                step="any"
+                v-model="mzMax"
+                :decimals="4"
                 :disabled="store.busy" /></label
             ><label
               ><FieldLabel name="合谱方式" /><select
@@ -517,3 +493,70 @@ const {
     <RouterLink to="/projects">前往项目首页 →</RouterLink>
   </div>
 </template>
+<style scoped>
+.raw-sample-toolbar {
+  display: grid;
+  grid-template-columns: minmax(210px, 420px) auto;
+  justify-content: start;
+  align-items: end;
+  gap: 10px 12px;
+}
+.raw-sample-toolbar > .field-grid,
+.raw-sample-toolbar > .actions {
+  margin: 0;
+}
+.raw-file-details {
+  grid-column: 1 / -1;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.raw-file-details > summary {
+  font-size: 12px;
+  color: var(--muted);
+}
+.raw-parameter-panel {
+  background: var(--panel-soft);
+}
+.raw-parameter-panel > h2,
+.raw-signal-panel > h2 {
+  margin-bottom: 10px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--border);
+  color: #284b55;
+  font-size: 17px;
+}
+.raw-parameter-panel > h3 {
+  margin: 12px 0 8px;
+  font-size: 13px;
+}
+.raw-parameter-panel > p {
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.raw-parameter-panel .parameter-categories {
+  gap: 4px;
+}
+.raw-parameter-panel .parameter-categories button {
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: 2px;
+  font-size: 12px;
+}
+.raw-parameter-panel .parameter-categories .selected {
+  border-color: #9ccbd3;
+  background: #e8f4f6;
+  color: var(--teal);
+}
+.raw-signal-panel {
+  min-width: 0;
+}
+.raw-signal-panel > .tabs {
+  margin-bottom: 12px;
+}
+@media (max-width: 600px) {
+  .raw-sample-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
+  }
+}
+</style>

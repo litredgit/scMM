@@ -38,7 +38,12 @@ const props = withDefaults(defineProps<{ table: DataTable; qc?: boolean; exact?:
 function formatted(value: unknown, key: string, row: Record<string, unknown>) {
   if (key === 'extraction_method' && value === 'snr_v1') return 'snr'
   if (value === null || value === undefined) return '—'
+  if (Array.isArray(value) && /(?:^|_)mz(?:_|$)/.test(key))
+    return value
+      .map((item) => (typeof item === 'number' ? item.toFixed(4) : String(item)))
+      .join(', ')
   if (typeof value === 'number') {
+    if (/(?:^|_)mz(?:_|$)|质荷比|m\/z/.test(key)) return value.toFixed(4)
     if (props.exact) return String(value)
     if (key === 'p_value' || key === 'fdr') return value === 0 ? '0' : value.toExponential(2)
     if (
@@ -49,7 +54,7 @@ function formatted(value: unknown, key: string, row: Record<string, unknown>) {
       return value.toExponential(1)
     if (props.qc && row.metric === '检出特征数')
       return value.toLocaleString('en-US', { maximumFractionDigits: 1, useGrouping: false })
-    if (/intensity|mean_a|mean_b/.test(key)) return value.toExponential(1)
+    if (/intensity|signal|snr|mean_a|mean_b/.test(key)) return value.toExponential(1)
     return Number.isInteger(value)
       ? String(value)
       : value.toLocaleString('en-US', { maximumSignificantDigits: 6, useGrouping: false })

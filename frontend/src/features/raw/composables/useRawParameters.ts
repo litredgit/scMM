@@ -250,13 +250,6 @@ export function useRawParameters(sample: Ref<string>) {
       if (!busy && !preferences.value && preferenceScope.isActive()) void loadPreferences()
     },
   )
-  function usePreset() {
-    const mass = preferences.value?.presets[preset.value]
-    if (mass) {
-      parameters.value.ref_mz = mass
-      edited()
-    }
-  }
   async function savePresets() {
     await store.run(
       async () => {
@@ -321,7 +314,6 @@ export function useRawParameters(sample: Ref<string>) {
     apply,
     clearParameters,
     edited,
-    usePreset,
     savePresets,
     connect,
   }

@@ -1,11 +1,11 @@
-import { test, expect, type Page } from './fixtures'
+import { navigate, test, expect, type Page } from './fixtures'
 
 async function create(page: Page, name: string) {
   await page.goto('/')
   await expect(page.getByRole('row').filter({ hasText: '已有项目' })).toBeVisible()
   await page.getByLabel('项目名称', { exact: true }).fill(name)
   await page.getByRole('button', { name: '创建并添加样本' }).click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '添加原始文件', exact: true })).toBeVisible()
 }
 
 test('project, samples, metadata, save and reopen with no browser errors', async ({
@@ -84,7 +84,7 @@ test('dataset import, mapping, CSV and snapshot reload', async ({ page }) => {
   await expect(page.getByLabel('alpha subject', { exact: true })).toHaveValue('animal-1')
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
-  await page.getByRole('link', { name: /结果与保存/ }).click()
+  await navigate(page, '/results')
   await page.getByText('项目快照详情', { exact: true }).click()
   await expect(
     page.locator('#main-content').getByText('6 细胞 × 4 特征', { exact: true }),
@@ -102,8 +102,8 @@ test('dataset import, mapping, CSV and snapshot reload', async ({ page }) => {
     .filter({ hasText: '导入与保存' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
-  await page.locator('a[href="/samples"]').first().click()
+  await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
+  await navigate(page, '/samples')
   await expect(page.getByLabel('alpha batch', { exact: true })).toHaveValue('批次A')
 })
 
@@ -192,7 +192,7 @@ test('processed merge explicitly maps sources, previews ref and restores the ful
   if (!(await restored.getByRole('heading', { name: '历史合并溯源', exact: true }).isVisible()))
     await restored.locator('summary').click()
   await expect(restored.getByRole('heading', { name: '历史合并溯源', exact: true })).toBeVisible()
-  await page.getByRole('link', { name: /预处理/ }).click()
+  await navigate(page, '/preprocess')
   await page.getByRole('button', { name: '历史与恢复', exact: true }).click()
   const resetting = page.waitForResponse(
     (r) =>

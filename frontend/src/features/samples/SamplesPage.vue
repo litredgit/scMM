@@ -281,27 +281,11 @@ async function applyMapping() {
   <section v-if="store.project">
     <div class="page-title">
       <div>
-        <p class="eyebrow">第 1 步 · 样本管理</p>
-        <h1>项目与样本</h1>
+        <p class="eyebrow">细胞提取 · 添加原始文件</p>
+        <h1>添加原始文件</h1>
         <p>建立样本清单，并标记实验分组、独立生物来源和采集批次。</p>
       </div>
-      <span class="step-badge">01 / 06</span>
-    </div>
-    <div class="metric-strip">
-      <div>
-        <span>项目样本</span><strong>{{ samples.length }}<small>个</small></strong>
-      </div>
-      <div>
-        <span>当前细胞</span
-        ><strong>{{ store.project.dataset?.cells.toLocaleString() ?? '—' }}</strong>
-      </div>
-      <div>
-        <span>当前特征</span
-        ><strong>{{ store.project.dataset?.features.toLocaleString() ?? '—' }}</strong>
-      </div>
-      <div>
-        <span>已保存修订</span><strong>r{{ store.project.manifest.revision }}</strong>
-      </div>
+      <span class="step-badge">细胞提取</span>
     </div>
     <section class="card project-info">
       <h2>项目信息</h2>

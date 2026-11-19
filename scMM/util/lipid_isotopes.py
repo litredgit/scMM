@@ -15,6 +15,7 @@ ADDUCTS = {
     "[M+Na]+": {"polarity": "pos", "add": "Na", "remove": "", "charge": 1},
     "[M+K]+": {"polarity": "pos", "add": "K", "remove": "", "charge": 1},
     "[M+NH4]+": {"polarity": "pos", "add": "NH4", "remove": "", "charge": 1},
+    "[M+2Na-H]+": {"polarity": "pos", "add": "Na2", "remove": "H", "charge": 1},
     "[M-H]-": {"polarity": "neg", "add": "", "remove": "H", "charge": -1},
     "[M+Cl]-": {"polarity": "neg", "add": "Cl", "remove": "", "charge": -1},
     "[M+HCOO]-": {"polarity": "neg", "add": "CHO2", "remove": "", "charge": -1},

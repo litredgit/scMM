@@ -11,15 +11,18 @@ import numpy as np
 import pandas as pd
 from anndata import AnnData
 
+from scMM.util.observations import observation_kind
+
 from .quality import quality_metrics
 
 MAX_REPORT_VALUES = 5_000_000
 
 
 def report_tables(data):
+    unit = observation_kind(data)
     if min(data.shape) < 1 or data.n_obs > 100_000 or data.n_obs * data.n_vars > MAX_REPORT_VALUES:
         raise ValueError(
-            "QC report requires non-empty data, at most 100000 cells and 5000000 matrix values"
+            f"QC report requires non-empty data, at most 100000 {unit}s and 5000000 matrix values"
         )
     values = data.X.toarray() if hasattr(data.X, "toarray") else np.asarray(data.X)
     if not np.isfinite(values).all():
@@ -47,16 +50,19 @@ def report_tables(data):
     cells = metrics["cell"]
     if not np.isfinite(cells["total_intensity"]).all():
         raise ValueError("current intensity scale cannot be summarized safely")
-    if "cell_id" in cells:
-        renamed = "obs_cell_id"
+    identifier = "observation_id" if unit == "sample" else "cell_id"
+    if identifier in cells:
+        renamed = f"obs_{identifier}"
         while renamed in cells:
             renamed += "_"
-        cells = cells.rename(columns={"cell_id": renamed})
-    cells.insert(0, "cell_id", data.obs_names.astype(str))
+        cells = cells.rename(columns={identifier: renamed})
+    cells.insert(0, identifier, data.obs_names.astype(str))
     sources = cells.groupby("source_file", sort=False, observed=True).agg(
-        cells=("cell_id", "size"),
-        median_total=("total_intensity", "median"),
-        median_detected=("detected_features", "median"),
+        **{
+            f"{unit}s": (identifier, "size"),
+            "median_total": ("total_intensity", "median"),
+            "median_detected": ("detected_features", "median"),
+        }
     )
     return {"cells": cells, "sources": sources, "zero_fraction": float(np.mean(values == 0))}
 
@@ -79,6 +85,9 @@ def quality_report_bytes(data, metadata, *, reports=None, tables=None):
         )
     except ImportError as exc:
         raise ImportError("PDF reports require scMM[web] and reportlab") from exc
+    unit = observation_kind(data)
+    unit_name = "样本" if unit == "sample" else "细胞"
+    metadata = {**metadata, "observation_kind": unit}
     tables = report_tables(data) if tables is None else tables
     if "STSong-Light" not in pdfmetrics.getRegisteredFontNames():
         pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
@@ -123,6 +132,7 @@ def quality_report_bytes(data, metadata, *, reports=None, tables=None):
         "available_results": "当前有效分析",
         "scope": "报告范围",
         "embeddings": "嵌入及附件映射",
+        "observation_kind": "观测单位",
     }
     for key, value in metadata.items():
         if key not in {"history", "figures", "omitted_figures"}:
@@ -130,21 +140,21 @@ def quality_report_bytes(data, metadata, *, reports=None, tables=None):
                 f"{labels.get(key, key)}: {_json_text(value) if isinstance(value, (dict, list)) else value}"
             )
     text(
-        "本报告描述导出时的当前矩阵，不等同于保存项目。细胞数不等于生物重复；质量候选、细胞级相关或模型拟合不构成结构鉴定/独立验证。"
+        f"本报告描述导出时的当前矩阵，不等同于保存项目。{unit_name}数与生物重复定义须结合实验设计；质量候选、{unit_name}级相关或模型拟合不构成结构鉴定/独立验证。"
     )
     text(
-        f"细胞数：{data.n_obs}；特征数：{data.n_vars}；当前矩阵零值比例：{tables['zero_fraction']:.6g}"
+        f"{unit_name}数：{data.n_obs}；特征数：{data.n_vars}；当前矩阵零值比例：{tables['zero_fraction']:.6g}"
     )
     text("来源与当前矩阵汇总", title=True)
     sources = tables["sources"]
     limit = 500
     table(
         [
-            ["来源", "细胞数", "总强度中位数", "检出特征中位数"],
+            ["来源", f"{unit_name}数", "总强度中位数", "检出特征中位数"],
             *[
                 [
                     name,
-                    int(row.cells),
+                    int(row[f"{unit}s"]),
                     f"{row.median_total:.1e}",
                     f"{row.median_detected:.1f}".rstrip("0").rstrip("."),
                 ]
@@ -155,12 +165,12 @@ def quality_report_bytes(data, metadata, *, reports=None, tables=None):
     )
     if len(sources) > limit:
         text(
-            f"PDF 仅列前 {limit} 个来源；完整来源和逐细胞数值在报告 ZIP 或 QC CSV 下载中，不按 PDF 显示精度舍入。"
+            f"PDF 仅列前 {limit} 个来源；完整来源和逐{unit_name}数值在报告 ZIP 或 QC CSV 下载中，不按 PDF 显示精度舍入。"
         )
 
     for column, title in (
-        ("total_intensity", "细胞总强度分布"),
-        ("detected_features", "细胞检出特征数分布"),
+        ("total_intensity", f"{unit_name}总强度分布"),
+        ("detected_features", f"{unit_name}检出特征数分布"),
     ):
         text(title, title=True)
         counts, edges = np.histogram(tables["cells"][column], bins=40)
@@ -186,7 +196,13 @@ def quality_report_bytes(data, metadata, *, reports=None, tables=None):
             String(410, 3, format(edges[-1], number_format), fontName="STSong-Light", fontSize=9)
         )
         drawing.add(
-            String(25, 128, f"最大细胞数：{maximum}；箱数：40", fontName="STSong-Light", fontSize=9)
+            String(
+                25,
+                128,
+                f"最大{unit_name}数：{maximum}；箱数：40",
+                fontName="STSong-Light",
+                fontSize=9,
+            )
         )
         story.append(drawing)
 
@@ -194,7 +210,7 @@ def quality_report_bytes(data, metadata, *, reports=None, tables=None):
     if reference:
         story.append(PageBreak())
         text("观测元数据中的参考强度（不重提取、不重新匹配质量）", title=True)
-        rows = [["参考列", "有限细胞数", "中位数", "最小值", "最大值"]]
+        rows = [["参考列", f"有限{unit_name}数", "中位数", "最小值", "最大值"]]
         for key in reference[:200]:
             values = tables["cells"][key].dropna()
             rows.append(
@@ -285,14 +301,15 @@ def report_bundle(data, metadata, reports, *, figures=None):
     ):
         raise ValueError("report result names must be simple identifiers")
     tables = report_tables(data)
-    metadata = dict(metadata)
+    unit = observation_kind(data)
+    metadata = {**metadata, "observation_kind": unit}
     embeddings = {}
     embedding_metadata = {}
     total_values = 0
     for number, (key, matrix) in enumerate(data.obsm.items(), 1):
         shape = getattr(matrix, "shape", ())
         if len(shape) != 2 or shape[0] != data.n_obs:
-            raise ValueError("report embeddings must be two-dimensional and match cells")
+            raise ValueError(f"report embeddings must be two-dimensional and match {unit}s")
         total_values += shape[0] * shape[1]
         if total_values > MAX_REPORT_VALUES:
             raise ValueError(
@@ -307,7 +324,7 @@ def report_bundle(data, metadata, reports, *, figures=None):
             index=data.obs_names.copy(),
             columns=[f"dimension_{i + 1}" for i in range(shape[1])],
         )
-        embeddings[filename].index.name = "cell_id"
+        embeddings[filename].index.name = "observation_id" if unit == "sample" else "cell_id"
         embedding_metadata[str(key)] = {
             "file": filename,
             "dimensions": shape[1],
@@ -349,7 +366,7 @@ def report_bundle(data, metadata, reports, *, figures=None):
             "history.json",
             _json_text(metadata.get("history", [])),
         )
-        archive.writestr("cell_qc.csv", tables["cells"].to_csv(index=False))
+        archive.writestr(f"{unit}_qc.csv", tables["cells"].to_csv(index=False))
         archive.writestr("source_qc.csv", tables["sources"].to_csv())
         for filename, content in figure_files.items():
             archive.writestr(filename, content)

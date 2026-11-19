@@ -440,3 +440,265 @@ def test_display_sorting_is_global_and_does_not_change_recommendations(workflow,
     features = get(workflow, "/analysis/features?query=Synthetic+B&sort=mz").json()
     assert features["total"] > 0
     assert all("Synthetic B" in r["label"] for r in features["rows"])
+
+
+@pytest.mark.parametrize("catalog", [False, True])
+def test_spectrum_review_sync_audit_export_identity_and_roundtrip(workflow, monkeypatch, catalog):
+    from scMM.util.lipid_isotopes import adduct_shift
+
+    original = setup_lipids(workflow, monkeypatch)
+    original.var.loc["f2", "mz"] = original.var.loc["f0", "mz"] + (
+        adduct_shift("[M+Na]+") - adduct_shift("[M+H]+")
+    )
+    original.write_h5ad(workflow[4] / "spectrum.h5ad")
+    post = workflow[-1]
+    post("/dataset/import", {"root": "Output", "path": "spectrum.h5ad"}).raise_for_status()
+    if catalog:
+        post("/ions/initialize", {"linearity": "linear_abundance"}).raise_for_status()
+    version = run_lipids(workflow, adducts=["[M+H]+", "[M+Na]+"])
+    result = query(workflow, version)
+    chosen = next(
+        r
+        for r in result["candidates"]["rows"]
+        if r["feature_id"] == "f0" and r["name"] == "Synthetic A"
+    )
+    isotope = next(
+        r for r in result["isotopes"]["rows"] if r["parent_candidate_id"] == chosen["candidate_id"]
+    )
+    adduct = next(
+        r
+        for r in result["adduct_relations"]
+        if chosen["candidate_id"] in r["candidate_ids"]
+        and {r["source"], r["target"]} == {"f0", "f2"}
+    )
+    initial = post("/lipids/spectrum", {"version": version, "feature_id": "f0"}).json()["value"]
+    assert initial["spectrum_kind"] == "feature_sticks" and not initial["intensity_missing"]
+    np.testing.assert_array_equal(
+        [p["intensity"] for p in initial["peaks"]], original.X.mean(axis=0)
+    )
+    assert {r["type"] for r in initial["relations"]} == {"adduct", "isotope"}
+    metadata = {
+        "lipid_version": version,
+        "lipid_review_revision": initial["review_revision"],
+        "dataset_token": initial["dataset_token"],
+    }
+
+    def check(value=metadata):
+        return workflow[0].post(
+            "/api/v1/workspace/figures/check", headers=workflow[1], json={"metadata": value}
+        )
+
+    assert check().status_code == 204
+    isotope_figure = post(
+        "/lipids/isotope-spectrum", {"version": version, "relation_id": isotope["relation_id"]}
+    ).json()["value"]
+    isotope_metadata = isotope_figure["layout"]["meta"]
+    assert isotope_metadata["lipid_version"] == version
+    assert isotope_metadata["lipid_review_revision"] == initial["review_revision"]
+    assert isotope_metadata["dataset_token"] == initial["dataset_token"]
+    assert check(isotope_metadata).status_code == 204
+    for relation_id in (isotope["relation_id"], adduct["relation_id"]):
+        post(
+            "/lipids/review", {"version": version, "relation_id": relation_id, "review": "accepted"}
+        ).raise_for_status()
+    post(
+        "/lipids/review",
+        {
+            "version": version,
+            "feature_id": "f0",
+            "candidate_ids": [chosen["candidate_id"]],
+            "annotation_name": "人工名称",
+        },
+    ).raise_for_status()
+    updated = query(workflow, version)
+    assert updated["annotation_names"] == {"f0": "人工名称", "f1": "人工名称", "f2": "人工名称"}
+    assert updated["linked_annotations"]["f1"]["candidate_ids"] == [chosen["candidate_id"]]
+    assert len(updated["selected"]["f2"]) == 1
+    assert updated["audit"][-1]["affected_features"] == ["f0", "f1", "f2"]
+    assert check().status_code == 400
+    assert check(isotope_metadata).status_code == 400
+    spectrum = post("/lipids/spectrum", {"version": version, "feature_id": "f0"}).json()["value"]
+    metadata["lipid_review_revision"] = spectrum["review_revision"]
+    assert check().status_code == 204
+    assert "M+1" in next(p["label"] for p in spectrum["peaks"] if p["feature_id"] == "f1")
+    assert next(p["role"] for p in spectrum["peaks"] if p["feature_id"] == "f2") == "adduct"
+    before = workflow[-2]()
+    invalid = post(
+        "/lipids/review",
+        {
+            "version": version,
+            "feature_id": "f0",
+            "candidate_ids": ["invalid"],
+            "relation_id": isotope["relation_id"],
+            "review": "rejected",
+        },
+    )
+    assert invalid.status_code == 400 and workflow[-2]() == before
+    assert query(workflow, version)["audit"] == updated["audit"]
+    exported = post("/lipids/export", {"version": version, "kind": "candidates"})
+    exported.raise_for_status()
+    table = pd.read_csv(StringIO(exported.text))
+    assert set(table.ms2_status) == {"not_supplied"}
+    assert {"database_sha256", "database_source", "database_filename", "annotation_name"} <= set(
+        table
+    )
+    exported_isotopes = post("/lipids/export", {"version": version, "kind": "isotopes"})
+    exported_isotopes.raise_for_status()
+    isotope_table = pd.read_csv(StringIO(exported_isotopes.text))
+    assert {
+        "database_sha256",
+        "database_record_id",
+        "database_filename",
+        "ms2_scope_feature_id",
+    } <= set(isotope_table)
+    assert set(isotope_table.ms2_status) == {"not_supplied"}
+    rerun = run_lipids(workflow, adducts=["[M+H]+", "[M+Na]+"])
+    inherited = query(workflow, rerun)
+    assert inherited["selected"] == updated["selected"]
+    assert inherited["annotation_names"] == updated["annotation_names"]
+    assert inherited["audit"] == updated["audit"]
+    # Adding another source preserves source identities and reviewed group membership.
+    (workflow[4] / "database" / "other.sdf").write_text(
+        sdf_record("other-source", formula="C11H22", name="Other source")
+    )
+    rerun = run_lipids(workflow, adducts=["[M+H]+", "[M+Na]+"], databases=["other.sdf"])
+    post(
+        "/lipids/review",
+        {
+            "version": rerun,
+            "feature_id": "f0",
+            "candidate_ids": [chosen["candidate_id"]],
+            "annotation_name": "多库审核名称",
+        },
+    ).raise_for_status()
+    multiple_sources = query(workflow, rerun)
+    assert multiple_sources["annotation_names"] == {
+        "f0": "多库审核名称",
+        "f1": "多库审核名称",
+        "f2": "多库审核名称",
+    }
+    assert multiple_sources["selected"] == updated["selected"]
+    post("/project/save").raise_for_status()
+    path = workflow[-2]()["project"]["path"]
+    post("/project/open", {"path": path}).raise_for_status()
+    assert query(workflow, rerun)["annotation_names"] == multiple_sources["annotation_names"]
+    with workflow[2].access(workflow[1]["X-SCMM-Workspace"]) as workspace:
+        np.testing.assert_array_equal(workspace.project.workspace.data.X, original.X)
+        if catalog:
+            root = next(iter(workspace.project.ion_state["roots"].values()))
+            assert STORAGE_KEY not in root["data"].uns
+
+
+def test_feature_only_mass_candidates_and_spectrum_do_not_fabricate_intensity(
+    workflow, monkeypatch
+):
+    import base64
+
+    data = setup_lipids(workflow, monkeypatch)
+    post = workflow[-1]
+    imported = post(
+        "/exchange/annotation/import",
+        {
+            "format": "feature_csv",
+            "filename": "features.csv",
+            "file_base64": base64.b64encode(
+                data.var.to_csv(index_label="feature_id").encode()
+            ).decode(),
+        },
+    )
+    assert imported.status_code == 200, imported.text
+    version = run_lipids(workflow, resolution=None)
+    result = query(workflow, version)
+    assert result["candidates"]["total"] == 4 and result["isotopes"]["total"] == 0
+    assert result["network_parameters"] is None
+    spectrum = post("/lipids/spectrum", {"version": version, "feature_id": "f0"})
+    spectrum.raise_for_status()
+    value = spectrum.json()["value"]
+    assert value["intensity_missing"] and all(p["intensity"] is None for p in value["peaks"])
+    assert value["intensity_source"]["quantitation_available"] is False
+    assert post("/lipids/export", {"version": version, "kind": "matrix"}).status_code == 400
+    post("/project/save").raise_for_status()
+    path = workflow[-2]()["project"]["path"]
+    post("/project/open", {"path": path}).raise_for_status()
+    assert query(workflow, version)["candidates"]["total"] == 4
+
+
+def test_preset_and_additional_only_database_never_download_lmsd(workflow, monkeypatch):
+    setup_lipids(workflow, monkeypatch)
+    monkeypatch.setattr(
+        "scMM.application.web_lipids.prepare_database", lambda: pytest.fail("unnecessary download")
+    )
+    for selected in (
+        {"database": "preset:mammalian_cells"},
+        {"database": "", "databases": ["preset:mammalian_cells"]},
+    ):
+        version = run_lipids(workflow, **selected)
+        assert query(workflow, version)["database"]["filename"] == "preset:mammalian_cells"
+    choices = get(workflow, "/lipids").json()["database"]["presets"]
+    assert any(
+        item["id"] == "preset:mammalian_cells" and item["ms2_status"] == "not_supplied"
+        for item in choices
+    )
+
+
+@pytest.mark.parametrize("format", ["matrix_csv", "h5ad"])
+@pytest.mark.parametrize("signed", [False, True])
+def test_independent_matrix_mass_only_annotation_preserves_value_provenance(
+    workflow, monkeypatch, format, signed
+):
+    import base64
+
+    from anndata import AnnData
+
+    original = setup_lipids(workflow, monkeypatch)
+    values = original.X - 800.0 if signed else original.X
+    data = AnnData(values, obs=original.obs.copy(), var=original.var.copy())
+    post = workflow[-1]
+    payload = {
+        "format": format,
+        "filename": "external." + ("csv" if format == "matrix_csv" else "h5ad"),
+    }
+    if format == "matrix_csv":
+        payload.update(
+            matrix_csv=pd.DataFrame(values, index=data.obs_names, columns=data.var_names).to_csv(
+                index_label="observation_id"
+            ),
+            features_csv=data.var.to_csv(index_label="feature_id"),
+        )
+    else:
+        path = workflow[4] / "unknown-origin.h5ad"
+        data.write_h5ad(path)
+        payload["file_base64"] = base64.b64encode(path.read_bytes()).decode()
+    imported = post("/exchange/annotation/import", payload)
+    assert imported.status_code == 200, imported.text
+    assert get(workflow, "/lipids").json()["layers"] == []
+    assert post("/lipids/run", {"options": options()}).status_code == 400
+    version = run_lipids(workflow, mass_only=True, resolution=None)
+    result = query(workflow, version)
+    assert result["parameters"]["mass_only"] is True
+    assert result["candidates"]["total"] == 4
+    assert result["isotopes"]["total"] == 0 and result["network_parameters"] is None
+    response = post("/lipids/spectrum", {"version": version, "feature_id": "f0"})
+    assert response.status_code == 200, response.text
+    spectrum = response.json()["value"]
+    assert spectrum["mass_only"] and not spectrum["intensity_missing"]
+    assert spectrum["intensity_source"]["value_state"] == "unknown"
+    assert spectrum["intensity_source"]["kind"] == "matrix_values"
+    assert spectrum["relative_intensity_allowed"] is False
+    assert spectrum["intensity_label"] == "Mean matrix value"
+    np.testing.assert_allclose(
+        [peak["intensity"] for peak in spectrum["peaks"]],
+        values.mean(axis=0),
+        rtol=8 * np.finfo(float).eps,
+        atol=0,
+    )
+    assert (
+        next(v for v in get(workflow, "/lipids").json()["versions"] if v["id"] == version)[
+            "mass_only"
+        ]
+        is True
+    )
+    post("/project/save").raise_for_status()
+    saved = workflow[-2]()["project"]["path"]
+    post("/project/open", {"path": saved}).raise_for_status()
+    assert query(workflow, version)["candidates"]["total"] == 4

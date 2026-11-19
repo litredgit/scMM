@@ -2,6 +2,52 @@ import { test as base, expect, type Page, type APIRequestContext } from '@playwr
 export type { Page } from '@playwright/test'
 export { expect }
 
+/** Follow the visible module navigation without reloading the scientific workspace. */
+export async function navigate(page: Page, path: string) {
+  const modules: Record<string, string> = {
+    '/samples': '/cell-extraction',
+    '/raw': '/cell-extraction',
+    '/extraction': '/cell-extraction',
+    '/preprocess': '/statistics',
+    '/data-check': '/statistics',
+    '/data-editor': '/statistics',
+    '/analysis': '/statistics',
+    '/ions': '/annotation',
+    '/annotation/evidence': '/annotation',
+  }
+  const sidebar = page.getByRole('navigation', { name: '工作流程', exact: true })
+  const roots: Record<string, string> = {
+    '/cell-extraction': '细胞提取',
+    '/annotation': '特征注释',
+    '/statistics': '统计分析',
+  }
+  const root = modules[path.split('?')[0]!] ?? path
+  const toggle = sidebar.getByRole('button', { name: roots[root], exact: true })
+  const destination = sidebar.locator(`a[href="${path.split('?')[0]}"]`).first()
+  await expect(async () => {
+    if (
+      roots[root] &&
+      (await toggle.count()) &&
+      (await toggle.getAttribute('aria-expanded')) !== 'true'
+    )
+      await toggle.click()
+    await expect(destination).toBeVisible({ timeout: 500 })
+  }).toPass({ timeout: 10_000, intervals: [100, 250] })
+  await destination.click()
+  await expect.poll(() => new URL(page.url()).pathname).toBe(path.split('?')[0])
+  if (path.startsWith('/preprocess'))
+    await expect(
+      page.getByRole('heading', { name: /^(预处理|尚未建立当前数据集|当前输入为独立特征表)$/ }),
+    ).toBeVisible()
+  const step = new URLSearchParams(path.split('?')[1]).get('step')
+  if (
+    step &&
+    path.startsWith('/preprocess') &&
+    (await page.getByLabel('下一项操作', { exact: true }).count())
+  )
+    await page.getByLabel('下一项操作', { exact: true }).selectOption(step)
+}
+
 export async function closeDocument(page: Page) {
   if (page.isClosed() || page.url() === 'about:blank') return
   const closed = page

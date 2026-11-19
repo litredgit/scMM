@@ -3,7 +3,7 @@ export async function createProject(page: Page, name: string) {
   await page.goto('/')
   await page.getByLabel('项目名称', { exact: true }).fill(name)
   await page.getByRole('button', { name: '创建并添加样本' }).click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '添加原始文件', exact: true })).toBeVisible()
 }
 export async function importDataset(page: Page, name: string) {
   await createProject(page, name)

@@ -22,6 +22,7 @@ from .routers import (
     ai,
     analysis,
     auth,
+    exchange,
     extraction,
     ions,
     lipids,
@@ -343,6 +344,7 @@ def create_app(
         preferences.router,
         raw.router,
         extraction.router,
+        exchange.router,
         analysis.router,
         lipids.router,
         ions.router,
@@ -366,6 +368,12 @@ def create_app(
         @app.get("/preprocess", include_in_schema=False)
         @app.get("/ions", include_in_schema=False)
         @app.get("/analysis", include_in_schema=False)
+        @app.get("/cell-extraction", include_in_schema=False)
+        @app.get("/annotation", include_in_schema=False)
+        @app.get("/annotation/evidence", include_in_schema=False)
+        @app.get("/data-check", include_in_schema=False)
+        @app.get("/data-editor", include_in_schema=False)
+        @app.get("/statistics", include_in_schema=False)
         @app.get("/admin/monitor", include_in_schema=False)
         @app.get("/account", include_in_schema=False)
         def index():

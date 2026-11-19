@@ -384,7 +384,7 @@ python3 scripts/scmm_env.py status
 
 账号页的严格维护为可选流程，继续要求页面草稿齐全和完整暂存验证；真实关闭事实仍可通过带范围/期限的关闭审阅登记。
 已启动的严格收集需先取消再切换部署维护，不混用两种恢复承诺。
-HTTP 200 不能代替六步流程或真实实验验收。可查看服务及具体运行目录：
+HTTP 200 不能代替网页操作或真实实验验收。可查看服务及具体运行目录：
 
 ```sh
 systemctl --user status scmm-ui.service scmm-dev.service --no-pager

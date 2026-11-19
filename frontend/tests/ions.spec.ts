@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fixtures'
+import { navigate, test, expect, type Page } from './fixtures'
 
 async function openIons(page: Page, name: string) {
   await page.goto('/')
@@ -9,8 +9,8 @@ async function openIons(page: Page, name: string) {
   await page.getByRole('button', { name: /^(?:▤ )?lipids[.]h5ad\s/ }).click()
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
   await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
-  await page.getByRole('link', { name: /^4\s*预处理$/ }).click()
-  await page.getByRole('link', { name: '离子归组与注释（统计预处理前）' }).click()
+  await navigate(page, '/preprocess')
+  await navigate(page, '/ions')
   await page.getByLabel('起点数值空间').selectOption('linear_abundance')
   await page.getByRole('button', { name: '启用离子数据目录' }).click()
   await expect(page.getByRole('heading', { name: '1. 候选关系与竞争解释' })).toBeVisible()

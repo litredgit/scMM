@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fixtures'
+import { navigate, test, expect, type Page } from './fixtures'
 import { createProject as create } from './support/project'
 
 test.use({ actionTimeout: 15000 })
@@ -17,26 +17,41 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
   await page.getByRole('button', { name: /extract.mzML/ }).click()
   await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
-  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await navigate(page, '/raw')
   await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
   await expect(page.locator('.js-plotly-plot')).toBeVisible()
   await expect(page.getByLabel('baseline_filter_size', { exact: true })).toHaveCount(0)
-  await expect(page.getByLabel('feature_snr_threshold', { exact: true })).not.toBeVisible()
-  await page
-    .locator('summary')
-    .filter({ hasText: /^特征保留$/ })
-    .click()
   await expect(page.getByLabel('feature_snr_threshold', { exact: true })).toBeVisible()
-  await page
-    .locator('summary')
-    .filter({ hasText: /^细胞识别$/ })
-    .click()
-  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('100000')
+  if (
+    !(await page
+      .locator('summary')
+      .filter({ hasText: /^特征保留$/ })
+      .evaluate((el) => (el.parentElement as HTMLDetailsElement).open))
+  )
+    await page
+      .locator('summary')
+      .filter({ hasText: /^特征保留$/ })
+      .click()
+  await expect(page.getByLabel('feature_snr_threshold', { exact: true })).toBeVisible()
+  if (
+    !(await page
+      .locator('summary')
+      .filter({ hasText: /^细胞识别$/ })
+      .evaluate((el) => (el.parentElement as HTMLDetailsElement).open))
+  )
+    await page
+      .locator('summary')
+      .filter({ hasText: /^细胞识别$/ })
+      .click()
+  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('1.0e+5')
   const panel = page.locator('.raw-parameter-panel')
-  expect(await panel.locator('input[type="number"]').count()).toBe(11)
+  await expect(panel.getByLabel('cell_min_signal', { exact: true })).toHaveAttribute(
+    'inputmode',
+    'decimal',
+  )
   for (const [label, value] of Object.entries({ ref_mz: '150', mz_min: '140', mz_max: '160' }))
     await page.getByLabel(label, { exact: true }).fill(value)
-  await expect(page.getByRole('button', { name: '提取方法：snr说明', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '提取方法：snr说明', exact: true })).toHaveCount(0)
   await expect(page.getByRole('combobox', { name: 'extraction_method' })).toHaveCount(0)
   await page.screenshot({ path: test.info().outputPath('raw-compact-1440.png'), fullPage: true })
   for (const width of [700, 390]) {
@@ -99,10 +114,16 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
     timeout: 30000,
   })
   if (!(await page.getByLabel('cell_min_signal', { exact: true }).isVisible()))
-    await page
-      .locator('summary')
-      .filter({ hasText: /^细胞识别$/ })
-      .click()
+    if (
+      !(await page
+        .locator('summary')
+        .filter({ hasText: /^细胞识别$/ })
+        .evaluate((el) => (el.parentElement as HTMLDetailsElement).open))
+    )
+      await page
+        .locator('summary')
+        .filter({ hasText: /^细胞识别$/ })
+        .click()
   await page.getByLabel('cell_min_signal', { exact: true }).fill('0')
   await page.getByRole('button', { name: '应用参数', exact: true }).click()
   await page.getByRole('button', { name: '预览细胞窗口', exact: true }).click()
@@ -110,12 +131,28 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
     timeout: 30000,
   })
   await noError(page)
-  await page.getByRole('link', { name: /提取与审核/ }).click()
+  await navigate(page, '/extraction')
   await page.getByRole('button', { name: '检查参数与输入', exact: true }).click()
   await expect(page.getByRole('heading', { name: '逐样本完整参数' })).toBeVisible()
   await page.getByRole('button', { name: '开始提取', exact: true }).click()
   await expect(page.getByLabel('extract · 2 细胞', { exact: true })).toBeVisible({ timeout: 30000 })
   await page.getByLabel('extract · 2 细胞', { exact: true }).check()
+  await page.getByRole('button', { name: '查看信号', exact: true }).click()
+  const signalGraph = page.locator('.batch-task-panel .js-plotly-plot')
+  await expect(signalGraph).toBeVisible()
+  const axes = await signalGraph.evaluate((element) => {
+    const layout = (
+      element as HTMLElement & {
+        layout: Record<string, { title?: { text?: string }; tickformat?: string }>
+      }
+    ).layout
+    return {
+      first: layout.xaxis?.title?.text,
+      second: layout.xaxis2?.title?.text,
+      signal: layout.yaxis2?.tickformat,
+    }
+  })
+  expect(axes).toEqual({ first: 'RT (min)', second: 'RT (min)', signal: '.1e' })
   await page.getByRole('button', { name: '比较所选成功样本的 QC', exact: true }).click()
   await page.getByRole('button', { name: '建立当前数据集', exact: true }).click()
   await expect(
@@ -150,13 +187,30 @@ test('two completed batches compare without replacing data, link signal axes and
     .filter({ hasText: '两批次比较合成项目' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await page.getByRole('link', { name: /提取与审核/ }).click()
+  await navigate(page, '/extraction')
   const selectedBatch = page.getByLabel('处理批次', { exact: true })
   const reviewSample = page.getByRole('checkbox', { name: /^中文样本 ·/ })
   await expect(reviewSample).toBeChecked()
   await reviewSample.uncheck()
   await page.getByRole('button', { name: '刷新批次', exact: true }).click()
   await expect(reviewSample).not.toBeChecked()
+  await expect(page.getByText('矩阵范围', { exact: true })).toHaveCount(0)
+  await page.getByText('CSV 标签设置', { exact: true }).click()
+  const labelsPanel = page.locator('.csv-label-panel')
+  await expect(labelsPanel).toBeVisible()
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    const panelBox = (await labelsPanel.boundingBox())!
+    expect(panelBox.width).toBeGreaterThan(260)
+    expect(panelBox.x).toBeGreaterThanOrEqual(0)
+    expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(width)
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true)
+  }
+  await page.screenshot({ path: test.info().outputPath('csv-label-settings.png') })
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.getByText('CSV 标签设置', { exact: true }).click()
   const matrixRequest = page.waitForRequest((r) => r.url().endsWith('/results/matrix/download'))
   const matrixDownload = page.waitForEvent('download')
   await page.getByRole('button', { name: '下载提取原始矩阵 CSV', exact: true }).click()

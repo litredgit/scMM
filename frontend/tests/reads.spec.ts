@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures'
+import { navigate, test, expect } from './fixtures'
 import { createProject, importDataset } from './support/project'
 
 for (const selection of ['switch', 'aba', 'resume'] as const) {
@@ -13,7 +13,7 @@ for (const selection of ['switch', 'aba', 'resume'] as const) {
           json: { ...(await response.json()), figures: ['scope_A', 'scope_B'] },
         })
       })
-      await page.getByRole('link', { name: /结果与保存/ }).click()
+      await navigate(page, '/results')
       let release!: () => void
       const held = new Promise<void>((resolve) => {
         release = resolve
@@ -46,8 +46,8 @@ for (const selection of ['switch', 'aba', 'resume'] as const) {
         await page.getByRole('button', { name: '查看图形', exact: true }).click()
         await pending
         if (selection === 'resume') {
-          await page.getByRole('link', { name: /项目与样本/ }).click()
-          await page.getByRole('link', { name: /结果与保存/ }).click()
+          await navigate(page, '/samples')
+          await navigate(page, '/results')
           await expect(page.getByLabel('已保存图形', { exact: true })).toHaveValue('scope_A')
         } else {
           await page.getByLabel('已保存图形', { exact: true }).selectOption('scope_B')
@@ -77,7 +77,7 @@ for (const saveFirst of [false, true]) {
     page,
   }) => {
     await createProject(page, '预设恢复读取')
-    await page.getByRole('link', { name: /原始谱与参数/ }).click()
+    await navigate(page, '/raw')
     const workspace = await page.evaluate(() => sessionStorage.getItem('scmm-workspace')!)
     const state = await (
       await page.request.get('/api/v1/workspace', { headers: { 'X-SCMM-Workspace': workspace } })
@@ -117,7 +117,7 @@ for (const saveFirst of [false, true]) {
     try {
       await page.reload()
       await expect.poll(() => loaded && restored).toBe(true)
-      await expect(page.getByRole('heading', { name: '原始谱与参数', exact: true })).toBeVisible()
+      await expect(page.getByRole('heading', { name: '预览', exact: true })).toBeVisible()
       // The maintenance protocol applies deferred controls after 200ms.
       await page.waitForTimeout(250)
       await page.getByRole('button', { name: '展开全部参数', exact: true }).click()
@@ -135,17 +135,12 @@ for (const saveFirst of [false, true]) {
       )
       release()
       await response
-      await expect(page.getByLabel('Cell type', { exact: true })).toHaveValue('saved-draft')
+      await expect(page.locator('datalist option[label^="saved-draft ·"]')).toHaveCount(1)
       await expect(page.getByLabel('预设名称与参考 m/z（JSON）', { exact: true })).toHaveValue(
         draft,
       )
       if (saveFirst)
-        await expect(
-          page
-            .getByLabel('Cell type', { exact: true })
-            .locator('option')
-            .filter({ hasText: 'new-draft' }),
-        ).toHaveCount(1)
+        await expect(page.locator('datalist option[label^="new-draft ·"]')).toHaveCount(1)
     } finally {
       release()
     }
@@ -168,16 +163,15 @@ for (const resume of [false, true]) {
       )
     })
     await createProject(page, '预设读取重试')
-    await page.getByRole('link', { name: /原始谱与参数/ }).click()
+    await navigate(page, '/raw')
     await expect(page.getByRole('alert')).toContainText('合成预设读取失败')
     expect(reads).toBe(1)
     if (resume) {
-      await page.getByRole('link', { name: /项目与样本/ }).click()
-      await page.getByRole('link', { name: /原始谱与参数/ }).click()
+      await navigate(page, '/samples')
+      await navigate(page, '/raw')
     } else await page.getByRole('button', { name: '重试读取预设', exact: true }).click()
-    await expect(page.getByLabel('Cell type', { exact: true }).locator('option')).toHaveText([
-      'loaded · 150',
-    ])
+    await expect(page.locator('datalist option')).toHaveCount(1)
+    await expect(page.locator('datalist option')).toHaveAttribute('label', 'loaded · 150.0000')
     await expect(page.getByRole('alert')).toHaveCount(0)
     expect(reads).toBe(2)
     expect(errors).toEqual([])
@@ -210,7 +204,7 @@ test('project metadata reads coalesce and cannot replace a newer save failure af
     await pending
     await page.getByLabel('项目名称', { exact: true }).fill('项目列表并发读取')
     await page.getByRole('button', { name: '创建并添加样本' }).click()
-    await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '添加原始文件', exact: true })).toBeVisible()
     await page.getByRole('button', { name: '保存项目', exact: true }).click()
     await expect(page.getByRole('alert')).toContainText('本次保存失败需保留')
     const response = page.waitForResponse((r) => r.url().endsWith('/api/v1/projects'))
@@ -246,16 +240,22 @@ test('a parameter read retried after page resume preserves edits made while its 
     await route.fulfill({ response })
   })
   try {
-    await page.getByRole('link', { name: /原始谱与参数/ }).click()
+    await navigate(page, '/raw')
     await pending
     if (!(await page.getByLabel('cell_min_signal', { exact: true }).isVisible()))
-      await page
-        .locator('summary')
-        .filter({ hasText: /^细胞识别$/ })
-        .click()
+      if (
+        !(await page
+          .locator('summary')
+          .filter({ hasText: /^细胞识别$/ })
+          .evaluate((el) => (el.parentElement as HTMLDetailsElement).open))
+      )
+        await page
+          .locator('summary')
+          .filter({ hasText: /^细胞识别$/ })
+          .click()
     await page.getByLabel('cell_min_signal', { exact: true }).fill('42')
-    await page.getByRole('link', { name: /项目与样本/ }).click()
-    await page.getByRole('link', { name: /原始谱与参数/ }).click()
+    await navigate(page, '/samples')
+    await navigate(page, '/raw')
     await expect.poll(() => reads).toBe(2)
     const response = page.waitForResponse(
       (r) => r.url().endsWith('/workspace/parameters') && r.request().method() === 'GET',
@@ -263,7 +263,7 @@ test('a parameter read retried after page resume preserves edits made while its 
     release()
     await response
     await page.waitForTimeout(100)
-    await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('42')
+    await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('4.2e+1')
     await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置不同')
     await expect(page.getByRole('alert')).toHaveCount(0)
   } finally {
@@ -276,7 +276,7 @@ for (const lateFailure of [false, true]) {
     page,
   }) => {
     await importDataset(page, `特征搜索身份-${lateFailure}`)
-    await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+    await navigate(page, '/analysis')
     let release!: () => void
     const held = new Promise<void>((resolve) => {
       release = resolve
@@ -341,8 +341,7 @@ for (const lateFailure of [false, true]) {
       }),
     )
     await createProject(page, `信号查询来源-${lateFailure}`)
-    await page.getByRole('link', { name: /提取与审核/ }).click()
-    await page.getByLabel('审核信号样本', { exact: true }).selectOption('a')
+    await navigate(page, '/extraction')
     let release!: () => void
     const held = new Promise<void>((resolve) => {
       release = resolve
@@ -375,10 +374,10 @@ for (const lateFailure of [false, true]) {
       )
     })
     try {
-      await page.getByRole('button', { name: '查看完整信号', exact: true }).click()
+      await page.getByRole('button', { name: '查看信号', exact: true }).click()
       await pending
-      await page.getByRole('link', { name: /项目与样本/ }).click()
-      await page.getByRole('link', { name: /提取与审核/ }).click()
+      await navigate(page, '/samples')
+      await navigate(page, '/extraction')
       const response = page.waitForResponse((r) => r.url().endsWith('/extraction/signal'))
       release()
       await response

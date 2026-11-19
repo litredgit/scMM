@@ -22,6 +22,7 @@ from scMM.analysis.statistics import feature_correlation_network, marker_feature
 from scMM.ion.semantics import transform_value_state, value_states, write_value_states
 from scMM.util.intensity import intensity_states, transformed_state, write_intensity_states
 from scMM.util.normalize import normalize
+from scMM.util.observations import observation_kind
 
 from .result_catalog import metadata_dependencies, serialize_reports, stale_metadata_results
 
@@ -60,10 +61,16 @@ class AnalysisWorkspace:
     def token(self):
         return self.dataset_id, self.revision
 
-    def require_data(self):
+    def require_features(self):
         if self.data is None:
             raise ValueError("Load a processed dataset first")
         return self.data
+
+    def require_data(self):
+        data = self.require_features()
+        if data.n_obs == 0:
+            raise ValueError("当前仅有特征表，缺少定量矩阵；请先导入细胞或样本定量数据。")
+        return data
 
     def replace(self, data, *, source=""):
         candidate = data.copy()
@@ -101,8 +108,24 @@ class AnalysisWorkspace:
 
     @staticmethod
     def _validate(data):
-        if min(data.shape) < 1:
+        from scMM.util.observations import observation_kind
+
+        observation_kind(data)
+        feature_only = False
+        if "scmm_exchange_json" in data.uns:
+            try:
+                exchange = json.loads(data.uns["scmm_exchange_json"])
+                feature_only = (
+                    exchange.get("schema_version") == 1
+                    and exchange.get("kind") == "feature_only"
+                    and exchange.get("quantitation_available") is False
+                )
+            except (TypeError, ValueError, AttributeError) as exc:
+                raise ValueError("invalid module exchange metadata") from exc
+        if data.n_vars < 1 or (data.n_obs < 1 and not feature_only):
             raise ValueError("dataset must have at least one observation and one feature")
+        if feature_only and data.n_obs != 0:
+            raise ValueError("feature-only data must not contain fabricated observations")
         if not data.obs_names.is_unique or not data.var_names.is_unique:
             raise ValueError("observation and feature identifiers must be unique")
         if not np.isfinite(dense(data.X)).all():
@@ -530,7 +553,7 @@ class AnalysisWorkspace:
             "layer": layer,
             "effect_layer": effect_layer,
             "test_layer": test_layer,
-            "statistical_unit": "cell",
+            "statistical_unit": observation_kind(self.require_data()),
             "numerical_inputs": table.attrs["input"],
         }
         self.put_result("differential", result, token)
@@ -650,7 +673,7 @@ class AnalysisWorkspace:
         self.put_result("supervised", analyzer, self.token)
 
     def save_h5ad(self, storage, label, directory, filename):
-        data = self.require_data()
+        data = self.require_features()
         if (
             Path(filename).name != filename
             or "/" in filename
@@ -683,5 +706,5 @@ class AnalysisWorkspace:
         return target
 
     def history(self):
-        metadata = self.require_data().uns["scmm_workbench"]
+        metadata = self.require_features().uns["scmm_workbench"]
         return deepcopy(json.loads(metadata["history_json"]))

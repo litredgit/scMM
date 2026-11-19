@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ScientificInput from '../../../components/ScientificInput.vue'
 import { computed, ref, watch } from 'vue'
 import { useAnalysisContext } from '../composables/useAnalysisContext'
 import PlotView from '../../../components/PlotView.vue'
@@ -179,7 +180,11 @@ useViewState('exploration', {
       >
       <label>参与比较的分组（逗号分隔）<input v-model="groups" :disabled="store.busy" /></label>
       <label
-        >检出强度下限<input v-model.number="intensity" type="number" min="0" :disabled="store.busy"
+        >检出强度下限<ScientificInput
+          :model-value="intensity"
+          @update:model-value="intensity = $event ?? 0"
+          scientific
+          :disabled="store.busy"
       /></label>
       <label
         >组内最低检出比例<input

@@ -10,7 +10,7 @@ export function useAnalysis() {
   const store = useWorkspace(),
     info = ref<AnalysisInfo>()
   const tab = ref('embedding')
-  const parametersPinned = ref(false)
+  const parametersPinned = ref(true)
   const active = ref(true)
   onActivated(() => {
     active.value = true
@@ -139,7 +139,7 @@ export function useAnalysis() {
       token === generation &&
       identity === dataContext() &&
       (api === store ? ticket() : api.isCurrent?.() !== false)
-    if (!store.project?.dataset) {
+    if (!store.project?.dataset || store.project.dataset.quantitation_available === false) {
       info.value = undefined
       requestedEmbedding = ''
       figures.value = {}

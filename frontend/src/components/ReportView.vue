@@ -2,18 +2,32 @@
 import { computed } from 'vue'
 import FieldLabel from './FieldLabel.vue'
 import { displayName } from '../help/labels'
-const props = defineProps<{ value: unknown }>()
+const props = defineProps<{ value: unknown; observationKind?: string }>()
 const entries = computed(() =>
   props.value && typeof props.value === 'object' && !Array.isArray(props.value)
     ? Object.entries(props.value as Record<string, unknown>)
     : null,
 )
+const observationKind = computed(() => {
+  const value = props.value as { statistical_unit?: string } | null
+  return value?.statistical_unit ?? props.observationKind
+})
+const sampleLabels: Record<string, string> = {
+  all_source_support: '全部已标记样本与来源组',
+  train_source_support: '训练集样本与来源组',
+  test_source_support: '留出集样本与来源组',
+  cv_source_support: '逐折样本与来源组',
+  excluded_unlabelled_cells: '未标记而排除的样本数',
+  cells: '样本数',
+}
 </script>
 <template>
   <dl v-if="entries" class="report-fields">
     <div v-for="[key, item] in entries" :key="key">
-      <dt><FieldLabel :name="key" /></dt>
-      <dd><ReportView :value="item" /></dd>
+      <dt>
+        <FieldLabel :name="observationKind === 'sample' ? (sampleLabels[key] ?? key) : key" />
+      </dt>
+      <dd><ReportView :value="item" :observation-kind="observationKind" /></dd>
     </div>
   </dl>
   <span v-else-if="Array.isArray(value)">{{

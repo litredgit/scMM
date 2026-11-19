@@ -7,6 +7,7 @@ import { useLegendOrder } from './useLegendOrder'
 import { useViewState, restoringViews } from '../api/viewState'
 import { applyViewport } from './plotViewport'
 import { applyLegend } from './plotPresentation'
+import { isMassSpectrum, spectrumPresentation, type SpectrumSettings } from './spectrumPresentation'
 import { systemPlotText } from './systemPlotText'
 import { useWorkspace } from '../stores/workspace'
 import type { Figure } from '../api/types'
@@ -29,6 +30,49 @@ const props = withDefaults(
   },
 )
 const store = useWorkspace()
+const spectrum = computed(() => isMassSpectrum(props.figure))
+const intensityMissing = computed(
+  () =>
+    (props.figure.layout.meta as Record<string, unknown> | undefined)?.intensity_missing === true,
+)
+const relativeIntensityAllowed = computed(
+  () =>
+    !intensityMissing.value &&
+    (props.figure.layout.meta as Record<string, unknown> | undefined)
+      ?.relative_intensity_allowed !== false,
+)
+const spectrumSettings = ref<SpectrumSettings>({
+  relative: false,
+  labels: true,
+  decimals: 4,
+  threshold: 1,
+  interaction: 'zoom',
+})
+const intensityMode = computed({
+  get: () => (relativeIntensityAllowed.value ? spectrumSettings.value.relative : false),
+  set: (relative: boolean) => {
+    spectrumSettings.value.relative = relative
+  },
+})
+const spectrumHistory = ref<Record<string, unknown>[]>([])
+const spectrumDescription = computed(() => {
+  const meta = (props.figure.layout.meta ?? {}) as Record<string, unknown>
+  const detail = (meta.detail ?? {}) as Record<string, unknown>
+  const parts: string[] = []
+  if (detail.native_id) parts.push(String(detail.native_id))
+  if (detail.rt_seconds !== undefined) parts.push(`RT ${Number(detail.rt_seconds).toFixed(3)} s`)
+  if (detail.ms_level !== undefined) parts.push(`MS${detail.ms_level}`)
+  parts.push(
+    intensityMissing.value
+      ? 'Feature positions · intensity not supplied'
+      : meta.source === 'matrix_feature_stems_not_raw_profile' ||
+          meta.source === 'feature_sticks' ||
+          meta.spectrum_kind === 'feature_sticks'
+        ? 'Feature spectrum'
+        : 'Mass spectrum',
+  )
+  return parts.join(' · ')
+})
 const chartKey = computed(
   () =>
     props.viewKey ??
@@ -70,7 +114,7 @@ const {
   move: moveLegend,
   reset: resetLegend,
 } = useLegendOrder(chartKey, legendNames, () => !!props.readonly)
-function orderedFigure(): Figure {
+function orderedFigure(view: Record<string, unknown> = {}): Figure {
   const copy = systemPlotText(JSON.parse(JSON.stringify(props.figure)) as Figure, chartKey.value)
   for (const [index, trace] of (copy.data as Record<string, unknown>[]).entries()) {
     if (traceVisibility.value[index] !== undefined) trace.visible = traceVisibility.value[index]
@@ -83,7 +127,14 @@ function orderedFigure(): Figure {
     }
   }
   copy.layout.legend = { ...(copy.layout.legend as object), traceorder: 'normal' }
-  return copy
+  return spectrumPresentation(
+    copy,
+    spectrumSettings.value,
+    chartWidth.value,
+    chartHeight.value,
+    position.value,
+    view,
+  )
 }
 const chartWidth = ref(900)
 const chartKind = computed(() =>
@@ -93,6 +144,7 @@ const chartKind = computed(() =>
 )
 const chartHeight = computed(() => {
   const width = chartWidth.value
+  if (spectrum.value && width < 680) return 560
   if (props.figure.layout.yaxis2 && (chartKind.value === 'cells' || props.name.includes('signal')))
     return Math.max(560, Math.min(760, width * 0.9))
   if (['tic', 'eic', 'sum', 'single', 'cells'].includes(chartKind.value))
@@ -131,6 +183,18 @@ const emit = defineEmits<{
   select: [feature: string]
   range: [range: [number, number]]
   viewport: [value: Record<string, unknown>]
+  'point-click': [
+    value: {
+      points: {
+        customdata?: unknown
+        x?: number
+        y?: number
+        pointIndex?: number
+        pointNumber?: number
+        curveNumber?: number
+      }[]
+    },
+  ]
 }>()
 const element = ref<HTMLElement>()
 const failure = ref('')
@@ -186,7 +250,41 @@ useViewState(`plot:${chartKey.value}`, {
   pointOpacity,
   artwork,
   includeTitle,
+  spectrumSettings,
 })
+function changeSpectrum() {
+  if (!restoringViews) {
+    const next = { ...viewport.value }
+    delete next['yaxis.range']
+    next['yaxis.autorange'] = true
+    viewport.value = next
+  }
+  void renderer.retry()
+}
+function spectrumView(action: 'reset' | 'back' | 'y-in' | 'y-out') {
+  if (action === 'back') {
+    const previous = spectrumHistory.value.pop()
+    viewport.value =
+      previous && Object.keys(previous).length
+        ? previous
+        : { 'xaxis.autorange': true, 'yaxis.autorange': true }
+  } else if (action === 'reset') {
+    spectrumHistory.value.push({ ...viewport.value })
+    viewport.value = { 'xaxis.autorange': true, 'yaxis.autorange': true }
+  } else {
+    const current = renderer.currentViewport()
+    const range = current['yaxis.range'] as number[] | undefined
+    if (!range || range.length !== 2) return
+    spectrumHistory.value.push({ ...current })
+    const factor = action === 'y-in' ? 0.5 : 2
+    viewport.value = {
+      ...current,
+      'yaxis.range': [range[0], Number(range[0]) + (Number(range[1]) - Number(range[0])) * factor],
+      'yaxis.autorange': false,
+    }
+  }
+  void renderer.retry()
+}
 function paperPreset() {
   const values: Record<string, [number, number]> = {
     'nature-single': [89, 65],
@@ -214,9 +312,19 @@ watch(artwork, () => {
 })
 watch(
   () => props.figure,
-  () => {
+  (figure, previous) => {
     if (!restoringViews) {
-      viewport.value = {}
+      const meta = figure.layout.meta as Record<string, unknown> | undefined
+      const before = previous?.layout.meta as Record<string, unknown> | undefined
+      const sameAnnotationInput =
+        meta?.scmm_spectrum === true &&
+        meta.lipid_version &&
+        meta.lipid_version === before?.lipid_version &&
+        JSON.stringify(meta.dataset_token) === JSON.stringify(before?.dataset_token)
+      if (!sameAnnotationInput) {
+        viewport.value = {}
+        spectrumHistory.value = []
+      }
       traceVisibility.value = []
     }
   },
@@ -243,6 +351,8 @@ const renderer = usePlotRenderer({
   legendItems,
   pointOpacity,
   traceVisibility,
+  spectrumSettings,
+  spectrumHistory,
 })
 watch(
   () => props.linkedViewport,
@@ -494,7 +604,68 @@ async function image(format: string, preview = false) {
 }
 </script>
 <template>
-  <div class="plot-shell">
+  <div class="plot-shell" :class="{ 'mass-spectrum-shell': spectrum }">
+    <div v-if="spectrum" class="spectrum-toolbar" aria-label="质谱浏览工具">
+      <div class="spectrum-caption">{{ spectrumDescription }}</div>
+      <div class="spectrum-tools">
+        <label
+          >强度<select
+            v-model="intensityMode"
+            :disabled="!relativeIntensityAllowed"
+            aria-label="谱图强度显示"
+            @change="changeSpectrum"
+          >
+            <option :value="false">
+              {{
+                intensityMissing
+                  ? '未提供实测强度'
+                  : relativeIntensityAllowed
+                    ? '绝对强度'
+                    : '当前矩阵值'
+              }}
+            </option>
+            <option :value="true">相对丰度（基峰 100%）</option>
+          </select></label
+        >
+        <label
+          >操作<select
+            v-model="spectrumSettings.interaction"
+            aria-label="谱图鼠标操作"
+            @change="renderer.retry()"
+          >
+            <option value="zoom">拖拽放大</option>
+            <option value="pan">平移</option>
+          </select></label
+        >
+        <button @click="spectrumView('back')" :disabled="!spectrumHistory.length">上一视图</button>
+        <button @click="spectrumView('reset')">恢复全谱</button>
+        <button @click="spectrumView('y-in')" aria-label="纵轴放大">Y × 2</button>
+        <button @click="spectrumView('y-out')" aria-label="纵轴缩小">Y ÷ 2</button>
+        <details class="spectrum-label-settings">
+          <summary>峰标签</summary>
+          <div class="spectrum-label-fields">
+            <label class="inline-check"
+              ><input
+                v-model="spectrumSettings.labels"
+                type="checkbox"
+                @change="renderer.retry()"
+              />显示标签</label
+            >
+            <label>m/z 小数位<span>4</span> </label>
+            <label
+              >标签阈值（基峰 %）<input
+                v-model.number="spectrumSettings.threshold"
+                type="number"
+                min="0"
+                max="100"
+                step=".1"
+                aria-label="谱图标签阈值"
+                @change="renderer.retry()"
+            /></label>
+          </div>
+        </details>
+      </div>
+    </div>
     <div
       ref="element"
       class="plot"
@@ -694,5 +865,56 @@ async function image(format: string, preview = false) {
   width: 100%;
   min-width: 0;
   max-width: 100%;
+}
+.mass-spectrum-shell {
+  border: 1px solid #d8dee7;
+  background: #fff;
+  border-radius: 4px;
+}
+.spectrum-toolbar {
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid #dde2e8;
+  background: #f7f8fa;
+}
+.spectrum-caption {
+  font-family: Arial, sans-serif;
+  font-size: 0.8rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+.spectrum-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: end;
+}
+.spectrum-tools label {
+  font-size: 0.75rem;
+  gap: 0.2rem;
+}
+.spectrum-tools button,
+.spectrum-tools select {
+  min-height: 30px;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+}
+.spectrum-label-settings {
+  position: relative;
+  font-size: 0.78rem;
+}
+.spectrum-label-fields {
+  position: absolute;
+  right: 0;
+  top: 2rem;
+  background: white;
+  border: 1px solid #d8dee7;
+  padding: 1rem;
+  min-width: 210px;
+  box-shadow: 0 3px 12px #0002;
+  z-index: 10;
+}
+.mass-spectrum-shell > .plot-actions,
+.mass-spectrum-shell > .plot-settings {
+  margin: 0.75rem;
 }
 </style>

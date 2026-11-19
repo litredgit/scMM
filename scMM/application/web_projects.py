@@ -299,12 +299,52 @@ class ProjectWorkflow:
             ids = [edit["id"] for edit in edits]
             if len(ids) != len(set(ids)) or set(ids) - lookup.keys():
                 raise ValueError("样本 ID 重复或不属于当前项目。")
+            before = {key: dict(lookup[key]) for key in ids}
             for edit in edits:
                 sample = lookup[edit["id"]]
                 sample.update(
                     {key: str(value).strip() for key, value in edit.items() if key != "id"}
                 )
                 sample["metadata_unresolved"] = []
+
+            if candidate.workspace.data is not None:
+                import json
+                from datetime import UTC, datetime
+
+                changes = [
+                    {
+                        "id": key,
+                        "before": {
+                            field: before[key].get(field)
+                            for field in ("name", "group", "subject", "batch")
+                        },
+                        "after": {
+                            field: lookup[key].get(field)
+                            for field in ("name", "group", "subject", "batch")
+                        },
+                    }
+                    for key in ids
+                    if any(
+                        before[key].get(field) != lookup[key].get(field)
+                        for field in ("name", "group", "subject", "batch")
+                    )
+                ]
+                for data in (
+                    candidate.workspace.data,
+                    candidate.workspace._original,
+                    candidate.workspace._selection_source,
+                ):
+                    if data is None or not changes:
+                        continue
+                    history = json.loads(data.uns.get("scmm_metadata_edits_json", "[]"))
+                    history.append(
+                        {
+                            "at": datetime.now(UTC).isoformat(),
+                            "workspace_id": identity,
+                            "changes": changes,
+                        }
+                    )
+                    data.uns["scmm_metadata_edits_json"] = json.dumps(history, ensure_ascii=False)
 
         return self._update_samples(identity, revision, update)
 

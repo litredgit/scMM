@@ -78,9 +78,10 @@ function bound(key: string, index: number, event: Event) {
         /></div
     ></template>
     <p v-if="summary" class="muted">
-      原始检测范围 {{ summary.mz_min }}–{{ summary.mz_max }} m/z；当前表单 {{ model.mz_min }}–{{
-        model.mz_max
+      原始检测范围 {{ Number(summary.mz_min).toFixed(4) }}–{{
+        Number(summary.mz_max).toFixed(4)
       }}
+      m/z；当前表单 {{ Number(model.mz_min).toFixed(4) }}–{{ Number(model.mz_max).toFixed(4) }}
       m/z。重新检测按最近的 50 倍数填入表单，应用后才生效。
     </p>
     <button class="preview" :disabled="store.busy || !summary" @click="detect">

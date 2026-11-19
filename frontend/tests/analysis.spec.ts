@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fixtures'
+import { navigate, test, expect, type Page } from './fixtures'
 import { readFile } from 'node:fs/promises'
 
 let pageErrors: string[] = []
@@ -20,7 +20,7 @@ async function importAnalysis(page: Page, name: string, filename = 'analysis.h5a
     .click()
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
   await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await navigate(page, '/analysis')
   await expect(page.getByLabel('group_key', { exact: true }).first()).toBeAttached()
   if (await page.getByRole('button', { name: '固定参数区', exact: true }).count())
     await page.getByRole('button', { name: '固定参数区', exact: true }).first().click()
@@ -107,9 +107,13 @@ test('legacy settings, independent parameters, draft and project reset, narrow p
   await expect(page.getByLabel('store_key', { exact: true })).toHaveValue('X_old')
   await expect(page.getByLabel('Color', { exact: true })).toHaveValue('feature:f0')
   await module(page, '监督与 SHAP')
+  await expect(page.getByRole('button', { name: '监督与 SHAP', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
   await expect(page.getByRole('button', { name: '监督与 SHAP', exact: true })).toHaveCSS(
     'background-color',
-    'rgb(239, 246, 255)',
+    'rgb(237, 247, 248)',
   )
   await expect(
     page.getByLabel('random_state', { exact: true }).filter({ visible: true }),
@@ -133,8 +137,8 @@ test('legacy settings, independent parameters, draft and project reset, narrow p
   await expect(
     page.getByLabel('random_state', { exact: true }).filter({ visible: true }),
   ).toHaveValue('91')
-  await page.getByRole('link', { name: /结果与保存/ }).click()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await navigate(page, '/results')
+  await navigate(page, '/analysis')
   await expect(
     page.getByLabel('random_state', { exact: true }).filter({ visible: true }),
   ).toHaveValue('91')
@@ -149,8 +153,8 @@ test('legacy settings, independent parameters, draft and project reset, narrow p
     .filter({ hasText: '分析设置迁移' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
+  await navigate(page, '/analysis')
   await module(page, '监督与 SHAP')
   await expect(
     page.getByLabel('random_state', { exact: true }).filter({ visible: true }),
@@ -485,8 +489,8 @@ test('clustering parameters execute explicitly and persist across saved project 
     .filter({ hasText: '聚类高级参数' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
+  await navigate(page, '/analysis')
   await module(page, '聚类')
   await expect(page.getByLabel('eps', { exact: true })).toHaveValue('0.001')
   await expect(page.getByLabel('min_samples', { exact: true })).toHaveValue('2')
@@ -536,8 +540,8 @@ test('exact feature scatter plots manually and reloads a saved exportable figure
     .filter({ hasText: '双特征散点闭环' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
+  await navigate(page, '/analysis')
   await module(page, '双特征散点')
   await expect(x).toHaveValue('f0')
   await expect(y).toHaveValue('f1')
@@ -570,8 +574,8 @@ test('feature-distance embedding exports distances and reloads a read-only figur
     .filter({ hasText: '特征距离嵌入' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
+  await navigate(page, '/analysis')
   await module(page, '特征距离嵌入')
   await expect(page.getByLabel('距离嵌入特征ID', { exact: true })).toHaveValue('f0\nf1\nf2\nf3')
   await page.getByRole('button', { name: '读取已保存特征距离嵌入', exact: true }).click()
@@ -605,8 +609,8 @@ test('acquisition stability requires explicit choices and persists full tables',
     .filter({ hasText: '采集稳定性' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
+  await navigate(page, '/analysis')
   await module(page, '采集稳定性 QC')
   await expect(page.getByLabel('稳定性坐标含义', { exact: true })).toHaveValue('stored_order')
   await page.getByRole('button', { name: '读取已保存采集稳定性 QC', exact: true }).click()
@@ -632,8 +636,8 @@ test('explicit model parameters reach training and persist display settings', as
   await page.getByLabel('model', { exact: true }).selectOption('random_forest')
   await page.getByLabel('random_forest n_estimators', { exact: true }).fill('7')
   await page.getByLabel('random_forest min_samples_leaf', { exact: true }).fill('0.1')
-  await page.getByRole('link', { name: /结果与保存/ }).click()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await navigate(page, '/results')
+  await navigate(page, '/analysis')
   await expect(page.getByLabel('random_forest n_estimators', { exact: true })).toHaveValue('7')
   await expect(page.getByLabel('SHAP 显示特征数', { exact: true })).toHaveValue('7')
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
@@ -645,8 +649,8 @@ test('explicit model parameters reach training and persist display settings', as
     .filter({ hasText: '模型高级参数' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
+  await navigate(page, '/analysis')
   await module(page, '监督与 SHAP')
   await page.getByText('监督高级参数', { exact: true }).click()
   await expect(page.getByLabel('random_forest min_samples_leaf', { exact: true })).toHaveValue(
@@ -735,8 +739,8 @@ test('named Palantir and window results retain exact sources through save and re
     .filter({ hasText: '命名时间结果' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
+  await navigate(page, '/analysis')
   await page.getByRole('combobox', { name: '分析功能', exact: true }).selectOption('time')
   await expect(page.getByLabel('选择命名时间结果', { exact: true })).toHaveValue('path_browser')
   await page.getByRole('button', { name: '读取已保存时间图', exact: true }).click()

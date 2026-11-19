@@ -74,6 +74,8 @@ class DatasetSummary(BaseModel):
     features: int
     observation_columns: list[str]
     source: str
+    quantitation_available: bool = True
+    observation_kind: Literal["cell", "sample"] = "cell"
 
 
 class ProjectView(BaseModel):

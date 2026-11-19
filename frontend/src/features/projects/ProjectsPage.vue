@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { formatTime } from '../../help/time'
 import { computed, onMounted, ref } from 'vue'
-import SavedItems from '../../components/SavedItems.vue'
 import TrashAction from '../../components/TrashAction.vue'
-import SaveExplanation from '../../components/SaveExplanation.vue'
 import { useRouter } from 'vue-router'
 import { useReadScope } from '../../api/readScope'
 import type { SavedProject } from '../../api/types'
@@ -11,10 +9,8 @@ import { useWorkspace } from '../../stores/workspace'
 
 const store = useWorkspace()
 const router = useRouter()
-const savedManager = ref<InstanceType<typeof SavedItems>>()
 async function removed() {
   await load()
-  await savedManager.value?.refresh()
 }
 const name = ref('')
 const search = ref('')
@@ -68,7 +64,14 @@ async function finishOpen(path: string, save = false) {
   const result = await store.mutate('/project/open', { path })
   if (result) {
     pendingPath.value = ''
-    await router.push(result.project?.dataset ? '/preprocess' : '/samples')
+    const dataset = result.project?.dataset
+    await router.push(
+      dataset?.quantitation_available === false
+        ? '/annotation'
+        : dataset
+          ? '/preprocess'
+          : '/samples',
+    )
   }
 }
 function date(value: string) {
@@ -77,19 +80,18 @@ function date(value: string) {
 </script>
 
 <template>
-  <section>
+  <section class="projects-home">
     <div class="page-title">
       <div>
-        <p class="eyebrow">项目首页</p>
-        <h1>从一个实验项目开始</h1>
-        <p>组织样本、检查原始谱，并将每一步分析保存在同一个项目中。</p>
+        <h1>选择项目</h1>
       </div>
     </div>
-    <div class="overview-grid">
-      <form class="card create-project" @submit.prevent="create">
-        <span class="section-tag">新实验</span>
-        <h2>创建项目</h2>
-        <p>原始文件仅引用，保留在服务器原位置。</p>
+    <section class="card project-start">
+      <form class="create-project" @submit.prevent="create">
+        <div class="project-create-heading">
+          <h2>创建项目</h2>
+          <small class="muted">原始文件保留在服务器原位置。</small>
+        </div>
         <label
           ><FieldLabel name="项目名称" /><input
             aria-label="项目名称"
@@ -100,30 +102,17 @@ function date(value: string) {
             :disabled="store.busy"
         /></label>
         <button class="primary" :disabled="store.busy || !name.trim()">
-          创建并添加样本 <span>→</span>
+          创建并添加样本 <span aria-hidden="true">→</span>
         </button>
       </form>
-      <details class="card workflow-note">
-        <summary>查看六步工作流程与保存说明</summary>
-        <span class="section-tag">工作流程</span>
-        <h2>从原始谱到可追溯的结果</h2>
-        <ol>
-          <li>添加样本与实验分组</li>
-          <li>检查原始谱，设置提取参数</li>
-          <li>审核提取结果，再进行预处理与分析</li>
-          <li>主动保存项目，下载需要的结果</li>
-        </ol>
-        <p class="muted">提取后人工审核；开始提取也会先完整保存项目。</p>
-        <SaveExplanation />
-      </details>
-    </div>
+    </section>
     <section class="card project-list">
       <div class="section-heading">
         <div>
           <h2>
             已保存项目 <span class="count">{{ projects.length }}</span>
           </h2>
-          <p>打开项目继续已保存的工作；备注可在“项目与样本”中编辑。</p>
+          <p>打开项目继续已保存的工作；备注可在“添加原始文件”中编辑。</p>
         </div>
         <div class="actions">
           <input v-model="search" aria-label="搜索项目" placeholder="搜索项目名称或备注" /><button
@@ -178,7 +167,7 @@ function date(value: string) {
               <td>{{ item.samples }}</td>
               <td>
                 <template v-if="item.data_state === 'saved'"
-                  >已保存数据 · {{ item.cells }} 细胞 × {{ item.features }} 特征</template
+                  >已保存数据 · {{ item.cells }} 个观测 × {{ item.features }} 特征</template
                 >
                 <template v-else-if="item.data_state === 'unavailable'"
                   >快照不可读取，请检查文件</template
@@ -204,6 +193,42 @@ function date(value: string) {
       </div>
       <p class="storage-path">项目根目录：{{ store.configuration?.project_root }}</p>
     </section>
-    <SavedItems ref="savedManager" @changed="load" />
   </section>
 </template>
+
+<style scoped>
+.project-start > .create-project {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(220px, 1.5fr) max-content;
+  gap: 1.25rem;
+  align-items: end;
+}
+.project-create-heading h2 {
+  margin: 0 0 0.25rem;
+}
+.project-create-heading small {
+  font-size: 0.79rem;
+}
+.create-project label,
+.create-project button {
+  margin: 0;
+  width: auto;
+}
+@media (max-width: 1100px) {
+  .project-start > .create-project {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+  .project-create-heading {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 480px) {
+  .project-start > .create-project {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .create-project button {
+    width: 100%;
+  }
+}
+</style>

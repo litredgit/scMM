@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from scMM.util.observations import observation_kind
+
 
 def _bh_fdr(p_values):
     p = np.asarray(p_values, dtype=float)
@@ -31,20 +33,21 @@ def differential_features(
     effect_layer=None,
     test_layer=None,
 ):
-    """Compare cells in two groups; cells are the statistical unit.
+    """Compare declared cell or sample observations in two groups.
 
     For biological replicate inference, aggregate by replicate upstream.
     Input must be finite and nonnegative so fold changes remain meaningful.
     """
+    unit = observation_kind(data)
     if method not in {"mannwhitney", "welch", "ttest"}:
         raise ValueError("method must be mannwhitney or welch")
     if min_present < 2 or str(group_a) == str(group_b):
-        raise ValueError("distinct groups with at least two cells are required")
+        raise ValueError(f"distinct groups with at least two {unit}s are required")
     labels = data.obs[group_key]
     a_mask = (labels.notna() & (labels.astype(str) == str(group_a))).to_numpy()
     b_mask = (labels.notna() & (labels.astype(str) == str(group_b))).to_numpy()
     if min(a_mask.sum(), b_mask.sum()) < min_present:
-        raise ValueError("each group must contain at least min_present cells")
+        raise ValueError(f"each group must contain at least min_present {unit}s")
     from scMM.ion.semantics import value_states
 
     if layer is not None and (effect_layer is not None or test_layer is not None):
@@ -98,10 +101,10 @@ def differential_features(
     result.attrs["input"] = {
         "effect_layer": effect_key,
         "test_layer": test_key,
-        "statistical_unit": "cell",
+        "statistical_unit": unit,
         "effect_space": state["space"],
         "legacy_unverified_abundance": state["space"] == "unknown",
-        "biological_replication": "not established by cell count",
+        "biological_replication": f"not established by {unit} count",
     }
     return result
 

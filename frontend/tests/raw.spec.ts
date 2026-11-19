@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fixtures'
+import { navigate, test, expect, type Page } from './fixtures'
 import { createProject as create } from './support/project'
 
 test.use({ actionTimeout: 15000 })
@@ -14,7 +14,7 @@ test('raw signal diagnostic stays independent and exports full numeric compariso
   await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
   await page.getByRole('button', { name: /extract.mzML/ }).click()
   await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
-  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await navigate(page, '/raw')
   await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
   await page.locator('summary').filter({ hasText: '原始信号诊断（可选）' }).click()
   const run = page.getByRole('button', { name: '运行信号诊断', exact: true })
@@ -33,7 +33,7 @@ test('raw signal diagnostic stays independent and exports full numeric compariso
   expect(body.table.total).toBe(62)
   expect(body.figure.layout.meta.export_tables['diagnostic.csv']).toContain('rank_residual')
   await expect(page.getByText('迭代噪声估计与残差标准差不同', { exact: false })).toBeVisible()
-  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('100000')
+  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('1.0e+5')
   const panel = page.locator('details.card').filter({ hasText: '原始信号诊断（可选）' })
   await expect(panel.locator('.js-plotly-plot')).toBeVisible()
   await page.route('**/workspace/raw/diagnostic', (route) =>
@@ -58,8 +58,8 @@ test('raw signal diagnostic stays independent and exports full numeric compariso
     .filter({ hasText: '独立原始诊断' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
-  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await expect(page.getByRole('heading', { name: '添加原始文件', exact: true })).toBeVisible()
+  await navigate(page, '/raw')
   // Restored read-only plots remain available without rerunning raw computation.
   if (!(await page.getByLabel('诊断基线', { exact: true }).isVisible()))
     await page.locator('summary').filter({ hasText: '原始信号诊断（可选）' }).click()
@@ -76,7 +76,7 @@ for (const mode of ['hidden-error', 'resumed-error', 'hidden-ready'] as const) {
     await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
     await page.getByRole('button', { name: /extract.mzML/ }).click()
     await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
-    await page.getByRole('link', { name: /原始谱与参数/ }).click()
+    await navigate(page, '/raw')
     await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
     let release!: () => void
     const held = new Promise<void>((resolve) => {
@@ -124,9 +124,9 @@ for (const mode of ['hidden-error', 'resumed-error', 'hidden-ready'] as const) {
     })
     await page.getByRole('button', { name: '预览细胞窗口', exact: true }).click()
     await pending
-    await page.getByRole('link', { name: /项目与样本/ }).click()
+    await navigate(page, '/samples')
     if (mode === 'resumed-error') {
-      await page.getByRole('link', { name: /原始谱与参数/ }).click()
+      await navigate(page, '/raw')
       // Longer than the 1500ms cadence: activation must not overlap a held read.
       await page.waitForTimeout(1700)
       expect(reads).toBe(1)
@@ -149,7 +149,7 @@ test('opening raw data keeps one operation through scan lookup and both initial 
   await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
   await page.getByRole('button', { name: /extract.mzML/ }).click()
   await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
-  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await navigate(page, '/raw')
   let release!: () => void
   const held = new Promise<void>((resolve) => {
     release = resolve
@@ -176,9 +176,9 @@ test('opening raw data keeps one operation through scan lookup and both initial 
       page.locator('.task-note').filter({ hasText: '打开原始文件：刷新状态中' }),
     ).toBeVisible()
     const navigation = page.getByRole('navigation', { name: '步骤切换', exact: true })
-    await navigation.getByRole('button', { name: /上一步：项目与样本/ }).click()
+    await navigation.getByRole('button', { name: /上一步：添加原始文件/ }).click()
     await expect(page).toHaveURL(/\/samples$/)
-    await navigation.getByRole('button', { name: /下一步：原始谱与参数/ }).click()
+    await navigation.getByRole('button', { name: /下一步：预览/ }).click()
     await expect(button).toBeDisabled()
     await button.evaluate((element) => (element as HTMLButtonElement).click())
     expect(opens).toBe(1)
@@ -202,21 +202,27 @@ test('failed clearing of a sample exception keeps the raw plot and unsaved param
   await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
   await page.getByRole('button', { name: /extract.mzML/ }).click()
   await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
-  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await navigate(page, '/raw')
   await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
   await expect(page.locator('.js-plotly-plot')).toBeVisible()
   if (!(await page.getByLabel('cell_min_signal', { exact: true }).isVisible()))
-    await page
-      .locator('summary')
-      .filter({ hasText: /^细胞识别$/ })
-      .click()
+    if (
+      !(await page
+        .locator('summary')
+        .filter({ hasText: /^细胞识别$/ })
+        .evaluate((el) => (el.parentElement as HTMLDetailsElement).open))
+    )
+      await page
+        .locator('summary')
+        .filter({ hasText: /^细胞识别$/ })
+        .click()
   await page.getByLabel('cell_min_signal', { exact: true }).fill('42')
   await page.route('**/workspace/parameters/clear', (route) =>
     route.fulfill({ status: 400, json: { error: { message: '合成例外清除失败' } } }),
   )
   await page.getByRole('button', { name: '清除样本例外', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('合成例外清除失败')
-  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('42')
+  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('4.2e+1')
   await expect(page.locator('.js-plotly-plot')).toBeVisible()
 })
 
@@ -228,7 +234,7 @@ test('changing the raw sample clears counts and messages belonging to the previo
   await page.getByRole('button', { name: /extract.mzML/ }).click()
   await page.getByRole('button', { name: /alpha.mzML/ }).click()
   await page.getByRole('button', { name: '添加 2 个文件', exact: true }).click()
-  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await navigate(page, '/raw')
   await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
   await expect(page.locator('.js-plotly-plot')).toBeVisible()
   let revision = 0
@@ -289,7 +295,7 @@ test('raw zoom, reset then zoom, and full-range SVG share one explicit export po
   await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
   await page.getByRole('button', { name: /extract.mzML/ }).click()
   await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
-  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await navigate(page, '/raw')
   await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
   const plot = page.locator('.plot-shell').first()
   await expect(plot.locator('.js-plotly-plot')).toBeVisible()
@@ -316,12 +322,13 @@ test('raw zoom, reset then zoom, and full-range SVG share one explicit export po
     await plot.getByRole('button', { name: '下载 SVG', exact: true }).click()
     const svg = await readFile((await (await pending).path())!, 'utf8')
     expect(svg).toContain('Intensity')
+    expect(svg).toContain('RT (min)')
     expect(svg).not.toContain('总离子流')
     return page.evaluate(
       (content) =>
         Array.from(
           new DOMParser().parseFromString(content, 'image/svg+xml').querySelectorAll('.xtick text'),
-        ).map((el) => Number(el.textContent)),
+        ).map((el) => Number(el.textContent) * 60),
       svg,
     )
   }
@@ -341,8 +348,8 @@ test('raw zoom, reset then zoom, and full-range SVG share one explicit export po
     graph.emit('plotly_relayout', { 'xaxis.range[0]': 11, 'xaxis.range[1]': 15 })
   })
   const again = await svgTicks()
-  expect(Math.min(...again)).toBeGreaterThanOrEqual(11)
-  expect(Math.max(...again)).toBeLessThanOrEqual(15)
+  expect(Math.min(...again)).toBeGreaterThanOrEqual(10.8)
+  expect(Math.max(...again)).toBeLessThanOrEqual(15.2)
   await plot.getByLabel('导出范围', { exact: true }).selectOption('full')
   const full = await svgTicks()
   expect(Math.min(...full)).toBeLessThanOrEqual(0)
@@ -368,7 +375,7 @@ test('legacy automatic labels become English while input legend and custom title
     body.figure.data[0].name = '用户输入图例'
     await route.fulfill({ response, json: body })
   })
-  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await navigate(page, '/raw')
   await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
   const plot = page.locator('.plot-shell').first()
   await expect(plot.locator('.gtitle')).toHaveText('Total ion chromatogram (TIC)')

@@ -1,12 +1,10 @@
 import ExplorationPanel from './modules/ExplorationPanel.vue'
-import AnnotationEvidencePanel from './modules/AnnotationEvidencePanel.vue'
 import StabilityPanel from './modules/StabilityPanel.vue'
 import TimePanel from './modules/TimePanel.vue'
 import FeatureEmbeddingPanel from './modules/FeatureEmbeddingPanel.vue'
 import FeatureScatterPanel from './modules/FeatureScatterPanel.vue'
 import HeatmapPanel from './modules/HeatmapPanel.vue'
 import ClusteringPanel from './modules/embedding/ClusteringPanel.vue'
-import LipidPanel from '../preprocess/LipidPanel.vue'
 import EmbeddingPanel from './modules/embedding/EmbeddingPanel.vue'
 import DifferentialPanel from './modules/differential/DifferentialPanel.vue'
 import NetworkPanel from './modules/network/NetworkPanel.vue'
@@ -18,13 +16,6 @@ export const analysisModules: readonly AnalysisModule[] = [
     name: '相关性与集合',
     group: '统计比较',
     component: ExplorationPanel,
-    requires: ['matrix'],
-  },
-  {
-    id: 'annotation_evidence',
-    name: '外部注释与谱图证据',
-    group: '候选注释',
-    component: AnnotationEvidencePanel,
     requires: ['matrix'],
   },
   {
@@ -67,13 +58,6 @@ export const analysisModules: readonly AnalysisModule[] = [
     name: '聚类',
     group: '探索 / QC',
     component: ClusteringPanel,
-    requires: ['matrix'],
-  },
-  {
-    id: 'lipids',
-    name: '注释与同位素',
-    group: '候选注释',
-    component: LipidPanel,
     requires: ['matrix'],
   },
   {

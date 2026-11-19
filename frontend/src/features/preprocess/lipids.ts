@@ -6,11 +6,21 @@ export interface LipidRules {
   rules: Record<string, unknown>[]
 }
 export interface LipidInfo {
+  quantitation_available?: boolean
   database: {
     directory: string
     files: { filename: string; bytes: number }[]
     available: boolean
     error?: string
+    presets?: {
+      id: string
+      label: string
+      available: boolean
+      records: number
+      source?: string
+      ms2_status?: string
+      description?: string
+    }[]
   }
   adducts: Record<string, { polarity: string }>
   presets: Record<string, LipidRules>
@@ -30,6 +40,7 @@ export interface LipidInfo {
     valid: boolean
     candidates: number
     isotope_matches: number
+    mass_only?: boolean
   }[]
 }
 export interface LipidResults {
@@ -50,6 +61,7 @@ export interface LipidResults {
   candidates: DataTable
   isotopes: DataTable
   selected: Record<string, string[]>
+  annotation_names?: Record<string, string>
   suggested: string[]
   diagnostics: Record<string, unknown>[]
   classification: Record<string, string[]>
@@ -58,6 +70,74 @@ export interface LipidResults {
   chart_filters?: Record<string, unknown>
   network_parameters?: Record<string, unknown>
   total_features: number
+}
+
+export function ms2Label(status: unknown): string {
+  return (
+    (
+      {
+        not_supplied: 'MS2: Not supplied',
+        available: 'MS2: Available in database',
+        matched: 'MS2: Matched',
+        no_match: 'MS2: No match',
+        unavailable: 'MS2: No record',
+        unknown: 'MS2: Unknown',
+        mixed: 'MS2: Mixed (see candidates)',
+      } as Record<string, string>
+    )[String(status)] ?? 'MS2: Unknown'
+  )
+}
+
+export interface AnnotationSpectrum {
+  spectrum_kind: 'feature_sticks' | 'raw_profile'
+  intensity_label: string
+  intensity_missing: boolean
+  relative_intensity_allowed?: boolean
+  intensity_source: {
+    layer: string
+    aggregation: string
+    sample: string
+    quantitation_available: boolean
+  }
+  peaks: {
+    feature_id: string
+    mz: number
+    intensity: number | null
+    label: string
+    role: 'selected' | 'isotope' | 'adduct' | 'unrelated'
+    candidate_ids: string[]
+    ms2_status: string
+    annotations?: {
+      candidate_id: string
+      display_name: string
+      name: string
+      adduct: string
+      isotope_order: number
+      database_filename?: string
+      database_id?: string
+      ms2_status: string
+      manual_group_assertion?: boolean
+    }[]
+  }[]
+  relations: {
+    id: string
+    source: string
+    target: string
+    type: 'isotope' | 'adduct'
+    review: string
+    candidate_ids: string[]
+    sample?: string
+    name?: string
+    adduct?: string
+  }[]
+  selected_feature_id: string
+  linked_feature_ids: string[]
+  confirmed_linked_feature_ids?: string[]
+  version: string
+  review_revision: number
+  dataset_token: [string, number]
+  database: { filename?: string; label?: string }
+  review_conflicts: unknown[]
 }
 
 export interface LipidChartView {

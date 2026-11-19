@@ -8,7 +8,7 @@
 
 ## 代码结构
 
-Vue/FastAPI 网页按功能组织完整六步交互；前端页面在仓库根 `frontend/src/features/`，
+Vue/FastAPI 网页按细胞提取、特征注释、统计分析三个独立板块组织；前端页面在仓库根 `frontend/src/features/`，
 共享组件、路由、请求客户端及 Pinia 状态分别在相邻 `components/`、`router/`、`api/`、`stores/`。
 `scMM/api/routers/` 按项目、样本、存储、原始谱、提取、分析、结果和预设拆分 HTTP 边界，
 `schemas.py`、`workflow_schemas.py` 定义接口契约并校验科学参数。
@@ -103,6 +103,18 @@ scMM/
 目录由离子页显式启用；启用后的提取/导入在保留旧分支基础上建立新测量来源。目录项目走版本2完整快照，正式保存与维护恢复分别处理报告与白名单模型，不降级为只保存活动矩阵。
 `data_view_storage.py` 与 `project_references.py` 管理完整快照/引用闭包；`analysis_inputs.py` 统一来源、空间与敏感性报告。
 `web_ions.py` 负责短锁事务与身份复核，`ion_jobs.py`/`ion_worker.py` 只为新增离子流程提供冻结输入、独立进程及校验后收集；状态与预算见[后台资源](01-installation.md#离子后台资源)。Vue 只持表单/摘要/分页，不持计算矩阵。
+
+### 板块与交换状态所有权
+
+`frontend/src/features/modules/` 管理三个板块的入口、内部步骤和导入导出展示，
+`features/annotation/` 承载谱图点峰、关联关系审核及外部证据入口。原有 URL 继续定位所属步骤。
+三个板块共用认证工作区、项目、任务和保存门禁，不拆成多个服务进程。
+`application/module_exchange.py` 负责导入候选、完整引用闭包和内容校验，HTTP 边界为
+`api/exchange_schemas.py` 与 `api/routers/exchange.py`，格式见[交换协议](06-data-output.md#模块交换协议-v1)。
+`AnalysisWorkspace.require_features()` 允许带明确标记的零观测特征表；`require_data()` 继续保护需要真实定量的操作。
+谱图展示由共享 `spectrumPresentation.ts` 处理副本，保留数据精度和独立数值下载；
+注释谱图按数据 token、注释版本及审核修订验证导出有效性。
+`application/data_inspection.py` 分块读取矩阵并提供有限预览，数据编辑页只持元数据草稿。样本更新复用 `web_projects.py` 的稳定样本映射与恢复起点同步，特征显示名复用受保护字段及稳定 ID 注释匹配。逐样本提取参数在 `web_raw.py` 中整体校验后发布，既有任务继续读取冻结输入。
 
 ## 前后端能力覆盖
 

@@ -45,6 +45,8 @@ export function useLipidPanel() {
   const label = ref('')
   const feature = ref('')
   const selection = ref<string[]>([])
+  const annotationName = ref('')
+  const syncRelated = ref(true)
   const offset = ref(0)
   const relationOffset = ref(0)
   const candidateSort = ref('recommended'),
@@ -94,7 +96,9 @@ export function useLipidPanel() {
     () => void loadResults(true),
   )
   const options = reactive({
+    mass_only: false,
     database: '',
+    databases: [] as string[],
     polarity: 'pos',
     adducts: ['[M+H]+', '[M+Na]+', '[M+K]+', '[M+NH4]+'],
     annotation_ppm: 10,
@@ -190,8 +194,12 @@ export function useLipidPanel() {
     if (reset) {
       version.value = value.active
       options.intensity_layer = value.default_layer
+      options.mass_only = value.quantitation_available === false || !value.layers.length
       options.resolution = value.resolution ?? 35000
-      options.database = value.database.files[0]?.filename ?? ''
+      options.database =
+        value.database.files[0]?.filename ??
+        value.database.presets?.find((p) => p.available)?.id ??
+        ''
       imported.value = false
       rules.value = { schema_version: 1, name: '', rules: [] }
       results.value = undefined
@@ -234,6 +242,11 @@ export function useLipidPanel() {
   }
   async function loadResults(reset = false): Promise<boolean> {
     if (!version.value || !validVersion.value || store.busy) return false
+    if (
+      info.value?.versions.find((v) => v.id === version.value)?.mass_only &&
+      filters.adduct_mode === 'strongest'
+    )
+      filters.adduct_mode = 'all'
     if (reset) {
       offset.value = 0
       relationOffset.value = 0
@@ -268,6 +281,7 @@ export function useLipidPanel() {
     if (!imported.value) rules.value = value.rules
     selection.value =
       feature.value in value.selected ? [...value.selected[feature.value]!] : [...value.suggested]
+    annotationName.value = value.annotation_names?.[feature.value] ?? ''
     if (feature.value && !value.features.some((f) => f.id === feature.value)) {
       feature.value = ''
       return await loadResults(true)
@@ -277,7 +291,11 @@ export function useLipidPanel() {
   async function run() {
     const result = await store.mutate(
       '/lipids/run',
-      { options, rules: rules.value, label: label.value },
+      {
+        options: { ...options, resolution: options.mass_only ? null : options.resolution },
+        rules: rules.value,
+        label: label.value,
+      },
       'POST',
       '',
     )
@@ -325,6 +343,8 @@ export function useLipidPanel() {
         version: version.value,
         feature_id: feature.value,
         candidate_ids: auto ? null : selection.value,
+        annotation_name: auto ? '' : annotationName.value,
+        sync_related: syncRelated.value,
       },
       'POST',
       '',
@@ -390,6 +410,8 @@ export function useLipidPanel() {
     label,
     feature,
     selection,
+    annotationName,
+    syncRelated,
     offset,
     relationOffset,
     isotopeFigure,
@@ -413,6 +435,8 @@ export function useLipidPanel() {
     label,
     feature,
     selection,
+    annotationName,
+    syncRelated,
     offset,
     relationOffset,
     ruleOffset,

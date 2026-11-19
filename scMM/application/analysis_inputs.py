@@ -8,6 +8,7 @@ import pandas as pd
 
 from scMM.ion.identity import dataset_identity
 from scMM.ion.semantics import value_states
+from scMM.util.observations import observation_kind
 
 KEY = "scmm_analysis_input_json"
 
@@ -61,7 +62,7 @@ def workspace_input(workspace, *, layer=None, purpose="analysis"):
         "shape": list(data.shape),
         "identity": dataset_identity(data),
         "value_state": value_states(data)[layer or "X"],
-        "statistical_unit": "cell",
+        "statistical_unit": observation_kind(data),
     }
 
 
@@ -96,13 +97,15 @@ def replicate_summary(data, *, replicate_key, group_key=None, layer=None, statis
     groups = [data.obs[key].rename(key) for key in keys]
     grouped = frame.groupby(groups, observed=True, sort=True)
     result = getattr(grouped, statistic)().reset_index()
-    result["cell_count"] = grouped.size().to_numpy()
+    unit = observation_kind(data)
+    result[f"{unit}_count"] = grouped.size().to_numpy()
     result.attrs["input"] = {
         "replicate_key": replicate_key,
         "group_key": group_key,
         "layer": layer or "X",
         "statistic": statistic,
         "inference_performed": False,
+        "statistical_unit": unit,
     }
     return result
 

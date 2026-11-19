@@ -19,7 +19,7 @@ async function create(page: Page) {
     .click()
   await page.getByLabel('项目名称', { exact: true }).fill(projectName())
   await page.getByRole('button', { name: '创建并添加样本' }).click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '添加原始文件', exact: true })).toBeVisible()
 }
 
 test('personal API configuration, test, persistence and delete', async ({ page }) => {
@@ -82,7 +82,7 @@ test('stream, context, cross-page retention, stop, clear, refresh and project sw
     .filter({ hasText: projectName() })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '项目与样本', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '添加原始文件', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
   await assistant.getByLabel('问题', { exact: true }).fill('慢回答')
   await assistant.getByRole('button', { name: '发送', exact: true }).click()

@@ -193,6 +193,8 @@ export const names: Record<string, string> = {
   validation_mode: '验证方式',
   grouped: '按来源分组划分',
   cell_exploration: '细胞级探索',
+  sample_exploration: '样本级探索',
+  statistical_unit: '统计单位',
   all_source_support: '全部已标记细胞与来源组',
   train_source_support: '训练集细胞与来源组',
   test_source_support: '留出集细胞与来源组',

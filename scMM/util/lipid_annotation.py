@@ -7,10 +7,20 @@ import json
 import numpy as np
 
 from .intensity import intensity_states
+from .lipid_evidence import ms2_status
 from .lipid_isotopes import ADDUCTS, adduct_shift, isotope_evidence
 from .lipid_rules import rank_candidates, validate_rules
 
 STORAGE_KEY = "scmm_lipid_annotations_json"
+
+
+def feature_only(data):
+    exchange = json.loads(data.uns.get("scmm_exchange_json", "{}"))
+    return (
+        data.n_obs == 0
+        and exchange.get("kind") == "feature_only"
+        and exchange.get("quantitation_available") is False
+    )
 
 
 def validate_intensity_layer(data, layer):
@@ -20,7 +30,7 @@ def validate_intensity_layer(data, layer):
         raise ValueError("所选强度已变换或来源未知，请选择有未归一化、未插补溯源的原始强度层。")
 
 
-def dataset_inputs(data, layer=""):
+def dataset_inputs(data, layer="", *, mass_only=False):
     context = json.loads(data.uns.get("scmm_analysis_input_json", "{}"))
     if context.get("variable_kind") == "empirical_compound":
         raise ValueError("EC 中性质量不是 m/z；请选择 Feature 视图或通用化合物候选搜索。")
@@ -28,13 +38,19 @@ def dataset_inputs(data, layer=""):
     mz = np.asarray(data.var.get("mz", data.var_names), dtype=float)
     if not np.isfinite(mz).all() or (mz <= 0).any() or not data.var_names.is_unique:
         raise ValueError("注释需要唯一特征 ID 和正的有限 m/z；允许不同 ID 对应相同 m/z。")
-    layer = layer or data.uns.get("scmm_workbench", {}).get("original_layer", "")
+    if feature_only(data):
+        layer = ""
+    elif not mass_only:
+        layer = layer or data.uns.get("scmm_workbench", {}).get("original_layer", "")
     if layer not in {"", "X"} and layer not in data.layers:
         raise ValueError("所选强度层不存在，请重新选择。")
-    validate_intensity_layer(data, layer)
+    if not feature_only(data) and not mass_only:
+        validate_intensity_layer(data, layer)
     matrix = data.X if layer in {"", "X"} else data.layers[layer]
     values = matrix.toarray() if hasattr(matrix, "toarray") else np.asarray(matrix)
-    if not np.isfinite(values).all() or (values < 0).any():
+    if not np.isfinite(values).all():
+        raise ValueError("注释展示需要有限矩阵数值。")
+    if not mass_only and (values < 0).any():
         raise ValueError("同位素检测需要有限、非负的未变换强度，请选择原始强度层。")
     group_key = next((key for key in ("sample_id", "sample", "source_file") if key in data.obs), "")
     samples = (
@@ -73,19 +89,20 @@ def mass_candidates(database, feature_ids, mz, parameters, database_identity):
             )
             for index in range(start, end):
                 record = records[index]
+                source_sha256 = record.get("database_sha256", database_identity["sha256"])
+                source_record_id = record.get("database_record_id", record["record_id"])
                 theoretical = masses[index] + shift
                 error = (query - theoretical) / theoretical * 1e6
                 if abs(error) > np.nextafter(parameters["annotation_ppm"], np.inf):
                     continue
-                identity = json.dumps(
-                    [database_identity["sha256"], feature_id, record["record_id"], adduct]
-                )
+                identity = json.dumps([source_sha256, feature_id, source_record_id, adduct])
                 rows.append(
                     {
                         "candidate_id": hashlib.sha256(identity.encode()).hexdigest()[:24],
                         "feature_id": feature_id,
                         "query_mz": float(query),
                         "database_id": record["record_id"],
+                        "database_record_id": source_record_id,
                         "name": str(record["COMMON_NAME"]),
                         "species": str(record.get("species", record["COMMON_NAME"])),
                         "formula": str(record["FORMULA"]),
@@ -94,6 +111,16 @@ def mass_candidates(database, feature_ids, mz, parameters, database_identity):
                         "theoretical_mz": float(theoretical),
                         "ppm_error": float(error),
                         "abs_ppm_error": float(abs(error)),
+                        "database_sha256": source_sha256,
+                        "database_source": record.get(
+                            "database_source", database_identity.get("source", "local")
+                        ),
+                        "database_filename": record.get(
+                            "database_filename", database_identity.get("filename", "")
+                        ),
+                        "ms2_status": ms2_status(record),
+                        "source_ms2_status": record.get("ms2_status", "not_supplied"),
+                        "ms2_evidence": record.get("ms2_evidence", []),
                         **{
                             key: str(record.get(key, ""))
                             for key in (
@@ -112,15 +139,37 @@ def mass_candidates(database, feature_ids, mz, parameters, database_identity):
 
 def annotate_lipids(data, database, database_identity, parameters, rules):
     rules = validate_rules(rules, ADDUCTS)
-    ids, mz, values, samples, layer, identity = dataset_inputs(data, parameters["intensity_layer"])
+    mass_only = feature_only(data) or parameters.get("mass_only", False)
+    parameters = {**parameters, "mass_only": mass_only}
+    if not mass_only and (
+        parameters.get("resolution") is None
+        or not np.isfinite(parameters["resolution"])
+        or parameters["resolution"] <= 0
+    ):
+        raise ValueError("同位素计算需要明确提供正的采集分辨率。")
+    ids, mz, values, samples, layer, identity = dataset_inputs(
+        data, parameters["intensity_layer"], mass_only=mass_only
+    )
     rows = rank_candidates(mass_candidates(database, ids, mz, parameters, database_identity), rules)
-    relations, diagnostics = isotope_evidence(rows, mz, ids, values, samples, parameters)
+    if mass_only:
+        relations, diagnostics = (
+            [],
+            [
+                {
+                    "message": "仅精确质量候选模式：不计算同位素比例或相关网络。",
+                    "kind": "mass_only",
+                }
+            ],
+        )
+    else:
+        relations, diagnostics = isotope_evidence(rows, mz, ids, values, samples, parameters)
     import pyopenms
 
     version = {
         "schema_version": 1,
         "input_identity": identity,
         "intensity_layer": layer,
+        "mass_only": mass_only,
         "database": database_identity,
         "parameters": parameters,
         "rules": rules,
@@ -131,9 +180,19 @@ def annotate_lipids(data, database, database_identity, parameters, rules):
         "reviewed_features": [],
         "pyopenms_version": pyopenms.__version__,
         "distribution_probability_tail": 1e-6,
+        "review_revision": 0,
+        "annotation_names": {},
+        "linked_annotations": {},
+        "audit": [],
+        "review_conflicts": [],
     }
+    from .lipid_spectrum import make_adduct_relations
+
+    version["adduct_relations"] = make_adduct_relations(rows)
     from .lipid_network import apply_support, build_network, intensity_layers
 
+    if mass_only:
+        return version
     if (layer or "X") not in intensity_layers(data)["raw"]:
         raise ValueError("辅助注释需要有未变换、未插补溯源的原始强度层。")
     version["network"] = build_network(data, version, values, ids, samples)
@@ -151,7 +210,9 @@ def annotation_store(data):
 
 def version_valid(data, version):
     try:
-        inputs = dataset_inputs(data, version["intensity_layer"])
+        inputs = dataset_inputs(
+            data, version["intensity_layer"], mass_only=version.get("mass_only", False)
+        )
         if inputs[-1] != version["input_identity"]:
             return False
         if "network" in version:
@@ -233,6 +294,8 @@ def filtered_feature_ids(data, version, filters):
     elif filters.get("isotopes") == "only":
         ids &= isotope_ids
     if filters.get("adduct_mode") == "strongest":
+        if version.get("mass_only", False):
+            raise ValueError("仅精确质量候选模式未建立原始强度证据，请选择全部或指定加合物。")
         _, _, values, samples, _, _ = dataset_inputs(data, version["intensity_layer"])
         sample_means = np.vstack(
             [values[samples == sample].mean(axis=0) for sample in dict.fromkeys(samples)]

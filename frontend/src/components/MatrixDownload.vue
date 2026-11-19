@@ -7,6 +7,7 @@ const props = defineProps<{
   source: 'extracted' | 'current'
   batchPath?: string
   embedded?: boolean
+  compact?: boolean
 }>()
 const store = useWorkspace()
 const info = ref<{
@@ -97,7 +98,7 @@ async function download() {
     <button class="download" :disabled="store.busy || !info?.available" @click="download">
       {{ source === 'extracted' ? '下载提取原始矩阵 CSV' : '下载预处理矩阵 CSV' }}
     </button>
-    <p v-if="info?.available" class="muted">
+    <p v-if="info?.available" v-show="!compact" class="muted">
       {{ info.cells }} 细胞 × {{ info.features }} 特征；{{
         source === 'extracted'
           ? batchPath
@@ -113,17 +114,22 @@ async function download() {
     </div>
     <p v-else class="muted">{{ info?.reason || '当前矩阵不可下载。' }}</p>
     <p v-if="store.busy && info?.available" class="muted" role="status">请等待当前操作完成。</p>
-    <details v-if="info?.available">
+    <details v-if="info?.available" class="csv-label-settings">
       <summary>CSV 标签设置</summary>
-      <p class="muted">Label 默认使用样本名；修改仅影响本入口下载，可将多个样本设为同一标签。</p>
-      <label v-for="sample in info.samples" :key="sample.id">
-        {{ sample.name }}
-        <input
-          :aria-label="`CSV 标签 ${sample.name}`"
-          :value="labels[sample.id] ?? sample.label"
-          @input="labels[sample.id] = ($event.target as HTMLInputElement).value"
-        />
-      </label>
+      <div class="csv-label-panel">
+        <p class="muted">设置本次 CSV 的 Label 列，可让多个样本共用标签。</p>
+        <div class="csv-label-grid">
+          <label v-for="sample in info.samples" :key="sample.id">
+            <span :title="sample.name">{{ sample.name }}</span>
+            <input
+              :aria-label="`CSV 标签 ${sample.name}`"
+              :disabled="store.busy"
+              :value="labels[sample.id] ?? sample.label"
+              @input="labels[sample.id] = ($event.target as HTMLInputElement).value"
+            />
+          </label>
+        </div>
+      </div>
     </details>
   </section>
 </template>

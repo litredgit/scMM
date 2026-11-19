@@ -20,6 +20,21 @@ export const router = createRouter({
   routes: [
     { path: '/', redirect: '/projects' },
     { path: '/projects', component: ProjectsPage },
+    {
+      path: '/cell-extraction',
+      component: () => import('../features/modules/ModuleHome.vue'),
+      props: { module: 'extraction' },
+    },
+    { path: '/annotation', component: () => import('../features/modules/AnnotationPage.vue') },
+    {
+      path: '/annotation/evidence',
+      component: () => import('../features/annotation/AnnotationEvidencePage.vue'),
+    },
+    {
+      path: '/statistics',
+      component: () => import('../features/modules/ModuleHome.vue'),
+      props: { module: 'statistics' },
+    },
     { path: '/admin/monitor', component: () => import('../features/monitor/MonitorPage.vue') },
     { path: '/account', component: () => import('../features/account/AccountPage.vue') },
     { path: '/samples', component: SamplesPage },
@@ -27,6 +42,12 @@ export const router = createRouter({
     { path: '/results', component: ResultsPage },
     { path: '/raw', component: () => import('../features/raw/RawPage.vue') },
     { path: '/extraction', component: () => import('../features/extraction/ExtractionPage.vue') },
+    { path: '/data-check', component: () => import('../features/preprocess/DataInspection.vue') },
+    {
+      path: '/data-editor',
+      component: () => import('../features/preprocess/DataInspection.vue'),
+      props: { editor: true },
+    },
     { path: '/preprocess', component: () => import('../features/preprocess/PreprocessPage.vue') },
     { path: '/ions', component: () => import('../features/ions/IonsPage.vue') },
     { path: '/analysis', component: () => import('../features/analysis/AnalysisPage.vue') },

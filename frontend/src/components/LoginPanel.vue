@@ -80,9 +80,12 @@ async function submit() {
   display: grid;
   place-items: center;
   padding: 1rem;
+  background: var(--panel-soft);
 }
 .login-card {
   width: min(100%, 28rem);
+  border-top: 4px solid var(--teal);
+  padding: 2rem;
 }
 label {
   display: grid;

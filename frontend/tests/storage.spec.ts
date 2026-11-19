@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fixtures'
+import { navigate, test, expect, type Page } from './fixtures'
 import { readFile } from 'node:fs/promises'
 import { createProject as create, importDataset as importData } from './support/project'
 
@@ -12,6 +12,7 @@ test('saved item plan, protected active project, recycle and restore', async ({ 
   await create(page, 'Vue 回收恢复')
   await page.getByRole('button', { name: '关闭项目', exact: true }).click()
   await page.getByRole('link', { name: 'scMM 项目首页' }).click()
+  await navigate(page, '/results')
   await page.getByText('高级：保留策略与外部结果', { exact: true }).click()
   const select = page.getByLabel('已保存项目', { exact: true })
   const option = select.locator('option').filter({ hasText: 'Vue 回收恢复' })
@@ -40,6 +41,7 @@ test('saved item plan, protected active project, recycle and restore', async ({ 
   expect(policy.policy_parameters).toEqual({ min_age_days: 30, keep_latest: 2 })
   expect(policy.read_only).toBe(true)
   await expect(option).toBeAttached()
+  await navigate(page, '/projects')
   await page
     .getByRole('row')
     .filter({ hasText: 'Vue 回收恢复' })
@@ -49,16 +51,19 @@ test('saved item plan, protected active project, recycle and restore', async ({ 
   await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText(
     '所选内容已移入共享回收区，尚未释放磁盘空间。',
   )
+  await navigate(page, '/results')
   await expect(retention).toHaveCount(0)
   await page.getByText('共享回收区（1）', { exact: true }).click()
   await page.getByRole('button', { name: '恢复', exact: true }).click()
   await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText('已恢复到原位置。')
+  await navigate(page, '/projects')
   await expect(page.getByRole('row').filter({ hasText: 'Vue 回收恢复' })).toBeVisible()
   await noError(page)
 })
 
 test('reviewed retention cleanup archives a shared pair and restores it', async ({ page }) => {
   await page.goto('/')
+  await navigate(page, '/results')
   await page.getByText('高级：保留策略与外部结果', { exact: true }).click()
   const selected = page.getByLabel('已保存项目', { exact: true })
   const option = selected.locator('option').filter({ hasText: '策略配对缓存合成项目' })
@@ -102,6 +107,7 @@ test('automatic retention rules require review, survive refresh and stop explici
   await page.getByRole('button', { name: '关闭项目', exact: true }).click()
   await page.getByRole('link', { name: 'scMM 项目首页' }).click()
   const selectProject = async () => {
+    await navigate(page, '/results')
     await page.getByText('高级：保留策略与外部结果', { exact: true }).click()
     const selected = page.getByLabel('已保存项目', { exact: true })
     const option = selected.locator('option').filter({ hasText: 'Vue 自动保留规则' })
@@ -137,7 +143,7 @@ test('current report downloads contain a PDF and portable numeric attachments', 
   page,
 }) => {
   await importData(page, '当前报告导出')
-  await page.getByRole('link', { name: /结果与保存/ }).click()
+  await navigate(page, '/results')
   await page.getByLabel('下载内容', { exact: true }).selectOption('quality_pdf')
   await expect(page.getByLabel('下载文件名', { exact: true })).toHaveValue('current_qc.pdf')
   const pdfDownload = page.waitForEvent('download')

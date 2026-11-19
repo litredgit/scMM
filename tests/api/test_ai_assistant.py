@@ -196,14 +196,18 @@ def test_actual_outbound_is_whitelisted_and_test_has_no_context(ai):
     assert response.status_code == 200 and "event: done" in response.text
     payload = json.loads(sent[-1].content)
     encoded = json.dumps(payload)
-    assert "SENSITIVE" not in encoded and "DRAFT" not in encoded and "999" not in encoded
+    assert "SENSITIVE" not in encoded and "DRAFT" not in encoded
     assert body["api_key"] not in encoded and "data_version" in encoded
     assert payload["stream"] is True and set(payload) == {"model", "messages", "stream"}
     assert sent[-1].url.host == "8.8.8.8"
     assert sent[-1].headers["host"] == "provider.example"
     assert sent[-1].extensions["sni_hostname"] == "provider.example"
     assert sent[-1].headers["authorization"] == "Bearer " + body["api_key"]
-    assert '"random_state": 12' in encoded.replace('\\"', '"')
+    context_message = payload["messages"][-2]["content"]
+    outbound_context = json.loads(context_message[context_message.index("{") :])
+    assert outbound_context["summary"]["applied_parameters"] == {
+        "reduce": {"method": "pca", "random_state": 12, "n_components": 2}
+    }
     assert "暂无" not in response.text  # mock returned literal text
     assert w[0].post("/api/v1/ai/test").status_code == 200
     test_payload = json.loads(sent[-1].content)

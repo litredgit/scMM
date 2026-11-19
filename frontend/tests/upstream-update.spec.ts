@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fixtures'
+import { test, expect, navigate, type Page } from './fixtures'
 import { importDataset } from './support/project'
 
 async function module(page: Page, id: string, name: string) {
@@ -12,7 +12,7 @@ test('target correlations, candidate evidence and manual annotation', async ({ p
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   await importDataset(page, '上游增强合成检查')
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await navigate(page, '/analysis')
   await module(page, 'exploration', '相关性与集合')
   const panel = page.getByRole('heading', { name: '相关性与集合比较', exact: true }).locator('..')
   await panel.getByLabel('目标变量', { exact: true }).fill('feature:f0')
@@ -25,7 +25,7 @@ test('target correlations, candidate evidence and manual annotation', async ({ p
   await panel.getByLabel('参与比较的分组（逗号分隔）').fill('a,b')
   await panel.getByRole('button', { name: '计算并绘图' }).click()
   await expect(panel.locator('.js-plotly-plot')).toBeVisible()
-  await module(page, 'annotation_evidence', '外部注释与谱图证据')
+  await navigate(page, '/annotation/evidence')
   const annotations = page
     .getByRole('heading', { name: '外部注释与谱图证据', exact: true })
     .locator('..')
@@ -52,7 +52,7 @@ test('target correlations, candidate evidence and manual annotation', async ({ p
 test('reversible cell labels and lasso selection events', async ({ page }) => {
   test.setTimeout(90000)
   await importDataset(page, '可逆筛选合成检查')
-  await page.getByRole('link', { name: /预处理/ }).click()
+  await navigate(page, '/preprocess')
   const panel = page.locator('details.selection-labels')
   await expect(panel).not.toHaveAttribute('open', '')
   await panel.locator('summary').click()

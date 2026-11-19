@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fixtures'
+import { navigate, test, expect, type Page } from './fixtures'
 import { importDataset as importData } from './support/project'
 
 test.use({ actionTimeout: 15000 })
@@ -12,8 +12,9 @@ test('preprocessing preview applies and restores the full origin', async ({ page
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await importData(page, 'Vue 全部分析')
-  await page.getByRole('link', { name: /预处理/ }).click()
-  await expect(page.getByRole('heading', { name: '预处理与 QC' })).toBeVisible()
+  await navigate(page, '/preprocess')
+  await expect(page.getByRole('heading', { name: '预处理' })).toBeVisible()
+  await page.getByLabel('下一项操作', { exact: true }).selectOption('filter')
   await expect(page.getByLabel('min_feature_fraction', { exact: true })).toHaveValue('0.2')
   await expect(page.getByRole('heading', { name: '操作前 · 当前数据', exact: true })).toBeVisible()
   await page.getByLabel('下一项操作', { exact: true }).selectOption('normalize')
@@ -64,7 +65,7 @@ test('preprocessing preview applies and restores the full origin', async ({ page
 
 test('advanced preprocessing controls stay manual and record applied options', async ({ page }) => {
   await importData(page, '高级预处理')
-  await page.getByRole('link', { name: /预处理/ }).click()
+  await navigate(page, '/preprocess')
   await page.getByLabel('下一项操作', { exact: true }).selectOption('normalize')
   await page.getByText('预处理高级参数', { exact: true }).click()
   await page.getByLabel('归一化总量尺度', { exact: true }).fill('100')
@@ -97,7 +98,7 @@ test('explicit ID subset previews, applies and restores full preprocessing origi
   page,
 }) => {
   await importData(page, '稳定ID子集')
-  await page.getByRole('link', { name: /预处理/ }).click()
+  await navigate(page, '/preprocess')
   await page.getByLabel('下一项操作', { exact: true }).selectOption('subset')
   await page.getByLabel('子集特征ID', { exact: true }).fill('f3,f0')
   await page.getByRole('button', { name: '检查影响', exact: true }).click()
@@ -121,7 +122,7 @@ test('matrix CSV uses editable sample labels without changing analysis groups', 
     (route) => route.fulfill({ status: 503, json: { detail: '暂时无法读取矩阵' } }),
     { times: 1 },
   )
-  await page.getByRole('link', { name: /预处理/ }).click()
+  await navigate(page, '/preprocess')
   const panel = page.getByRole('region', { name: '矩阵 CSV 下载' })
   await expect(panel.getByText('未能读取矩阵信息。')).toBeVisible()
   await expect(panel.getByRole('button', { name: '下载预处理矩阵 CSV' })).toBeDisabled()

@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import MassListInput from '../../components/MassListInput.vue'
+import ScientificInput from '../../components/ScientificInput.vue'
+import { computed, useId } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
-const props = defineProps<{ fields: string[]; disabled?: boolean }>()
+const props = defineProps<{
+  fields: string[]
+  disabled?: boolean
+  referencePresets?: Record<string, number>
+}>()
 const model = defineModel<Record<string, unknown>>({ required: true })
-const emit = defineEmits<{ edited: [] }>()
+const emit = defineEmits<{ edited: []; 'preset-selected': [name: string] }>()
 const store = useWorkspace()
+const referenceListId = useId()
 const groups = computed(() =>
   props.fields.includes('cell_snr') && props.fields.includes('ref_mz')
     ? [
@@ -17,14 +24,31 @@ const groups = computed(() =>
       ]
     : [{ title: '', fields: props.fields }],
 )
+function updateMass(key: string, value: number | null) {
+  model.value[key] = value
+  if (key === 'ref_mz') {
+    const preset = Object.entries(props.referencePresets ?? {}).find(([, mass]) => mass === value)
+    if (preset) emit('preset-selected', preset[0])
+  }
+  emit('edited')
+}
+function inputWidth(key: string) {
+  if (['ref_mz', 'mz_min', 'mz_max'].includes(key)) return '112px'
+  if (key === 'reference_mz' || key === 'reference_mode') return '220px'
+  if (key === 'rt_range') return '82px'
+  if (key === 'frame_range') return '88px'
+  if (/snr|signal|intensity/.test(key)) return '86px'
+  if (/frac|fraction/.test(key)) return '72px'
+  if (key === 'n_jobs') return '64px'
+  return '90px'
+}
 function rangeValue(key: string, index: number) {
   return (model.value[key] as number[] | null)?.[index] ?? ''
 }
-function rangeEdit(key: string, index: number, event: Event) {
-  const text = (event.target as HTMLInputElement).value
+function rangeNumber(key: string, index: number, value: number | null) {
   const current = [...((model.value[key] as number[] | null) ?? [0, 0])]
-  current[index] = Number(text)
-  model.value[key] = text === '' ? null : current
+  current[index] = value ?? 0
+  model.value[key] = value === null ? null : current
   emit('edited')
 }
 function help(key: string) {
@@ -35,16 +59,26 @@ function unit(key: string) {
   if (key.includes('ppm')) return 'ppm'
   if (['baseline_filter_size', 'noise_window'].includes(key)) return '扫描数'
   if (key === 'max_zero_frac') return '0–1'
+  if (key === 'rt_range') return 's'
   return ''
 }
 </script>
 <template>
   <div class="parameter-sections">
+    <datalist v-if="referencePresets" :id="referenceListId">
+      <option
+        v-for="(mass, name) in referencePresets"
+        :key="name"
+        :value="String(mass)"
+        :label="`${name} · ${mass.toFixed(4)}`"
+      />
+    </datalist>
     <details
-      v-for="(group, index) in groups"
+      v-for="group in groups"
       :key="group.title"
+      :class="{ 'parameter-section-plain': !group.title }"
       class="parameter-section"
-      :open="index === 0"
+      :open="true"
     >
       <summary>{{ group.title || '参数设置' }}</summary>
       <div class="parameter-controls">
@@ -52,24 +86,24 @@ function unit(key: string) {
           v-for="key in group.fields"
           :key="key"
           class="parameter-field"
+          :style="{ '--compact-input': inputWidth(key) }"
           :class="{
-            'parameter-field-full': key === 'reference_mz' || (key === 'ref_mz' && !!group.title),
+            'parameter-field-full': key === 'reference_mz',
+            'parameter-field-pair': key === 'rt_range' || key === 'frame_range',
+            'parameter-field-mass': ['ref_mz', 'mz_min', 'mz_max'].includes(key),
           }"
         >
           <FieldLabel :name="key" :text="help(key)" />
           <span class="parameter-input">
             <template v-if="key === 'rt_range' || key === 'frame_range'">
-              <input
+              <ScientificInput
                 v-for="i in [0, 1]"
                 :key="i"
-                type="number"
-                min="0"
-                :step="key === 'frame_range' ? 1 : 'any'"
+                :model-value="rangeValue(key, i)"
+                :decimals="key === 'rt_range' ? 1 : 0"
                 :aria-label="`${key}_${i}`"
-                :value="rangeValue(key, i)"
                 :disabled="disabled"
-                :placeholder="i === 0 ? '起点（空值全部）' : '终点'"
-                @input="rangeEdit(key, i, $event)"
+                @update:model-value="(value) => rangeNumber(key, i, value)"
               />
             </template>
             <select
@@ -82,13 +116,30 @@ function unit(key: string) {
               <option value="union">任一参考离子满足</option>
               <option value="intersection">全部参考离子满足</option>
             </select>
-            <input
+            <MassListInput
               v-else-if="key === 'reference_mz'"
               v-model="model[key]"
               :aria-label="key"
               :disabled="disabled"
               placeholder="逗号分隔；空值使用主参考离子"
               @input="emit('edited')"
+            />
+            <ScientificInput
+              v-else-if="['ref_mz', 'mz_min', 'mz_max'].includes(key)"
+              :model-value="model[key]"
+              :list="key === 'ref_mz' && referencePresets ? referenceListId : undefined"
+              :decimals="4"
+              :aria-label="key"
+              :disabled="disabled"
+              @update:model-value="(value) => updateMass(key, value)"
+            />
+            <ScientificInput
+              v-else-if="/snr|signal|intensity/.test(key)"
+              v-model="model[key]"
+              scientific
+              :aria-label="key"
+              :disabled="disabled"
+              @update:model-value="emit('edited')"
             />
             <input
               v-else

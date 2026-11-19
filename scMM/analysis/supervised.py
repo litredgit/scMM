@@ -87,6 +87,7 @@ class SupervisedAnalyzer:
         from ._validation import preprocessing_audit
 
         self.validation_audit = preprocessing_audit(data, layer)
+        unit_name = "样本" if self.validation_audit["statistical_unit"] == "sample" else "细胞"
         self.validation_audit["excluded_unlabelled_cells"] = int((~valid).sum())
         self.random_state = int(random_state)
         self.groups = None
@@ -99,7 +100,7 @@ class SupervisedAnalyzer:
                 raise ValueError("来源组标签不能为空白，请核实所选分组列。")
         else:
             self.validation_audit["warnings"].append(
-                "当前为细胞级探索，同一来源的细胞可能同时进入训练和测试，不能解释为独立来源验证。"
+                f"当前为{unit_name}级探索，同一来源的{unit_name}可能同时进入训练和测试，不能解释为独立来源验证。"
             )
         if not np.isfinite(self.X).all() or self.X.shape[1] == 0:
             raise ValueError("analysis requires finite values and at least one feature")
@@ -160,12 +161,14 @@ class SupervisedAnalyzer:
             raise ValueError("every class needs at least two observations")
         indices = np.arange(len(self.y))
         source_support = self._source_support(indices)
+        unit = self.validation_audit.get("statistical_unit", "cell")
+        unit_name = "样本" if unit == "sample" else "细胞"
         if self.groups is not None and any(
             value["source_groups"] < 3 for value in source_support.values()
         ):
             raise ValueError(
                 "分组留出及至少两折 CV 要求每类至少有 3 个来源组；"
-                "细胞数量不能替代来源组数量。请核实独立来源或选择细胞级探索。"
+                f"{unit_name}数量不能替代来源组数量。请核实独立来源或选择{unit_name}级探索。"
             )
         if self.groups is None:
             train, test = train_test_split(
@@ -276,7 +279,7 @@ class SupervisedAnalyzer:
         self.result_ = {
             "validation_audit": {
                 **self.validation_audit,
-                "validation_mode": "grouped" if self.groups is not None else "cell_exploration",
+                "validation_mode": "grouped" if self.groups is not None else f"{unit}_exploration",
                 "all_source_support": source_support,
                 "train_source_support": self._source_support(train),
                 "test_source_support": self._source_support(test),
@@ -339,7 +342,7 @@ class SupervisedAnalyzer:
                     max(1, min(estimator.n_components, X_train.shape[1], size - 1))
                     for size in fit_sizes
                 ],
-                "definition": "Existing PLS wrapper clips requested components to input features and fitted cells minus one; SMOTE fits use resampled size.",
+                "definition": f"Existing PLS wrapper clips requested components to input features and fitted {unit}s minus one; SMOTE fits use resampled size.",
             }
         return self.result_
 

@@ -1,5 +1,8 @@
 """View selection, quantitative spaces and descriptive sensitivity contracts."""
 
+import io
+import json
+import zipfile
 from copy import deepcopy
 
 import numpy as np
@@ -135,6 +138,47 @@ def test_replicate_export_and_ec_not_mz(tmp_path):
     data.uns["scmm_analysis_input_json"] = '{"variable_kind":"empirical_compound"}'
     with pytest.raises(ValueError, match="m/z"):
         dataset_inputs(data)
+
+
+def test_imported_sample_units_reach_statistics_and_portable_qc_reports(tmp_path):
+    from scMM.analysis import SupervisedAnalyzer
+    from scMM.analysis.quality_pdf import report_bundle, report_tables
+    from scMM.application.web_analysis import quality_view
+
+    project, data = example(tmp_path)
+    expected = differential_features(data, "group", "a", "b")
+    baseline_model = SupervisedAnalyzer(data, "group")
+    baseline_model.evaluate(cv=2, test_size=1 / 3)
+    data.uns["scmm_exchange_json"] = json.dumps({"schema_version": 1, "observation_kind": "sample"})
+    project.workspace.replace(data)
+    assert resolve_analysis_input(project)["statistical_unit"] == "sample"
+    result = project.workspace.differential("group", "a", "b")
+    assert result["statistical_unit"] == "sample"
+    assert result["numerical_inputs"]["statistical_unit"] == "sample"
+    assert result["numerical_inputs"]["biological_replication"] == "not established by sample count"
+    sample_model = SupervisedAnalyzer(data, "group")
+    audit = sample_model.evaluate(cv=2, test_size=1 / 3)["validation_audit"]
+    assert audit["statistical_unit"] == "sample"
+    assert audit["validation_mode"] == "sample_exploration"
+    assert any("样本级探索" in warning for warning in audit["warnings"])
+    np.testing.assert_array_equal(sample_model.test_obs_names_, baseline_model.test_obs_names_)
+    np.testing.assert_array_equal(sample_model.probabilities_, baseline_model.probabilities_)
+    np.testing.assert_array_equal(result["table"].p_value, expected.p_value)
+    np.testing.assert_array_equal(result["table"].log2_fold_change, expected.log2_fold_change)
+    summary = replicate_summary(data, replicate_key="sample_id")
+    assert summary.sample_count.tolist() == [3, 3]
+    assert summary.attrs["input"]["statistical_unit"] == "sample"
+    qc = quality_view(project.workspace)
+    assert qc["figure"]["layout"]["title"]["text"] == "Sample quality control · current matrix"
+    assert qc["figure"]["layout"]["meta"]["point_kind"] == "sample"
+    assert "samples" in qc["figure"]["layout"]["meta"]["export_tables"]
+    tables = report_tables(data)
+    assert "observation_id" in tables["cells"]
+    assert tables["sources"].samples.sum() == data.n_obs
+    with zipfile.ZipFile(io.BytesIO(report_bundle(data, {}, {}))) as archive:
+        assert json.loads(archive.read("metadata.json"))["observation_kind"] == "sample"
+        exported = pd.read_csv(io.BytesIO(archive.read("sample_qc.csv")))
+        assert exported.observation_id.tolist() == data.obs_names.tolist()
 
 
 def test_saved_comparison_is_json_safe_and_normalization_claims_are_checked(tmp_path):

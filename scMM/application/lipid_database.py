@@ -10,6 +10,7 @@ import urllib.request
 import zipfile
 from datetime import UTC, datetime
 from functools import lru_cache
+from importlib.resources import files
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -23,6 +24,50 @@ from .projects import project_lock, write_json
 LMSD_URL = "https://lipidmaps.org/files/?ext=sdf.zip&file=LMSD"
 DATABASE_ROOT = Path("~/data/results/databases/lipidmaps").expanduser()
 _LOCK = threading.RLock()
+MAMMALIAN_PRESET = "preset:mammalian_cells"
+
+
+@lru_cache(maxsize=1)
+def mammalian_database():
+    resource = files("scMM").joinpath("resources/lipid_databases/mammalian_cells.json")
+    content = resource.read_bytes()
+    payload = json.loads(content)
+    frame = pd.DataFrame(payload["records"]).sort_values("EXACT_MASS", kind="stable")
+    metadata = {key: value for key, value in payload.items() if key != "records"}
+    metadata.update(
+        filename=MAMMALIAN_PRESET,
+        sha256=hashlib.sha256(content).hexdigest(),
+        records=len(frame),
+        invalid_mass_records=0,
+        missing_formula_records=0,
+    )
+    return frame.reset_index(drop=True), metadata
+
+
+def database_presets(local_files=()):
+    _, mammalian = mammalian_database()
+    return [
+        {
+            "id": MAMMALIAN_PRESET,
+            "label": mammalian["label"],
+            "available": True,
+            "records": mammalian["records"],
+            "source": mammalian["source"],
+            "ms2_status": mammalian["ms2_status"],
+            "sha256": mammalian["sha256"],
+            "curation": mammalian["curation"],
+        },
+        *[
+            {
+                "id": item["filename"],
+                "label": item["filename"],
+                "available": True,
+                "source": "local_sdf",
+                "ms2_status": "not_supplied",
+            }
+            for item in local_files
+        ],
+    ]
 
 
 def database_root():
@@ -50,6 +95,7 @@ def database_status():
             "available": False,
             "source": LMSD_URL,
             "error": str(exc),
+            "presets": database_presets(),
         }
     files = []
     if root.is_dir():
@@ -65,6 +111,7 @@ def database_status():
         "source": LMSD_URL,
         "active": active.get("filename", ""),
         "provenance": active,
+        "presets": database_presets(files),
     }
 
 
@@ -91,6 +138,22 @@ def _read_database(path, *, include_invalid=False):
     frame = (frame if include_invalid else frame.loc[~invalid]).copy().fillna("")
     if frame.empty:
         raise ValueError("数据库没有有效的精确质量记录。")
+    evidence = []
+    for record, value in zip(
+        frame["source_record"],
+        frame.get("ms2_evidence", pd.Series("", index=frame.index)),
+        strict=True,
+    ):
+        try:
+            parsed = json.loads(value) if value.strip() else []
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"数据库记录 {record + 1} 的 ms2_evidence 需要有效的 JSON 列表。"
+            ) from exc
+        if not isinstance(parsed, list):
+            raise ValueError(f"数据库记录 {record + 1} 的 ms2_evidence 需要有效的 JSON 列表。")
+        evidence.append(parsed)
+    frame["ms2_evidence"] = evidence
     for key in (
         "LM_ID",
         "COMMON_NAME",
@@ -145,10 +208,14 @@ def _load_cached(path, size, modified):
         "records": len(frame),
         "invalid_mass_records": invalid,
         "missing_formula_records": int(frame["FORMULA"].eq("").sum()),
+        "ms2_status": "not_supplied",
     }
 
 
 def load_database(filename=""):
+    if filename == MAMMALIAN_PRESET:
+        frame, metadata = mammalian_database()
+        return frame.copy(deep=True), json.loads(json.dumps(metadata))
     root = database_root()
     with _LOCK:
         files = database_status()["files"]
@@ -166,6 +233,41 @@ def load_database(filename=""):
             raise PermissionError("数据库路径不可越界或使用符号链接。")
         stat = path.stat()
         return _load_cached(str(path), stat.st_size, stat.st_mtime_ns)
+
+
+def load_databases(filenames):
+    selected = list(dict.fromkeys(name for name in filenames if name))
+    if len(selected) <= 1:
+        return load_database(selected[0] if selected else "")
+    frames, sources, digests = [], [], set()
+    for name in selected:
+        frame, metadata = load_database(name)
+        if metadata["sha256"] in digests:
+            continue
+        digests.add(metadata["sha256"])
+        frame = frame.copy()
+        frame["database_record_id"] = frame["record_id"].astype(str)
+        frame["record_id"] = metadata["sha256"][:16] + ":" + frame["record_id"].astype(str)
+        for key in ("sha256", "filename", "source"):
+            frame[f"database_{key}"] = metadata.get(key, "local" if key == "source" else "")
+        if "ms2_status" not in frame:
+            frame["ms2_status"] = metadata.get("ms2_status", "not_supplied")
+        if "ms2_evidence" not in frame:
+            frame["ms2_evidence"] = [[] for _ in range(len(frame))]
+        frames.append(frame)
+        sources.append(metadata)
+    result = pd.concat(frames, ignore_index=True).sort_values("EXACT_MASS", kind="stable")
+    identity = hashlib.sha256(json.dumps([s["sha256"] for s in sources]).encode()).hexdigest()
+    return result.fillna(""), {
+        "source": "selected_local_databases",
+        "filename": "+".join(selected),
+        "sha256": identity,
+        "records": len(result),
+        "sources": sources,
+        "ms2_status": "not_supplied"
+        if all(s.get("ms2_status", "not_supplied") == "not_supplied" for s in sources)
+        else "unknown",
+    }
 
 
 def prepare_database(*, force=False, archive_path=None, expected_sha256=None):

@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fixtures'
+import { navigate, test, expect, type Page } from './fixtures'
 async function openAnalysis(page: Page) {
   await page.goto('/')
   await page.getByLabel('项目名称', { exact: true }).fill('图例与差异交互回归')
@@ -8,10 +8,10 @@ async function openAnalysis(page: Page) {
   await page.getByRole('button', { name: /^(?:▤ )?analysis[.]h5ad\s/ }).click()
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
   await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await navigate(page, '/analysis')
   await page.getByRole('button', { name: '固定参数区', exact: true }).first().click()
 }
-test('legend reorder persists, selection is manual and six steps fit narrow screens', async ({
+test('legend reorder persists, selection is manual and three modules fit narrow screens', async ({
   page,
 }) => {
   test.setTimeout(90000)
@@ -50,8 +50,8 @@ test('legend reorder persists, selection is manual and six steps fit narrow scre
     .filter({ hasText: '图例与差异交互回归' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
+  await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
+  await navigate(page, '/analysis')
   await page.getByRole('button', { name: '更新嵌入图', exact: true }).click()
   await expect(plot.locator('.legendtext')).toHaveText(['b', 'a'])
   if (!(await plot.locator('.plot-settings').evaluate((el) => (el as HTMLDetailsElement).open)))
@@ -99,13 +99,13 @@ test('legend reorder persists, selection is manual and six steps fit narrow scre
       '/analysis',
       '/results',
     ]) {
-      await page.locator(`.sidebar nav a[href='${route}']`).click()
+      await navigate(page, route)
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
         .toBe(true)
     }
     await page.screenshot({
-      path: test.info().outputPath(`six-steps-${width}.png`),
+      path: test.info().outputPath(`three-modules-${width}.png`),
       fullPage: true,
     })
   }
@@ -121,7 +121,7 @@ test('parameter scope, unapplied drafts and saved project state stay distinct', 
   await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
   await page.getByRole('button', { name: /extract.mzML/ }).click()
   await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
-  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await navigate(page, '/raw')
   const reference = page.getByLabel('ref_mz', { exact: true })
   await expect(reference).not.toHaveValue('')
   const original = await reference.inputValue()
@@ -189,7 +189,7 @@ test('desktop figures, direct exports, assistant space and compact mobile naviga
   const content = await page.locator('.analysis-content').boundingBox()
   expect(content!.x + content!.width).toBeLessThanOrEqual(assistant!.x)
   await page.getByRole('button', { name: '收起 AI 助手', exact: true }).click()
-  await page.getByRole('link', { name: /结果与保存/ }).click()
+  await navigate(page, '/results')
   const download = await page
     .getByRole('button', { name: '下载完整结果', exact: true })
     .boundingBox()
@@ -205,7 +205,7 @@ test('desktop figures, direct exports, assistant space and compact mobile naviga
       '/analysis',
       '/results',
     ]) {
-      await page.locator(`.sidebar nav a[href='${route}']`).click()
+      await navigate(page, route)
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
         .toBe(true)
@@ -330,7 +330,7 @@ test('raw m/z bounds stay paired beside the spectrum at laptop widths', async ({
   await page.goto('/')
   await page.getByLabel('项目名称', { exact: true }).fill('原始参数笔记本布局')
   await page.getByRole('button', { name: '创建并添加样本' }).click()
-  await page.getByRole('link', { name: /原始谱与参数/ }).click()
+  await navigate(page, '/raw')
   await expect(page.getByLabel('mz_min', { exact: true })).toBeVisible()
   for (const width of [1366, 1440, 1920, 390]) {
     await page.setViewportSize({ width, height: 900 })
@@ -338,6 +338,8 @@ test('raw m/z bounds stay paired beside the spectrum at laptop widths', async ({
     const max = (await page.getByLabel('mz_max', { exact: true }).boundingBox())!
     expect(Math.abs(min.y - max.y)).toBeLessThan(2)
     expect(max.x).toBeGreaterThan(min.x)
+    expect(min.width).toBeLessThanOrEqual(125)
+    expect(max.width).toBeLessThanOrEqual(125)
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true)
@@ -352,7 +354,7 @@ test('downloads explain missing snapshot and embeddings without changing project
   page,
 }) => {
   await openAnalysis(page)
-  await page.getByRole('link', { name: /结果与保存/ }).click()
+  await navigate(page, '/results')
   await page.getByLabel('下载内容', { exact: true }).selectOption('snapshot')
   await expect(page.getByRole('button', { name: '下载完整结果', exact: true })).toBeDisabled()
   await expect(page.getByText(/尚无已保存的数据快照，请先保存项目/)).toBeVisible()

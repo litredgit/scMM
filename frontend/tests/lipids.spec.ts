@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures'
+import { test, expect, navigate } from './fixtures'
 import { readFile } from 'node:fs/promises'
 
 test('lipid rules, isotope review, filtered adduct CSV and saved versions', async ({ page }) => {
@@ -30,8 +30,7 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
   await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await expect(page.getByRole('heading', { name: '结果与样本关联' })).toBeVisible()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
-  await page.getByRole('button', { name: '注释与同位素', exact: true }).click()
+  await navigate(page, '/annotation')
   const panel = page.locator('.lipid-panel')
   await expect(panel.getByRole('heading', { name: '注释与同位素', exact: true })).toBeVisible()
   await expect(panel.getByRole('button', { name: '检查本地数据库' })).toBeVisible()
@@ -42,7 +41,7 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await expect(panel.locator('summary').filter({ hasText: '查看规则' })).toContainText('78 项')
   await expect(panel.locator('summary').filter({ hasText: '查看规则' })).toContainText('尚未应用')
   const rulePreview = panel.locator('.lipid-rule-preview')
-  await rulePreview.locator('summary').click()
+  await rulePreview.locator(':scope > summary').click()
   await expect(rulePreview.getByRole('row')).toHaveCount(51)
   await rulePreview.getByRole('button', { name: '规则下一页', exact: true }).click()
   await expect(rulePreview.getByRole('row')).toHaveCount(29)
@@ -186,11 +185,10 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
     .filter({ hasText: '脂质标记验收' })
     .getByRole('button', { name: '打开项目 →' })
     .click()
-  await page.locator('a[href="/preprocess"]').first().click()
-  await expect(page.getByRole('heading', { name: '预处理与 QC', exact: true })).toBeVisible()
+  await navigate(page, '/preprocess')
+  await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
   await expect(page.getByText('40 细胞 × 4 特征 · 每步成功后保留历史层。')).toBeVisible()
-  await page.getByRole('link', { name: /^5\s*分析$/ }).click()
-  await page.getByRole('button', { name: '注释与同位素', exact: true }).click()
+  await navigate(page, '/annotation')
   await expect(panel).not.toHaveAttribute('open', '')
   await expect(panel.getByRole('heading', { name: '注释与同位素', exact: true })).toBeVisible()
   await expect(panel.getByText('4 / 4 特征 · 4 条候选 · 4 条关系证据')).toBeVisible()

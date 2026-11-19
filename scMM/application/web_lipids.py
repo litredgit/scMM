@@ -14,6 +14,7 @@ from scMM.util.lipid_annotation import (
     STORAGE_KEY,
     annotate_lipids,
     annotation_store,
+    feature_only,
     filtered_candidates,
     filtered_feature_ids,
     isotope_feature_ids,
@@ -23,8 +24,10 @@ from scMM.util.lipid_isotopes import ADDUCTS
 from scMM.util.lipid_network import apply_support, intensity_layers
 from scMM.util.lipid_network_views import annotation_charts, representatives
 from scMM.util.lipid_rules import import_rules, rank_candidates, validate_rules
+from scMM.util.lipid_spectrum import annotation_spectrum, apply_review, inherit_reviews
 
-from .lipid_database import database_status, load_database, prepare_database
+from .identity import actor
+from .lipid_database import database_status, load_database, load_databases, prepare_database
 from .preferences import preferences_path
 from .projects import project_lock, write_json
 from .web_support import table_view
@@ -95,18 +98,60 @@ def relation_labels(project, rows):
     return [{**row, "sample_name": names.get(row["sample"], row["sample"])} for row in rows]
 
 
+def catalog_relations(project, data):
+    """Snapshot reviewed root relations without changing the ion registry or its matrices."""
+    state = project.ion_state
+    if state is None or state.get("active_branch_id") is None:
+        return []
+    view = state["views"][state["branches"][state["active_branch_id"]]["view_id"]]
+    if view["variable_kind"] != "feature":
+        return []
+    entries = [
+        (key, entry)
+        for key, entry in state["registry"]["grouping"].items()
+        if entry["root_id"] == view["root_id"]
+        and (not view.get("grouping_id") or key == view["grouping_id"])
+    ]
+    if not entries:
+        return []
+    key, entry = entries[-1]
+    ids = set(data.var_names)
+    result = []
+    for row in entry["grouping"]["relations"]:
+        if (
+            row["kind"] not in {"isotope", "adduct"}
+            or not {row["left_feature_id"], row["right_feature_id"]} <= ids
+        ):
+            continue
+        result.append(
+            {
+                **deepcopy(row),
+                "relation_id": f"catalog:{key}:{row['relation_id']}",
+                "origin": "ion_catalog_snapshot",
+                "grouping_version": key,
+                "source": row["left_feature_id"],
+                "target": row["right_feature_id"],
+                "type": row["kind"],
+                "candidate_ids": [],
+                "review": entry.get("relation_reviews", {}).get(row["relation_id"], "pending"),
+            }
+        )
+    return result
+
+
 class LipidWorkflow:
     def lipid_info(self, identity):
         with self.access(identity) as workspace:
             project = workspace.require_project()
-            data = project.workspace.require_data()
+            data = project.workspace.require_features()
             store = annotation_store(data)
             return {
                 "database": database_status(),
+                "quantitation_available": not feature_only(data),
                 "adducts": ADDUCTS,
                 "presets": rules_presets(),
                 "active": store["active"],
-                "layers": intensity_layers(data)["raw"],
+                "layers": [] if feature_only(data) else intensity_layers(data)["raw"],
                 "molecule_layers": intensity_layers(data)["molecule"],
                 "sample_field": next(
                     (k for k in ("sample_id", "sample", "source_file") if k in data.obs), ""
@@ -140,6 +185,7 @@ class LipidWorkflow:
                         "label": v["label"],
                         "created_at": v["created_at"],
                         "valid": version_valid(data, v),
+                        "mass_only": v.get("mass_only", False),
                         "candidates": len(v["candidates"]),
                         "isotope_matches": sum(r["matched"] for r in v["relations"]),
                     }
@@ -165,18 +211,35 @@ class LipidWorkflow:
                 a not in ADDUCTS for a in options["adducts"]
             ):
                 raise ValueError("请选择有效且不重复的单电荷加合物。")
-            if not database_status()["available"]:
+            selected_databases = list(
+                dict.fromkeys(
+                    name for name in [options["database"], *options.get("databases", [])] if name
+                )
+            )
+            if not selected_databases and not database_status()["available"]:
                 prepare_database()
-            database, database_identity = load_database(options["database"])
+            if len(selected_databases) <= 1:
+                database, database_identity = load_database(
+                    selected_databases[0] if selected_databases else ""
+                )
+            else:
+                database, database_identity = load_databases(selected_databases)
             candidate = project_candidate(project)
-            data = candidate.workspace.require_data()
+            data = candidate.workspace.require_features()
             version = annotate_lipids(data, database, database_identity, options, rules)
+            version["catalog_relations"] = catalog_relations(candidate, data)
             version.update(
                 id=uuid4().hex,
                 label=label.strip() or "注释与同位素",
                 created_at=datetime.now(UTC).isoformat(),
             )
             store = annotation_store(data)
+            if store["active"]:
+                previous = next((v for v in store["versions"] if v["id"] == store["active"]), None)
+                if previous:
+                    inherit_reviews(previous, version)
+                    apply_support(version)
+                    rank_candidates(version["candidates"], version["rules"])
             store["versions"].append(version)
             store["active"] = version["id"]
             persist_annotation(data, store)
@@ -201,9 +264,10 @@ class LipidWorkflow:
         with self.access(identity) as workspace:
             workspace.check(revision)
             candidate = project_candidate(workspace.require_project())
-            data = candidate.workspace.require_data()
+            data = candidate.workspace.require_features()
             store, version = selected_version(data, version_id)
             action(version)
+            version["review_revision"] = version.get("review_revision", 0) + 1
             apply_support(version)
             rank_candidates(version["candidates"], version["rules"])
             persist_annotation(data, store)
@@ -223,35 +287,30 @@ class LipidWorkflow:
 
     def lipid_review(self, identity, revision, values):
         def action(version):
-            feature = values["feature_id"]
-            if feature is not None:
-                if feature not in workspace_data_ids:
-                    raise ValueError("所选特征不存在。")
-                valid = {
-                    r["candidate_id"] for r in version["candidates"] if r["feature_id"] == feature
-                }
-                if values["candidate_ids"] is None:
-                    version["selected"].pop(feature, None)
-                elif not set(values["candidate_ids"]) <= valid:
-                    raise ValueError("所选候选不属于该特征。")
-                else:
-                    version["selected"][feature] = list(dict.fromkeys(values["candidate_ids"]))
-                if feature not in version["reviewed_features"]:
-                    version["reviewed_features"].append(feature)
-            if values["relation_id"] is not None:
-                row = next(
-                    (r for r in version["relations"] if r["relation_id"] == values["relation_id"]),
-                    None,
-                )
-                if row is None:
-                    raise ValueError("同位素关系不存在。")
-                row["review"] = values["review"]
-            if feature is None and values["relation_id"] is None:
-                raise ValueError("请选择候选或同位素关系。")
+            principal = actor.get()
+            apply_review(
+                version,
+                values,
+                workspace_data_ids,
+                reviewer=principal["id"] if principal else "local-api",
+                timestamp=datetime.now(UTC).isoformat(),
+            )
 
         with self.access(identity) as workspace:
-            workspace_data_ids = set(workspace.require_project().workspace.require_data().var_names)
+            workspace_data_ids = set(
+                workspace.require_project().workspace.require_features().var_names
+            )
             return self.lipid_edit(identity, revision, values["version"], action)
+
+    def lipid_spectrum(self, identity, revision, version_id, feature_id="", sample=""):
+        with self.access(identity) as workspace:
+            workspace.check(revision)
+            project = workspace.require_project()
+            data = project.workspace.require_features()
+            _, version = selected_version(data, version_id)
+            value = annotation_spectrum(data, version, feature_id=feature_id, sample=sample)
+            value["dataset_token"] = list(project.workspace.token)
+            return {"workspace": self.view(workspace), "value": value}
 
     def lipid_activate(self, identity, revision, version_id):
         from .web_projects import project_candidate
@@ -259,7 +318,7 @@ class LipidWorkflow:
         with self.access(identity) as workspace:
             workspace.check(revision)
             candidate = project_candidate(workspace.require_project())
-            data = candidate.workspace.require_data()
+            data = candidate.workspace.require_features()
             store = annotation_store(data)
             if version_id:
                 selected_version(data, version_id)
@@ -274,7 +333,7 @@ class LipidWorkflow:
         with self.access(identity) as workspace:
             workspace.check(revision)
             project = workspace.require_project()
-            data = project.workspace.require_data()
+            data = project.workspace.require_features()
             _, version = selected_version(data, values["version"])
             filters = values["filters"]
             if filters["adduct_mode"] == "specified" and not filters["adducts"]:
@@ -375,6 +434,12 @@ class LipidWorkflow:
                 "candidates": table,
                 "isotopes": isotope_table,
                 "selected": deepcopy(version["selected"]),
+                "annotation_names": deepcopy(version.get("annotation_names", {})),
+                "linked_annotations": deepcopy(version.get("linked_annotations", {})),
+                "adduct_relations": deepcopy(version.get("adduct_relations", [])),
+                "review_conflicts": deepcopy(version.get("review_conflicts", [])),
+                "review_revision": version.get("review_revision", 0),
+                "audit": deepcopy(version.get("audit", [])),
                 "suggested": [
                     r["candidate_id"]
                     for r in version["candidates"]
@@ -403,7 +468,7 @@ class LipidWorkflow:
     def lipid_charts(self, identity, revision, version_id, filters, view):
         with self.access(identity) as workspace:
             workspace.check(revision)
-            data = workspace.require_project().workspace.require_data()
+            data = workspace.require_project().workspace.require_features()
             _, version = selected_version(data, version_id)
             if filters["adduct_mode"] == "specified" and not filters["adducts"]:
                 raise ValueError("请指定保留的加合物。")
@@ -448,7 +513,7 @@ class LipidWorkflow:
         with self.access(identity) as workspace:
             workspace.check(revision)
             project = workspace.require_project()
-            data = project.workspace.require_data()
+            data = project.workspace.require_features()
             _, version = selected_version(data, version_id)
             if filters["adduct_mode"] == "specified" and not filters["adducts"]:
                 raise ValueError("请指定保留的加合物。")
@@ -553,12 +618,47 @@ class LipidWorkflow:
             if kind == "matrix":
                 from .matrix_export import matrix_csv
 
+                if feature_only(data):
+                    raise ValueError("当前仅有特征表，未提供可导出的定量矩阵。")
                 return matrix_csv(data, features=ids), "text/csv; charset=utf-8"
             if kind == "candidates":
                 rows = [r for r in filtered_candidates(version, filters) if r["feature_id"] in ids]
             elif kind == "isotopes":
                 # Full relationships remain auditable even if their feature is hidden from the matrix.
                 rows = relation_labels(project, version["relations"])
+                by_candidate = {row["candidate_id"]: row for row in version["candidates"]}
+                from scMM.util.lipid_evidence import ms2_status
+
+                rows = [
+                    {
+                        **row,
+                        **{
+                            key: by_candidate[row["parent_candidate_id"]].get(
+                                key, [] if key == "ms2_evidence" else ""
+                            )
+                            for key in (
+                                "database_record_id",
+                                "database_sha256",
+                                "database_source",
+                                "database_filename",
+                                "source_ms2_status",
+                                "ms2_evidence",
+                            )
+                        },
+                        "ms2_status": ms2_status(
+                            by_candidate[row["parent_candidate_id"]],
+                            input_identity=version["input_identity"],
+                        ),
+                        "ms2_scope_feature_id": row["parent_feature_id"],
+                        "parent_annotation_name": version.get("annotation_names", {}).get(
+                            row["parent_feature_id"], ""
+                        ),
+                        "isotope_annotation_name": version.get("annotation_names", {}).get(
+                            row["isotope_feature_id"], ""
+                        ),
+                    }
+                    for row in rows
+                ]
             else:
                 return json.dumps(
                     version["rules"], ensure_ascii=False, indent=2
@@ -573,11 +673,19 @@ class LipidWorkflow:
                 sorting.get(f"{prefix}_descending", False),
             )
             frame = pd.DataFrame(rows)
+            if kind == "candidates" and not frame.empty:
+                frame["annotation_name"] = (
+                    frame["feature_id"].map(version.get("annotation_names", {})).fillna("")
+                )
+            if "ms2_evidence" in frame:
+                frame["ms2_evidence"] = frame["ms2_evidence"].map(
+                    lambda value: json.dumps(value, ensure_ascii=False)
+                )
             if frame.empty:
                 columns = (
-                    "candidate_id feature_id name formula database_id adduct ppm_error ppm_band class_score adduct_score"
+                    "candidate_id feature_id name formula database_id database_record_id database_sha256 database_source database_filename adduct ppm_error ppm_band class_score adduct_score ms2_status ms2_evidence annotation_name"
                     if kind == "candidates"
-                    else "relation_id parent_feature_id isotope_feature_id name formula adduct sample sample_name order theoretical_ratio observed_ratio matched review"
+                    else "relation_id parent_feature_id isotope_feature_id name formula adduct sample sample_name order theoretical_ratio observed_ratio matched review database_record_id database_sha256 database_source database_filename ms2_status ms2_evidence ms2_scope_feature_id parent_annotation_name isotope_annotation_name"
                 )
                 frame = pd.DataFrame(columns=columns.split())
             return frame.to_csv(index=False).encode(), "text/csv; charset=utf-8"
