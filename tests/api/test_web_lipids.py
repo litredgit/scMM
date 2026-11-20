@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from scMM.util.lipid_annotation import STORAGE_KEY, annotation_store
-from tests.support.lipids import options, sdf_record, synthetic_data
+from tests.support.lipids import options, sdf_record, synthetic_data, write_annotation_acquisition
 from tests.support.workflow import get
 
 
@@ -54,6 +54,105 @@ def query(workflow, version, **kwargs):
     response = workflow[-1]("/lipids/query", {"version": version, **kwargs})
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def test_profile_and_acquisition_msms_are_bound_to_original_scan_and_saved(workflow, monkeypatch):
+    from base64 import b64encode
+
+    masses = write_annotation_acquisition(workflow[3] / "profile.mzML")
+    database = workflow[4] / "profile-db"
+    database.mkdir()
+    (database / "test.sdf").write_text(
+        sdf_record("LMGP01010001", "C42H80NO8P", "PC 34:2")
+        + sdf_record("LMGP01010002", "C42H82NO8P", "PC 34:1")
+    )
+    monkeypatch.setenv("SCMM_LIPID_DATABASE_DIR", str(database))
+    post = workflow[-1]
+    csv = f"feature_id,mz\nparent,{masses[0]}\ncompeting,{masses[1]}\n"
+    post(
+        "/exchange/annotation/import",
+        {
+            "format": "feature_csv",
+            "filename": "peaks.csv",
+            "file_base64": b64encode(csv.encode()).decode(),
+        },
+    ).raise_for_status()
+    post("/samples", {"root": "Raw", "paths": ["profile.mzML"]}).raise_for_status()
+    sample = workflow[-2]()["project"]["manifest"]["samples"][0]["id"]
+    version = run_lipids(workflow, resolution=None)
+    candidate_ids = [row["candidate_id"] for row in query(workflow, version)["candidates"]["rows"]]
+    body = {
+        "source": "current",
+        "version": version,
+        "sample_id": sample,
+        "candidate_ids": candidate_ids,
+        "scan_index": 0,
+    }
+    revision = workflow[-2]()["revision"]
+    wrong_scan = post("/lipids/spectrum/profile-review", {**body, "scan_index": 1})
+    assert wrong_scan.status_code == 400 and "MS1" in wrong_scan.text, wrong_scan.text
+    assert workflow[-2]()["revision"] == revision
+    response = post("/lipids/spectrum/profile-review", body)
+    assert response.status_code == 200, response.text
+    profile = response.json()["value"]
+    assert profile["status"] == "compared"
+    assert profile["native_id"] == "scan=47"
+    assert profile["competing_height"] == pytest.approx(350, abs=0.2)
+    assert profile["fwhm_source"] == "same_scan_parent"
+    key = profile["id"]
+
+    library = (
+        f"BEGIN IONS\nTITLE=reference\nPEPMASS={masses[0]}\n120 20\n140 60\n160 10\nEND IONS\n"
+    )
+    comparison = post(
+        "/analysis/msms",
+        {
+            "source": "current",
+            "acquisition_sample": sample,
+            "scan_start": 1,
+            "scan_end": 1,
+            "library": library,
+            "sample_pool": "Synthetic pool",
+            "polarity": "positive",
+        },
+    )
+    assert comparison.status_code == 200, comparison.text
+    search = comparison.json()["value"]["layout"]["meta"]
+    row = get(
+        workflow, f"/analysis/annotation-evidence/record?key={search['annotation_record']}"
+    ).json()["rows"][0]
+    assert row["measured_scan"] == "scan=48"
+    assert row["acquisition_scan_index"] == 1
+    assert row["acquisition_isolation_offsets_da"] == [0.4, 0.6]
+    assert row["acquisition_collision_energy"] == 25
+    assert row["passes_threshold"]
+    assert search["acquisition"]["sample_id"] == sample
+
+    post("/project/save").raise_for_status()
+    post("/project/open", {"path": workflow[-2]()["project"]["path"]}).raise_for_status()
+    record = get(workflow, f"/analysis/annotation-evidence/record?key={key}").json()
+    assert record["kind"] == "ms1_overlap"
+    assert record["profile_review"]["profile"] == profile["profile"]
+    assert query(workflow, version)["candidates"]["total"] == 2
+
+
+def test_mzxml_ms2_preserves_unknown_acquisition_metadata(tmp_path):
+    import pyopenms as oms
+
+    from scMM.analysis.external_annotations import acquisition_msms
+
+    mzml = tmp_path / "input.mzML"
+    mzxml = tmp_path / "input.mzXML"
+    write_annotation_acquisition(mzml)
+    experiment = oms.MSExperiment()
+    oms.MzMLFile().load(str(mzml), experiment)
+    oms.MzXMLFile().store(str(mzxml), experiment)
+    with pytest.raises(ValueError, match="缺少谱型"):
+        acquisition_msms(mzxml, start=1)
+    spectra, details = acquisition_msms(mzxml, start=1, unknown_spectrum_type="centroid")
+    assert details["first_scan"] == details["last_scan"] == 1
+    assert spectra[0]["metadata"]["spectrum_type_source"] == "user"
+    assert spectra[0]["metadata"]["acquisition_collision_energy"] is None
 
 
 def test_msms_failed_fragments_can_be_linked_and_reopened(workflow, monkeypatch):

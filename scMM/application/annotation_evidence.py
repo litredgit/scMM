@@ -12,6 +12,7 @@ from scMM.util.lipid_annotation import feature_axis, feature_samples
 
 from .annotation_sources import feature_source
 from .identity import actor
+from .preview_cache import file_identity
 from .web_lipids import selected_version
 from .web_projects import project_candidate
 
@@ -97,6 +98,21 @@ def link_preview(project, target, record_id, row):
         if external is None or row is not None:
             raise ValueError("没有找到所选证据。")
         scope = external["scope"]
+        if external["kind"] == "ms1_overlap":
+            profile = external["profile_review"]
+            if target["source_identity"] != profile["source_identity"] or not any(
+                target["feature_id"] == candidate["feature_id"]
+                and (
+                    target["kind"] == "feature"
+                    or (
+                        target["kind"] == "candidate"
+                        and target["version"] == profile["version"]
+                        and target["id"] == candidate["candidate_id"]
+                    )
+                )
+                for candidate in profile["candidates"]
+            ):
+                raise ValueError("原始谱复核只关联本次选定来源的测量峰或候选。")
         comparison = None
     key = json_identity([target, record_id, row])
     previous = registry.get("links", {}).get(key)
@@ -112,12 +128,144 @@ def link_preview(project, target, record_id, row):
 
 
 class AnnotationEvidenceWorkflow:
+    def annotation_acquisition(self, project, sample_id):
+        sample = self.sample(project, sample_id)
+        if sample.get("result_only"):
+            raise ValueError("请先重新定位此样本的原始文件。")
+        path = self.storage.resolve_raw_file(sample["storage"], sample["path"])
+        return sample["name"], path, file_identity(path)
+
+    def annotation_profile_review(
+        self,
+        identity,
+        revision,
+        *,
+        source,
+        version,
+        candidate_ids,
+        sample_id,
+        scan_index,
+        fwhm,
+        offset_ppm,
+    ):
+        from pyopenms import IonSource, SpectrumSettings
+
+        from scMM.file.io import load_single_file
+        from scMM.util.lipid_overlap import compare_profile
+
+        from .raw_preview import spectrum_at
+
+        if not source or not version or len(set(candidate_ids)) != 2:
+            raise ValueError("请明确选择注释来源、版本和两个候选。")
+        with self.access(identity, operation="profile_review_input") as workspace:
+            workspace.check(revision)
+            project = workspace.require_project()
+            data, binding = evidence_source(project, source)
+            _, selected = selected_version(project, data, version, source)
+            rows = [r for r in selected["candidates"] if r["candidate_id"] in candidate_ids]
+            if len(rows) != 2:
+                raise ValueError("候选不属于当前注释版本。")
+            candidates = [
+                {
+                    key: row.get(key)
+                    for key in (
+                        "candidate_id",
+                        "feature_id",
+                        "name",
+                        "formula",
+                        "adduct",
+                        "query_mz",
+                        "theoretical_mz",
+                        "polarity",
+                        "database_sha256",
+                        "database_record_id",
+                        "source_formula_conflict",
+                    )
+                }
+                for row in rows
+            ]
+            parameters = dict(selected["parameters"])
+            sample_name, path, acquisition = self.annotation_acquisition(project, sample_id)
+        experiment, metadata = load_single_file(path)
+        scan = spectrum_at(experiment, scan_index)
+        if scan.getMSLevel() != 1:
+            raise ValueError("请选择 MS1 扫描。")
+        if hasattr(scan, "getType"):
+            if scan.getType() != SpectrumSettings.SpectrumType.PROFILE:
+                raise ValueError("当前扫描需明确为连续谱（profile）。")
+            measured_polarity = {
+                IonSource.Polarity.POSITIVE: "pos",
+                IonSource.Polarity.NEGATIVE: "neg",
+            }.get(scan.getInstrumentSettings().getPolarity())
+            if measured_polarity and any(r["polarity"] != measured_polarity for r in candidates):
+                raise ValueError("扫描记录的采集极性与候选不一致。")
+        elif not scan.is_profile:
+            raise ValueError("当前扫描需为连续谱（profile）。")
+        else:
+            measured_polarity = None
+        result = compare_profile(
+            *scan.get_peaks(),
+            candidates,
+            max_order=parameters["max_isotope_order"],
+            ppm=parameters["annotation_ppm"],
+            fwhm=fwhm,
+            offset_ppm=offset_ppm,
+        )
+        profile = {
+            **result,
+            "source": source,
+            "source_identity": binding,
+            "version": version,
+            "sample_id": sample_id,
+            "scan_index": scan_index,
+            "native_id": scan.getNativeID()
+            if hasattr(scan, "getNativeID")
+            else f"scan={scan.scan_number}",
+            "rt_seconds": float(scan.getRT()),
+            "acquisition_polarity": measured_polarity,
+            "instrument": str(metadata.get("instrument", "")),
+        }
+        with self.access(identity, operation="profile_review_collect") as workspace:
+            workspace.check(revision)
+            project = workspace.require_project()
+            if (
+                evidence_source(project, source)[1] != binding
+                or self.annotation_acquisition(project, sample_id)[2] != acquisition
+            ):
+                raise ValueError("测量来源或原始文件已改变，请重新运行。")
+            key = json_identity([profile, json_identity(acquisition)])
+            candidate = project_candidate(project)
+            external_records(candidate, write=True).setdefault(
+                key,
+                {
+                    "evidence_id": key,
+                    "kind": "ms1_overlap",
+                    "scope": {
+                        "description": f"{sample_name} · {profile['native_id']} · 单次 MS1 扫描"
+                    },
+                    "source": {"name": sample_name, "file_identity": json_identity(acquisition)},
+                    "profile_review": profile,
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "user_id": (actor.get() or {}).get("id", workspace.owner_id),
+                },
+            )
+            candidate.dirty = True
+            workspace.project = candidate
+            workspace.revision += 1
+            return {"workspace": self.view(workspace), "value": {"id": key, **profile}}
+
     def annotation_msms(self, identity, revision, *, source, options):
-        from scMM.analysis.external_annotations import msms_search
+        from scMM.analysis.external_annotations import acquisition_msms, msms_search
         from scMM.plot.presentation import style_figure
 
+        from .preview_cache import digest_file
         from .web_support import figure_view
 
+        sample_id = options.pop("acquisition_sample", "")
+        start, end = options.pop("scan_start", 0), options.pop("scan_end", None)
+        unknown_type = options.pop("unknown_spectrum_type", "")
+        if bool(sample_id) == bool(options["measured"].strip()):
+            raise ValueError("请在实测谱文件和项目采集文件中选择一种输入。")
         legacy = not source
         source = source or "current"
         with self.access(identity, operation="msms_input") as workspace:
@@ -135,11 +283,28 @@ class AnnotationEvidenceWorkflow:
                 np.empty((0, data.n_vars)), var=DataFrame({"mz": masses}, index=features)
             )
             token = list(project.workspace.token)
-        figure = msms_search(frozen, **options)
+            if sample_id:
+                name, path, acquisition_identity = self.annotation_acquisition(project, sample_id)
+        acquisition = None
+        if sample_id:
+            spectra, details = acquisition_msms(
+                path, start=start, end=end, unknown_spectrum_type=unknown_type
+            )
+            acquisition = {
+                **details,
+                "sample_id": sample_id,
+                "sample_name": name,
+                "format": path.suffix.lstrip(".").lower(),
+                "sha256": digest_file(path),
+                "spectra": spectra,
+            }
+        figure = msms_search(frozen, acquisition=acquisition, **options)
         meta = dict(figure.layout.meta)
         rows = meta.pop("match_rows")
         key = uuid4().hex
         parameters = {k: v for k, v in options.items() if k not in {"measured", "library"}}
+        if sample_id:
+            parameters["acquisition"] = meta["acquisition"]
         figure.update_layout(
             meta={
                 **meta,
@@ -155,6 +320,11 @@ class AnnotationEvidenceWorkflow:
             project = workspace.require_project()
             if evidence_source(project, source)[1] != binding:
                 raise ValueError("数据已改变，请重新运行 MS/MS 搜索。")
+            if (
+                sample_id
+                and self.annotation_acquisition(project, sample_id)[2] != acquisition_identity
+            ):
+                raise ValueError("原始文件已改变，请重新运行 MS/MS 搜索。")
             candidate = project_candidate(project)
             evidence_registry(candidate, write=True).setdefault("searches", {})[key] = {
                 "id": key,

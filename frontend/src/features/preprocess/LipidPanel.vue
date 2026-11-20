@@ -11,6 +11,8 @@ import DataTableView from '../../components/DataTable.vue'
 import LipidNetworkOptions from './LipidNetworkOptions.vue'
 import LipidNetworkPanel from './LipidNetworkPanel.vue'
 import AnnotationSpectrum from '../annotation/AnnotationSpectrum.vue'
+import ProfileReviewPanel from '../annotation/ProfileReviewPanel.vue'
+import type { ProfileCandidate } from '../annotation/profileReview'
 import { ms2Label } from './lipids'
 import { useLipidPanel } from './useLipidPanel'
 const props = defineProps<{ source: AnnotationSource }>()
@@ -121,6 +123,32 @@ const currentResult = computed(() =>
     ? results.value
     : undefined,
 )
+const profileCandidates = ref<ProfileCandidate[]>([])
+function compositionDiffers(row: Record<string, unknown>) {
+  const compact = (value: unknown) => String(value ?? '').replace(/[()\s]/g, '')
+  return !!row.species && compact(row.species) !== compact(row.name)
+}
+watch([sourceIdentity, version], () => {
+  profileCandidates.value = []
+})
+function addProfileCandidate(row: Record<string, unknown>) {
+  const id = String(row.candidate_id)
+  if (profileCandidates.value.some((candidate) => candidate.candidate_id === id)) {
+    profileCandidates.value = profileCandidates.value.filter(
+      (candidate) => candidate.candidate_id !== id,
+    )
+  } else if (profileCandidates.value.length < 2) {
+    profileCandidates.value = [
+      ...profileCandidates.value,
+      {
+        candidate_id: id,
+        feature_id: String(row.feature_id),
+        name: String(row.name),
+        adduct: String(row.adduct),
+      },
+    ]
+  }
+}
 const filteredIds = computed(() => results.value?.features.map((row) => row.id))
 watch(feature, (id) => {
   if (id && selectedTarget.value?.featureId !== id)
@@ -209,6 +237,12 @@ watch(
           {{ settings === 'search' ? '收起查库设置' : '查找候选' }}
         </button>
         <slot name="grouping-action" />
+        <ProfileReviewPanel
+          :source="sourceId"
+          :version="validVersion ? version : ''"
+          :candidates="profileCandidates"
+          @clear="profileCandidates = []"
+        />
       </template>
       <template #settings>
         <section v-show="settings === 'search'" class="search-settings" aria-label="查找候选设置">
@@ -560,6 +594,7 @@ watch(
               <p>
                 {{ row.database_filename }} · {{ row.adduct }} · {{ number(row.ppm_error) }} ppm
               </p>
+              <p v-if="compositionDiffers(row)">总组成 {{ row.species }}</p>
               <p>
                 {{ ms2Label(row.ms2_status) }} · {{ row.top_ranked ? '规则推荐' : '容差内候选' }}
               </p>
@@ -606,6 +641,26 @@ watch(
                   关联此候选的证据
                 </button>
               </details>
+              <button
+                v-if="row.formula && !row.source_formula_conflict"
+                type="button"
+                class="text-button"
+                :aria-pressed="
+                  profileCandidates.some((item) => item.candidate_id === row.candidate_id)
+                "
+                :disabled="
+                  store.busy ||
+                  (profileCandidates.length === 2 &&
+                    !profileCandidates.some((item) => item.candidate_id === row.candidate_id))
+                "
+                @click="addProfileCandidate(row)"
+              >
+                {{
+                  profileCandidates.some((item) => item.candidate_id === row.candidate_id)
+                    ? '移出原始谱复核'
+                    : '选入原始谱复核'
+                }}
+              </button>
             </article>
             <div v-if="currentResult.feature_candidates.total > limit" class="actions">
               <button :disabled="offset === 0" @click="pageCandidates(-1)">候选上一页</button>

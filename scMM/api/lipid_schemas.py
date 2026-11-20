@@ -96,6 +96,14 @@ class LipidSpectrumOverlay(LipidSpectrumAxis):
     grouping: str = ""
 
 
+class LipidProfileReview(LipidActivate):
+    candidate_ids: list[str] = Field(min_length=2, max_length=2)
+    sample_id: str = Field(min_length=1, max_length=100)
+    scan_index: int = Field(ge=0)
+    fwhm: float | None = Field(default=None, gt=0, le=0.5)
+    offset_ppm: float = Field(default=0, ge=-100, le=100)
+
+
 class LipidReview(LipidActivate):
     grouping: str = ""
     feature_id: str | None = None

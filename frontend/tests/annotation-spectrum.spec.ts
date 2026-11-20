@@ -12,6 +12,73 @@ function peak(page: Page, id: string) {
     })
 }
 
+test('raw overlap and acquisition MS2 stay traceable through the desktop review layout', async ({
+  page,
+}) => {
+  test.setTimeout(90000)
+  await createProject(page, '原始谱证据复核')
+  await navigate(page, '/annotation')
+  const exchange = page.getByRole('region', { name: '板块数据导入与导出' })
+  await exchange.getByRole('button', { name: '导入外部数据' }).click()
+  await exchange.getByLabel('板块导入格式').selectOption('feature_csv')
+  await exchange.getByLabel('板块数据文件').setInputFiles({
+    name: 'profile-features.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('feature_id,mz\nparent,758.569434493991\ncompeting,760.585084557791\n'),
+  })
+  await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
+  await navigate(page, '/samples')
+  await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
+  await page.getByRole('button', { name: /annotation-profile.mzML/ }).click()
+  await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
+  await navigate(page, '/annotation')
+  const spectrum = page.getByRole('region', { name: '谱图注释与关联峰' })
+  await spectrum.getByRole('button', { name: '查找候选', exact: true }).click()
+  await page.getByLabel('脂质数据库文件').selectOption({ label: 'zz-profile.sdf' })
+  await page.getByRole('button', { name: '运行精确质量候选注释' }).click()
+  await peak(page, 'parent').click()
+  await spectrum.getByRole('button', { name: '选入原始谱复核' }).click()
+  await peak(page, 'competing').click()
+  await spectrum.getByRole('button', { name: '选入原始谱复核' }).click()
+  await expect(spectrum.locator('.js-plotly-plot')).toBeInViewport({ ratio: 0.9 })
+  await spectrum.getByRole('button', { name: '原始谱复核 · 2/2' }).click()
+  const dialog = page.getByRole('dialog', { name: '原始谱重叠复核' })
+  await dialog.getByLabel('项目样本').selectOption({ label: 'annotation-profile' })
+  await dialog.getByLabel('MS1 扫描索引').fill('0')
+  await dialog.getByRole('button', { name: '运行并记录复核' }).click()
+  await expect(dialog).toContainText('scan=47')
+  await expect(dialog).toContainText('8.94 mDa')
+  await expect(dialog.locator('.js-plotly-plot')).toBeInViewport({ ratio: 0.95 })
+  await dialog.getByRole('link', { name: /打开证据记录/ }).click()
+  await expect(page.getByRole('region', { name: '原始谱复核结果' })).toContainText('scan=47')
+
+  await page.getByRole('button', { name: 'MS/MS 搜索', exact: true }).click()
+  await page.getByLabel('实测来源').selectOption('acquisition')
+  await page.getByLabel('项目采集文件').selectOption({ label: 'annotation-profile' })
+  await page.getByLabel('起始扫描索引').fill('1')
+  await page.getByLabel('结束扫描索引').fill('1')
+  await page.getByLabel('参考谱库').setInputFiles({
+    name: 'reference.mgf',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      'BEGIN IONS\nTITLE=reference\nPEPMASS=758.569434493991\n120 20\n140 60\n160 10\nEND IONS\n',
+    ),
+  })
+  await page.getByLabel('样本池与适用范围').fill('Synthetic pool')
+  const search = page.getByRole('button', { name: '搜索候选证据' })
+  await expect(search).toBeInViewport()
+  await search.click()
+  await page.getByLabel('显示全部峰的比对').check()
+  const row = page.getByRole('button', { name: /parent \/ scan=48/ })
+  await expect(row).toBeVisible()
+  await row.click()
+  await expect(page.getByText(/隔离窗偏移 0.4 \/ 0.6 Da/)).toBeVisible()
+  await expect(page.getByText(/采集碰撞能 25/)).toBeVisible()
+  await navigate(page, '/ions')
+  await expect(page.getByRole('heading', { name: '定量视图', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
+
 test('complete feature spectrum is selectable before candidate search, including identical masses', async ({
   page,
 }) => {

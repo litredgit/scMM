@@ -475,6 +475,7 @@
         "frontend/src/features/preprocess/*Lipid*",
         "frontend/src/features/preprocess/useLipid*.ts",
         "frontend/src/features/annotation/*",
+        "frontend/src/features/analysis/modules/AnnotationEvidencePanel.vue",
         "frontend/src/features/preprocess/lipids.ts"
       ],
       "downstream": [],

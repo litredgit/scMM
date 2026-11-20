@@ -10,7 +10,46 @@ from scMM.application.lipid_database import load_database, load_databases
 from scMM.util.lipid_annotation import mass_candidates
 from scMM.util.lipid_curation import curate_mammalian_cells
 from scMM.util.lipid_spectrum import apply_review, spectrum_relations
-from tests.support.lipids import options, sdf_record
+from tests.support.lipids import options, overlap_profile, sdf_record
+
+
+@pytest.mark.parametrize("height", [0.0, 350.0])
+def test_profile_overlap_recovers_competing_component_and_reports_final_residual(height):
+    from scMM.util.lipid_overlap import compare_profile
+
+    mz, intensity, _, candidates = overlap_profile(competing=height)
+    result = compare_profile(mz, intensity, candidates[::-1], max_order=3, ppm=10, fwhm=0.043)
+    assert result["status"] == "compared"
+    assert result["isotope_order"] == 2
+    assert result["separation_da"] == pytest.approx(0.00894, abs=1e-6)
+    assert result["parent_height"] == pytest.approx(1000, abs=0.01)
+    assert result["competing_height"] == pytest.approx(height, abs=0.01)
+    assert result["mixed_relative_rmse"] < 1e-6
+    profile = result["profile"]
+    np.testing.assert_allclose(
+        profile["residual"], np.array(profile["observed"]) - profile["mixed"]
+    )
+    if height:
+        assert result["parent_only_relative_rmse"] > 0.05
+    missing = compare_profile(mz[:201], intensity[:201], candidates, max_order=3, ppm=10)
+    assert missing["status"] == "unresolved" and "profile" not in missing
+    quiet = compare_profile(
+        mz, np.full_like(intensity, 4), candidates, max_order=3, ppm=10, fwhm=0.043
+    )
+    assert quiet["status"] == "unresolved" and "competing_height" not in quiet
+
+
+def test_species_normalization_retains_chemically_distinct_annotations():
+    from scMM.util.lipid_names import record_species, species_label
+
+    assert species_label("Cer(t18:0/24:1)") == "Cer(42:1;O3)"
+    assert species_label("Cer(d18:0/24:1)") == "Cer(42:1;O2)"
+    assert species_label("PE P-16:0/20:4") == species_label("PE O-36:5")
+    assert species_label("DGTS 16:0/18:1") == "DGTS(34:1)"
+    assert species_label("15-HETE") == "15-HETE"
+    assert (
+        record_species({"COMMON_NAME": "PC 34:1", "FORMULA": "C42H74D7NO8P"}) == "PC(34:1)[M[2]H7]"
+    )
 
 
 def test_mammalian_preset_retains_source_and_uses_formula_mass(monkeypatch):

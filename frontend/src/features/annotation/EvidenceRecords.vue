@@ -7,6 +7,8 @@ import { saveBlob } from '../../api/workspaceDownload'
 import { formatTime } from '../../help/time'
 import type { Figure } from '../../api/types'
 import PlotView from '../../components/PlotView.vue'
+import ProfileReviewResult from './ProfileReviewResult.vue'
+import type { ProfileReview } from './profileReview'
 import DataTableView from '../../components/DataTable.vue'
 import { useAnnotationSource } from './useAnnotationSource'
 
@@ -23,6 +25,10 @@ type Match = {
   passes_threshold: boolean
   sample_pool: string
   fragments_json: string
+  acquisition_scan_index?: number
+  acquisition_isolation_offsets_da?: [number, number] | null
+  acquisition_collision_energy?: number | null
+  acquisition_polarity?: string | null
 }
 type EvidenceRecord = {
   id: string
@@ -32,6 +38,7 @@ type EvidenceRecord = {
   scope?: Record<string, unknown>
   text?: string
   parameters?: Record<string, unknown>
+  profile_review?: ProfileReview
 }
 type Link = {
   id: string
@@ -217,16 +224,26 @@ async function returnToTarget(link: Link) {
   })
   void router.push('/annotation')
 }
-const canLink = computed(
-  () =>
-    !!target.value &&
-    !!key.value &&
-    (record.value?.rows !== undefined
-      ? !!selected.value &&
-        currentRecord.value?.current &&
-        target.value.feature_id === selected.value.feature_id
-      : !!record.value),
-)
+const canLink = computed(() => {
+  const selectedTarget = target.value
+  const stored = record.value
+  if (!selectedTarget || !key.value || !stored) return false
+  if (stored.rows)
+    return currentRecord.value?.current && selectedTarget.feature_id === selected.value?.feature_id
+  const profile = stored.profile_review
+  return (
+    !profile ||
+    (profile.source === selectedTarget.source &&
+      profile.candidates.some(
+        (candidate) =>
+          candidate.feature_id === selectedTarget.feature_id &&
+          (selectedTarget.kind === 'feature' ||
+            (selectedTarget.kind === 'candidate' &&
+              selectedTarget.id === candidate.candidate_id &&
+              selectedTarget.version === profile.version)),
+      ))
+  )
+})
 async function association(decision: 'preview' | 'linked' | 'withdrawn') {
   if (!target.value) return
   const body = {
@@ -354,9 +371,10 @@ async function archive() {
               {{ row.size }} 条{{ row.current ? '' : ' · 其他来源或历史版本' }}
             </option>
           </optgroup>
-          <optgroup label="外部证据">
+          <optgroup label="原始谱复核与外部证据">
             <option v-for="row in index?.external" :key="row.evidence_id" :value="row.evidence_id">
-              {{ row.source.name || row.kind }} · {{ row.kind }}
+              {{ row.scope.description || row.source.name || row.kind }} ·
+              {{ row.kind === 'ms1_overlap' ? '原始谱重叠复核' : row.kind }}
             </option>
           </optgroup>
         </select>
@@ -429,6 +447,18 @@ async function archive() {
           {{ selected.feature_id }} · {{ selected.name }} · 数据库中有参考谱 ·
           {{ selected.passes_threshold ? '实测比对通过' : '实测未匹配' }}
         </p>
+        <p v-if="selected.acquisition_scan_index != null" class="muted">
+          原始索引 {{ selected.acquisition_scan_index }} · 隔离窗偏移
+          {{ selected.acquisition_isolation_offsets_da?.join(' / ') || '未提供' }} Da · 采集碰撞能
+          {{ selected.acquisition_collision_energy ?? '未提供' }} ·
+          {{
+            selected.acquisition_polarity === 'positive'
+              ? '正离子'
+              : selected.acquisition_polarity === 'negative'
+                ? '负离子'
+                : '采集极性未提供'
+          }}
+        </p>
         <button v-if="currentRecord?.current && !target" class="preview" @click="targetMatch">
           以此测量峰为关联目标
         </button>
@@ -455,6 +485,7 @@ async function archive() {
         <PlotView :figure="record.figure" name="msms_evidence" />
       </details>
     </template>
+    <ProfileReviewResult v-else-if="record?.profile_review" :result="record.profile_review" />
     <p v-else-if="record?.kind">
       {{ record.kind }} · {{ record.scope?.description }}
       {{ record.text ? ' · ' + record.text : '' }}

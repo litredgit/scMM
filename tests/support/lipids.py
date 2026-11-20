@@ -7,10 +7,12 @@ from pyopenms import EmpiricalFormula
 
 from scMM.application.workbench import AnalysisWorkspace
 from scMM.util.intensity import write_intensity_states
-from scMM.util.lipid_isotopes import ADDUCTS, adduct_shift, resolved_distribution
+from scMM.util.lipid_isotopes import ADDUCTS, adduct_shift, fine_distribution, resolved_distribution
 
 
-def sdf_record(identifier="LMGP01010001", formula="C10H20", name="Synthetic A"):
+def sdf_record(
+    identifier="LMGP01010001", formula="C10H20", name="Synthetic A", abbreviation="PC 10:0"
+):
     mass = EmpiricalFormula(formula).getMonoWeight()
     return f"""{name}
   scMM synthetic
@@ -34,7 +36,7 @@ Glycerophospholipids [GP]
 Glycerophosphocholines [GP01]
 
 >  <ABBREVIATION>
-PC 10:0
+{abbreviation}
 
 $$$$
 """
@@ -76,3 +78,53 @@ def options(adduct="[M+H]+"):
         "intensity_layer": "",
         "resolution": 35000.0,
     }
+
+
+def overlap_profile(competing=350.0):
+    adduct = "[M+H]+"
+    width = 0.043
+    formulas = ("C42H80NO8P", "C42H82NO8P")
+    masses = [
+        EmpiricalFormula(formula).getMonoWeight() + adduct_shift(adduct) for formula in formulas
+    ]
+    mz = np.concatenate([np.linspace(mass - 0.15, mass + 0.15, 201) for mass in masses])
+    intensity = np.full_like(mz, 4.0)
+    for formula, mono, height in zip(formulas, masses, (1000.0, competing), strict=True):
+        for delta, probability, _ in [(0, 1, 0), *fine_distribution(formula, adduct, 3)]:
+            intensity += (
+                height * probability * np.exp(-4 * np.log(2) * ((mz - mono - delta) / width) ** 2)
+            )
+    return mz, intensity, masses, [{"formula": formula, "adduct": adduct} for formula in formulas]
+
+
+def write_annotation_acquisition(path):
+    import pyopenms as oms
+
+    mz, intensity, masses, _ = overlap_profile()
+    profile = oms.MSSpectrum()
+    profile.setMSLevel(1)
+    profile.setNativeID("scan=47")
+    profile.setRT(30.0)
+    profile.setType(oms.SpectrumSettings.SpectrumType.PROFILE)
+    profile.set_peaks((mz, intensity))
+    fragment = oms.MSSpectrum()
+    fragment.setMSLevel(2)
+    fragment.setNativeID("scan=48")
+    fragment.setRT(31.0)
+    fragment.setType(oms.SpectrumSettings.SpectrumType.CENTROID)
+    fragment.set_peaks((np.array([120.0, 140.0, 160.0]), np.array([20.0, 60.0, 10.0])))
+    precursor = oms.Precursor()
+    precursor.setMZ(masses[0])
+    precursor.setCharge(1)
+    precursor.setIsolationWindowLowerOffset(0.4)
+    precursor.setIsolationWindowUpperOffset(0.6)
+    precursor.setActivationEnergy(25.0)
+    precursor.setActivationMethods({oms.ActivationMethod.HCD})
+    fragment.setPrecursors([precursor])
+    instrument = fragment.getInstrumentSettings()
+    instrument.setPolarity(oms.IonSource.Polarity.POSITIVE)
+    fragment.setInstrumentSettings(instrument)
+    experiment = oms.MSExperiment()
+    experiment.setSpectra([profile, fragment])
+    oms.MzMLFile().store(str(path), experiment)
+    return masses

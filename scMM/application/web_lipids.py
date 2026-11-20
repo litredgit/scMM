@@ -538,7 +538,7 @@ class LipidWorkflow:
 
             grouped = {}
             for row in candidates:
-                label = row.get("species") or record_species(row)
+                label = record_species(row)
                 key = (row["feature_id"], label, row["formula"], row["adduct"])
                 grouped.setdefault(key, []).append(row)
             groups = list(grouped.items())
@@ -556,8 +556,9 @@ class LipidWorkflow:
                     sorting.get("candidate_sort", "recommended"),
                     sorting.get("candidate_descending", False),
                 )
+            review_rows = for_review[values["offset"] : values["offset"] + values["limit"]]
             review_table = table_view(
-                pd.DataFrame(for_review[values["offset"] : values["offset"] + values["limit"]]),
+                pd.DataFrame([{**row, "species": record_species(row)} for row in review_rows]),
                 limit=values["limit"],
             )
             review_table["total"] = len(for_review)

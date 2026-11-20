@@ -191,9 +191,6 @@ def _read_database(path, *, include_invalid=False):
     ]
     if frame["record_id"].duplicated().any():
         raise ValueError("数据库存在重复物质 ID。")
-    from scMM.util.lipid_names import record_species
-
-    frame["species"] = [record_species(row) for row in frame.to_dict(orient="records")]
     if not include_invalid:
         frame = frame.sort_values("EXACT_MASS", kind="stable")
     frame = frame.reset_index(drop=True)
@@ -329,6 +326,11 @@ def prepare_database(*, force=False, archive_path=None, expected_sha256=None):
             except zipfile.BadZipFile as exc:
                 raise ValueError("数据库压缩包无效。") from exc
             full_frame, invalid = _read_database(sdf, include_invalid=True)
+            from scMM.util.lipid_names import record_species
+
+            full_frame["species"] = [
+                record_species(row) for row in full_frame.to_dict(orient="records")
+            ]
             frame = full_frame.loc[full_frame["valid_exact_mass"]].copy()
             digest = file_digest(sdf)
             target = root / f"LMSD_{digest[:16]}.sdf"

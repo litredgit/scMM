@@ -203,20 +203,7 @@ class RawFilePreview:
 
     def single_spectrum(self, scan_index: int) -> tuple[pd.DataFrame, dict]:
         """Read a zero-based scan index; RAW scans stream sequentially to it."""
-        if isinstance(scan_index, bool) or not isinstance(scan_index, int):
-            raise ValueError("scan_index must be an integer")
-        if not 0 <= scan_index < self.experiment.getNrSpectra():
-            raise ValueError("scan_index is outside the loaded experiment")
-        if isinstance(self.experiment, ThermoRawSource):
-            with spectrum_iterator(self.experiment) as scans:
-                for index, candidate in enumerate(scans):
-                    if index == scan_index:
-                        spectrum = candidate
-                        break
-                else:
-                    raise ValueError("scan_index is outside the RAW stream")
-        else:
-            spectrum = self.experiment[scan_index]
+        spectrum = spectrum_at(self.experiment, scan_index)
         mz, intensity = spectrum.get_peaks()
         return pd.DataFrame({"mz": mz, "intensity": intensity}), {
             "scan_index": scan_index,
@@ -387,6 +374,20 @@ class RawFilePreview:
         width = (mz_max - mz_min) / bins
         centers = mz_min + (np.arange(bins, dtype=np.float64) + 0.5) * width
         return pd.DataFrame({"mz": centers, "intensity": accumulated})
+
+
+def spectrum_at(experiment, scan_index):
+    if isinstance(scan_index, bool) or not isinstance(scan_index, int):
+        raise ValueError("scan_index must be an integer")
+    if not 0 <= scan_index < experiment.getNrSpectra():
+        raise ValueError("scan_index is outside the loaded experiment")
+    if isinstance(experiment, ThermoRawSource):
+        with spectrum_iterator(experiment) as scans:
+            for index, spectrum in enumerate(scans):
+                if index == scan_index:
+                    return spectrum
+        raise ValueError("scan_index is outside the RAW stream")
+    return experiment[scan_index]
 
 
 class RawPreviewService:

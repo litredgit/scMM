@@ -78,6 +78,13 @@ def spectrum_overlay(body: s.LipidSpectrumOverlay, manager: Service, identity: I
     )
 
 
+@router.post("/spectrum/profile-review")
+def profile_review(body: s.LipidProfileReview, manager: Service, identity: Identity):
+    return manager.annotation_profile_review(
+        identity, body.revision, **body.model_dump(exclude={"revision"})
+    )
+
+
 @router.post("/isotope-spectrum")
 def spectrum(body: s.IsotopeSpectrum, manager: Service, identity: Identity):
     from scMM.application.annotation_sources import feature_source

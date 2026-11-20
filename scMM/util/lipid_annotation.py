@@ -91,6 +91,8 @@ def dataset_inputs(data, layer="", *, mass_only=False):
 
 
 def mass_candidates(database, feature_ids, mz, parameters, database_identity):
+    from .lipid_names import record_species
+
     masses = database["EXACT_MASS"].to_numpy(dtype=float)
     records = database.to_dict(orient="records")
     record_indices = np.arange(len(records))
@@ -136,7 +138,7 @@ def mass_candidates(database, feature_ids, mz, parameters, database_identity):
                     "database_id": record["record_id"],
                     "database_record_id": source_record_id,
                     "name": str(record["COMMON_NAME"]),
-                    "species": str(record.get("species", record["COMMON_NAME"])),
+                    "species": record_species(record),
                     "formula": str(record["FORMULA"]),
                     "adduct": adduct,
                     "polarity": spec["polarity"],

@@ -198,6 +198,98 @@ def spectrum_polarity(spectrum):
     return None
 
 
+def acquisition_msms(path, *, start=0, end=None, unknown_spectrum_type=""):
+    """Prepare spectra independently, with their original precursor and scan metadata."""
+    from pyopenms import IonSource, MSSpectrum, PeakPickerHiRes, SpectrumSettings
+
+    from scMM.file.io import load_single_file
+
+    if path.suffix.lower() not in {".mzml", ".mzxml"}:
+        raise ValueError("请选择带前体元数据的 mzML/mzXML，或导入实测 MGF/MSP。")
+    experiment, file_metadata = load_single_file(path)
+    count = experiment.getNrSpectra()
+    last = count - 1 if end is None else end
+    if not 0 <= start <= last < count:
+        raise ValueError(f"扫描范围应在 0 到 {count - 1} 内，含首尾。")
+    picker = PeakPickerHiRes()
+    spectra = []
+    rejected = {"precursor": 0, "unknown_type": 0, "empty": 0}
+    peak_count = 0
+    types = SpectrumSettings.SpectrumType
+    declared = {"profile": types.PROFILE, "centroid": types.CENTROID}.get(unknown_spectrum_type)
+    for index in range(start, last + 1):
+        scan = experiment[index]
+        if scan.getMSLevel() != 2:
+            continue
+        sources = scan.getPrecursors()
+        if len(sources) != 1 or not np.isfinite(sources[0].getMZ()) or sources[0].getMZ() <= 0:
+            rejected["precursor"] += 1
+            continue
+        source = sources[0]
+        spectrum_type = scan.getType()
+        type_source = "file"
+        if spectrum_type == types.UNKNOWN and declared is not None:
+            spectrum_type = declared
+            type_source = "user"
+        if spectrum_type == types.PROFILE:
+            centroid = MSSpectrum()
+            picker.pick(scan, centroid)
+        elif spectrum_type == types.CENTROID:
+            centroid = scan
+        else:
+            rejected["unknown_type"] += 1
+            continue
+        mz, intensity = centroid.get_peaks()
+        if not np.isfinite(mz).all() or not np.isfinite(intensity).all() or (mz <= 0).any():
+            raise ValueError(f"扫描 {index} 的碎片谱含无效质量或强度。")
+        positive = intensity > 0
+        if not positive.any():
+            rejected["empty"] += 1
+            continue
+        peak_count += int(positive.sum())
+        if len(spectra) >= 2000 or peak_count > 250_000:
+            raise ValueError("实测谱量超过本次比对上限，请缩小扫描范围。")
+        lower = float(source.getIsolationWindowLowerOffset())
+        upper = float(source.getIsolationWindowUpperOffset())
+        energy = float(source.getActivationEnergy())
+        polarity = {
+            IonSource.Polarity.POSITIVE: "positive",
+            IonSource.Polarity.NEGATIVE: "negative",
+        }.get(scan.getInstrumentSettings().getPolarity())
+        spectra.append(
+            {
+                "metadata": {
+                    "scans": scan.getNativeID() or str(index),
+                    "scan_index": index,
+                    "rt_seconds": float(scan.getRT()),
+                    "precursor_mz": float(source.getMZ()),
+                    "precursor_charge": int(source.getCharge()) or None,
+                    "polarity": polarity,
+                    "isolation_offsets_da": [lower, upper]
+                    if all(np.isfinite([lower, upper])) and lower > 0 and upper > 0
+                    else None,
+                    "acquisition_collision_energy": energy
+                    if np.isfinite(energy) and energy > 0
+                    else None,
+                    "source_spectrum_type": "profile" if centroid is not scan else "centroid",
+                    "spectrum_type_source": type_source,
+                },
+                "peaks": np.column_stack([mz[positive], intensity[positive]]).tolist(),
+            }
+        )
+    if not spectra:
+        if rejected["unknown_type"]:
+            raise ValueError("扫描缺少谱型。请按采集记录填写已知谱型，或导入实测 MGF/MSP。")
+        raise ValueError("范围内没有具备单一有效前体及可读碎片谱的 MS2 扫描。")
+    return spectra, {
+        "first_scan": start,
+        "last_scan": last,
+        "skipped_ms2": rejected,
+        "unknown_spectrum_type": unknown_spectrum_type,
+        "instrument": str(file_metadata.get("instrument", "")),
+    }
+
+
 def msms_search(
     data,
     *,
@@ -213,10 +305,15 @@ def msms_search(
     polarity,
     collision_energy="",
     instrument="",
+    acquisition=None,
 ):
     if not sample_pool.strip():
         raise ValueError("请填写样本池和证据适用范围。")
-    observed = parse_text_spectra(measured, format=measured_format)
+    observed = (
+        parse_text_spectra(measured, format=measured_format)
+        if acquisition is None
+        else acquisition["spectra"]
+    )
     references = parse_text_spectra(library, format=library_format)
     if len(observed) * len(references) > 1_000_000:
         raise ValueError("谱库组合超过上限，请按前体质量拆分输入。")
@@ -226,6 +323,8 @@ def msms_search(
         k: hashlib.sha256(v.encode()).hexdigest()
         for k, v in [("measured", measured), ("library", library)]
     }
+    if acquisition is not None:
+        identities["measured"] = acquisition["sha256"]
     masses = data.var.mz.to_numpy(float)
     rows = []
     budget = 0
@@ -277,6 +376,20 @@ def msms_search(
                         "collision_energy": collision_energy,
                         "instrument": instrument,
                         "scope": "pool_evidence_not_individual_cell_identity",
+                        **(
+                            {
+                                "acquisition_scan_index": spectrum["metadata"]["scan_index"],
+                                "acquisition_isolation_offsets_da": spectrum["metadata"][
+                                    "isolation_offsets_da"
+                                ],
+                                "acquisition_collision_energy": spectrum["metadata"][
+                                    "acquisition_collision_energy"
+                                ],
+                                "acquisition_polarity": spectrum["metadata"]["polarity"],
+                            }
+                            if acquisition is not None
+                            else {}
+                        ),
                     }
                 )
     columns = [
@@ -298,6 +411,15 @@ def msms_search(
         "instrument",
         "scope",
     ]
+    if acquisition is not None:
+        columns.extend(
+            [
+                "acquisition_scan_index",
+                "acquisition_isolation_offsets_da",
+                "acquisition_collision_energy",
+                "acquisition_polarity",
+            ]
+        )
     table = pd.DataFrame(rows, columns=columns)
     figure = go.Figure(
         go.Scatter(
@@ -319,6 +441,11 @@ def msms_search(
             "source_sha256": identities,
             "scope": sample_pool,
             "spectra": {"measured": observed, "library": references},
+            **(
+                {"acquisition": {k: v for k, v in acquisition.items() if k != "spectra"}}
+                if acquisition is not None
+                else {}
+            ),
             "match_rows": rows,
             "export_tables": {"candidates": table.to_csv(index=False)},
         },

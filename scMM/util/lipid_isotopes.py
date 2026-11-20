@@ -36,9 +36,8 @@ def adduct_shift(name):
     )
 
 
-@lru_cache(maxsize=4096)
-def fine_distribution(formula, adduct, max_order):
-    from pyopenms import EmpiricalFormula, FineIsotopePatternGenerator
+def ion_composition(formula, adduct):
+    from pyopenms import EmpiricalFormula
 
     try:
         molecule = EmpiricalFormula(formula)
@@ -55,6 +54,17 @@ def fine_distribution(formula, adduct, max_order):
         ion = molecule + EmpiricalFormula(spec["add"]) - EmpiricalFormula(spec["remove"])
         if any(count < 0 for count in ion.getElementalComposition().values()):
             raise ValueError("加合物移除的元素数超过分子式。")
+        return ion
+    except (RuntimeError, OverflowError) as exc:
+        raise ValueError(f"无法计算离子组成：{formula}") from exc
+
+
+@lru_cache(maxsize=4096)
+def fine_distribution(formula, adduct, max_order):
+    from pyopenms import FineIsotopePatternGenerator
+
+    ion = ion_composition(formula, adduct)
+    try:
         mass = ion.getMonoWeight()
         values = ion.getIsotopeDistribution(FineIsotopePatternGenerator(1e-6)).getContainer()
         peaks = [(float(v.getMZ()) - mass, float(v.getIntensity())) for v in values]

@@ -628,7 +628,11 @@ class AnnotationTable(RevisionRequest):
 
 class MSMSSearch(RevisionRequest):
     source: str = Field(default="", max_length=100)
-    measured: str = Field(max_length=10_000_000)
+    measured: str = Field(default="", max_length=10_000_000)
+    acquisition_sample: str = Field(default="", max_length=100)
+    scan_start: int = Field(default=0, ge=0)
+    scan_end: int | None = Field(default=None, ge=0)
+    unknown_spectrum_type: Literal["", "centroid", "profile"] = ""
     library: str = Field(max_length=10_000_000)
     measured_format: Literal["mgf", "msp"] = "mgf"
     library_format: Literal["mgf", "msp"] = "mgf"

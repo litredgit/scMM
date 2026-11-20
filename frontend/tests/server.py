@@ -153,6 +153,13 @@ def main():
                 + "$$$$\n"
             )
         (database / "synthetic.sdf").write_text("".join(records))
+        from tests.support.lipids import sdf_record, write_annotation_acquisition
+
+        write_annotation_acquisition(raw / "annotation-profile.mzML")
+        (database / "zz-profile.sdf").write_text(
+            sdf_record("LMGP01010021", "C42H80NO8P", "PC 34:2", "PC 34:2")
+            + sdf_record("LMGP01010022", "C42H82NO8P", "PC 34:1", "PC 34:1")
+        )
         os.environ["SCMM_LIPID_DATABASE_DIR"] = str(database)
         os.environ["SCMM_PREFERENCES"] = str(root / "preferences.json")
         # Load the review files into this temporary preset store, never the live one.
