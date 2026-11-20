@@ -64,9 +64,33 @@ def preview_status(manager: Service, identity: Identity):
     return manager.preview_status(identity)
 
 
+@router.get("/workspace/tasks/active")
+def active_tasks(manager: Service, identity: Identity):
+    with manager.access(identity) as workspace:
+        project = workspace.require_project()
+        job = workspace.preview_job
+        preview = (
+            manager.preview_status_unlocked(workspace)
+            if job and job["project_folder"] == project.folder
+            else None
+        )
+        ions = manager.ion_tasks(identity, active_only=True)
+        return {
+            "ion": {"id": ions[0]["id"], "status": ions[0]["status"]} if ions else None,
+            "preview": preview
+            if preview and preview["status"] in {"queued", "running", "stopping"}
+            else None,
+        }
+
+
 @router.post("/workspace/raw/preview/collect")
 def collect_preview(body: s.PreviewCollect, manager: Service, identity: Identity):
     return manager.collect_preview(identity, body.revision, body.job_id)
+
+
+@router.post("/workspace/raw/preview/stop")
+def stop_preview(body: s.PreviewCollect, manager: Service, identity: Identity):
+    return manager.stop_preview(identity, body.revision, body.job_id)
 
 
 @router.get("/workspace/raw/scans")

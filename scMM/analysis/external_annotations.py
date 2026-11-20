@@ -261,6 +261,7 @@ def msms_search(
                             "scans", measured_meta.get("title", str(oi + 1))
                         ),
                         "library_scan": ri + 1,
+                        "measured_index": oi,
                         "precursor_mz": mass,
                         "library_precursor_mz": refmass,
                         "score": score,
@@ -284,6 +285,7 @@ def msms_search(
         "name",
         "measured_scan",
         "library_scan",
+        "measured_index",
         "precursor_mz",
         "library_precursor_mz",
         "score",
@@ -317,6 +319,7 @@ def msms_search(
             "source_sha256": identities,
             "scope": sample_pool,
             "spectra": {"measured": observed, "library": references},
+            "match_rows": rows,
             "export_tables": {"candidates": table.to_csv(index=False)},
         },
     )

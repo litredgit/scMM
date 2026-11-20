@@ -51,7 +51,7 @@ export function useCellPreview(options: Options) {
     const status = await store.read<Job | null>('/raw/preview', undefined, isCurrent)
     if (!isCurrent() || !status || !job.value || status.id !== job.value.id) return
     job.value = status
-    if (status.status === 'failed') {
+    if (status.status === 'failed' || status.status === 'stopped') {
       jobNote.value = status.message
       store.task = `细胞预览：${status.message}`
       job.value = undefined

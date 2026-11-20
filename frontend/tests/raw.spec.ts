@@ -33,7 +33,7 @@ test('raw signal diagnostic stays independent and exports full numeric compariso
   expect(body.table.total).toBe(62)
   expect(body.figure.layout.meta.export_tables['diagnostic.csv']).toContain('rank_residual')
   await expect(page.getByText('迭代噪声估计与残差标准差不同', { exact: false })).toBeVisible()
-  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('1.0e+5')
+  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('100000')
   const panel = page.locator('details.card').filter({ hasText: '原始信号诊断（可选）' })
   await expect(panel.locator('.js-plotly-plot')).toBeVisible()
   await page.route('**/workspace/raw/diagnostic', (route) =>
@@ -222,7 +222,7 @@ test('failed clearing of a sample exception keeps the raw plot and unsaved param
   )
   await page.getByRole('button', { name: '清除样本例外', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('合成例外清除失败')
-  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('4.2e+1')
+  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('42')
   await expect(page.locator('.js-plotly-plot')).toBeVisible()
 })
 

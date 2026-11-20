@@ -30,7 +30,7 @@ def validate_intensity_layer(data, layer):
         raise ValueError("所选强度已变换或来源未知，请选择有未归一化、未插补溯源的原始强度层。")
 
 
-def dataset_inputs(data, layer="", *, mass_only=False):
+def feature_axis(data):
     context = json.loads(data.uns.get("scmm_analysis_input_json", "{}"))
     if context.get("variable_kind") == "empirical_compound":
         raise ValueError("EC 中性质量不是 m/z；请选择 Feature 视图或通用化合物候选搜索。")
@@ -38,6 +38,20 @@ def dataset_inputs(data, layer="", *, mass_only=False):
     mz = np.asarray(data.var.get("mz", data.var_names), dtype=float)
     if not np.isfinite(mz).all() or (mz <= 0).any() or not data.var_names.is_unique:
         raise ValueError("注释需要唯一特征 ID 和正的有限 m/z；允许不同 ID 对应相同 m/z。")
+    return feature_ids, mz
+
+
+def feature_samples(data):
+    group_key = next((key for key in ("sample_id", "sample", "source_file") if key in data.obs), "")
+    return (
+        data.obs[group_key].astype("string").fillna("未分组").to_numpy(dtype=str)
+        if group_key
+        else np.repeat("单样本", data.n_obs)
+    )
+
+
+def dataset_inputs(data, layer="", *, mass_only=False):
+    feature_ids, mz = feature_axis(data)
     if feature_only(data):
         layer = ""
     elif not mass_only:
@@ -52,12 +66,7 @@ def dataset_inputs(data, layer="", *, mass_only=False):
         raise ValueError("注释展示需要有限矩阵数值。")
     if not mass_only and (values < 0).any():
         raise ValueError("同位素检测需要有限、非负的未变换强度，请选择原始强度层。")
-    group_key = next((key for key in ("sample_id", "sample", "source_file") if key in data.obs), "")
-    samples = (
-        data.obs[group_key].astype("string").fillna("未分组").to_numpy(dtype=str)
-        if group_key
-        else np.repeat("单样本", data.n_obs)
-    )
+    samples = feature_samples(data)
     digest = hashlib.sha256()
     for value in (
         feature_ids,

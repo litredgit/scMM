@@ -11,7 +11,7 @@ BUILTIN_PRESETS = {"哺乳动物": 760.5851, "藻类": 734.5929, "细菌": 690.5
 def cpu_default():
     count = os.cpu_count() or 1
     available = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else count
-    return max(1, min(count // 4, available))
+    return max(1, min(count, available) * 3 // 4)
 
 
 def preferences_path():

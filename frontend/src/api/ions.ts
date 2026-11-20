@@ -26,6 +26,7 @@ export type IonInfo = {
   branches: IonBranch[]
   versions: { id: string; root_id: string; groups: number; relations: number; complete: boolean }[]
   annotation_versions: string[]
+  annotation_roots?: Record<string, string>
   tasks: IonTask[]
   species: { id: string; polarity: string }[]
 }

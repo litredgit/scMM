@@ -194,6 +194,19 @@ class DataViewCatalog:
             if root.identity != meta["identity"]:
                 raise ValueError("root identity mismatch")
             candidate._roots[key] = root
+        feature_annotations = candidate.registry.get("feature_annotations", {})
+        if not isinstance(feature_annotations, dict):
+            raise ValueError("invalid feature annotation registry")
+        for key, entry in feature_annotations.items():
+            root = candidate._roots.get(key)
+            if (
+                root is None
+                or not isinstance(entry, dict)
+                or entry.get("root_identity") != root.identity
+                or not isinstance(entry.get("store"), dict)
+                or not isinstance(entry["store"].get("versions"), list)
+            ):
+                raise ValueError("invalid feature annotation source binding")
         candidate._views = deepcopy(state["views"])
         if not set(candidate.source_matrices).issubset(candidate._views):
             raise ValueError("source matrix references unknown view")
@@ -308,6 +321,10 @@ def initialize_catalog(project, data, *, source, origin_kind, linearity, preserv
             catalog.registry["legacy_annotations"] = {
                 row["id"]: migrate_lipid_version(row) for row in legacy["versions"]
             }
+        if project.views.get("annotation_evidence"):
+            records = deepcopy(project.views["annotation_evidence"])
+            catalog.registry["evidence"].update(records.pop("external", {}))
+            catalog.registry["annotation_evidence"] = records
     state = catalog.export_state()
     DataViewCatalog.from_state(state)
     project.ion_state = state

@@ -281,11 +281,9 @@ async function applyMapping() {
   <section v-if="store.project">
     <div class="page-title">
       <div>
-        <p class="eyebrow">细胞提取 · 添加原始文件</p>
         <h1>添加原始文件</h1>
         <p>建立样本清单，并标记实验分组、独立生物来源和采集批次。</p>
       </div>
-      <span class="step-badge">细胞提取</span>
     </div>
     <section class="card project-info">
       <h2>项目信息</h2>
@@ -320,14 +318,8 @@ async function applyMapping() {
           应用项目信息
         </button>
       </form>
-      <p class="state-note" role="status">
-        {{
-          projectEdited || sampleEdited
-            ? '未应用草稿：项目信息需点击应用；样本字段离开输入框后自动应用。'
-            : store.project.unsaved
-              ? '已应用未保存：请主动保存项目。'
-              : '已保存：当前项目信息与样本信息已写入项目。'
-        }}
+      <p v-if="projectEdited || sampleEdited" class="state-note" role="status">
+        未应用草稿：项目信息需点击应用；样本字段离开输入框后自动应用。
       </p>
     </section>
     <section class="card">
@@ -339,8 +331,7 @@ async function applyMapping() {
         <div class="actions">
           <button class="primary" :disabled="store.busy" @click="togglePicker('raw')">
             ＋ 添加原始文件</button
-          ><button class="primary" :disabled="store.busy" @click="togglePicker('results')">
-            导入 H5AD 数据</button
+          ><button :disabled="store.busy" @click="togglePicker('results')">导入 H5AD 数据</button
           ><button
             class="danger"
             :disabled="store.busy || !selected.length"

@@ -114,8 +114,13 @@ const {
   move: moveLegend,
   reset: resetLegend,
 } = useLegendOrder(chartKey, legendNames, () => !!props.readonly)
-function orderedFigure(view: Record<string, unknown> = {}): Figure {
+function orderedFigure(view: Record<string, unknown> = {}, full = false): Figure {
   const copy = systemPlotText(JSON.parse(JSON.stringify(props.figure)) as Figure, chartKey.value)
+  if (full && (copy.layout.meta as Record<string, unknown> | undefined)?.spectrum_local) {
+    const xaxis = copy.layout.xaxis as Record<string, unknown>
+    delete xaxis.range
+    xaxis.autorange = true
+  }
   for (const [index, trace] of (copy.data as Record<string, unknown>[]).entries()) {
     if (traceVisibility.value[index] !== undefined) trace.visible = traceVisibility.value[index]
     if (typeof trace.name === 'string') trace.legendrank = legendItems.value.indexOf(trace.name)
@@ -193,6 +198,7 @@ const emit = defineEmits<{
         pointNumber?: number
         curveNumber?: number
       }[]
+      xUnitsPerPixel?: number
     },
   ]
 }>()
@@ -204,6 +210,7 @@ const widthMm = ref(89),
   dpi = ref(300),
   fontPt = ref(7)
 const viewport = ref<Record<string, unknown>>({})
+const spectrumViewports = new Map<string, Record<string, unknown>>()
 const traceVisibility = ref<(boolean | string)[]>([])
 const fresh = computed(() => {
   const meta = props.figure.layout.meta as
@@ -316,6 +323,25 @@ watch(
     if (!restoringViews) {
       const meta = figure.layout.meta as Record<string, unknown> | undefined
       const before = previous?.layout.meta as Record<string, unknown> | undefined
+      if (typeof meta?.spectrum_context === 'string') {
+        if (meta.spectrum_input !== before?.spectrum_input) spectrumViewports.clear()
+        else if (typeof before?.spectrum_context === 'string') {
+          spectrumViewports.set(before.spectrum_context, viewport.value)
+          if (spectrumViewports.size > 20) {
+            const oldest = [...spectrumViewports.keys()].find((key) => key !== 'full')
+            if (oldest) spectrumViewports.delete(oldest)
+          }
+        }
+        if (
+          meta.spectrum_context !== before?.spectrum_context ||
+          meta.spectrum_input !== before?.spectrum_input
+        ) {
+          viewport.value = spectrumViewports.get(meta.spectrum_context) ?? {}
+          spectrumHistory.value = []
+        }
+        traceVisibility.value = []
+        return
+      }
       const sameAnnotationInput =
         meta?.scmm_spectrum === true &&
         meta.lipid_version &&
@@ -453,7 +479,7 @@ async function image(format: string, preview = false) {
       height = (heightMm.value * 96) / 25.4
     if (format === 'png' && width * height * (dpi.value / 96) ** 2 > 60_000_000)
       throw new Error('成图像素过多，请减小尺寸或 DPI。')
-    const copy = orderedFigure()
+    const copy = orderedFigure({}, exportRange.value === 'full')
     const source = (copy.layout.meta ?? {}) as Record<string, unknown>
     const identity = Object.fromEntries(
       [
@@ -463,6 +489,12 @@ async function image(format: string, preview = false) {
         'result_identity_valid',
         'sample_id',
         'input_identity',
+        'annotation_source',
+        'annotation_source_identity',
+        'annotation_catalog_revision',
+        'annotation_grouping_version',
+        'lipid_version',
+        'lipid_review_revision',
       ]
         .filter((key) => Object.hasOwn(source, key))
         .map((key) => [key, source[key]]),

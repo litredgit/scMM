@@ -137,6 +137,32 @@ def test_preview_old_parameters_never_apply(workflow, monkeypatch):
     assert workflow[-2]() == before
 
 
+def test_stop_preview_blocks_collection_until_worker_reaches_safe_point(workflow, monkeypatch):
+    sample = raw_samples(workflow)[0]
+    post = workflow[-1]
+    post("/raw/open", {"sample_id": sample["id"]}).raise_for_status()
+    future = Future()
+    future.set_running_or_notify_cancel()
+    path = workflow[5] / "preview-state.json"
+    write_json(path, {"status": "running", "message": "test"})
+    monkeypatch.setattr("scMM.application.web_raw.submit_preview", lambda _: (future, path))
+    job = post(
+        "/raw/preview",
+        {
+            "sample_id": sample["id"],
+            "parameters": workflow[6].manifest["parameters"],
+        },
+    ).json()["value"]
+    assert get(workflow, "/tasks/active").json()["preview"]["id"] == job["id"]
+    assert post("/raw/preview/stop", {"job_id": "old"}).status_code == 400
+    response = post("/raw/preview/stop", {"job_id": job["id"]})
+    assert response.json()["value"]["status"] == "stopping"
+    future.set_result({})
+    assert get(workflow, "/raw/preview").json()["status"] == "stopped"
+    assert get(workflow, "/tasks/active").json()["preview"] is None
+    assert post("/raw/preview/collect", {"job_id": job["id"]}).status_code == 400
+
+
 def test_detached_extraction_preflight_review_and_retry_identity(workflow):
     samples = raw_samples(workflow)
     checked = workflow[-1]("/extraction/preflight")

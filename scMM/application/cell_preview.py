@@ -49,8 +49,11 @@ def initialize_ranges(project, service):
 def run_preview(request, state_path):
     """Read, extract and persist a frozen request in a fresh interpreter."""
     state = {"created_at": request["created_at"], "pid": os.getpid()}
+    stop = state_path.with_name("stop.requested")
 
     def report(message, status="running"):
+        if stop.is_file() and status != "failed":
+            raise InterruptedError("预览已停止")
         write_json(state_path, {**state, "status": status, "message": message})
 
     def check_inputs():
@@ -107,7 +110,10 @@ def run_preview(request, state_path):
         report("预览计算完成，等待页面接收", "succeeded")
         return result
     except Exception as exc:
-        report(str(exc), "failed")
+        if stop.is_file():
+            write_json(state_path, {**state, "status": "stopped", "message": "预览已停止"})
+        else:
+            report(str(exc), "failed")
         raise
 
 
@@ -132,8 +138,8 @@ def submit_preview(request):
 
     def finished(future):
         try:
-            if future.cancelled():
-                write_json(state_path, {**state, "status": "stopped", "message": "会话已关闭"})
+            if future.cancelled() or state_path.with_name("stop.requested").is_file():
+                write_json(state_path, {**state, "status": "stopped", "message": "预览已停止"})
             elif (error := future.exception()) is not None:
                 write_json(state_path, {**state, "status": "failed", "message": str(error)})
         finally:

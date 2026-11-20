@@ -43,7 +43,7 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
       .locator('summary')
       .filter({ hasText: /^细胞识别$/ })
       .click()
-  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('1.0e+5')
+  await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('100000')
   const panel = page.locator('.raw-parameter-panel')
   await expect(panel.getByLabel('cell_min_signal', { exact: true })).toHaveAttribute(
     'inputmode',
@@ -136,8 +136,11 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   await expect(page.getByRole('heading', { name: '逐样本完整参数' })).toBeVisible()
   await page.getByRole('button', { name: '开始提取', exact: true }).click()
   await expect(page.getByLabel('extract · 2 细胞', { exact: true })).toBeVisible({ timeout: 30000 })
-  await page.getByLabel('extract · 2 细胞', { exact: true }).check()
-  await page.getByRole('button', { name: '查看信号', exact: true }).click()
+  const reviewRow = page
+    .getByRole('row')
+    .filter({ has: page.getByLabel('extract · 2 细胞', { exact: true }) })
+  await reviewRow.getByLabel('extract · 2 细胞', { exact: true }).check()
+  await reviewRow.getByRole('button', { name: '查看信号', exact: true }).click()
   const signalGraph = page.locator('.batch-task-panel .js-plotly-plot')
   await expect(signalGraph).toBeVisible()
   const axes = await signalGraph.evaluate((element) => {
@@ -153,6 +156,10 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
     }
   })
   expect(axes).toEqual({ first: 'RT (min)', second: 'RT (min)', signal: '.1e' })
+  await page.getByRole('button', { name: '收起信号', exact: true }).click()
+  await expect(signalGraph).toHaveCount(0)
+  await page.getByRole('button', { name: '查看信号', exact: true }).click()
+  await expect(signalGraph).toBeVisible()
   await page.getByRole('button', { name: '比较所选成功样本的 QC', exact: true }).click()
   await page.getByRole('button', { name: '建立当前数据集', exact: true }).click()
   await expect(
@@ -170,7 +177,7 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   expect(originalCSV.trim().split('\n')).toHaveLength(3)
   expect(originalCSV).toContain(',extract,')
   await page.getByRole('button', { name: '下一步：预处理 →', exact: true }).click()
-  await expect(page.getByText('2 细胞 × 1 特征 · 每步成功后保留历史层。')).toBeVisible()
+  await expect(page.locator('.project-heading')).toContainText(/2\s+细胞 ×\s+1 特征/)
   await noError(page)
   expect(errors).toEqual([])
 })

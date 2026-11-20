@@ -263,7 +263,7 @@ test('a parameter read retried after page resume preserves edits made while its 
     release()
     await response
     await page.waitForTimeout(100)
-    await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('4.2e+1')
+    await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('42')
     await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置不同')
     await expect(page.getByRole('alert')).toHaveCount(0)
   } finally {

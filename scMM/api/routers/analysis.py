@@ -25,17 +25,33 @@ def _check_figure_identity(metadata, manager, identity):
         raise ValueError("图的计算结果身份不明或已失效，请重新绘图。")
     if not any(
         metadata.get(key)
-        for key in ("dataset_token", "result_name", "sample_id", "time_result_key", "lipid_version")
+        for key in (
+            "dataset_token",
+            "result_name",
+            "sample_id",
+            "time_result_key",
+            "lipid_version",
+            "annotation_source_identity",
+        )
     ):
         return
     with manager.access(identity) as workspace:
         project = workspace.require_project()
+        source = metadata.get("annotation_source", "")
+        if metadata.get("annotation_source_identity") or metadata.get("lipid_version"):
+            from scMM.application.annotation_sources import feature_source
+
+            data, source_identity = feature_source(project, source)
+            if metadata.get("annotation_source_identity", source_identity) != source_identity:
+                raise ValueError("谱图来源已改变，请重新读取后导出。")
+            if metadata.get("annotation_grouping_version") and metadata.get(
+                "annotation_catalog_revision"
+            ) != (project.ion_state or {}).get("revision"):
+                raise ValueError("归组审核已改变，请重新读取后导出。")
         if metadata.get("lipid_version"):
             from scMM.application.web_lipids import selected_version
 
-            _, version = selected_version(
-                project.workspace.require_features(), metadata["lipid_version"]
-            )
+            _, version = selected_version(project, data, metadata["lipid_version"], source)
             if metadata.get("lipid_review_revision") != version.get("review_revision", 0):
                 raise ValueError("注释审核已改变，请重新读取谱图后导出。")
         if metadata.get("time_result_key"):
@@ -268,6 +284,7 @@ def annotation_table(
     from datetime import UTC, datetime
 
     from scMM.analysis.external_annotations import align_annotations, read_table, write_annotations
+    from scMM.application.annotation_evidence import evidence_registry, evidence_source
     from scMM.application.web_projects import project_candidate
     from scMM.application.web_support import table_view
 
@@ -277,10 +294,13 @@ def annotation_table(
     with manager.access(identity, operation="manual_annotations") as workspace:
         workspace.check(body.revision)
         project = workspace.require_project()
-        if project.workspace._selection_source is not None:
+        source = body.source or "current"
+        root_scope = source != "current"
+        if not root_scope and project.workspace._selection_source is not None:
             raise ValueError("请先关闭全部标签筛选，再导入注释。")
+        data, source_identity = evidence_source(project, source)
         table, matched = align_annotations(
-            project.workspace.require_features(),
+            data,
             frame,
             **body.model_dump(
                 include={"mapping", "source_key", "target_key", "ppm", "mode", "row_positions"}
@@ -297,6 +317,44 @@ def annotation_table(
                 },
             }
         candidate = project_candidate(project)
+        if root_scope:
+            registry = evidence_registry(candidate, write=True)
+            fields = registry.setdefault("feature_fields", {}).setdefault(source, {})
+            for column, values in fields.items():
+                if data is project.ion_state["roots"][source]["data"]:
+                    data = data.copy()
+                data.var[column] = data.var_names.map(values).fillna("")
+            updated = write_annotations(
+                data,
+                table,
+                matched,
+                mapping=body.mapping,
+                clear_unmatched=body.clear_unmatched,
+            )
+            for column in body.mapping.values():
+                fields[column] = dict(
+                    zip(map(str, updated.var_names), updated.var[column].astype(str), strict=True)
+                )
+            registry.setdefault("tables", []).append(
+                {
+                    "source": source,
+                    "source_identity": source_identity,
+                    "at": datetime.now(UTC).isoformat(),
+                    "user_id": workspace.owner_id,
+                    "source_sha256": __import__("hashlib")
+                    .sha256(body.content.encode())
+                    .hexdigest(),
+                    "mapping": body.mapping,
+                    "mode": body.mode,
+                    "clear_unmatched": body.clear_unmatched,
+                    "matched": int(matched.sum()),
+                    "rows": table_view(table, limit=len(table))["rows"],
+                }
+            )
+            candidate.dirty = True
+            workspace.project = candidate
+            workspace.revision += 1
+            return {"workspace": manager.view(workspace), "value": {"matched": int(matched.sum())}}
         previous_names = candidate.workspace.data.var.get("display_name")
         candidate.workspace.data = write_annotations(
             candidate.workspace.data,
@@ -351,7 +409,6 @@ def annotation_table(
         )
         candidate.workspace.data.uns["scmm_manual_annotations_json"] = json.dumps(records)
         baseline.uns["scmm_manual_annotations_json"] = json.dumps(records)
-        candidate.views.pop("figures", None)
         candidate.dirty = True
         workspace.project = candidate
         workspace.revision += 1
@@ -360,34 +417,37 @@ def annotation_table(
 
 @router.post("/workspace/analysis/msms")
 def msms(body: s.MSMSSearch, manager: Service, identity: Identity):
-    from scMM.analysis.external_annotations import msms_search
-    from scMM.application.web_support import figure_view
-    from scMM.plot.presentation import style_figure
-
-    with manager.access(identity, operation="msms_input") as workspace:
-        workspace.check(body.revision)
-        project = workspace.require_project()
-        data = project.workspace.require_data().copy()
-        token = project.workspace.token
-    options = body.model_dump(exclude={"revision"})
-    figure = msms_search(data, **options)
-    figure.update_layout(
-        meta={
-            **figure.layout.meta,
-            "dataset_token": list(token),
-            "parameters": {k: v for k, v in options.items() if k not in {"measured", "library"}},
-        }
+    return manager.annotation_msms(
+        identity,
+        body.revision,
+        source=body.source,
+        options=body.model_dump(exclude={"revision", "source"}),
     )
-    value = figure_view(style_figure(figure))
-    with manager.access(identity, operation="msms_collect") as workspace:
-        workspace.check(body.revision)
-        project = workspace.require_project()
-        if token != project.workspace.token:
-            raise ValueError("数据已改变，请重新运行 MS/MS 搜索。")
-        project.views.setdefault("figures", {})["msms_evidence"] = value
-        project.dirty = True
-        workspace.revision += 1
-        return {"workspace": manager.view(workspace), "value": value}
+
+
+@router.get("/workspace/analysis/annotation-evidence")
+def annotation_evidence(manager: Service, identity: Identity, source: str = "", feature: str = ""):
+    return manager.annotation_evidence_list(identity, source=source, feature=feature)
+
+
+@router.get("/workspace/analysis/annotation-evidence/record")
+def annotation_evidence_record(manager: Service, identity: Identity, key: str):
+    return manager.annotation_evidence_record(identity, key)
+
+
+@router.post("/workspace/analysis/annotation-evidence/import")
+def import_evidence(body: s.AnnotationEvidenceImport, manager: Service, identity: Identity):
+    return manager.annotation_import_evidence(identity, **body.model_dump())
+
+
+@router.post("/workspace/analysis/annotation-evidence/{action}")
+def link_evidence(
+    action: Literal["preview", "apply"],
+    body: s.AnnotationEvidenceLink,
+    manager: Service,
+    identity: Identity,
+):
+    return manager.annotation_link(identity, preview=action == "preview", **body.model_dump())
 
 
 @router.get("/workspace/analysis/selection-axes")

@@ -5,431 +5,708 @@ import { request } from '../../api/client'
 import { useReadScope } from '../../api/readScope'
 import { useViewState } from '../../api/viewState'
 import { useWorkspace } from '../../stores/workspace'
-import type { Figure, WorkspaceView } from '../../api/types'
+import type { AnnotationSource, Figure } from '../../api/types'
 import { ms2Label, type AnnotationSpectrum } from '../preprocess/lipids'
+import type { ReviewTarget } from './useAnnotationSource'
 
-const props = defineProps<{ version: string; featureId: string; samples: string[] }>()
+type Peak = Pick<AnnotationSpectrum['peaks'][number], 'feature_id' | 'mz' | 'intensity'>
+type OverlayPeak = Omit<AnnotationSpectrum['peaks'][number], 'mz' | 'intensity'>
+type Axis = Pick<
+  AnnotationSpectrum,
+  | 'spectrum_kind'
+  | 'intensity_label'
+  | 'intensity_missing'
+  | 'intensity_source'
+  | 'relative_intensity_allowed'
+> & {
+  peaks: Peak[]
+  source_identity: string
+}
+type Overlay = Pick<
+  AnnotationSpectrum,
+  'version' | 'review_revision' | 'relations' | 'review_conflicts'
+> & {
+  peaks: OverlayPeak[]
+  source_identity: string
+  grouping: string
+  sample: string
+  catalog_revision?: number
+  external_names?: Record<string, string>
+}
+const props = defineProps<{
+  source: AnnotationSource
+  version: string
+  featureId: string
+  samples: string[]
+  grouping: string
+  resultIds?: string[]
+  group?: ReviewTarget
+}>()
 const emit = defineEmits<{
-  (event: 'select', id: string): void
-  (event: 'review', id: string, state: string): void
+  select: [id: string]
+  review: [id: string, state: string]
 }>()
 const store = useWorkspace()
 const sample = ref('')
-const showNames = ref(true)
+const labelMode = ref<'both' | 'name' | 'mz'>('both')
 const showMS2 = ref(true)
-const data = ref<AnnotationSpectrum>()
-const failure = ref('')
-const loading = ref(false)
-const relationPage = ref(0)
-const identity = () => [
+const full = ref(false)
+const query = ref('')
+const reviewFilter = ref('')
+const tabs = [
+  ['candidates', '候选'],
+  ['relations', '峰关系'],
+  ['evidence', '证据'],
+  ['reviews', '审核记录'],
+] as const
+const tab = ref<(typeof tabs)[number][0]>('candidates')
+const axis = ref<Axis>()
+const overlay = ref<Overlay>()
+const axisError = ref('')
+const overlayError = ref('')
+const axisLoading = ref(false)
+const peakPage = ref(0)
+const overlaps = ref<Peak[]>([])
+const pageSize = 100
+const axisKey = () => [
   store.current?.workspace_id,
   store.project?.path,
-  store.current?.revision,
-  props.version,
-  props.featureId,
+  props.source.identity,
   sample.value,
 ]
-const reads = useReadScope(identity, () => void load())
-async function load() {
+const overlayKey = () => [...axisKey(), props.version, props.grouping, store.current?.revision]
+const axisReads = useReadScope(axisKey, () => void loadAxis())
+const overlayReads = useReadScope(overlayKey, () => void loadOverlay())
+
+async function loadAxis() {
   const current = store.current
-  const accept = reads.begin()
-  if (!current || !props.version) {
-    data.value = undefined
-    return
-  }
-  failure.value = ''
-  loading.value = true
-  data.value = undefined
+  if (!current) return
+  const accept = axisReads.begin()
+  axisLoading.value = true
+  axisError.value = ''
   try {
-    const response = await request<{ workspace: WorkspaceView; value: AnnotationSpectrum }>(
-      '/workspace/lipids/spectrum',
-      {
-        method: 'POST',
-        workspace: current.workspace_id,
-        body: {
-          revision: current.revision,
-          version: props.version,
-          feature_id: props.featureId,
-          sample: sample.value,
-        },
-      },
-    )
-    if (accept()) data.value = response.value
+    const response = await request<Axis>('/workspace/lipids/spectrum/axis', {
+      method: 'POST',
+      workspace: current.workspace_id,
+      body: { revision: current.revision, source: props.source.id, sample: sample.value },
+    })
+    if (accept() && response.source_identity === props.source.identity) axis.value = response
   } catch (cause) {
-    if (accept()) failure.value = cause instanceof Error ? cause.message : String(cause)
+    if (accept()) axisError.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
-    if (accept()) loading.value = false
+    if (accept()) axisLoading.value = false
+  }
+}
+async function loadOverlay() {
+  const current = store.current
+  if (!current) return
+  const accept = overlayReads.begin()
+  overlayError.value = ''
+  try {
+    const response = await request<Overlay>('/workspace/lipids/spectrum/overlay', {
+      method: 'POST',
+      workspace: current.workspace_id,
+      body: {
+        revision: current.revision,
+        source: props.source.id,
+        version: props.version,
+        grouping: props.grouping,
+        sample: sample.value,
+      },
+    })
+    if (accept() && response.source_identity === props.source.identity) overlay.value = response
+  } catch (cause) {
+    if (accept()) overlayError.value = cause instanceof Error ? cause.message : String(cause)
   }
 }
 watch(
-  identity,
+  () => JSON.stringify(axisKey()),
   () => {
-    relationPage.value = 0
-    void load()
+    axis.value = undefined
+    overlaps.value = []
+    void loadAxis()
   },
   { immediate: true },
 )
 watch(
-  () => props.samples,
-  (values) => {
-    if (sample.value && !values.includes(sample.value)) sample.value = ''
+  () => JSON.stringify(overlayKey()),
+  () => void loadOverlay(),
+  { immediate: true },
+)
+watch(
+  () => store.current?.revision,
+  () => {
+    if (!axis.value && axisReads.isActive()) void loadAxis()
   },
 )
-const selected = computed(() => data.value?.peaks.find((p) => p.feature_id === props.featureId))
-const selectedRelations = computed(
+watch(
+  () => props.samples,
+  (values) => {
+    if (sample.value && values.length && !values.includes(sample.value)) sample.value = ''
+  },
+)
+watch(
+  () => props.source.identity,
+  () => {
+    sample.value = ''
+    peakPage.value = 0
+  },
+  { flush: 'sync' },
+)
+watch([query, reviewFilter], () => {
+  peakPage.value = 0
+})
+
+const activeOverlay = computed(() =>
+  axis.value &&
+  overlay.value?.source_identity === axis.value.source_identity &&
+  overlay.value.version === props.version &&
+  overlay.value.sample === sample.value &&
+  (!props.grouping || overlay.value.grouping === props.grouping)
+    ? overlay.value
+    : undefined,
+)
+const peakLabels = computed(
+  () => new Map(activeOverlay.value?.peaks.map((peak) => [peak.feature_id, peak])),
+)
+const peaks = computed(() => axis.value?.peaks ?? [])
+const byId = computed(() => new Map(peaks.value.map((peak) => [peak.feature_id, peak])))
+const byMass = computed(() => [...peaks.value].sort((a, b) => a.mz - b.mz))
+const selected = computed(() => byId.value.get(props.featureId))
+const selectedLabel = computed(() => peakLabels.value.get(props.featureId))
+const selectedRelations = computed(() => {
+  const groups = new Map<string, AnnotationSpectrum['relations']>()
+  for (const row of activeOverlay.value?.relations ?? []) {
+    if (!selected.value || ![row.source, row.target].includes(props.featureId)) continue
+    const id = row.shared_review || row.id
+    const rows = groups.get(id) ?? []
+    rows.push(row)
+    groups.set(id, rows)
+  }
+  return [...groups].map(([id, rows]) => ({
+    ...(rows.find((row) => row.id === id) ?? rows[0]!),
+    evidence: rows,
+  }))
+})
+const selectedRoles = computed(() => {
+  const roles = new Map<string, 'selected' | 'isotope' | 'adduct' | 'group_member'>()
+  if (props.group) {
+    for (const id of props.group.members ?? [])
+      roles.set(id, id === props.group.quantifier ? 'selected' : 'group_member')
+    return roles
+  }
+  if (!selected.value) return roles
+  for (const row of selectedRelations.value) {
+    if (row.review !== 'rejected') {
+      const id = row.source === props.featureId ? row.target : row.source
+      if (row.type === 'isotope' || row.type === 'adduct') roles.set(id, row.type)
+    }
+  }
+  roles.set(props.featureId, 'selected')
+  return roles
+})
+const filtered = computed(() => {
+  const text = query.value.trim().toLocaleLowerCase()
+  return peaks.value.filter((peak) => {
+    const label = peakLabels.value.get(peak.feature_id)
+    const matches = [
+      peak.feature_id,
+      String(peak.mz),
+      peak.mz.toFixed(4),
+      label?.label,
+      ...(label?.candidate_names ?? []),
+      activeOverlay.value?.external_names?.[peak.feature_id],
+    ].some((value) => value?.toLocaleLowerCase().includes(text))
+    return (
+      matches &&
+      (!reviewFilter.value ||
+        (reviewFilter.value === 'ambiguous' && (label?.candidate_count ?? 0) > 1) ||
+        (reviewFilter.value === 'reviewed' && label?.reviewed) ||
+        (reviewFilter.value === 'pending' && !label?.reviewed))
+    )
+  })
+})
+const displayed = computed(() =>
+  filtered.value.slice(peakPage.value * pageSize, (peakPage.value + 1) * pageSize),
+)
+const outside = computed(
   () =>
-    data.value?.relations.filter(
-      (r) => !props.featureId || r.source === props.featureId || r.target === props.featureId,
-    ) ?? [],
+    selected.value &&
+    (!filtered.value.some((peak) => peak.feature_id === props.featureId) ||
+      (props.resultIds && !props.resultIds.includes(props.featureId))),
 )
-const visibleRelations = computed(() =>
-  selectedRelations.value.slice(relationPage.value * 30, (relationPage.value + 1) * 30),
-)
-const colors = { selected: '#c0392b', isotope: '#2166ac', adduct: '#d27c12', unrelated: '#252525' }
+watch([filtered, () => props.featureId], () => {
+  const index = filtered.value.findIndex((peak) => peak.feature_id === props.featureId)
+  if (index >= 0) peakPage.value = Math.floor(index / pageSize)
+})
+function select(id: string) {
+  overlaps.value = []
+  emit('select', id)
+}
+function pointClick(event: { points: { customdata?: unknown }[]; xUnitsPerPixel?: number }) {
+  const custom = event.points.find((point) => Array.isArray(point.customdata))?.customdata
+  if (!Array.isArray(custom) || custom[3] !== axis.value?.source_identity) return
+  const peak = byId.value.get(String(custom[0]))
+  if (!peak) return
+  const tolerance = Math.abs(event.xUnitsPerPixel ?? 0)
+  const hits = byMass.value.filter((item) => Math.abs(item.mz - peak.mz) <= tolerance)
+  if (hits.length > 1) overlaps.value = hits
+  else select(peak.feature_id)
+}
+const coverage = (peak: Peak) => {
+  const label = peakLabels.value.get(peak.feature_id)
+  if (!label) return '未计算候选'
+  return label.candidate_count ? `${label.candidate_count} 个候选` : '已查未命中'
+}
+const colors = {
+  selected: '#c0392b',
+  isotope: '#2166ac',
+  adduct: '#b86814',
+  group_member: '#247884',
+  unrelated: '#39484d',
+}
 const roleNames = {
   selected: 'Selected peak',
   isotope: 'Isotope',
   adduct: 'Adduct',
+  group_member: 'Group member',
   unrelated: 'Measured features',
 }
-function featureTable(spectrum: AnnotationSpectrum) {
-  const columns = ['feature_id', 'mz', 'intensity', 'label', 'role', 'ms2_status'] as const
+const escape = (value: string) =>
+  value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+const featureCSV = computed(() => {
   const quote = (value: unknown) => '"' + String(value ?? '').replaceAll('"', '""') + '"'
   return [
-    columns.join(','),
-    ...spectrum.peaks.map((peak) => columns.map((key) => quote(peak[key])).join(',')),
+    'source,source_identity,sample,layer,annotation_version,review_revision,range,feature_id,mz,intensity,annotation,ms2_status',
+    ...peaks.value.map((peak) => {
+      const label = peakLabels.value.get(peak.feature_id)
+      return [
+        props.source.id,
+        axis.value?.source_identity,
+        sample.value,
+        axis.value?.intensity_source.layer,
+        activeOverlay.value?.version,
+        activeOverlay.value?.review_revision,
+        'all_source_features',
+        peak.feature_id,
+        peak.mz,
+        peak.intensity,
+        label?.label,
+        label?.ms2_status,
+      ]
+        .map(quote)
+        .join(',')
+    }),
   ].join('\n')
-}
+})
 const figure = computed<Figure | undefined>(() => {
-  const spectrum = data.value
-  if (!spectrum) return
+  const data = axis.value
+  if (!data) return
   const traces: Record<string, unknown>[] = []
-  const intensityMissing = spectrum.intensity_missing
-  for (const role of ['unrelated', 'isotope', 'adduct', 'selected'] as const) {
-    const peaks = spectrum.peaks.filter((p) => p.role === role)
-    if (!peaks.length) continue
-    if (!intensityMissing) {
+  const localCenter =
+    (props.group?.members?.length ? byId.value.get(props.group.members[0]!) : selected.value) ??
+    byMass.value[0]
+  const centerMass = localCenter?.mz ?? 0
+  const ms = [
+    centerMass,
+    ...[...selectedRoles.value.keys()].map((id) => byId.value.get(id)?.mz ?? centerMass),
+  ]
+  const localRange = [Math.min(...ms) - 0.6, Math.max(...ms) + 0.6]
+  for (const role of ['unrelated', 'group_member', 'isotope', 'adduct', 'selected'] as const) {
+    const items = peaks.value.filter(
+      (peak) => (selectedRoles.value.get(peak.feature_id) ?? 'unrelated') === role,
+    )
+    if (!items.length) continue
+    if (!data.intensity_missing)
       traces.push({
         type: 'scattergl',
         mode: 'lines',
         name: roleNames[role],
         showlegend: false,
-        x: peaks.flatMap((p) => [p.mz, p.mz, null]),
-        y: peaks.flatMap((p) => [0, p.intensity, null]),
-        line: {
-          color: colors[role],
-          width: role === 'selected' ? 2.4 : role === 'unrelated' ? 0.8 : 1.6,
-        },
+        x: items.flatMap((p) => [p.mz, p.mz, null]),
+        y: items.flatMap((p) => [0, p.intensity, null]),
+        line: { color: colors[role], width: role === 'unrelated' ? 1 : 2 },
         hoverinfo: 'skip',
         meta: { spectrum_role: 'observed', annotation_role: role },
       })
-    }
-    const labels = peaks.map((p) => {
-      if (showNames.value && p.annotations?.length) {
-        const multipleSources = new Set(p.annotations.map((a) => a.database_filename)).size > 1
-        return [
-          ...new Set(
-            p.annotations.map((a) =>
-              [
-                `${a.display_name || a.name} ${a.adduct}${a.isotope_order ? ` M+${a.isotope_order}` : ''}`,
-                showMS2.value
-                  ? `${ms2Label(a.ms2_status)}${multipleSources ? ` (${a.database_filename})` : ''}`
-                  : '',
-              ]
-                .filter(Boolean)
-                .join('<br>'),
-            ),
-          ),
-        ].join('<br>')
-      }
+    const visibleText = (peak: Peak) => {
+      const detail = peakLabels.value.get(peak.feature_id)
+      if (role === 'unrelated' && items.length > 100 && !detail?.label) return ''
+      if (role === 'unrelated' && full.value && items.length > 100) return ''
       return [
-        showNames.value && p.label ? p.label : p.mz.toFixed(4),
-        showMS2.value && (p.candidate_ids.length || p.label) ? ms2Label(p.ms2_status) : '',
+        labelMode.value !== 'mz' ? escape(detail?.label ?? '') : '',
+        labelMode.value !== 'name' || !detail?.label ? peak.mz.toFixed(4) : '',
+        showMS2.value && detail?.label ? ms2Label(detail.ms2_status) : '',
       ]
         .filter(Boolean)
         .join('<br>')
-    })
+    }
     traces.push({
-      type: 'scatter',
+      type: items.length > 1500 && !data.intensity_missing ? 'scattergl' : 'scatter',
       mode: 'markers+text',
       name: roleNames[role],
-      x: peaks.map((p) => p.mz),
-      y: peaks.map((p) => (intensityMissing ? 0 : p.intensity)),
-      customdata: peaks.map((p) => [
-        p.feature_id,
-        p.label || 'Unannotated',
-        ms2Label(p.ms2_status),
-      ]),
-      text: labels,
-      textposition: 'top center',
-      textfont: { size: role === 'selected' ? 12 : 10, color: colors[role] },
+      x: items.map((peak) => peak.mz),
+      y: items.map((peak) => peak.intensity ?? 0),
+      customdata: items.map((peak) => {
+        const detail = peakLabels.value.get(peak.feature_id)
+        return [
+          peak.feature_id,
+          escape(detail?.label || 'Unannotated'),
+          ms2Label(detail?.ms2_status),
+          data.source_identity,
+        ]
+      }),
+      text: items.map(visibleText),
       marker: {
         color: colors[role],
-        size: role === 'selected' ? 9 : intensityMissing ? 6 : 4,
-        symbol: intensityMissing ? 'line-ns-open' : 'circle',
+        size: role === 'selected' ? 9 : 6,
+        symbol: data.intensity_missing ? 'line-ns-open' : 'circle',
       },
       hovertemplate:
-        'Feature: %{customdata[0]}<br>m/z: %{x:.4f}<br>' +
-        (intensityMissing ? 'Intensity: Not supplied' : 'Intensity: %{y:.1e}') +
+        'Feature: %{customdata[0]}<br>m/z: %{x}<br>' +
+        (data.intensity_missing ? 'Intensity: Not supplied' : 'Intensity: %{y}') +
         '<br>%{customdata[1]}<br>%{customdata[2]}<extra></extra>',
-      meta: {
-        spectrum_role: 'observed',
-        annotation_role: role,
-        label_kind: showNames.value ? 'annotation' : 'mz',
-      },
+      meta: { spectrum_role: 'observed', annotation_role: role },
     })
   }
   return {
     data: traces,
     layout: {
-      title: { text: 'Feature annotation spectrum' },
+      title: { text: full.value ? 'Full feature spectrum' : 'Local feature spectrum' },
       xaxis: {
         title: { text: 'm/z' },
         showline: true,
-        linecolor: '#252525',
-        ticks: 'outside',
         showgrid: false,
-        zeroline: false,
+        ...(full.value ? {} : { range: localRange }),
       },
       yaxis: {
-        title: { text: spectrum.intensity_label },
+        title: { text: data.intensity_label },
         showline: true,
         showgrid: false,
         zeroline: false,
-        rangemode: intensityMissing ? 'normal' : 'tozero',
-        ...(intensityMissing ? { showticklabels: false, range: [-0.2, 1] } : {}),
+        ...(data.intensity_missing
+          ? { showticklabels: false, range: [-0.2, 1] }
+          : { rangemode: 'tozero' }),
       },
-      plot_bgcolor: '#fff',
-      paper_bgcolor: '#fff',
       hovermode: 'closest',
       meta: {
         scmm_spectrum: true,
-        spectrum_kind: spectrum.spectrum_kind,
-        intensity_missing: intensityMissing,
-        relative_intensity_allowed: spectrum.relative_intensity_allowed,
-        dataset_token: spectrum.dataset_token,
-        lipid_version: spectrum.version,
-        lipid_review_revision: spectrum.review_revision,
-        export_tables: { features: featureTable(spectrum) },
+        spectrum_kind: data.spectrum_kind,
+        intensity_missing: data.intensity_missing,
+        relative_intensity_allowed: data.relative_intensity_allowed,
+        spectrum_context: full.value
+          ? 'full'
+          : 'local:' + (props.group?.id ?? localCenter?.feature_id ?? ''),
+        spectrum_input: JSON.stringify([data.source_identity, sample.value]),
+        spectrum_local: !full.value,
+        annotation_source: props.source.id,
+        annotation_source_identity: data.source_identity,
+        intensity_source: data.intensity_source,
+        spectrum_data_range: 'all_source_features',
+        lipid_version: activeOverlay.value?.version,
+        lipid_review_revision: activeOverlay.value?.review_revision,
+        annotation_catalog_revision: activeOverlay.value?.catalog_revision,
+        annotation_grouping_version: activeOverlay.value?.grouping,
+        export_tables: { features: featureCSV.value },
       },
     },
   }
 })
-function pointClick(event: { points: { customdata?: unknown }[] }) {
-  const custom = event.points?.[0]?.customdata
-  const id = Array.isArray(custom)
-    ? String(custom[0] ?? '')
-    : typeof custom === 'string'
-      ? custom
-      : ''
-  if (id) emit('select', id)
-}
-function stateName(state: string) {
-  return state === 'accepted' ? '已确认' : state === 'rejected' ? '已否定' : '待审核'
-}
-useViewState('annotation_spectrum', { sample, showNames, showMS2 })
+const reviewName = (value: string) =>
+  ({ accepted: '已确认', rejected: '已否定' })[value] ?? '待审核'
+useViewState('annotation_spectrum', { sample, labelMode, showMS2, full, query, reviewFilter, tab })
 </script>
 
 <template>
-  <section
-    id="annotation-spectrum"
-    class="annotation-spectrum task-section"
-    aria-labelledby="annotation-spectrum-title"
-  >
-    <div class="section-heading">
-      <h3 id="annotation-spectrum-title">谱图注释与关联峰</h3>
-      <button class="preview" :disabled="loading || store.busy" @click="load">重新读取谱图</button>
-    </div>
-    <p class="muted">
-      点击峰可定位候选并高亮同位素与加合关系；当前图展示特征位置及所选样本的平均强度。
-    </p>
-    <div class="spectrum-settings">
+  <section id="annotation-spectrum" class="annotation-spectrum" aria-label="谱图注释与关联峰">
+    <div class="actions spectrum-toolbar">
+      <slot name="actions" />
+      <button class="preview" @click="full = !full">
+        {{ full ? '返回局部谱图' : '查看完整谱图' }}
+      </button>
       <label
-        >强度样本<select v-model="sample" :disabled="store.busy">
-          <option value="">全部样本</option>
+        >强度样本
+        <select
+          v-model="sample"
+          aria-label="谱图强度样本"
+          :disabled="!source.quantitation_available"
+        >
+          <option value="">全部观测</option>
           <option v-for="value in samples" :key="value" :value="value">{{ value }}</option>
-        </select></label
-      >
+        </select>
+      </label>
       <label
-        >峰标签<select v-model="showNames">
-          <option :value="true">注释名称</option>
-          <option :value="false">m/z</option>
-        </select></label
-      >
-      <label
-        >数据库二级匹配标签<select v-model="showMS2">
-          <option :value="true">显示</option>
-          <option :value="false">隐藏</option>
-        </select></label
-      >
+        >峰标签
+        <select v-model="labelMode" aria-label="峰标签内容">
+          <option value="both">注释名称 + m/z</option>
+          <option value="name">注释名称</option>
+          <option value="mz">m/z</option>
+        </select>
+      </label>
+      <label class="inline-check"><input v-model="showMS2" type="checkbox" />二级状态标签</label>
+      <slot name="version" />
     </div>
-    <p v-if="failure" role="alert">
-      {{ failure }} <button class="preview" @click="load">重试读取</button>
-    </p>
-    <p v-else-if="loading" role="status">正在读取谱图与关联关系…</p>
-    <template v-if="data">
-      <p class="muted">
-        当前数据库：{{ data.database.label || data.database.filename }} · MS2
-        状态按此注释版本使用的数据库显示；未提供信息不等于匹配失败。
-      </p>
-      <p v-if="data.intensity_missing" class="state-note">
-        当前只有特征表，没有实测强度；图中标记仅表示 m/z 位置。
-      </p>
-      <p v-if="selected" class="selected-peak" aria-live="polite">
-        选中 {{ selected.feature_id }} · m/z {{ selected.mz.toFixed(4) }} ·
-        {{ selected.label || '未注释' }} · {{ ms2Label(selected.ms2_status) }} · 已确认关联
-        {{
-          (data.confirmed_linked_feature_ids ?? []).filter((id) => id !== selected?.feature_id)
-            .length
-        }}
-        个峰
-      </p>
-      <PlotView
-        v-if="figure"
-        :figure="figure"
-        name="annotation-spectrum"
-        @point-click="pointClick"
-      />
-      <details v-if="selected?.annotations?.length">
-        <summary>当前峰的候选与数据库二级证据（{{ selected.annotations.length }} 项）</summary>
-        <div class="data-table">
-          <table>
-            <thead>
-              <tr>
-                <th>候选名称</th>
-                <th>来源数据库</th>
-                <th>加合形式</th>
-                <th>同位素阶数</th>
-                <th>二级状态</th>
-                <th>依据</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="annotation in selected.annotations"
-                :key="`${annotation.candidate_id}:${annotation.adduct}:${annotation.isotope_order}`"
-              >
-                <td>{{ annotation.display_name || annotation.name }}</td>
-                <td>{{ annotation.database_filename || annotation.database_id }}</td>
-                <td>{{ annotation.adduct }}</td>
-                <td>M+{{ annotation.isotope_order }}</td>
-                <td>{{ ms2Label(annotation.ms2_status) }}</td>
-                <td>{{ annotation.manual_group_assertion ? '人工关联断言' : '数据库候选' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </details>
-      <details :open="!!featureId">
-        <summary>审核关联关系（{{ selectedRelations.length }} 条）</summary>
-        <p class="muted">
-          已确认关系参与组内联动；待审核关系保留为候选。人工接受关系不替代化学鉴定。
-        </p>
-        <div class="data-table">
-          <table>
-            <thead>
-              <tr>
-                <th>关系</th>
-                <th>来源峰</th>
-                <th>关联峰</th>
-                <th>样本</th>
-                <th>候选来源</th>
-                <th>审核状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="relation in visibleRelations" :key="relation.id">
-                <td>{{ relation.type === 'isotope' ? '同位素' : '加合离子' }}</td>
-                <td>
-                  <button
-                    class="preview"
-                    :disabled="store.busy"
-                    @click="emit('select', relation.source)"
-                  >
-                    {{ relation.source }}
-                  </button>
-                </td>
-                <td>
-                  <button
-                    class="preview"
-                    :disabled="store.busy"
-                    @click="emit('select', relation.target)"
-                  >
-                    {{ relation.target }}
-                  </button>
-                </td>
-                <td>
-                  {{ relation.sample || (relation.type === 'adduct' ? '质量候选关系' : '未指定') }}
-                </td>
-                <td :title="relation.candidate_ids.join(' / ')">
-                  {{
-                    relation.name
-                      ? `${relation.name} ${relation.adduct || ''}`
-                      : relation.candidate_ids.join(' / ') || '离子目录关系'
-                  }}
-                </td>
-                <td>{{ stateName(relation.review) }}</td>
-                <td>
-                  <div class="actions">
-                    <button :disabled="store.busy" @click="emit('review', relation.id, 'accepted')">
-                      接受关联</button
-                    ><button
-                      :disabled="store.busy"
-                      @click="emit('review', relation.id, 'rejected')"
-                    >
-                      否定关联</button
-                    ><button :disabled="store.busy" @click="emit('review', relation.id, 'pending')">
-                      恢复待审核
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p v-if="!selectedRelations.length" class="muted">当前峰没有可审核的关联关系。</p>
-        <div v-if="selectedRelations.length > 30" class="actions">
-          <button :disabled="relationPage === 0" @click="relationPage--">关联上一页</button
-          ><span>{{ relationPage + 1 }} / {{ Math.ceil(selectedRelations.length / 30) }}</span
-          ><button
-            :disabled="(relationPage + 1) * 30 >= selectedRelations.length"
-            @click="relationPage++"
+    <slot name="settings" />
+    <div class="spectrum-grid" :class="{ 'full-spectrum': full }">
+      <aside class="peak-list" aria-label="峰列表">
+        <label class="field"
+          >定位峰<input v-model="query" type="search" placeholder="特征 ID、m/z 或名称"
+        /></label>
+        <label v-if="!full" class="field"
+          >审核状态
+          <select v-model="reviewFilter">
+            <option value="">全部峰</option>
+            <option value="ambiguous">有多候选</option>
+            <option value="pending">待审核</option>
+            <option value="reviewed">已审核</option>
+          </select>
+        </label>
+        <div class="peak-items">
+          <button
+            v-for="peak in displayed"
+            :key="peak.feature_id"
+            type="button"
+            :aria-pressed="peak.feature_id === featureId"
+            @click="select(peak.feature_id)"
           >
-            关联下一页
+            <strong>{{ peak.feature_id }}</strong> <span>{{ peak.mz.toFixed(4) }}</span>
+            <small>{{ peakLabels.get(peak.feature_id)?.label || coverage(peak) }}</small>
           </button>
         </div>
-      </details>
-      <p v-if="data.review_conflicts.length" class="state-note">
-        关联组存在 {{ data.review_conflicts.length }} 项候选冲突；请逐项审核，冲突峰保留待定。
-      </p>
-    </template>
+        <div v-if="filtered.length > pageSize" class="actions">
+          <button :disabled="!peakPage" @click="peakPage--">上一页</button>
+          <span>{{ peakPage + 1 }} / {{ Math.ceil(filtered.length / pageSize) }}</span>
+          <button :disabled="(peakPage + 1) * pageSize >= filtered.length" @click="peakPage++">
+            下一页
+          </button>
+        </div>
+        <p v-if="axis && !filtered.length" class="muted">没有符合筛选的峰。</p>
+      </aside>
+      <div class="spectrum-chart">
+        <div class="peak-summary" aria-live="polite">
+          <p v-if="group" class="selected-peak">
+            离子组 {{ group.id }} · {{ group.members?.length ?? 0 }} 个测量峰
+            <template v-if="group.quantifier"> · 固定代表 {{ group.quantifier }}</template>
+          </p>
+          <p v-else-if="selected" class="selected-peak">
+            选中 {{ selected.feature_id }} · m/z {{ selected.mz }} ·
+            {{ selectedLabel?.label || coverage(selected) }}
+            <template v-if="selectedLabel?.label">
+              · {{ ms2Label(selectedLabel.ms2_status) }}</template
+            >
+            <template v-if="activeOverlay?.external_names?.[selected.feature_id]">
+              · 外部名称 {{ activeOverlay.external_names[selected.feature_id] }}</template
+            >
+          </p>
+          <p v-else>点击图中峰或从列表选择特征。</p>
+          <p v-if="outside" class="muted">当前峰在列表筛选范围之外。</p>
+          <p v-if="axis?.intensity_missing" class="muted">
+            独立特征表没有实测强度，标记仅表示 m/z 位置。
+          </p>
+          <p v-if="axisError" role="alert">
+            {{ axisError }} <button class="preview" @click="loadAxis">重试读取</button>
+          </p>
+          <p v-else-if="axisLoading && !axis" role="status">正在读取特征谱…</p>
+        </div>
+        <div v-if="overlaps.length" class="overlap-list">
+          <strong>此位置有 {{ overlaps.length }} 个可选峰</strong>
+          <button v-for="peak in overlaps" :key="peak.feature_id" @click="select(peak.feature_id)">
+            {{ peak.feature_id }} · m/z {{ peak.mz }} · {{ peak.intensity ?? '未提供强度' }}
+          </button>
+        </div>
+        <PlotView
+          v-if="figure"
+          :figure="figure"
+          name="annotation-spectrum"
+          legend="hidden"
+          @point-click="pointClick"
+        />
+      </div>
+      <aside class="spectrum-review" aria-label="所选对象详情">
+        <nav class="review-tabs" aria-label="审核详情">
+          <button
+            v-for="[id, name] in tabs"
+            :key="id"
+            type="button"
+            :aria-pressed="tab === id"
+            @click="tab = id"
+          >
+            {{ name }}
+          </button>
+        </nav>
+        <p v-if="overlayError" role="alert">
+          {{ overlayError }} <button class="preview" @click="loadOverlay">重试</button>
+        </p>
+        <div v-show="tab === 'candidates'" class="review-pane">
+          <slot name="candidates" :peak="selected" :status="selected && coverage(selected)" />
+        </div>
+        <div v-show="tab === 'relations'" class="review-pane">
+          <p v-if="!selectedRelations.length" class="muted">当前峰没有可审核关系。</p>
+          <article v-for="row in selectedRelations" :key="row.id" class="relation-item">
+            <strong
+              >{{
+                {
+                  isotope: '同位素',
+                  adduct: '加合离子',
+                  charge: '电荷关系',
+                  multimer: '多聚体',
+                  neutral_loss: '失水或中性丢失',
+                  fragment_form: '源内碎片',
+                }[row.type] ?? row.type
+              }}
+              · {{ reviewName(row.review) }}</strong
+            >
+            <div class="actions">
+              <button class="text-button" @click="select(row.source)">{{ row.source }}</button> →
+              <button class="text-button" @click="select(row.target)">{{ row.target }}</button>
+            </div>
+            <p>
+              {{ row.sample || '质量关系'
+              }}<template v-if="row.name"> · {{ row.name }} {{ row.adduct }}</template>
+            </p>
+            <details>
+              <summary>关系依据（{{ row.evidence.length }} 条）</summary>
+              <dl v-for="item in row.evidence" :key="item.id">
+                <dt>{{ item.origin ? '测量归组' : '注释候选计算' }}</dt>
+                <dd>
+                  {{ item.left_species || item.adduct }} / {{ item.right_species || item.adduct }} ·
+                  ppm {{ item.ppm_error ?? '—' }} · {{ item.sample || '完整测量来源' }}
+                </dd>
+              </dl>
+            </details>
+            <div class="actions">
+              <button
+                class="save"
+                :disabled="
+                  store.busy ||
+                  row.review === 'accepted' ||
+                  ['neutral_loss', 'fragment_form'].includes(row.type)
+                "
+                @click="emit('review', row.id, 'accepted')"
+              >
+                接受关联
+              </button>
+              <button
+                :disabled="store.busy || row.review === 'rejected'"
+                @click="emit('review', row.id, 'rejected')"
+              >
+                否定关联
+              </button>
+              <button
+                :disabled="store.busy || row.review === 'pending'"
+                @click="emit('review', row.id, 'pending')"
+              >
+                恢复待审核
+              </button>
+            </div>
+          </article>
+          <slot name="relations" />
+        </div>
+        <div v-show="tab === 'evidence'" class="review-pane">
+          <slot name="evidence" :annotations="selectedLabel?.annotations" />
+        </div>
+        <div v-show="tab === 'reviews'" class="review-pane">
+          <p v-if="activeOverlay?.review_conflicts.length" class="state-note">
+            有 {{ activeOverlay.review_conflicts.length }} 项历史冲突待核对。
+          </p>
+          <slot name="reviews" />
+        </div>
+      </aside>
+    </div>
   </section>
 </template>
 
 <style scoped>
-.annotation-spectrum {
+.annotation-spectrum,
+.spectrum-chart,
+.spectrum-review {
   min-width: 0;
-  border-top: 1px solid var(--line, #dce2e9);
-  margin-top: 16px;
-  padding-top: 16px;
 }
-.spectrum-settings {
-  display: flex;
+.spectrum-toolbar {
+  align-items: end;
   flex-wrap: wrap;
-  gap: 12px;
+  margin: 0 0 8px;
 }
-.spectrum-settings label {
+.spectrum-toolbar .inline-check {
+  min-height: 36px;
+}
+.spectrum-toolbar select {
+  width: auto;
+}
+.spectrum-grid {
   display: grid;
+  grid-template-columns: minmax(145px, 0.55fr) minmax(0, 2.2fr) minmax(315px, 1.15fr);
+  align-items: start;
+  gap: 10px;
+}
+.full-spectrum {
+  grid-template-columns: minmax(130px, 0.4fr) minmax(0, 3.2fr) minmax(305px, 1fr);
+}
+.peak-list,
+.spectrum-review {
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--panel-soft);
+  padding: 8px;
+}
+.peak-items,
+.review-pane {
+  max-height: 475px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.peak-items button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-bottom: 3px;
+  width: 100%;
+  padding: 5px;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.peak-items strong,
+.peak-items small {
+  overflow-wrap: anywhere;
+}
+.peak-items small {
+  grid-column: 1 / -1;
+}
+button[aria-pressed='true'] {
+  background: #e4f2f4;
+  border-color: var(--teal);
+}
+.review-tabs {
+  display: flex;
   gap: 4px;
-  min-width: 150px;
+  margin-bottom: 8px;
+}
+.review-tabs button {
+  flex: 1;
+  padding: 4px;
+}
+.peak-summary {
+  min-height: 40px;
+}
+.peak-summary p,
+.relation-item p {
+  margin: 2px 0;
 }
 .selected-peak {
   overflow-wrap: anywhere;
   border-left: 3px solid #c0392b;
-  padding-left: 10px;
+  padding-left: 8px;
 }
-td .actions {
-  min-width: 190px;
+.relation-item {
+  border-bottom: 1px solid var(--border);
+  padding: 6px 0;
+  overflow-wrap: anywhere;
+}
+.overlap-list {
+  display: grid;
+  gap: 3px;
+  max-height: 155px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  overflow: auto;
 }
 </style>

@@ -1,4 +1,4 @@
-import { navigate, test, expect, type Page } from './fixtures'
+import { navigate, test, expect, pinAnalysisParameters, type Page } from './fixtures'
 async function openAnalysis(page: Page) {
   await page.goto('/')
   await page.getByLabel('项目名称', { exact: true }).fill('图例与差异交互回归')
@@ -9,7 +9,7 @@ async function openAnalysis(page: Page) {
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
   await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await navigate(page, '/analysis')
-  await page.getByRole('button', { name: '固定参数区', exact: true }).first().click()
+  await pinAnalysisParameters(page)
 }
 test('legend reorder persists, selection is manual and three modules fit narrow screens', async ({
   page,
@@ -126,6 +126,7 @@ test('parameter scope, unapplied drafts and saved project state stay distinct', 
   await expect(reference).not.toHaveValue('')
   const original = await reference.inputValue()
   await reference.fill('150')
+  await reference.blur()
   await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置不同')
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state')).toHaveText('已保存')
@@ -139,6 +140,7 @@ test('parameter scope, unapplied drafts and saved project state stay distinct', 
   await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置一致')
   await expect(page.getByLabel('参数生效状态')).toContainText('当前样本使用样本例外')
   await reference.fill('151')
+  await reference.blur()
   await page.getByLabel('参数应用范围').selectOption('project')
   const applyProject = page.waitForRequest(
     (r) => r.url().endsWith('/parameters') && r.method() === 'PUT',
@@ -161,9 +163,9 @@ test('parameter scope, unapplied drafts and saved project state stay distinct', 
   await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置不同')
   await page.unroute('**/workspace/parameters')
   await page.getByRole('button', { name: '清除样本例外', exact: true }).click()
-  await expect(reference).toHaveValue('151')
+  await expect(reference).toHaveValue('151.0000')
   await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置一致')
-  expect(original).not.toBe('151')
+  expect(Number(original)).not.toBe(151)
 })
 
 test('desktop figures, direct exports, assistant space and compact mobile navigation', async ({
@@ -174,8 +176,12 @@ test('desktop figures, direct exports, assistant space and compact mobile naviga
   page.on('pageerror', (e) => errors.push(e.message))
   await page.setViewportSize({ width: 1920, height: 1080 })
   await openAnalysis(page)
+  await expect(page.getByRole('navigation', { name: '分析功能', exact: true })).toBeInViewport()
+  await expect(page.locator('aside.sidebar .progress-panel')).toBeInViewport({ ratio: 1 })
+  await expect(page.getByRole('link', { name: '管理员监控', exact: true })).toBeInViewport()
   await page.getByRole('button', { name: '运行降维', exact: true }).click()
   await expect(page.locator('.analysis-visualization .js-plotly-plot')).toBeVisible()
+  await expect(page.locator('.sidebar a[href="/analysis"]')).toHaveClass(/step-completed/)
   const inputBox = await page.locator('.analysis-calculation').first().boundingBox()
   const figureBox = await page.locator('.analysis-visualization').first().boundingBox()
   expect(figureBox!.x).toBeGreaterThan(inputBox!.x + inputBox!.width)
@@ -185,7 +191,7 @@ test('desktop figures, direct exports, assistant space and compact mobile naviga
     fullPage: true,
   })
   await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
-  const assistant = await page.locator('.ai-assistant').boundingBox()
+  const assistant = await page.locator('.ai-body').boundingBox()
   const content = await page.locator('.analysis-content').boundingBox()
   expect(content!.x + content!.width).toBeLessThanOrEqual(assistant!.x)
   await page.getByRole('button', { name: '收起 AI 助手', exact: true }).click()

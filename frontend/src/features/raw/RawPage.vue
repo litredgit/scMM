@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import ScientificInput from '../../components/ScientificInput.vue'
 import MassListInput from '../../components/MassListInput.vue'
 import { useRawWorkbench } from './composables/useRawWorkbench'
@@ -66,6 +68,18 @@ const {
   startPreview,
   savePresets,
 } = useRawWorkbench()
+const route = useRoute()
+const signalOnly = ref(false)
+watch(
+  () => [route.path, route.query.sample, route.query.panel, samples.value.length],
+  () => {
+    if (route.path !== '/raw') return
+    const id = route.query.sample
+    if (typeof id === 'string' && samples.value.some((item) => item.id === id)) sample.value = id
+    if (route.query.panel === 'signal') signalOnly.value = true
+  },
+  { immediate: true },
+)
 </script>
 <template>
   <section v-if="store.project" class="raw-page">
@@ -74,53 +88,54 @@ const {
         <h1>预览</h1>
         <p>检查采集信号，选择实验参考离子，再预览细胞窗口。</p>
       </div>
+      <div class="actions" role="group" aria-label="预览布局">
+        <button :aria-pressed="!signalOnly" @click="signalOnly = false">参数与信号</button>
+        <button :aria-pressed="signalOnly" @click="signalOnly = true">信号全宽</button>
+      </div>
     </div>
-    <div class="workflow-columns raw-workflow">
-      <div class="card raw-parameter-panel">
-        <div class="card raw-sample-toolbar">
-          <div class="field-grid">
-            <label
-              ><FieldLabel name="当前样本" /><select
-                aria-label="当前样本"
-                v-model="sample"
-                :disabled="store.busy"
-              >
-                <option value="" disabled>选择样本</option>
-                <option v-for="s in samples" :key="s.id" :value="s.id">
-                  {{ s.name }}{{ s.parameters ? ' · 样本例外' : '' }}
-                </option>
-              </select></label
-            >
+    <section class="card raw-sample-toolbar" aria-label="原始样本">
+      <label class="raw-sample-select">
+        <FieldLabel name="当前样本" />
+        <select
+          :aria-label="signalOnly ? '信号样本' : '当前样本'"
+          v-model="sample"
+          :disabled="store.busy"
+        >
+          <option value="" disabled>选择样本</option>
+          <option v-for="s in samples" :key="s.id" :value="s.id">
+            {{ s.name }}{{ s.parameters ? ' · 样本例外' : '' }}
+          </option>
+        </select>
+      </label>
+      <button class="primary" :disabled="!sample || store.busy" @click="open">
+        {{ signalOnly ? '打开样本信号' : '打开原始文件' }}
+      </button>
+      <details v-if="summary" class="raw-file-details">
+        <summary>
+          原始文件详情 · {{ summary.scan_count }} 扫描 ·
+          {{ summary.instrument || '仪器未标注' }}
+        </summary>
+        <dl class="detail-list">
+          <div>
+            <dt>原始文件</dt>
+            <dd>{{ summary.path }}</dd>
           </div>
-          <div class="actions">
-            <button class="primary" :disabled="!sample || store.busy" @click="open">
-              打开原始文件
-            </button>
+          <div>
+            <dt>扫描 / 仪器</dt>
+            <dd>{{ summary.scan_count }} / {{ summary.instrument || '—' }}</dd>
           </div>
-          <details v-if="summary" class="raw-file-details">
-            <summary>
-              原始文件详情 · {{ summary.scan_count }} 扫描 ·
-              {{ summary.instrument || '仪器未标注' }}
-            </summary>
-            <dl class="detail-list">
-              <div>
-                <dt>原始文件</dt>
-                <dd>{{ summary.path }}</dd>
-              </div>
-              <div>
-                <dt>扫描 / 仪器</dt>
-                <dd>{{ summary.scan_count }} / {{ summary.instrument || '—' }}</dd>
-              </div>
-              <div>
-                <dt>RT / m/z</dt>
-                <dd>
-                  {{ summary.rt_min_seconds }}–{{ summary.rt_max_seconds }} 秒 /
-                  {{ Number(summary.mz_min).toFixed(4) }}–{{ Number(summary.mz_max).toFixed(4) }}
-                </dd>
-              </div>
-            </dl>
-          </details>
-        </div>
+          <div>
+            <dt>RT / m/z</dt>
+            <dd>
+              {{ summary.rt_min_seconds }}–{{ summary.rt_max_seconds }} 秒 /
+              {{ Number(summary.mz_min).toFixed(4) }}–{{ Number(summary.mz_max).toFixed(4) }}
+            </dd>
+          </div>
+        </dl>
+      </details>
+    </section>
+    <div class="workflow-columns raw-workflow" :class="{ 'signal-only': signalOnly }">
+      <div v-show="!signalOnly" class="card raw-parameter-panel">
         <h2>提取参数</h2>
         <p v-if="unsupportedParameters" class="alert">
           此项目或样本的提取参数已不受支持。请核对当前 SNR
@@ -303,22 +318,25 @@ const {
         <ProjectArtifacts scope="previews" :refresh-key="cellCount" />
       </div>
       <div class="card raw-signal-panel">
-        <h2>原始信号</h2>
-        <div class="tabs">
-          <button
-            v-for="(label, value) in {
-              tic: 'TIC',
-              eic: 'EIC',
-              sum: '合并谱',
-              single: '单扫描',
-              cells: '细胞窗口',
-            }"
-            :key="value"
-            :class="{ selected: kind === value }"
-            @click="kind = value"
-          >
-            {{ label }}
-          </button>
+        <div class="raw-signal-header">
+          <h2>原始信号</h2>
+          <div class="tabs" role="group" aria-label="信号类型">
+            <button
+              v-for="(label, value) in {
+                tic: 'TIC',
+                eic: 'EIC',
+                sum: '合并谱',
+                single: '单扫描',
+                cells: '细胞窗口',
+              }"
+              :key="value"
+              :class="{ selected: kind === value }"
+              :aria-pressed="kind === value"
+              @click="kind = value"
+            >
+              {{ label }}
+            </button>
+          </div>
         </div>
         <div v-if="kind !== 'cells'" class="field-grid">
           <label
@@ -401,7 +419,7 @@ const {
               :disabled="store.busy"
           /></label>
         </div>
-        <div class="actions">
+        <div class="actions raw-signal-actions">
           <button
             v-if="kind !== 'cells'"
             class="primary"
@@ -429,6 +447,24 @@ const {
           >
             下载完整数据 CSV
           </button>
+          <button
+            v-if="kind === 'cells' && signalOnly"
+            class="preview"
+            :disabled="opened !== sample || !!job || store.busy"
+            @click="startPreview"
+          >
+            预览细胞窗口
+          </button>
+          <label class="raw-drag-control" v-if="['tic', 'eic', 'cells'].includes(kind)"
+            ><FieldLabel name="拖动方式" /><select
+              aria-label="拖动方式"
+              v-model="selectRange"
+              :disabled="store.busy"
+            >
+              <option :value="false">缩放</option>
+              <option :value="true">选择合谱范围</option>
+            </select></label
+          >
         </div>
         <div v-if="kind === 'single' && scanCatalog.indices.length" class="field-grid">
           <label
@@ -465,16 +501,6 @@ const {
             <dd>{{ value }}</dd>
           </div>
         </dl>
-        <label v-if="['tic', 'eic', 'cells'].includes(kind)"
-          ><FieldLabel name="拖动方式" /><select
-            aria-label="拖动方式"
-            v-model="selectRange"
-            :disabled="store.busy"
-          >
-            <option :value="false">缩放</option>
-            <option :value="true">选择合谱范围</option>
-          </select></label
-        >
         <PlotView
           v-if="currentPlot"
           :key="kind"
@@ -495,30 +521,37 @@ const {
 </template>
 <style scoped>
 .raw-sample-toolbar {
-  display: grid;
-  grid-template-columns: minmax(210px, 420px) auto;
-  justify-content: start;
-  align-items: end;
-  gap: 10px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 9px 12px;
 }
-.raw-sample-toolbar > .field-grid,
-.raw-sample-toolbar > .actions {
-  margin: 0;
+.raw-sample-select {
+  display: flex;
+  flex-direction: row;
+  flex: 0 1 450px;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
 }
-.raw-file-details {
-  grid-column: 1 / -1;
+.raw-sample-select > span {
+  flex-shrink: 0;
+}
+.raw-file-details[open] {
+  flex-basis: 100%;
   padding-top: 8px;
   border-top: 1px solid var(--border);
+}
+.raw-file-details {
+  flex: 1;
+  min-width: 180px;
 }
 .raw-file-details > summary {
   font-size: 12px;
   color: var(--muted);
 }
-.raw-parameter-panel {
-  background: var(--panel-soft);
-}
-.raw-parameter-panel > h2,
-.raw-signal-panel > h2 {
+.raw-parameter-panel > h2 {
   margin-bottom: 10px;
   padding-bottom: 9px;
   border-bottom: 1px solid var(--border);
@@ -550,13 +583,39 @@ const {
 .raw-signal-panel {
   min-width: 0;
 }
-.raw-signal-panel > .tabs {
-  margin-bottom: 12px;
+.raw-workflow.signal-only {
+  grid-template-columns: minmax(0, 1fr);
 }
-@media (max-width: 600px) {
-  .raw-sample-toolbar {
-    grid-template-columns: minmax(0, 1fr);
-    justify-content: stretch;
-  }
+.raw-signal-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.raw-signal-header > h2,
+.raw-signal-header > .tabs {
+  margin: 0;
+}
+.raw-signal-actions {
+  margin: 8px 0;
+}
+.raw-drag-control {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+.raw-drag-control select {
+  width: auto;
+  max-width: 100%;
+}
+.raw-page button[aria-pressed='true'] {
+  background: #e4f2f4;
+  border-color: var(--teal);
 }
 </style>

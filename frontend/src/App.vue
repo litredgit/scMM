@@ -11,6 +11,8 @@ import { startPresence, updatePresence } from './api/presence'
 import LoginPanel from './components/LoginPanel.vue'
 import AssistantPanel from './features/assistant/AssistantPanel.vue'
 import { modules, moduleForPath } from './features/modules/modules'
+import type { Job } from './api/types'
+import type { IonTask } from './api/ions'
 
 const store = useWorkspace()
 const auth = useAuth()
@@ -95,15 +97,23 @@ const pageGuide = computed(() => {
     ],
     '/raw': [
       '预览当前样本的色谱与质谱，设置提取参数。',
-      '展开参数组查看详细选项。信号强度以科学计数法显示，聚焦输入框可查看完整数值。图形显示范围与提取范围分别设置。',
+      '参数以十进制显示。切换信号全宽可查看 TIC、EIC、合并谱、单扫描及细胞窗口。图形与提取范围分别设置。',
     ],
     '/extraction': [
       '检查逐样本参数，执行提取并审核纳入结果。',
-      '在参数表内修改单个样本，或将一行、一个字段复制到全部样本。参数修改后重新检查输入。每行的查看信号按钮打开对应样本的提取信号。',
+      '逐样本编辑完整参数，也可按组对照。应用草稿后重新检查输入。每行的信号可展开和收起。',
     ],
     '/annotation': [
       '选择注释数据库，在谱图中检查候选与关联峰。',
-      '点击峰查看同位素和加合关系、注释名称及当前数据库的二级匹配状态。人工审核修改同步到关联峰，并保留审核记录。',
+      '可先看完整特征谱并点峰。右侧核对候选、关系和证据，定量分支在定量视图显式启用。',
+    ],
+    '/annotation/evidence': [
+      '查看注释证据，或导入外部注释与实测二级谱。',
+      '选中证据可查看匹配碎片，并关联到指定峰、候选或离子组。',
+    ],
+    '/ions': [
+      '查看测量来源、离子关系及其定量表示。',
+      '预览后可明确选择统计输入。查看测量峰时仍可回到候选与关系审核。',
     ],
     '/statistics': [
       '选择定量矩阵来源，进入统计分析。',
@@ -135,32 +145,44 @@ const pageGuide = computed(() => {
 })
 const expandedModule = ref('')
 watch(
-  activeModule,
-  (value) => {
-    if (value) expandedModule.value = value.key
+  () => route.path,
+  () => {
+    if (activeModule.value) expandedModule.value = activeModule.value.key
+    navigationOpen.value = false
   },
   { immediate: true },
 )
-const workflowPolling = serialPolling(
-  async () => {
-    if (!standalone.value && !store.busy && route.path !== '/extraction')
-      await store.refreshBatches()
-  },
-  5000,
-  (cause) => {
-    store.error = cause instanceof Error ? cause.message : String(cause)
-  },
-)
-watch(
-  () => route.path,
-  () => {
-    navigationOpen.value = false
-  },
-)
+const ionTask = ref<Pick<IonTask, 'id' | 'status'>>()
+const previewTask = ref<Job>()
+const taskReads = useReadScope(() => [
+  store.current?.workspace_id,
+  store.project?.path,
+  store.current?.revision,
+])
+async function refreshTasks() {
+  if (standalone.value || store.busy || !store.project) return
+  const accept = taskReads.begin()
+  const [tasks] = await Promise.all([
+    store.read<{ ion: Pick<IonTask, 'id' | 'status'> | null; preview: Job | null }>(
+      '/tasks/active',
+      undefined,
+      accept,
+    ),
+    route.path === '/extraction' ? undefined : store.refreshBatches(),
+  ])
+  if (!accept()) return
+  ionTask.value = tasks?.ion ?? undefined
+  previewTask.value = tasks?.preview ?? undefined
+}
+const workflowPolling = serialPolling(refreshTasks, 2000, (cause) => {
+  store.error = cause instanceof Error ? cause.message : String(cause)
+})
 watch(
   () => store.project?.path,
   () => {
     resetScrollPositions()
+    ionTask.value = undefined
+    previewTask.value = undefined
     if (!standalone.value) void store.refreshBatches()
   },
 )
@@ -181,8 +203,44 @@ const batchProgress = computed(() => {
   const finished = batch.samples.filter((sample) =>
     ['succeeded', 'failed'].includes(sample.status),
   ).length
-  return `提取 ${finished}/${batch.samples.length} · ${batch.message || batch.stage || '运行中'}`
+  return `提取 ${finished}/${batch.samples.length} · ${batch.stop_requested ? '处理完当前样本后停止' : batch.message || batch.stage || '运行中'}`
 })
+const activeProgress = computed(() =>
+  store.busy
+    ? store.operationMessage
+    : ionTask.value
+      ? '离子归组正在运行'
+      : previewTask.value
+        ? `细胞预览 · ${previewTask.value.message}`
+        : activeBatch.value
+          ? batchProgress.value
+          : store.task,
+)
+const stoppable = computed(() => !!(ionTask.value || previewTask.value || activeBatch.value))
+const stopping = computed(
+  () =>
+    !ionTask.value &&
+    (previewTask.value
+      ? previewTask.value.status === 'stopping'
+      : activeBatch.value?.stop_requested),
+)
+async function stopCurrent() {
+  if (store.busy || stopping.value) return
+  if (ionTask.value) {
+    await store.command('/ions/cancel', { job_id: ionTask.value.id })
+  } else if (previewTask.value) {
+    await store.command('/raw/preview/stop', { job_id: previewTask.value.id })
+  } else if (activeBatch.value) {
+    await store.mutate(
+      '/extraction/stop',
+      { path: activeBatch.value.path },
+      'POST',
+      '提取将在当前样本结束后停止。',
+    )
+    await store.refreshBatches()
+  }
+  await refreshTasks()
+}
 const checkedDatasets = ref(new Set<string>())
 const checkIdentity = computed(() =>
   JSON.stringify([
@@ -221,9 +279,11 @@ watch(
     workflowState.value = {}
     if (!store.project?.dataset) return
     const accept = workflowReads.begin()
-    const info = await store.readResource<typeof workflowState.value>('/analysis/workflow-status', {
+    const info = await store.read<typeof workflowState.value>(
+      '/analysis/workflow-status',
+      undefined,
       accept,
-    })
+    )
     if (accept() && info) workflowState.value = info
   },
 )
@@ -269,10 +329,11 @@ const nextHelp = computed(() =>
     :class="activeModule ? `module-${activeModule.key}` : 'module-overview'"
     :key="auth.user.id"
   >
+    <a class="skip-to-content" href="#main-content">跳到工作内容</a>
     <aside class="sidebar" :class="{ 'navigation-open': navigationOpen }">
       <RouterLink to="/projects" class="brand" aria-label="scMM 项目首页">
-        <span class="brand-mark" aria-hidden="true">s</span
-        ><span>scMM<small>单细胞质谱工作台</small></span>
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span>scMM<small>单细胞质谱工作台</small></span>
       </RouterLink>
       <button
         class="mobile-nav-toggle"
@@ -282,18 +343,23 @@ const nextHelp = computed(() =>
       >
         {{ navigationOpen ? '收起导航' : '流程与账号' }}
       </button>
-      <p class="nav-caption">{{ activeModule ? `${activeModule.name}工作流程` : '工作板块' }}</p>
+      <p class="nav-caption">工作流程</p>
       <nav id="workflow-menu" aria-label="工作流程">
         <RouterLink to="/projects" class="nav-home">项目首页</RouterLink>
-        <div v-for="module in modules" :key="module.key" class="nav-module">
+        <div
+          v-for="module in modules"
+          :key="module.key"
+          class="nav-module"
+          :class="[`nav-${module.key}`, { 'nav-module-current': activeModule?.key === module.key }]"
+        >
           <button
             :aria-label="module.name"
             :aria-expanded="expandedModule === module.key"
             :aria-controls="`steps-${module.key}`"
             @click="expandedModule = expandedModule === module.key ? '' : module.key"
           >
-            <span>{{ module.name }}</span
-            ><span aria-hidden="true">{{ expandedModule === module.key ? '▾' : '▸' }}</span>
+            <span class="nav-module-name">{{ module.name }}</span>
+            <span class="nav-chevron" aria-hidden="true"></span>
           </button>
           <div
             v-show="expandedModule === module.key"
@@ -304,7 +370,7 @@ const nextHelp = computed(() =>
               v-for="step in module.steps"
               :key="step.path"
               :class="{
-                'current-step': route.fullPath === step.path,
+                'current-step': route.path === step.path,
                 'step-completed': stepCompleted(step.path),
               }"
               :to="step.path"
@@ -313,20 +379,33 @@ const nextHelp = computed(() =>
                 extractionStatus
               }}</small></RouterLink
             >
-            <div v-if="module.key === 'statistics'" id="method-menu"></div>
           </div>
         </div>
         <RouterLink to="/results">结果与保存</RouterLink>
       </nav>
-      <p
+      <div
         class="task-note progress-panel"
-        :title="store.busy ? store.operationMessage : activeBatch ? batchProgress : store.task"
-        :class="{ running: store.busy || activeBatch }"
-        role="status"
-        aria-live="polite"
+        :title="activeProgress"
+        :class="{ running: store.busy || stoppable }"
       >
-        {{ store.busy ? store.operationMessage : activeBatch ? batchProgress : store.task }}
-      </p>
+        <strong>任务进度</strong>
+        <span role="status" aria-live="polite">{{ activeProgress }}</span>
+        <button
+          v-if="stoppable"
+          class="restore stop-current"
+          :disabled="store.busy || stopping"
+          :title="
+            store.busy
+              ? '正在处理请求，完成后可提交停止'
+              : activeBatch && !ionTask && !previewTask
+                ? '当前样本处理完毕后停止'
+                : ''
+          "
+          @click="stopCurrent"
+        >
+          {{ stopping ? '正在停止' : '停止当前任务' }}
+        </button>
+      </div>
       <div class="sidebar-bottom">
         <RouterLink v-if="auth.admin" to="/admin/monitor">管理员监控</RouterLink>
         <RouterLink to="/account">{{ auth.admin ? '账号与管理' : '我的账号' }}</RouterLink>
@@ -338,11 +417,16 @@ const nextHelp = computed(() =>
       </div>
     </aside>
 
-    <div class="main-shell" :class="{ 'assistant-expanded': assistantOpen }">
+    <div
+      class="main-shell"
+      :class="{ 'assistant-expanded': assistantOpen && route.path !== '/admin/monitor' }"
+    >
       <header class="topbar">
         <div class="project-heading">
-          <span class="eyebrow">当前项目</span
-          ><strong>{{ store.project?.manifest.name ?? '尚未打开项目' }}</strong>
+          <span v-if="store.project" class="project-context-label">当前项目</span>
+          <strong :title="store.project?.manifest.name">{{
+            store.project?.manifest.name ?? '尚未打开项目'
+          }}</strong>
           <small v-if="store.project?.dataset" class="muted"
             ><template v-if="store.project.dataset.quantitation_available === false"
               >{{ store.project.dataset.features.toLocaleString() }} 个特征 ·
@@ -355,13 +439,6 @@ const nextHelp = computed(() =>
           >
         </div>
         <div class="topbar-actions">
-          <details class="account-menu">
-            <summary>{{ auth.user.username }} · 账号</summary>
-            <div class="account-menu-body">
-              <RouterLink to="/account">我的账号</RouterLink
-              ><button :disabled="store.busy" @click="logout">退出登录</button>
-            </div>
-          </details>
           <span v-if="store.project" class="save-state" :class="{ dirty: store.project.unsaved }">{{
             store.project.unsaved ? '已应用未保存' : '已保存'
           }}</span>
@@ -383,11 +460,26 @@ const nextHelp = computed(() =>
           >
             关闭项目
           </button>
+          <div class="topbar-utilities">
+            <AssistantPanel
+              v-if="route.path !== '/admin/monitor'"
+              @update:open="assistantOpen = $event"
+            />
+            <details class="account-menu" :key="route.path">
+              <summary>{{ auth.user.username }} · 账号</summary>
+              <div class="account-menu-body">
+                <RouterLink to="/account">我的账号</RouterLink>
+                <p v-if="store.project?.unsaved" class="muted">退出前请保存当前项目。</p>
+                <button :disabled="store.busy" @click="logout">退出登录</button>
+              </div>
+            </details>
+          </div>
         </div>
       </header>
       <main
         :inert="store.maintenancePaused && !standalone"
         id="main-content"
+        tabindex="-1"
         :aria-busy="!standalone && store.busy"
       >
         <div v-if="store.error" role="alert" class="alert error workspace-feedback">
@@ -403,9 +495,6 @@ const nextHelp = computed(() =>
             ><button @click="store.error = ''" aria-label="清除错误">×</button>
           </div>
         </div>
-        <div v-if="store.notice" role="status" class="alert success workspace-feedback">
-          {{ store.notice }}
-        </div>
         <div v-if="!store.current && !standalone" class="card empty-state">
           <h1>连接实验工作区</h1>
           <p>服务重启或页面刷新后，请重新打开已保存的项目。</p>
@@ -415,16 +504,20 @@ const nextHelp = computed(() =>
         </div>
         <template v-else>
           <section v-if="activeModule" class="page-overview" aria-label="本页概况">
-            <p>
-              {{ pageGuide[0]
-              }}<template v-if="store.project?.dataset">
-                · {{ store.project.dataset.cells }} 个观测 ×
-                {{ store.project.dataset.features }} 特征</template
-              >
-            </p>
-            <details>
-              <summary>查看本页使用说明</summary>
-              <p>{{ pageGuide[1] }}</p>
+            <div class="workspace-path">
+              <RouterLink to="/projects">项目首页</RouterLink>
+              <span aria-hidden="true">/</span>
+              <RouterLink v-if="route.path !== activeModule.path" :to="activeModule.path">{{
+                activeModule.name
+              }}</RouterLink>
+              <strong v-else>{{ activeModule.name }}</strong>
+            </div>
+            <details :key="route.path">
+              <summary>使用说明</summary>
+              <div class="page-guide">
+                <strong>{{ pageGuide[0] }}</strong>
+                <p>{{ pageGuide[1] }}</p>
+              </div>
             </details>
           </section>
           <RouterView v-slot="{ Component }"
@@ -434,7 +527,6 @@ const nextHelp = computed(() =>
             <button v-if="previousStep" @click="router.push(previousStep.path)">
               ← 上一步：{{ previousStep.name }}
             </button>
-            <span class="muted">{{ stepIndex + 1 }} / {{ workflow.length }}</span>
             <div v-if="nextStep" class="workflow-next">
               <button
                 class="primary"
@@ -450,23 +542,33 @@ const nextHelp = computed(() =>
           </nav>
         </template>
       </main>
-      <AssistantPanel
-        v-if="route.path !== '/admin/monitor'"
-        @update:open="assistantOpen = $event"
-      />
-      <footer>scMM · CyESI 单细胞质谱分析<span>离开或刷新前请主动保存项目</span></footer>
+      <div v-if="store.notice" class="alert success workspace-notice">
+        <span class="workspace-feedback" role="status">{{ store.notice }}</span>
+        <button type="button" aria-label="关闭操作提示" @click="store.notice = ''">×</button>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.progress-panel {
+  display: grid;
+  gap: 4px;
+}
+.stop-current {
+  justify-self: start;
+  padding: 4px 8px;
+  font-size: 12px;
+}
 .workflow-navigation {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-top: 1.5rem;
+  margin-top: 1.25rem;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 .workflow-next {
   max-width: 100%;
@@ -474,5 +576,24 @@ const nextHelp = computed(() =>
 }
 .workflow-next p {
   margin-bottom: 0;
+}
+.workspace-notice {
+  position: fixed;
+  z-index: 45;
+  right: 24px;
+  bottom: 18px;
+  width: max-content;
+  max-width: min(460px, calc(100vw - 48px));
+  margin: 0;
+  padding: 8px 10px 8px 14px;
+  box-shadow: var(--shadow-raised);
+  pointer-events: none;
+}
+.workspace-notice > button {
+  min-height: 26px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  pointer-events: auto;
 }
 </style>

@@ -49,7 +49,11 @@ class LipidOptions(Controls):
     network: LipidNetworkOptions = Field(default_factory=LipidNetworkOptions)
 
 
-class LipidRun(RevisionRequest):
+class LipidSource(RevisionRequest):
+    source: str = Field(default="", max_length=100)
+
+
+class LipidRun(LipidSource):
     options: LipidOptions
     rules: dict = Field(default_factory=dict)
     label: str = Field(default="", max_length=200)
@@ -60,7 +64,7 @@ class LipidRulesImport(RevisionRequest):
     format: Literal["json", "csv"] = "json"
 
 
-class LipidRulesApply(RevisionRequest):
+class LipidRulesApply(LipidSource):
     version: str
     rules: dict
 
@@ -70,7 +74,7 @@ class LipidPreset(RevisionRequest):
     rules: dict
 
 
-class LipidActivate(RevisionRequest):
+class LipidActivate(LipidSource):
     version: str
 
 
@@ -83,7 +87,17 @@ class LipidSpectrum(LipidActivate):
     sample: str = Field(default="", max_length=1000)
 
 
+class LipidSpectrumAxis(LipidSource):
+    sample: str = Field(default="", max_length=1000)
+
+
+class LipidSpectrumOverlay(LipidSpectrumAxis):
+    version: str = ""
+    grouping: str = ""
+
+
 class LipidReview(LipidActivate):
+    grouping: str = ""
     feature_id: str | None = None
     candidate_ids: list[str] | None = Field(default=None, max_length=10000)
     relation_id: str | None = None

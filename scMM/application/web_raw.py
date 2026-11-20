@@ -359,13 +359,32 @@ class RawWorkflow:
         if job is None:
             return None
         state = json.loads(job["state_path"].read_text(encoding="utf-8"))
-        if job["future"].done():
+        if job["state_path"].with_name("stop.requested").is_file() or job["future"].cancelled():
+            state.update(
+                status="stopped" if job["future"].done() else "stopping",
+                message="预览已停止" if job["future"].done() else "正在等待预览计算到达停止点",
+            )
+        elif job["future"].done():
             state["status"] = "failed" if job["future"].exception() else "ready"
         return {**state, "id": job["id"], "revision": job["revision"]}
 
     def preview_status(self, identity):
         with self.access(identity) as workspace:
             return self.preview_status_unlocked(workspace)
+
+    def stop_preview(self, identity, revision, job_id):
+        with self.access(identity) as workspace:
+            workspace.check(revision)
+            project = workspace.require_project()
+            job = workspace.preview_job
+            if not job or job["id"] != job_id or job["project_folder"] != project.folder:
+                raise ValueError("预览任务不属于当前项目。")
+            job["state_path"].with_name("stop.requested").touch()
+            job["future"].cancel()
+            return {
+                "workspace": self.view(workspace),
+                "value": self.preview_status_unlocked(workspace),
+            }
 
     def collect_preview(self, identity, revision, job_id):
         with self.access(identity, operation="preview") as workspace:
@@ -381,6 +400,8 @@ class RawWorkflow:
                 raise ValueError("样本或参数已改变，旧预览不再适用，请重新预览。")
             if not job["future"].done():
                 raise ValueError("预览尚未完成。")
+            if job["state_path"].with_name("stop.requested").is_file() or job["future"].cancelled():
+                raise ValueError("预览已停止，请重新运行。")
             result = job["future"].result()
             if any(file_identity(p) != expected for p, expected in job["inputs"].items()):
                 raise ValueError("原始文件已改变，请重新预览。")

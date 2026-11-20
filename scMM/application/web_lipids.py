@@ -13,8 +13,8 @@ import pandas as pd
 from scMM.util.lipid_annotation import (
     STORAGE_KEY,
     annotate_lipids,
-    annotation_store,
     feature_only,
+    feature_samples,
     filtered_candidates,
     filtered_feature_ids,
     isotope_feature_ids,
@@ -24,8 +24,15 @@ from scMM.util.lipid_isotopes import ADDUCTS
 from scMM.util.lipid_network import apply_support, intensity_layers
 from scMM.util.lipid_network_views import annotation_charts, representatives
 from scMM.util.lipid_rules import import_rules, rank_candidates, validate_rules
-from scMM.util.lipid_spectrum import annotation_spectrum, apply_review, inherit_reviews
+from scMM.util.lipid_spectrum import (
+    annotation_spectrum,
+    apply_review,
+    inherit_reviews,
+    measured_spectrum,
+    spectrum_overlay,
+)
 
+from .annotation_sources import feature_source, source_versions
 from .identity import actor
 from .lipid_database import database_status, load_database, load_databases, prepare_database
 from .preferences import preferences_path
@@ -65,8 +72,8 @@ def save_rules_preset(name, rules):
     return rules_presets()
 
 
-def selected_version(data, identity):
-    store = annotation_store(data)
+def selected_version(project, data, identity, source=""):
+    store = source_versions(project, data, source)
     version = next((v for v in store["versions"] if v["id"] == (identity or store["active"])), None)
     if version is None:
         raise ValueError("请先运行注释并选择有效版本。")
@@ -93,24 +100,46 @@ def persist_annotation(data, store):
         data.var["lipid_annotation_version"] = active["id"]
 
 
+def persist_source_annotation(project, data, source, store):
+    if source in {"", "current"}:
+        persist_annotation(data, store)
+        return
+    state = project.ion_state
+    state["registry"].setdefault("feature_annotations", {})[source] = {
+        "root_identity": state["roots"][source]["metadata"]["identity"],
+        "store": store,
+    }
+    state["revision"] += 1
+
+
 def relation_labels(project, rows):
     names = {sample["id"]: sample["name"] for sample in project.samples}
     return [{**row, "sample_name": names.get(row["sample"], row["sample"])} for row in rows]
 
 
-def catalog_relations(project, data):
+def catalog_relations(project, data, source="", grouping=""):
     """Snapshot reviewed root relations without changing the ion registry or its matrices."""
     state = project.ion_state
-    if state is None or state.get("active_branch_id") is None:
+    if state is None:
         return []
-    view = state["views"][state["branches"][state["active_branch_id"]]["view_id"]]
-    if view["variable_kind"] != "feature":
-        return []
+    if source in {"", "current"}:
+        branch = state["branches"].get(state["active_branch_id"])
+        if branch is None:
+            return []
+        view = state["views"][branch["view_id"]]
+        if view["variable_kind"] != "feature":
+            return []
+    else:
+        view = {"root_id": source}
     entries = [
         (key, entry)
         for key, entry in state["registry"]["grouping"].items()
         if entry["root_id"] == view["root_id"]
-        and (not view.get("grouping_id") or key == view["grouping_id"])
+        and (
+            key == grouping
+            if grouping
+            else not view.get("grouping_id") or key == view["grouping_id"]
+        )
     ]
     if not entries:
         return []
@@ -118,16 +147,14 @@ def catalog_relations(project, data):
     ids = set(data.var_names)
     result = []
     for row in entry["grouping"]["relations"]:
-        if (
-            row["kind"] not in {"isotope", "adduct"}
-            or not {row["left_feature_id"], row["right_feature_id"]} <= ids
-        ):
+        if not {row["left_feature_id"], row["right_feature_id"]} <= ids:
             continue
         result.append(
             {
                 **deepcopy(row),
                 "relation_id": f"catalog:{key}:{row['relation_id']}",
                 "origin": "ion_catalog_snapshot",
+                "catalog_relation_id": row["relation_id"],
                 "grouping_version": key,
                 "source": row["left_feature_id"],
                 "target": row["right_feature_id"],
@@ -139,15 +166,76 @@ def catalog_relations(project, data):
     return result
 
 
+def relation_role(row, candidates):
+    """Only explicit, directed chemical roles can share a review decision."""
+    kind = row.get("type") or ("isotope" if "parent_feature_id" in row else "")
+    left = row.get("source", row.get("parent_feature_id"))
+    right = row.get("target", row.get("isotope_feature_id"))
+    if kind == "isotope":
+        species = row.get("left_species") or row.get("adduct")
+        order = row.get("order")
+        charge = row.get("charge_magnitude", 1)
+        if species and order and species == row.get("right_species", species):
+            return kind, left, right, species, charge, order
+    elif kind == "adduct":
+        roles = []
+        for feature, key in ((left, "left_species"), (right, "right_species")):
+            species = {
+                candidates[c]["adduct"]
+                for c in row.get("candidate_ids", [])
+                if c in candidates and candidates[c]["feature_id"] == feature
+            }
+            roles.append(row.get(key) or (next(iter(species)) if len(species) == 1 else ""))
+        if all(roles):
+            return kind, left, right, *roles
+    return None
+
+
+def live_relation_reviews(version, catalog):
+    """Expose live decisions while retaining candidate-specific evidence and historical disagreements."""
+    candidates = {r["candidate_id"]: r for r in version["candidates"]}
+    by_role = {}
+    for row in catalog:
+        role = relation_role(row, candidates)
+        if role is not None:
+            by_role.setdefault(role, []).append(row)
+    linked = {}
+    conflicts = list(version.get("review_conflicts", []))
+    for name in ("relations", "adduct_relations"):
+        rows = []
+        for row in version.get(name, []):
+            matches = by_role.get(relation_role(row, candidates), [])
+            if len(matches) == 1:
+                current = matches[0]
+                linked[row["relation_id"]] = current
+                previous = row.get("review", "pending")
+                if previous != "pending" and previous != current["review"]:
+                    conflicts.append(
+                        {
+                            "relation": row["relation_id"],
+                            "grouping_relation": current["relation_id"],
+                            "recorded": previous,
+                            "current": current["review"],
+                        }
+                    )
+                row = {**row, "review": current["review"], "shared_review": current["relation_id"]}
+            rows.append(row)
+        if name in version:
+            version = {**version, name: rows}
+    return {**version, "catalog_relations": catalog, "review_conflicts": conflicts}, linked
+
+
 class LipidWorkflow:
-    def lipid_info(self, identity):
+    def lipid_info(self, identity, source=""):
         with self.access(identity) as workspace:
             project = workspace.require_project()
-            data = project.workspace.require_features()
-            store = annotation_store(data)
+            data, _ = feature_source(project, source)
+            store = source_versions(project, data, source)
+            registry = (project.ion_state or {}).get("registry", {})
             return {
                 "database": database_status(),
                 "quantitation_available": not feature_only(data),
+                "feature_columns": list(dict.fromkeys(["mz", *map(str, data.var.columns)])),
                 "adducts": ADDUCTS,
                 "presets": rules_presets(),
                 "active": store["active"],
@@ -156,16 +244,12 @@ class LipidWorkflow:
                 "sample_field": next(
                     (k for k in ("sample_id", "sample", "source_file") if k in data.obs), ""
                 ),
-                "samples": sorted(
-                    data.obs[
-                        next(k for k in ("sample_id", "sample", "source_file") if k in data.obs)
-                    ]
-                    .astype(str)
-                    .unique()
-                    .tolist()
-                )
-                if any(k in data.obs for k in ("sample_id", "sample", "source_file"))
-                else ["单样本"],
+                "samples": sorted(set(feature_samples(data).tolist())),
+                "grouping_versions": [
+                    key
+                    for key, entry in registry.get("grouping", {}).items()
+                    if entry["root_id"] == source
+                ],
                 "condition_fields": [
                     str(k)
                     for k in data.obs
@@ -200,7 +284,7 @@ class LipidWorkflow:
             result = prepare_database()
             return {"workspace": self.view(workspace), "value": result}
 
-    def lipid_run(self, identity, revision, options, rules, label):
+    def lipid_run(self, identity, revision, options, rules, label, source=""):
         from .web_projects import project_candidate
 
         with self.access(identity, operation="lipid_annotation") as workspace:
@@ -225,15 +309,15 @@ class LipidWorkflow:
             else:
                 database, database_identity = load_databases(selected_databases)
             candidate = project_candidate(project)
-            data = candidate.workspace.require_features()
+            data, _ = feature_source(candidate, source)
             version = annotate_lipids(data, database, database_identity, options, rules)
-            version["catalog_relations"] = catalog_relations(candidate, data)
+            version["catalog_relations"] = catalog_relations(candidate, data, source)
             version.update(
                 id=uuid4().hex,
                 label=label.strip() or "注释与同位素",
                 created_at=datetime.now(UTC).isoformat(),
             )
-            store = annotation_store(data)
+            store = source_versions(candidate, data, source)
             if store["active"]:
                 previous = next((v for v in store["versions"] if v["id"] == store["active"]), None)
                 if previous:
@@ -242,7 +326,7 @@ class LipidWorkflow:
                     rank_candidates(version["candidates"], version["rules"])
             store["versions"].append(version)
             store["active"] = version["id"]
-            persist_annotation(data, store)
+            persist_source_annotation(candidate, data, source, store)
             candidate.dirty = True
             workspace.project = candidate
             workspace.revision += 1
@@ -258,32 +342,32 @@ class LipidWorkflow:
             workspace.check(revision)
             return {"workspace": self.view(workspace), "value": save_rules_preset(name, rules)}
 
-    def lipid_edit(self, identity, revision, version_id, action):
+    def lipid_edit(self, identity, revision, version_id, action, source=""):
         from .web_projects import project_candidate
 
         with self.access(identity) as workspace:
             workspace.check(revision)
             candidate = project_candidate(workspace.require_project())
-            data = candidate.workspace.require_features()
-            store, version = selected_version(data, version_id)
+            data, _ = feature_source(candidate, source)
+            store, version = selected_version(candidate, data, version_id, source)
             action(version)
             version["review_revision"] = version.get("review_revision", 0) + 1
             apply_support(version)
             rank_candidates(version["candidates"], version["rules"])
-            persist_annotation(data, store)
+            persist_source_annotation(candidate, data, source, store)
             candidate.dirty = True
             workspace.project = candidate
             workspace.revision += 1
             return self.view(workspace)
 
-    def lipid_apply_rules(self, identity, revision, version_id, rules):
+    def lipid_apply_rules(self, identity, revision, version_id, rules, source=""):
         rules = validate_rules(rules, ADDUCTS)
 
         def action(version):
             version["rules"] = rules
             rank_candidates(version["candidates"], rules)
 
-        return self.lipid_edit(identity, revision, version_id, action)
+        return self.lipid_edit(identity, revision, version_id, action, source)
 
     def lipid_review(self, identity, revision, values):
         def action(version):
@@ -297,33 +381,105 @@ class LipidWorkflow:
             )
 
         with self.access(identity) as workspace:
-            workspace_data_ids = set(
-                workspace.require_project().workspace.require_features().var_names
-            )
-            return self.lipid_edit(identity, revision, values["version"], action)
+            workspace.check(revision)
+            source = values.get("source", "")
+            project = workspace.require_project()
+            data, _ = feature_source(project, source)
+            workspace_data_ids = set(data.var_names)
+            relation_id = values.get("relation_id")
+            if relation_id:
+                catalog = catalog_relations(project, data, source, values.get("grouping", ""))
+                row = next((r for r in catalog if r["relation_id"] == relation_id), None)
+                if row is None and catalog and values["version"]:
+                    _, version = selected_version(project, data, values["version"], source)
+                    _, linked = live_relation_reviews(version, catalog)
+                    row = linked.get(relation_id)
+                if row is not None:
+                    self.ion_review(
+                        identity,
+                        revision,
+                        kind="relation",
+                        version=row["grouping_version"],
+                        target_id=row["catalog_relation_id"],
+                        decision=values["review"],
+                        scope={"root_id": source},
+                        reason="从测量峰工作台人工核对关系",
+                    )
+                    return self.view(workspace)
+            return self.lipid_edit(identity, revision, values["version"], action, source)
 
-    def lipid_spectrum(self, identity, revision, version_id, feature_id="", sample=""):
+    def lipid_spectrum(self, identity, revision, version_id, feature_id="", sample="", source=""):
         with self.access(identity) as workspace:
             workspace.check(revision)
             project = workspace.require_project()
-            data = project.workspace.require_features()
-            _, version = selected_version(data, version_id)
+            data, _ = feature_source(project, source)
+            _, version = selected_version(project, data, version_id, source)
             value = annotation_spectrum(data, version, feature_id=feature_id, sample=sample)
             value["dataset_token"] = list(project.workspace.token)
             return {"workspace": self.view(workspace), "value": value}
 
-    def lipid_activate(self, identity, revision, version_id):
+    def lipid_spectrum_axis(self, identity, revision, *, source, sample):
+        with self.access(identity) as workspace:
+            workspace.check(revision)
+            project = workspace.require_project()
+            data, source_identity = feature_source(project, source)
+            raw_layers = [] if feature_only(data) else intensity_layers(data)["raw"]
+            original = data.uns.get("scmm_workbench", {}).get("original_layer")
+            layer = original if original in raw_layers else "X"
+            axis = measured_spectrum(data, sample=sample, layer=layer)
+            return {**axis, "source": source, "source_identity": source_identity}
+
+    def lipid_spectrum_overlay(
+        self, identity, revision, *, source, sample, version_id, grouping=""
+    ):
+        with self.access(identity) as workspace:
+            workspace.check(revision)
+            project = workspace.require_project()
+            data, source_identity = feature_source(project, source)
+            catalog = catalog_relations(project, data, source, grouping)
+            if version_id:
+                _, version = selected_version(project, data, version_id, source)
+                display, _ = live_relation_reviews(version, catalog)
+                overlay = spectrum_overlay(display, data.var_names, sample=sample)
+            else:
+                overlay = {
+                    "peaks": [],
+                    "version": "",
+                    "review_revision": 0,
+                    "review_conflicts": [],
+                    "relations": [{**r, "id": r["relation_id"]} for r in catalog],
+                }
+            from .annotation_evidence import evidence_registry
+
+            external = evidence_registry(project).get("feature_fields", {}).get(source, {})
+            display_name = external.get("display_name", external.get("manual_annotation", {}))
+            if source in {"", "current"}:
+                column = next(
+                    (key for key in ("display_name", "manual_annotation") if key in data.var), None
+                )
+                if column:
+                    display_name = data.var[column].fillna("").astype(str).to_dict()
+            return {
+                **overlay,
+                "source_identity": source_identity,
+                "sample": sample,
+                "external_names": {k: v for k, v in display_name.items() if v},
+                "grouping": catalog[0]["grouping_version"] if catalog else grouping,
+                "catalog_revision": (project.ion_state or {}).get("revision"),
+            }
+
+    def lipid_activate(self, identity, revision, version_id, source=""):
         from .web_projects import project_candidate
 
         with self.access(identity) as workspace:
             workspace.check(revision)
             candidate = project_candidate(workspace.require_project())
-            data = candidate.workspace.require_features()
-            store = annotation_store(data)
+            data, _ = feature_source(candidate, source)
+            store = source_versions(candidate, data, source)
             if version_id:
-                selected_version(data, version_id)
+                selected_version(candidate, data, version_id, source)
             store["active"] = version_id
-            persist_annotation(data, store)
+            persist_source_annotation(candidate, data, source, store)
             candidate.dirty = True
             workspace.project = candidate
             workspace.revision += 1
@@ -333,8 +489,10 @@ class LipidWorkflow:
         with self.access(identity) as workspace:
             workspace.check(revision)
             project = workspace.require_project()
-            data = project.workspace.require_features()
-            _, version = selected_version(data, values["version"])
+            source = values.get("source", "")
+            data, _ = feature_source(project, source)
+            _, version = selected_version(project, data, values["version"], source)
+            version, _ = live_relation_reviews(version, catalog_relations(project, data, source))
             filters = values["filters"]
             if filters["adduct_mode"] == "specified" and not filters["adducts"]:
                 raise ValueError("请指定保留的加合物。")
@@ -391,6 +549,18 @@ class LipidWorkflow:
                 limit=values["limit"],
             )
             table["total"] = len(candidates)
+            for_review = candidates
+            if values["feature_id"]:
+                for_review = sorted_rows(
+                    [r for r in version["candidates"] if r["feature_id"] == values["feature_id"]],
+                    sorting.get("candidate_sort", "recommended"),
+                    sorting.get("candidate_descending", False),
+                )
+            review_table = table_view(
+                pd.DataFrame(for_review[values["offset"] : values["offset"] + values["limit"]]),
+                limit=values["limit"],
+            )
+            review_table["total"] = len(for_review)
             candidate_groups = [
                 {
                     "label": key[1],
@@ -432,6 +602,7 @@ class LipidWorkflow:
                     for f in ids
                 ],
                 "candidates": table,
+                "feature_candidates": review_table,
                 "isotopes": isotope_table,
                 "selected": deepcopy(version["selected"]),
                 "annotation_names": deepcopy(version.get("annotation_names", {})),
@@ -465,11 +636,12 @@ class LipidWorkflow:
                 "network_parameters": version.get("network", {}).get("parameters"),
             }
 
-    def lipid_charts(self, identity, revision, version_id, filters, view):
+    def lipid_charts(self, identity, revision, version_id, filters, view, source=""):
         with self.access(identity) as workspace:
             workspace.check(revision)
-            data = workspace.require_project().workspace.require_features()
-            _, version = selected_version(data, version_id)
+            project = workspace.require_project()
+            data, _ = feature_source(project, source)
+            _, version = selected_version(project, data, version_id, source)
             if filters["adduct_mode"] == "specified" and not filters["adducts"]:
                 raise ValueError("请指定保留的加合物。")
             ids = filtered_feature_ids(data, version, filters)
@@ -484,7 +656,7 @@ class LipidWorkflow:
                 version, ids, mz, filtered_candidates(version, filters), filters, view
             )
 
-    def lipid_chart_view(self, identity, revision, version_id, filters, view):
+    def lipid_chart_view(self, identity, revision, version_id, filters, view, source=""):
         def action(version):
             if "network" not in version:
                 raise ValueError("旧版本未计算相关网络，请重新运行注释。")
@@ -492,10 +664,12 @@ class LipidWorkflow:
             version["network"]["chart_filters"] = filters
 
         # Validate scope and filters before committing the display settings.
-        self.lipid_charts(identity, revision, version_id, filters, view)
-        return self.lipid_edit(identity, revision, version_id, action)
+        self.lipid_charts(identity, revision, version_id, filters, view, source)
+        return self.lipid_edit(identity, revision, version_id, action, source)
 
-    def lipid_representative(self, identity, revision, version_id, database_id, feature_id):
+    def lipid_representative(
+        self, identity, revision, version_id, database_id, feature_id, source=""
+    ):
         def action(version):
             if "network" not in version:
                 raise ValueError("请重新运行注释以计算相关网络。")
@@ -507,14 +681,16 @@ class LipidWorkflow:
             else:
                 version["network"]["representatives"].pop(database_id, None)
 
-        return self.lipid_edit(identity, revision, version_id, action)
+        return self.lipid_edit(identity, revision, version_id, action, source)
 
-    def lipid_export(self, identity, revision, version_id, filters, kind, view=None, sorting=None):
+    def lipid_export(
+        self, identity, revision, version_id, filters, kind, view=None, sorting=None, source=""
+    ):
         with self.access(identity) as workspace:
             workspace.check(revision)
             project = workspace.require_project()
-            data = project.workspace.require_features()
-            _, version = selected_version(data, version_id)
+            data, _ = feature_source(project, source)
+            _, version = selected_version(project, data, version_id, source)
             if filters["adduct_mode"] == "specified" and not filters["adducts"]:
                 raise ValueError("请指定保留的加合物。")
             ids = filtered_feature_ids(data, version, filters)

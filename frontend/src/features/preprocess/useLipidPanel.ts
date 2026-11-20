@@ -2,13 +2,17 @@ import { useLipidRules } from './useLipidRules'
 import { useViewState } from '../../api/viewState'
 import { useReadScope } from '../../api/readScope'
 import type { Figure } from '../../api/types'
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onActivated, reactive, ref, watch, type Ref } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import { useAuth } from '../../stores/auth'
 import { workspaceBlob, saveBlob } from '../../api/workspaceDownload'
 import type { LipidInfo, LipidResults, LipidRules } from './lipids'
 
-export function useLipidPanel() {
+export function useLipidPanel(
+  source: Readonly<Ref<string>>,
+  sourceIdentity: Readonly<Ref<string>>,
+  grouping: () => string,
+) {
   const store = useWorkspace()
   const auth = useAuth()
   const info = ref<LipidInfo>()
@@ -29,6 +33,7 @@ export function useLipidPanel() {
     store,
     info,
     () => version.value,
+    () => source.value,
     () => loadResults(),
     limit,
   )
@@ -36,6 +41,7 @@ export function useLipidPanel() {
   const isotopeFigure = ref<Figure>()
   async function viewIsotope(id: string) {
     const result = await store.command<Figure>('/lipids/isotope-spectrum', {
+      source: source.value,
       version: version.value,
       relation_id: id,
     })
@@ -164,31 +170,29 @@ export function useLipidPanel() {
       ),
     ].sort()
   }
-  const featureIndex = computed(
-    () => results.value?.features.findIndex((f) => f.id === feature.value) ?? -1,
-  )
   const validVersion = computed(
     () => info.value?.versions.find((v) => v.id === version.value)?.valid ?? false,
   )
   const infoReads = useReadScope(
-    () => [
-      store.current?.workspace_id,
-      store.project?.path,
-      store.project?.dataset?.id,
-      store.project?.dataset?.revision,
-    ],
+    () => [store.current?.workspace_id, store.project?.path, source.value, sourceIdentity.value],
     () => void refresh(),
   )
   let generation = 0
   let queryGeneration = 0
   let restoredVersion = ''
+  const resultLoading = ref(false)
+  const resultFeature = ref('')
 
   async function refresh(reset = false) {
     const token = ++generation
     const ticket = infoReads.begin()
     const accept = () => ticket() && token === generation
     const workspace = store.current?.workspace_id
-    const value = await store.read<LipidInfo>('/lipids', undefined, accept)
+    const value = await store.read<LipidInfo>(
+      `/lipids?source=${encodeURIComponent(source.value)}`,
+      undefined,
+      accept,
+    )
     if (!value || !accept() || workspace !== store.current?.workspace_id) return
     info.value = value
     if (reset) {
@@ -204,18 +208,16 @@ export function useLipidPanel() {
       rules.value = { schema_version: 1, name: '', rules: [] }
       results.value = undefined
       restoredVersion = ''
-      feature.value = ''
     }
   }
   watch(
-    [
-      () => store.project?.path,
-      () => store.project?.dataset?.id,
-      () => store.project?.dataset?.revision,
-    ],
-    async () => {
+    [() => store.project?.path, sourceIdentity],
+    async ([project, identity], previous) => {
       results.value = undefined
+      info.value = undefined
       version.value = ''
+      if (previous?.[0] && (previous[0] !== project || previous[1] !== identity)) feature.value = ''
+      if (!source.value) return
       await refresh(true)
       if (version.value && validVersion.value) {
         const notice = store.notice
@@ -224,6 +226,11 @@ export function useLipidPanel() {
     },
     { immediate: true },
   )
+  onActivated(async () => {
+    if (!source.value || !info.value) return
+    await refresh()
+    await loadResults()
+  })
   watch(
     () => options.polarity,
     () => {
@@ -241,7 +248,7 @@ export function useLipidPanel() {
     if (!store.error) store.notice = '本地脂质数据库已校验。'
   }
   async function loadResults(reset = false): Promise<boolean> {
-    if (!version.value || !validVersion.value || store.busy) return false
+    if (!version.value || !validVersion.value) return false
     if (
       info.value?.versions.find((v) => v.id === version.value)?.mass_only &&
       filters.adduct_mode === 'strongest'
@@ -254,22 +261,35 @@ export function useLipidPanel() {
     const token = ++queryGeneration
     const workspace = store.current?.workspace_id
     const selectedVersion = version.value
-    const value = await store.inspect<LipidResults>('/lipids/query', {
-      version: selectedVersion,
-      filters: { ...filters, adducts: filters.adduct_mode === 'specified' ? filters.adducts : [] },
-      feature_id: feature.value,
-      offset: offset.value,
-      relation_offset: relationOffset.value,
-      sorting: sorting.value,
-      limit,
-    })
-    if (
-      !value ||
-      token !== queryGeneration ||
-      workspace !== store.current?.workspace_id ||
-      selectedVersion !== version.value
+    const selectedFeature = feature.value
+    const selectedSource = sourceIdentity.value
+    const current = () =>
+      token === queryGeneration &&
+      workspace === store.current?.workspace_id &&
+      selectedSource === sourceIdentity.value &&
+      selectedVersion === version.value &&
+      selectedFeature === feature.value
+    resultLoading.value = true
+    const value = await store.read<LipidResults>(
+      '/lipids/query',
+      {
+        revision: store.current?.revision,
+        source: source.value,
+        version: selectedVersion,
+        filters: {
+          ...filters,
+          adducts: filters.adduct_mode === 'specified' ? filters.adducts : [],
+        },
+        feature_id: feature.value,
+        offset: offset.value,
+        relation_offset: relationOffset.value,
+        sorting: sorting.value,
+        limit,
+      },
+      current,
     )
-      return false
+    if (token === queryGeneration) resultLoading.value = false
+    if (!value || !current()) return false
     if (restoredVersion !== selectedVersion) {
       restoredVersion = selectedVersion
       if (value.chart_filters && Object.keys(value.chart_filters).length) {
@@ -278,20 +298,18 @@ export function useLipidPanel() {
       }
     }
     results.value = value
+    resultFeature.value = selectedFeature
     if (!imported.value) rules.value = value.rules
     selection.value =
       feature.value in value.selected ? [...value.selected[feature.value]!] : [...value.suggested]
     annotationName.value = value.annotation_names?.[feature.value] ?? ''
-    if (feature.value && !value.features.some((f) => f.id === feature.value)) {
-      feature.value = ''
-      return await loadResults(true)
-    }
     return true
   }
   async function run() {
     const result = await store.mutate(
       '/lipids/run',
       {
+        source: source.value,
         options: { ...options, resolution: options.mass_only ? null : options.resolution },
         rules: rules.value,
         label: label.value,
@@ -302,12 +320,17 @@ export function useLipidPanel() {
     if (!result) return
     await refresh()
     version.value = info.value?.active ?? ''
-    feature.value = ''
     imported.value = false
     if (await loadResults(true)) store.notice = '注释与同位素版本已生成；矩阵强度和特征保留。'
+    return true
   }
   async function activate() {
-    const value = await store.mutate('/lipids/activate', { version: version.value }, 'POST', '')
+    const value = await store.mutate(
+      '/lipids/activate',
+      { source: source.value, version: version.value },
+      'POST',
+      '',
+    )
     if (value) {
       await refresh()
       if (version.value) {
@@ -319,27 +342,23 @@ export function useLipidPanel() {
     }
   }
   async function selectFeature(id: string) {
-    feature.value = id
-    await loadResults(true)
+    if (feature.value === id) await loadResults(true)
+    else feature.value = id
   }
+  watch(feature, () => void loadResults(true))
   async function changeVersion() {
-    results.value = undefined
     imported.value = false
-    feature.value = ''
+    if (!validVersion.value) results.value = undefined
     await loadResults(true)
   }
   async function applyFilters() {
-    feature.value = ''
     await loadResults(true)
-  }
-  async function moveFeature(step: number) {
-    const next = results.value?.features[featureIndex.value + step]
-    if (next) await selectFeature(next.id)
   }
   async function saveSelection(auto = false) {
     const value = await store.mutate(
       '/lipids/review',
       {
+        source: source.value,
         version: version.value,
         feature_id: feature.value,
         candidate_ids: auto ? null : selection.value,
@@ -354,6 +373,8 @@ export function useLipidPanel() {
   }
   async function reviewRelation(id: unknown, review: string) {
     const value = await store.mutate('/lipids/review', {
+      source: source.value,
+      grouping: grouping(),
       version: version.value,
       relation_id: id,
       review,
@@ -383,6 +404,7 @@ export function useLipidPanel() {
           method: 'POST',
           body: {
             revision,
+            source: source.value,
             version: version.value,
             filters: {
               ...filters,
@@ -426,6 +448,8 @@ export function useLipidPanel() {
     auth,
     info,
     results,
+    resultLoading,
+    resultFeature,
     isotopeFigure,
     rules,
     imported,
@@ -449,7 +473,6 @@ export function useLipidPanel() {
     options,
     filters,
     rulesTable,
-    featureIndex,
     validVersion,
     viewIsotope,
     classificationChoices,
@@ -464,7 +487,6 @@ export function useLipidPanel() {
     selectFeature,
     changeVersion,
     applyFilters,
-    moveFeature,
     saveSelection,
     reviewRelation,
     pageCandidates,

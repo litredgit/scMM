@@ -244,6 +244,10 @@ def test_ms2_claim_requires_actual_reference_or_current_scoped_measurement(tmp_p
     )
     assert ms2_status(record, input_identity="input") == "matched"
     assert ms2_status(record, input_identity="other") == "available"
+    record["ms2_evidence"][-1]["passes_threshold"] = False
+    assert ms2_status(record, input_identity="input") == "no_match"
+    assert ms2_status({"ms2_status": "unavailable"}) == "unavailable"
+    assert ms2_status({}) == "not_supplied"
 
 
 def test_sdf_reference_ms2_json_is_available_and_invalid_payloads_are_rejected(

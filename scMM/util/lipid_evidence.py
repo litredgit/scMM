@@ -42,6 +42,8 @@ def ms2_status(record, *, input_identity=None):
         return "matched" if any(matches) else "no_match"
     if available:
         return "available"
+    if supplied in {"unavailable", "no_record"} and not evidence:
+        return "unavailable"
     if supplied == "not_supplied" and not evidence:
         return "not_supplied"
     return "unknown"

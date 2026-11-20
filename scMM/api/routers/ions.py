@@ -56,6 +56,11 @@ def represent(body: s.Represent, manager: Service, identity: Identity):
     return manager.ion_represent(identity, **body.model_dump())
 
 
+@router.post("/represent/preview")
+def preview_representation(body: s.Represent, manager: Service, identity: Identity):
+    return manager.ion_representation_preview(identity, **body.model_dump())
+
+
 @router.post("/annotate")
 def annotate(body: s.Annotate, manager: Service, identity: Identity):
     return manager.ion_annotate(identity, **body.model_dump())
@@ -167,11 +172,22 @@ def table(
         "evidence",
         "reviews",
         "representations",
+        "source_ec",
     ] = "relations",
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=200),
+    feature_id: str = "",
+    ec_id: str = "",
 ):
-    return manager.ion_table(identity, version=version, kind=kind, offset=offset, limit=limit)
+    return manager.ion_table(
+        identity,
+        version=version,
+        kind=kind,
+        offset=offset,
+        limit=limit,
+        feature_id=feature_id,
+        ec_id=ec_id,
+    )
 
 
 @router.get("/download")

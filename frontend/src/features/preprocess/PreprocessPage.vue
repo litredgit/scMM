@@ -15,9 +15,13 @@ import DataTableView from '../../components/DataTable.vue'
 import QCComparison from './QCComparison.vue'
 import DataViewSelector from '../ions/DataViewSelector.vue'
 const store = useWorkspace()
-const observationLabel = computed(() =>
-  store.project?.dataset?.observation_kind === 'sample' ? '样本' : '细胞',
-)
+const stages = [
+  { key: 'remove_outliers', name: '异常值处理' },
+  { key: 'filter', name: '筛选' },
+  { key: 'impute', name: '零值插补' },
+  { key: 'normalize', name: '归一化 / 标准化' },
+  { key: 'subset', name: '按稳定 ID 取子集' },
+]
 const historyOpen = ref(false)
 const historyPanel = ref<HTMLElement>()
 async function showHistory() {
@@ -51,6 +55,7 @@ const advanced = ref({
 })
 const subsetCells = ref(''),
   subsetFeatures = ref('')
+const stage = computed(() => stages.find((item) => item.key === operation.value) ?? stages[0]!)
 function ids(value: string) {
   const result = value
     .split(/[\n,;]+/)
@@ -62,7 +67,7 @@ const route = useRoute()
 watch(
   () => route.query.step,
   (step) => {
-    if (['filter', 'impute', 'normalize'].includes(String(step))) operation.value = String(step)
+    if (typeof step === 'string' && stages.some((item) => item.key === step)) operation.value = step
   },
   { immediate: true },
 )
@@ -221,67 +226,37 @@ useViewState('preprocess', {
 })
 </script>
 <template>
-  <DataViewSelector />
   <section
     v-if="store.project?.dataset?.cells && store.project.dataset.quantitation_available !== false"
     class="preprocess-page"
   >
     <div class="page-title">
-      <div>
-        <h1>预处理</h1>
-        <p>
-          {{ store.project.dataset.cells }} {{ observationLabel }} ×
-          {{ store.project.dataset.features }} 特征 · 每步成功后保留历史层。
-        </p>
-      </div>
+      <h1>预处理</h1>
       <div class="actions">
         <button class="restore" @click="showHistory">历史与恢复</button>
       </div>
     </div>
-    <section class="card current-matrix">
-      <div class="section-heading">
-        <div>
-          <h2>当前矩阵</h2>
-          <p>
-            {{ store.project.dataset.cells }} {{ observationLabel }} ×
-            {{ store.project.dataset.features }} 特征
-          </p>
-        </div>
+    <DataViewSelector />
+    <section class="card preprocess-toolbar">
+      <div class="actions preprocess-stages" role="group" aria-label="预处理操作">
+        <button
+          v-for="step in stages"
+          :key="step.key"
+          :aria-pressed="operation === step.key"
+          :disabled="store.busy"
+          @click="operation = step.key"
+        >
+          {{ step.name }}
+        </button>
       </div>
-      <MatrixDownload source="current" embedded />
+      <MatrixDownload source="current" embedded compact />
     </section>
     <div class="preprocess-workspace">
       <div class="card preprocess-parameters">
-        <h2>处理当前矩阵</h2>
-        <div class="preprocess-stages">
-          <button
-            v-for="step in [
-              { key: 'remove_outliers', name: '异常值处理' },
-              { key: 'filter', name: '筛选' },
-              { key: 'impute', name: '零值插补 · 默认跳过' },
-              { key: 'normalize', name: '归一化 / 标准化' },
-            ]"
-            :key="step.key"
-            :aria-expanded="operation === step.key"
-            @click="operation = step.key"
-          >
-            {{ step.name }}
-          </button>
-        </div>
+        <h2>{{ stage.name }}</h2>
+        <p v-if="operation === 'impute'" class="muted">默认跳过插补，可根据数据和分析需求选用。</p>
         <div class="field-grid">
-          <label
-            ><FieldLabel name="下一项操作" /><select
-              aria-label="下一项操作"
-              v-model="operation"
-              :disabled="store.busy"
-            >
-              <option value="remove_outliers">异常值处理</option>
-              <option value="filter">筛选</option>
-              <option value="impute">零值插补（按需启用）</option>
-              <option value="normalize">归一化 / 标准化</option>
-              <option value="subset">按稳定 ID 取子集</option>
-            </select></label
-          ><template v-if="operation === 'filter'"
+          <template v-if="operation === 'filter'"
             ><label
               ><FieldLabel name="min_total" /><ScientificInput
                 aria-label="min_total"
@@ -617,43 +592,34 @@ useViewState('preprocess', {
 </template>
 
 <style scoped>
-.current-matrix {
-  display: grid;
-  gap: 12px;
-}
-.current-matrix .section-heading {
-  margin: 0;
-}
-.current-matrix .section-heading > div {
+.preprocess-toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px 16px;
-}
-.current-matrix h2,
-.current-matrix .section-heading p {
-  margin: 0;
-}
-.current-matrix h2 {
-  font-size: 16px;
-}
-.current-matrix .section-heading p {
-  color: var(--muted);
-  font-size: 12px;
-}
-.current-matrix :deep(.matrix-download) {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
+  justify-content: space-between;
   gap: 8px 12px;
+  padding: 9px 12px;
+}
+.preprocess-toolbar > .actions {
+  gap: 5px;
   margin: 0;
 }
-.current-matrix :deep(.matrix-download > p) {
+.preprocess-stages button[aria-pressed='true'] {
+  border-color: #91beb8;
+  background: #e8f5f2;
+  color: var(--teal);
+  font-weight: 650;
+}
+.preprocess-toolbar :deep(.matrix-download) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.preprocess-toolbar :deep(.matrix-download > p) {
   margin: 0;
   font-size: 12px;
-}
-.current-matrix :deep(.matrix-download > details) {
-  grid-column: 1 / -1;
 }
 .preprocess-workspace {
   display: grid;
@@ -664,9 +630,6 @@ useViewState('preprocess', {
 .preprocess-workspace > .card {
   margin: 0;
   min-width: 0;
-}
-.preprocess-parameters {
-  background: var(--panel-soft);
 }
 .preprocess-parameters > h2,
 .preprocess-comparison > h2 {
@@ -707,18 +670,10 @@ useViewState('preprocess', {
 }
 @media (min-width: 1440px) {
   .preprocess-workspace {
-    grid-template-columns: 330px minmax(0, 1fr);
+    grid-template-columns: minmax(300px, 330px) minmax(0, 1fr);
   }
   .preprocess-parameters > .field-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .preprocess-parameters > .field-grid:first-of-type > label:first-child {
-    grid-column: 1 / -1;
-  }
-}
-@media (max-width: 600px) {
-  .current-matrix :deep(.matrix-download) {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

@@ -32,25 +32,25 @@ const quantitationMissing = computed(
         <dd>{{ current.output }}</dd>
       </div>
     </dl>
-    <ModuleExchange :module="module" />
-    <p v-if="quantitationMissing" class="state-note">
-      统计分析需要定量矩阵。请在上方导入矩阵，或选择细胞提取板块中已审核纳入的数据；独立特征表可继续用于注释。
-    </p>
-    <section class="card module-workflow">
-      <h2>工作步骤</h2>
-      <ul class="module-workflow-list">
-        <li v-for="step in current.steps.slice(1)" :key="step.path">
-          <button v-if="quantitationMissing" disabled>
-            <strong>{{ step.name }}</strong>
-            <span>导入定量矩阵后可用</span>
-          </button>
-          <RouterLink v-else :to="step.path">
-            <strong>{{ step.name }}</strong>
-            <span>进入 <span aria-hidden="true">→</span></span>
-          </RouterLink>
-        </li>
-      </ul>
-    </section>
+    <div class="module-intake-grid">
+      <ModuleExchange :module="module" />
+      <section class="card module-workflow">
+        <h2>工作步骤</h2>
+        <p v-if="quantitationMissing" id="matrix-required" class="muted">
+          导入定量矩阵或审核纳入提取结果后，即可开始统计分析。
+        </p>
+        <ul class="module-workflow-list">
+          <li v-for="step in current.steps.slice(1)" :key="step.path">
+            <button v-if="quantitationMissing" disabled aria-describedby="matrix-required">
+              {{ step.name }}
+            </button>
+            <RouterLink v-else :to="step.path">
+              {{ step.name }} <span aria-hidden="true">→</span>
+            </RouterLink>
+          </li>
+        </ul>
+      </section>
+    </div>
     <nav class="module-continue" aria-label="其他工作板块">
       <RouterLink
         v-for="item in modules.filter((item) => item.key !== module)"
@@ -63,11 +63,17 @@ const quantitationMissing = computed(
 </template>
 
 <style scoped>
+.module-intake-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(235px, 0.36fr);
+  align-items: start;
+  gap: 14px;
+}
 .module-context {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem 1.5rem;
-  margin: 0 0 1rem;
+  margin: 0 0 12px;
   color: var(--muted);
   font-size: 0.86rem;
 }
@@ -82,9 +88,6 @@ const quantitationMissing = computed(
 }
 .module-context dd {
   margin: 0;
-}
-.module-workflow h2 {
-  margin-bottom: 0.7rem;
 }
 .module-workflow-list {
   margin: 0;
@@ -101,12 +104,13 @@ const quantitationMissing = computed(
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.8rem 0.5rem;
+  min-height: 36px;
+  padding: 7px 6px;
   border: 0;
   border-radius: 0;
   background: transparent;
   text-align: left;
-  font-size: 0.9rem;
+  font-size: var(--text-body);
 }
 .module-workflow-list a:hover {
   background: var(--panel-soft);
@@ -128,7 +132,8 @@ const quantitationMissing = computed(
   text-decoration: underline;
 }
 @media (max-width: 760px) {
-  .module-context {
+  .module-context,
+  .module-intake-grid {
     grid-template-columns: 1fr;
   }
 }

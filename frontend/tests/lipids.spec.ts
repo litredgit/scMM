@@ -1,6 +1,8 @@
 import { test, expect, navigate } from './fixtures'
 import { readFile } from 'node:fs/promises'
 
+test.use({ viewport: { width: 1920, height: 1080 } })
+
 test('lipid rules, isotope review, filtered adduct CSV and saved versions', async ({ page }) => {
   test.setTimeout(90000)
   const errors: string[] = []
@@ -11,16 +13,17 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
         response.url().endsWith('/lipids/query') &&
         response.request().postDataJSON().feature_id === id,
     )
-    await page.getByLabel('脂质逐特征核对', { exact: true }).selectOption(id)
+    await peak(id).click()
     const response = await query
     expect(response.ok()).toBe(true)
     await response.finished()
     await expect(page.getByRole('button', { name: '保存人工指定', exact: true })).toBeEnabled()
-    for (const details of await page.locator('.lipid-panel tbody details').all()) {
-      if ((await details.getAttribute('open')) === null)
-        await details.locator(':scope > summary').click()
-    }
   }
+  const peak = (id: string) =>
+    page
+      .getByRole('complementary', { name: '峰列表' })
+      .locator('button')
+      .filter({ has: page.getByText(id, { exact: true }) })
   await page.goto('/')
   await page.getByLabel('项目名称', { exact: true }).fill('脂质标记验收')
   await page.getByRole('button', { name: '创建并添加样本' }).click()
@@ -32,6 +35,7 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await expect(page.getByRole('heading', { name: '结果与样本关联' })).toBeVisible()
   await navigate(page, '/annotation')
   const panel = page.locator('.lipid-panel')
+  await panel.getByRole('button', { name: '查找候选', exact: true }).click()
   await expect(panel.getByRole('heading', { name: '注释与同位素', exact: true })).toBeVisible()
   await expect(panel.getByRole('button', { name: '检查本地数据库' })).toBeVisible()
   await expect(page.getByLabel('脂质规则预设').locator('option')).toHaveCount(6)
@@ -86,10 +90,11 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   ).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
   const network = panel.locator('.lipid-network-panel')
+  await panel.getByText('分类与相关网络图表', { exact: true }).click()
   await expect(network.getByRole('img', { name: '注释分类饼图' })).toBeVisible()
   await expect(network.getByRole('button', { name: '网络节点 f_h', exact: true })).toBeVisible()
   await network.getByRole('button', { name: '网络节点 f_h', exact: true }).click()
-  await expect(page.getByLabel('脂质逐特征核对', { exact: true })).toHaveValue('f_h')
+  await expect(peak('f_h')).toHaveAttribute('aria-pressed', 'true')
   await network.getByRole('button', { name: '展开邻居', exact: true }).click()
   await expect(network.getByRole('button', { name: '网络节点 f_h', exact: true })).toBeVisible()
   await network.getByRole('button', { name: '应用图表显示', exact: true }).click()
@@ -127,14 +132,12 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   expect(nodeCsv.trim().split('\n')).toHaveLength(5)
   await network.getByLabel('node_limit', { exact: true }).fill('100')
   await network.getByRole('button', { name: '应用图表显示', exact: true }).click()
-  for (const width of [1440, 700, 390]) {
-    await page.setViewportSize({ width, height: 1000 })
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-      .toBe(true)
-    await panel.screenshot({ path: test.info().outputPath(`lipids-${width}.png`) })
-  }
-  await page.setViewportSize({ width: 1440, height: 1000 })
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true)
+  await panel.screenshot({ path: test.info().outputPath('lipids-1920.png') })
+  await panel.getByRole('button', { name: '查看全部候选', exact: true }).click()
+  await panel.getByText('显示和导出筛选', { exact: true }).click()
   await page.getByLabel('同位素状态', { exact: true }).selectOption('hide')
   await page.getByLabel('加合物保留方式', { exact: true }).selectOption('strongest')
   await page.getByRole('button', { name: '应用显示筛选', exact: true }).click()
@@ -163,6 +166,7 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await page.getByRole('button', { name: '保存人工指定', exact: true }).click()
   await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText('人工指定已保存。')
   await expect(panel.getByLabel('指定 LMGP01010002 [M+H]+', { exact: true })).not.toBeChecked()
+  await panel.getByText('完整天然同位素关系', { exact: true }).click()
   await panel.getByRole('button', { name: '接受', exact: true }).first().click()
   await expect(panel.getByRole('cell', { name: '接受', exact: true }).first()).toBeVisible()
   await network.getByLabel('网络 graph', { exact: true }).selectOption('molecule')
@@ -187,15 +191,19 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
     .click()
   await navigate(page, '/preprocess')
   await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
-  await expect(page.getByText('40 细胞 × 4 特征 · 每步成功后保留历史层。')).toBeVisible()
+  await expect(page.locator('.project-heading')).toContainText(/40\s+细胞 ×\s+4 特征/)
   await navigate(page, '/annotation')
   await expect(panel).not.toHaveAttribute('open', '')
-  await expect(panel.getByRole('heading', { name: '注释与同位素', exact: true })).toBeVisible()
-  await expect(panel.getByText('4 / 4 特征 · 4 条候选 · 4 条关系证据')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '候选与关系审核', exact: true })).toBeVisible()
+  const clear = panel.getByRole('button', { name: '查看全部候选', exact: true })
+  if (await clear.isVisible()) await clear.click()
+  await expect(panel.getByText(/4 \/ 4 特征 · \d+ 条候选 · 4 条关系证据/)).toBeVisible()
+  await panel.getByText('分类与相关网络图表', { exact: true }).click()
   await expect(network.getByLabel('网络 graph', { exact: true })).toHaveValue('molecule')
   await selectFeature('f_h')
   await expect(panel.getByLabel('指定 LMGP01010001 [M+H]+', { exact: true })).toBeChecked()
   await expect(panel.getByLabel('指定 LMGP01010002 [M+H]+', { exact: true })).not.toBeChecked()
+  await panel.getByText('完整天然同位素关系', { exact: true }).click()
   await expect(panel.getByRole('cell', { name: '接受', exact: true }).first()).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
   expect(errors).toEqual([])

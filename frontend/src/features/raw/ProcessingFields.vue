@@ -7,23 +7,28 @@ const props = defineProps<{
   fields: string[]
   disabled?: boolean
   referencePresets?: Record<string, number>
+  sections?: { title: string; fields: string[] }[]
+  ariaPrefix?: string
 }>()
 const model = defineModel<Record<string, unknown>>({ required: true })
 const emit = defineEmits<{ edited: []; 'preset-selected': [name: string] }>()
 const store = useWorkspace()
 const referenceListId = useId()
-const groups = computed(() =>
-  props.fields.includes('cell_snr') && props.fields.includes('ref_mz')
-    ? [
-        {
-          title: '参考与提取范围',
-          fields: ['ref_mz', 'mz_min', 'mz_max', 'rt_range', 'frame_range'],
-        },
-        { title: '细胞识别', fields: ['cell_snr', 'cell_min_signal'] },
-        { title: '特征保留', fields: ['feature_snr_threshold', 'max_zero_frac'] },
-      ]
-    : [{ title: '', fields: props.fields }],
+const groups = computed(
+  () =>
+    props.sections ??
+    (props.fields.includes('cell_snr') && props.fields.includes('ref_mz')
+      ? [
+          {
+            title: '参考与提取范围',
+            fields: ['ref_mz', 'mz_min', 'mz_max', 'rt_range', 'frame_range'],
+          },
+          { title: '细胞识别', fields: ['cell_snr', 'cell_min_signal'] },
+          { title: '特征保留', fields: ['feature_snr_threshold', 'max_zero_frac'] },
+        ]
+      : [{ title: '', fields: props.fields }]),
 )
+const fieldId = (key: string) => (props.ariaPrefix ? props.ariaPrefix + ' ' + key : key)
 function updateMass(key: string, value: number | null) {
   model.value[key] = value
   if (key === 'ref_mz') {
@@ -101,7 +106,7 @@ function unit(key: string) {
                 :key="i"
                 :model-value="rangeValue(key, i)"
                 :decimals="key === 'rt_range' ? 1 : 0"
-                :aria-label="`${key}_${i}`"
+                :aria-label="fieldId(`${key}_${i}`)"
                 :disabled="disabled"
                 @update:model-value="(value) => rangeNumber(key, i, value)"
               />
@@ -109,7 +114,7 @@ function unit(key: string) {
             <select
               v-else-if="key === 'reference_mode'"
               v-model="model[key]"
-              :aria-label="key"
+              :aria-label="fieldId(key)"
               :disabled="disabled"
               @change="emit('edited')"
             >
@@ -119,7 +124,7 @@ function unit(key: string) {
             <MassListInput
               v-else-if="key === 'reference_mz'"
               v-model="model[key]"
-              :aria-label="key"
+              :aria-label="fieldId(key)"
               :disabled="disabled"
               placeholder="逗号分隔；空值使用主参考离子"
               @input="emit('edited')"
@@ -129,15 +134,15 @@ function unit(key: string) {
               :model-value="model[key]"
               :list="key === 'ref_mz' && referencePresets ? referenceListId : undefined"
               :decimals="4"
-              :aria-label="key"
+              :aria-label="fieldId(key)"
               :disabled="disabled"
               @update:model-value="(value) => updateMass(key, value)"
             />
             <ScientificInput
               v-else-if="/snr|signal|intensity/.test(key)"
               v-model="model[key]"
-              scientific
-              :aria-label="key"
+              plain
+              :aria-label="fieldId(key)"
               :disabled="disabled"
               @update:model-value="emit('edited')"
             />
@@ -146,7 +151,7 @@ function unit(key: string) {
               v-model.number="model[key]"
               type="number"
               step="any"
-              :aria-label="key"
+              :aria-label="fieldId(key)"
               :disabled="disabled"
               @input="emit('edited')"
             />

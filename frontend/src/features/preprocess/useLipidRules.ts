@@ -7,6 +7,7 @@ export function useLipidRules(
   store: ReturnType<typeof useWorkspace>,
   info: Ref<LipidInfo | undefined>,
   version: () => string,
+  source: () => string,
   loadResults: () => Promise<boolean>,
   limit: number,
 ) {
@@ -58,7 +59,7 @@ export function useLipidRules(
   async function applyRules() {
     const value = await store.mutate(
       '/lipids/rules/apply',
-      { version: version(), rules: rules.value },
+      { version: version(), source: source(), rules: rules.value },
       'POST',
       '',
     )

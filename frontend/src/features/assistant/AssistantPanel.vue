@@ -31,11 +31,16 @@ watch(
 const questions = ['当前进行到哪一步了？', '当前结果说明什么？', '下一步建议做什么？']
 </script>
 <template>
-  <aside class="ai-assistant" :class="{ open }" aria-label="AI 分析助手">
-    <button class="ai-toggle primary" :aria-expanded="open" @click="open = !open">
+  <aside class="ai-assistant" aria-label="AI 分析助手">
+    <button
+      class="ai-toggle"
+      :aria-expanded="open"
+      aria-controls="assistant-content"
+      @click="open = !open"
+    >
       {{ open ? '收起 AI 助手' : 'AI 分析助手' }}<span v-if="busy"> · 生成中</span>
     </button>
-    <section v-show="open" class="ai-body">
+    <section v-show="open" id="assistant-content" class="ai-body">
       <h2>AI 分析助手</h2>
       <p role="status">{{ historyStatus }}</p>
       <p>只读解释与建议 · 当前模型：{{ model || '未配置' }}</p>
@@ -101,66 +106,29 @@ const questions = ['当前进行到哪一步了？', '当前结果说明什么�
   </aside>
 </template>
 <style scoped>
-.ai-assistant {
-  position: fixed;
-  right: 1.25rem;
-  bottom: 1rem;
-  z-index: 40;
-  max-width: calc(100vw - 2rem);
-}
-.ai-toggle {
-  float: right;
-  box-shadow: 0 2px 8px #173b4518;
+.ai-toggle[aria-expanded='true'] {
+  background: #e7f4f4;
+  border-color: #8cbebb;
+  color: var(--teal);
 }
 .ai-body {
-  clear: both;
-  width: 430px;
-  max-width: calc(100vw - 2rem);
-  max-height: calc(100dvh - 6rem);
+  position: fixed;
+  top: calc(var(--topbar-height) + 9px);
+  right: 18px;
+  bottom: 18px;
+  width: min(424px, calc(100vw - 36px));
   overflow: auto;
-  padding: 1.2rem;
-  background: var(--surface, white);
-  color: var(--text, #172b32);
-  border: 1px solid #d2dfdc;
-  border-radius: 3px;
-  box-shadow: 0 5px 20px #173b4524;
-}
-@media (min-width: 1800px) {
-  .ai-assistant.open {
-    top: 1rem;
-    width: 430px;
-    display: flex;
-    flex-direction: column;
-  }
-  .open .ai-toggle {
-    align-self: flex-end;
-    margin-bottom: 0.5rem;
-  }
-  .open .ai-body {
-    flex: 1;
-    min-height: 0;
-    max-height: none;
-  }
+  overscroll-behavior: contain;
+  padding: 16px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-raised);
 }
 @media (max-width: 760px) {
-  .ai-assistant.open {
-    inset: 0;
-    max-width: none;
-    display: flex;
-    flex-direction: column;
-    background: white;
-    padding: 0.75rem;
-  }
-  .open .ai-toggle {
-    align-self: flex-end;
-  }
-  .open .ai-body {
-    margin-top: 0.5rem;
-    flex: 1;
-    width: 100%;
-    max-width: none;
-    max-height: none;
-    min-height: 0;
+  .ai-body {
+    top: 132px;
   }
 }
 .ai-body h2 {
@@ -205,26 +173,5 @@ textarea {
   width: 100%;
   box-sizing: border-box;
   margin: 0.5rem 0;
-}
-</style>
-
-<style scoped>
-@media (min-width: 761px) and (max-width: 1799px) {
-  .ai-assistant.open {
-    width: 360px;
-    top: 90px;
-    bottom: 16px;
-    display: flex;
-    flex-direction: column;
-  }
-  .ai-body {
-    width: 100%;
-    flex: 1;
-    min-height: 0;
-  }
-  .ai-toggle {
-    align-self: flex-end;
-    margin-bottom: 8px;
-  }
 }
 </style>

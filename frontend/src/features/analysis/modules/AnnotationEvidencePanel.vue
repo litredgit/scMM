@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { useAnalysisContext } from '../composables/useAnalysisContext'
+import { useWorkspace } from '../../../stores/workspace'
+import { useAnnotationSource } from '../../annotation/useAnnotationSource'
+import EvidenceRecords from '../../annotation/EvidenceRecords.vue'
 import type { DataTable, Figure } from '../../../api/types'
-import PlotView from '../../../components/PlotView.vue'
 import DataTableView from '../../../components/DataTable.vue'
 import { useViewState } from '../../../api/viewState'
-const { store, info, refreshAnalysis } = useAnalysisContext()
+const store = useWorkspace()
+const { source, sourceId } = useAnnotationSource()
+const view = ref<'table' | 'msms'>('table')
+const newest = ref('')
+const featureColumns = ref<string[]>(['mz'])
 const content = ref(''),
   format = ref('csv'),
   mappingText = ref('name=manual_annotation'),
@@ -28,24 +33,32 @@ const measured = ref(''),
   fragmentPPM = ref(20),
   score = ref(0.5),
   matches = ref(3)
-const figure = ref<Figure>()
 watch(
-  () => [store.current?.workspace_id, store.project?.path, store.project?.dataset?.id],
+  () => [store.current?.workspace_id, store.project?.path, source.value?.identity],
   () => {
     preview.value = undefined
-    figure.value = undefined
+    newest.value = ''
   },
+)
+watch(
+  () => [sourceId.value, source.value?.identity],
+  async () => {
+    const identity = source.value?.identity
+    featureColumns.value = ['mz']
+    if (!identity) return
+    const payload = await store.read<{ feature_columns: string[] }>(
+      '/lipids?source=' + encodeURIComponent(sourceId.value),
+      undefined,
+      () => source.value?.identity === identity,
+    )
+    if (payload) featureColumns.value = payload.feature_columns
+  },
+  { immediate: true },
 )
 watch(
   [content, format, mappingText, sourceKey, targetKey, alignment, ppm, clear, transpose],
   () => {
     preview.value = undefined
-  },
-)
-watch(
-  () => info.value?.figures,
-  (values) => {
-    if (values && !values.includes('msms_evidence')) figure.value = undefined
   },
 )
 async function file(event: Event, type: 'content' | 'measured' | 'library') {
@@ -67,6 +80,7 @@ function annotationOptions() {
       }),
   )
   return {
+    source: sourceId.value,
     content: content.value,
     format: format.value,
     mapping,
@@ -79,40 +93,33 @@ function annotationOptions() {
   }
 }
 async function annotate(apply = false) {
-  await store.analysisTransaction(async (api) => {
-    const value = await api.command<typeof preview.value>(
-      `/analysis/annotations/${apply ? 'apply' : 'preview'}`,
-      annotationOptions(),
-    )
-    if (api.isCurrent?.() === false) return
-    if (!apply && value) preview.value = value
-    if (apply) preview.value = undefined
-    await refreshAnalysis(api)
-  })
+  const value = await store.command<typeof preview.value>(
+    `/analysis/annotations/${apply ? 'apply' : 'preview'}`,
+    annotationOptions(),
+  )
+  if (value) {
+    preview.value = apply ? undefined : value
+    if (apply) store.notice = '注释已应用，请保存项目。'
+  }
 }
-async function search(saved = false) {
-  await store.analysisTransaction(async (api) => {
-    const value = saved
-      ? await api.read<Figure>('/analysis/figures/msms_evidence')
-      : await api.command<Figure>('/analysis/msms', {
-          measured: measured.value,
-          library: library.value,
-          measured_format: measuredFormat.value,
-          library_format: libraryFormat.value,
-          sample_pool: pool.value,
-          polarity: polarity.value,
-          collision_energy: energy.value,
-          instrument: instrument.value,
-          precursor_ppm: precursorPPM.value,
-          fragment_ppm: fragmentPPM.value,
-          minimum_score: score.value,
-          minimum_matches: matches.value,
-        })
-    if (value && api.isCurrent?.() !== false) {
-      figure.value = value
-      await refreshAnalysis(api)
-    }
+async function search() {
+  const value = await store.command<Figure>('/analysis/msms', {
+    source: sourceId.value,
+    measured: measured.value,
+    library: library.value,
+    measured_format: measuredFormat.value,
+    library_format: libraryFormat.value,
+    sample_pool: pool.value,
+    polarity: polarity.value,
+    collision_energy: energy.value,
+    instrument: instrument.value,
+    precursor_ppm: precursorPPM.value,
+    fragment_ppm: fragmentPPM.value,
+    minimum_score: score.value,
+    minimum_matches: matches.value,
   })
+  const meta = value?.layout.meta as { annotation_record?: string } | undefined
+  if (meta?.annotation_record) newest.value = meta.annotation_record
 }
 useViewState('annotation_evidence', {
   mappingText,
@@ -132,13 +139,16 @@ useViewState('annotation_evidence', {
   fragmentPPM,
   score,
   matches,
-  figure,
+  view,
 })
 </script>
 <template>
-  <div class="card">
-    <h2>外部注释与谱图证据</h2>
-    <section>
+  <div v-if="source" class="card evidence-input">
+    <div class="tabs">
+      <button :aria-pressed="view === 'table'" @click="view = 'table'">已有注释表</button>
+      <button :aria-pressed="view === 'msms'" @click="view = 'msms'">MS/MS 搜索</button>
+    </div>
+    <section v-show="view === 'table'">
       <h3>导入注释表</h3>
       <p>按稳定编号或指定字段对齐。多条匹配会阻止写入；按顺序导入须显式选择且行数一致。</p>
       <label
@@ -177,7 +187,7 @@ useViewState('annotation_evidence', {
         ><label
           >当前特征匹配列<select v-model="targetKey" :disabled="store.busy">
             <option value="feature_id">稳定特征编号</option>
-            <option v-for="key in info?.feature_columns" :key="key" :value="key">{{ key }}</option>
+            <option v-for="key in featureColumns" :key="key" :value="key">{{ key }}</option>
           </select></label
         ><label v-if="targetKey === 'mz'"
           >质量匹配容差（ppm）<input
@@ -195,7 +205,11 @@ useViewState('annotation_evidence', {
       <div class="actions">
         <button class="preview" :disabled="store.busy || !content" @click="annotate()">
           预览匹配</button
-        ><button class="primary" :disabled="store.busy || !content" @click="annotate(true)">
+        ><button
+          class="primary"
+          :disabled="store.busy || !preview || !!preview.ambiguous"
+          @click="annotate(true)"
+        >
           应用注释
         </button>
       </div>
@@ -206,7 +220,7 @@ useViewState('annotation_evidence', {
         <DataTableView :table="preview.table"
       /></template>
     </section>
-    <section>
+    <section v-show="view === 'msms'">
       <h3>MS/MS 候选搜索</h3>
       <p>
         导入带前体质量的实测与参考 MGF/MSP
@@ -273,16 +287,30 @@ useViewState('annotation_evidence', {
           :disabled="store.busy || !measured || !library || !pool"
           @click="search()"
         >
-          搜索候选证据</button
-        ><button
-          class="preview"
-          :disabled="store.busy || !info?.figures.includes('msms_evidence')"
-          @click="search(true)"
-        >
-          读取已保存证据
+          搜索候选证据
         </button>
       </div>
-      <PlotView v-if="figure" :figure="figure" name="msms_evidence" />
     </section>
   </div>
+  <p v-else class="card">
+    导入注释表和实测二级比对需要稳定的测量峰来源。已有证据记录可在下方查询。
+  </p>
+  <EvidenceRecords :newest="newest" />
 </template>
+
+<style scoped>
+.evidence-input section {
+  margin-top: 8px;
+}
+.evidence-input section > label {
+  display: inline-grid;
+  gap: 3px;
+  min-width: 160px;
+  margin: 3px 7px 5px 0;
+  vertical-align: top;
+}
+.evidence-input button[aria-pressed='true'] {
+  background: #e4f2f4;
+  border-color: var(--teal);
+}
+</style>

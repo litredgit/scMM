@@ -30,27 +30,59 @@ async function activate() {
 }
 </script>
 <template>
-  <div v-if="info?.initialized" class="card">
-    <div class="field-grid">
-      <label
-        >分析视图与分支<select v-model="selected" aria-label="分析视图与分支">
-          <option v-for="branch in info.branches" :key="branch.id" :value="branch.id">
-            {{ info.views.find((row) => row.id === branch.view_id)?.level }} ·
-            {{ branch.cells }} 细胞 × {{ branch.variables }} 变量 · {{ branch.id.slice(0, 8) }}
-          </option>
-        </select></label
-      >
-      <button
-        class="primary"
-        :disabled="store.busy || selected === info.active_branch_id"
-        @click="activate"
-      >
-        切换分析分支
-      </button>
+  <div v-if="info?.initialized" class="card analysis-input-bar">
+    <label>
+      <span>分析视图与分支</span>
+      <select v-model="selected" aria-label="分析视图与分支" :disabled="store.busy">
+        <option v-for="branch in info.branches" :key="branch.id" :value="branch.id">
+          {{ info.views.find((row) => row.id === branch.view_id)?.level }} · {{ branch.cells }} 细胞
+          × {{ branch.variables }} 变量 · {{ branch.id.slice(0, 8) }}
+        </option>
+      </select>
+    </label>
+    <HelpTip
+      label="L0、L1 与 L2"
+      text="L0 保留全部特征；L1 保留未知并按审阅去冗余；L2 使用固定代表离子。各分支独立预处理和保存结果。"
+    />
+    <button
+      class="primary"
+      :disabled="store.busy || !selected || selected === info.active_branch_id"
+      @click="activate"
+    >
+      作为统计输入
+    </button>
+    <div class="actions">
+      <RouterLink to="/annotation">回看测量峰与候选 →</RouterLink>
+      <RouterLink v-if="$route.path !== '/ions'" to="/ions">定量视图 →</RouterLink>
     </div>
-    <p class="muted">
-      L0 保留全部特征；L1 保留未知并按审阅去冗余；L2 使用固定代表离子。各分支独立预处理和保存结果。
-    </p>
-    <RouterLink to="/ions">离子归组、化合物候选与证据</RouterLink>
   </div>
 </template>
+
+<style scoped>
+.analysis-input-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 10px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.analysis-input-bar > label {
+  flex: 0 1 450px;
+  flex-direction: row;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+.analysis-input-bar label > span {
+  flex-shrink: 0;
+}
+.analysis-input-bar > .actions {
+  gap: 12px;
+  margin: 0 0 0 auto;
+  color: var(--teal);
+}
+.analysis-input-bar a:hover {
+  text-decoration: underline;
+}
+</style>

@@ -1,4 +1,4 @@
-import { navigate, test, expect, type Page } from './fixtures'
+import { navigate, test, expect, pinAnalysisParameters, type Page } from './fixtures'
 import { importDataset as importData } from './support/project'
 
 test.use({ actionTimeout: 15000 })
@@ -32,7 +32,7 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
     '已恢复完整预处理起点。',
   )
   await navigate(page, '/analysis')
-  await page.getByRole('button', { name: '固定参数区', exact: true }).first().click()
+  await pinAnalysisParameters(page)
   await page.getByRole('button', { name: '运行降维', exact: true }).click()
   await expect(page.getByLabel('查看嵌入', { exact: true })).toHaveValue('X_pca')
   await expect(page.locator('.js-plotly-plot').first()).toBeVisible()
@@ -137,7 +137,10 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
   await expect(validationNotes).toContainText('细胞数不等于生物重复')
   await noError(page)
   await analysisModule(page, 'differential', '差异与 Marker')
-  await page.getByRole('button', { name: '展开计算参数', exact: true }).first().click()
+  const expand = page.getByRole('button', { name: '展开计算参数', exact: true }).first()
+  const collapse = page.getByRole('button', { name: '收起计算参数', exact: true }).first()
+  await expect(expand.or(collapse)).toBeVisible()
+  if (await expand.isVisible()) await expand.click()
   const invalidated = page.waitForResponse((response) =>
     response.url().endsWith('/analysis/invalidate'),
   )

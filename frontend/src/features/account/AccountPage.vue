@@ -73,12 +73,12 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
 </script>
 <template>
   <section>
-    <h1>我的账号</h1>
-    <p>
-      当前账号：{{
-        auth.user?.username
-      }}。团队共享全部项目和指定原始数据；退出登录不会自动保存项目。
-    </p>
+    <div class="page-title">
+      <div>
+        <h1>我的账号</h1>
+        <p>{{ auth.user?.username }} · {{ auth.admin ? '管理员' : '团队成员' }}</p>
+      </div>
+    </div>
     <SectionNav
       :items="[
         { id: 'personal-settings', label: '个人设置' },
@@ -91,36 +91,38 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
           : []),
       ]"
     />
-    <section id="personal-settings" class="task-section" aria-label="个人设置">
-      <h2>个人设置</h2>
-      <form class="card" @submit.prevent="change">
-        <h3>修改密码</h3>
-        <p>修改后所有设备需要重新登录。请先保存当前项目。</p>
-        <label
-          >当前密码<input
-            v-model="current"
-            type="password"
-            autocomplete="current-password"
-            required
-            maxlength="128"
-        /></label>
-        <label
-          >新密码<input
-            v-model="next"
-            type="password"
-            autocomplete="new-password"
-            required
-            minlength="15"
-            maxlength="128"
-        /></label>
-        <p v-if="auth.error" role="alert">{{ auth.error }}</p>
-        <button class="primary" :disabled="auth.busy || store.busy">修改密码</button>
-      </form>
-    </section>
-    <section id="personal-ai" class="task-section" aria-label="个人 AI">
-      <h2>个人 AI</h2>
-      <AISettings />
-    </section>
+    <div class="account-preferences">
+      <section id="personal-settings" class="task-section" aria-label="个人设置">
+        <h2>个人设置</h2>
+        <form class="card" @submit.prevent="change">
+          <h3>修改密码</h3>
+          <p>修改后所有设备需要重新登录。请先保存当前项目。</p>
+          <label
+            >当前密码<input
+              v-model="current"
+              type="password"
+              autocomplete="current-password"
+              required
+              maxlength="128"
+          /></label>
+          <label
+            >新密码<input
+              v-model="next"
+              type="password"
+              autocomplete="new-password"
+              required
+              minlength="15"
+              maxlength="128"
+          /></label>
+          <p v-if="auth.error" role="alert">{{ auth.error }}</p>
+          <button class="primary" :disabled="auth.busy || store.busy">修改密码</button>
+        </form>
+      </section>
+      <section id="personal-ai" class="task-section" aria-label="个人 AI">
+        <h2>个人 AI</h2>
+        <AISettings />
+      </section>
+    </div>
     <section v-if="auth.admin" id="team-management" class="task-section" aria-label="团队管理">
       <h2>团队管理</h2>
       <form class="card" @submit.prevent="create">
@@ -205,6 +207,15 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
   </section>
 </template>
 <style scoped>
+.account-preferences {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.account-preferences > section {
+  margin-top: 0;
+}
 label {
   display: grid;
   gap: 0.5rem;

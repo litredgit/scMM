@@ -612,6 +612,7 @@ class SelectionLabel(RevisionRequest):
 
 
 class AnnotationTable(RevisionRequest):
+    source: str = Field(default="", max_length=100)
     content: str = Field(max_length=10_000_000)
     format: Literal["csv", "tsv"] = "csv"
     header: bool = True
@@ -626,6 +627,7 @@ class AnnotationTable(RevisionRequest):
 
 
 class MSMSSearch(RevisionRequest):
+    source: str = Field(default="", max_length=100)
     measured: str = Field(max_length=10_000_000)
     library: str = Field(max_length=10_000_000)
     measured_format: Literal["mgf", "msp"] = "mgf"
@@ -638,6 +640,32 @@ class MSMSSearch(RevisionRequest):
     polarity: Literal["positive", "negative"]
     collision_energy: str = Field(default="", max_length=200)
     instrument: str = Field(default="", max_length=200)
+
+
+class AnnotationEvidenceTarget(Controls):
+    source: str = Field(min_length=1, max_length=100)
+    kind: Literal["feature", "candidate", "ec"]
+    id: str = Field(min_length=1, max_length=1000)
+    version: str = Field(default="", max_length=100)
+    feature_id: str = Field(default="", max_length=1000)
+
+
+class AnnotationEvidenceLink(RevisionRequest):
+    target: AnnotationEvidenceTarget
+    record_id: str = Field(min_length=1, max_length=100)
+    row: int | None = Field(default=None, ge=0)
+    decision: Literal["linked", "withdrawn"] = "linked"
+    reason: str = Field(default="", max_length=2000)
+
+
+class AnnotationEvidenceImport(RevisionRequest):
+    source_name: str = Field(min_length=1, max_length=200)
+    scope: str = Field(min_length=1, max_length=1000)
+    kind: Literal[
+        "blank", "standard", "bulk_msms", "experience", "literature", "user_review", "tracer"
+    ]
+    format: Literal["json", "mgf", "msp", "text"]
+    content: str = Field(min_length=1, max_length=10_000_000)
 
 
 class SelectionPlot(RevisionRequest):

@@ -1,11 +1,22 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onActivated, onDeactivated, onUnmounted, ref, watch } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import { ionPath, type IonInfo, type IonTable, type IonView } from '../../api/ions'
 import { saveBlob, workspaceBlob } from '../../api/workspaceDownload'
 import { serialPolling } from '../../api/polling'
 import DataTableView from '../../components/DataTable.vue'
 import DataViewSelector from './DataViewSelector.vue'
+import AnnotationHeader from '../annotation/AnnotationHeader.vue'
+import CompoundSourcePanel from './CompoundSourcePanel.vue'
+import { useAnnotationSource } from '../annotation/useAnnotationSource'
+const props = withDefaults(
+  defineProps<{
+    surface?: 'quantitative' | 'review' | 'search' | 'evidence'
+    focusFeature?: string
+  }>(),
+  { surface: 'quantitative', focusFeature: '' },
+)
+const { sourceId, source, grouping, selectTarget } = useAnnotationSource()
 const store = useWorkspace()
 const info = ref<IonInfo>()
 const root = ref(''),
@@ -13,6 +24,7 @@ const root = ref(''),
   annotation = ref(''),
   tableKind = ref('relations')
 const table = ref<IonTable>(),
+  groupRelations = ref<IonTable>(),
   offset = ref(0)
 const polarity = ref('pos'),
   ppm = ref(5),
@@ -30,11 +42,10 @@ const groupId = ref(''),
   reason = ref('')
 const databaseFormat = ref('json'),
   fieldMapping = ref('{}')
+const compoundTarget = ref('features'),
+  compoundFormulas = ref('[]')
 const database = ref(''),
-  namespace = ref('local'),
-  evidence = ref('[]'),
-  evidenceFormat = ref('json'),
-  sourceName = ref('manual evidence')
+  namespace = ref('local')
 const availabilityView = ref(''),
   availabilityAxis = ref('cells'),
   availabilityIds = ref(''),
@@ -53,6 +64,37 @@ const evidenceLinks = ref('{}'),
   mergeAlignments = ref('[]'),
   overlayTarget = ref('')
 let generation = 0
+let tableGeneration = 0
+const versions = computed(
+  () => info.value?.versions?.filter((row) => row.root_id === root.value) ?? [],
+)
+const focusedOnly = ref(true)
+const localVersions = computed(
+  () =>
+    info.value?.annotation_versions?.filter(
+      (key) => info.value?.annotation_roots?.[key] === root.value,
+    ) ?? [],
+)
+const representation = ref<{
+  views: Record<string, unknown>[]
+  metadata: Record<string, unknown>
+}>()
+const representationOptions = computed(() => ({
+  version: version.value,
+  mode: mode.value,
+  strategy: strategy.value,
+  include_singletons: singletons.value,
+}))
+watch(representationOptions, () => {
+  representation.value = undefined
+})
+watch(
+  () => store.current?.revision,
+  () => {
+    representation.value = undefined
+  },
+)
+
 const availableSpecies = computed(
   () => info.value?.species.filter((row) => row.polarity === polarity.value) ?? [],
 )
@@ -66,34 +108,47 @@ function ids(text: string) {
   return text.split(/[\s,;]+/).filter(Boolean)
 }
 async function refresh() {
+  if (!store.project) {
+    info.value = undefined
+    return
+  }
   const token = ++generation
   const result = await store.read<IonInfo>(ionPath('info'), undefined, () => token === generation)
   if (!result) return
   info.value = result
-  if (!result.roots?.some((row) => row.id === root.value)) root.value = result.roots?.[0]?.id ?? ''
-  if (!result.versions?.some((row) => row.id === version.value))
-    version.value = result.versions?.at(-1)?.id ?? ''
-  if (!result.annotation_versions?.includes(annotation.value))
-    annotation.value = result.annotation_versions?.at(-1) ?? ''
+  root.value = result.roots?.some((row) => row.id === sourceId.value) ? sourceId.value : ''
+  if (!versions.value.some((row) => row.id === version.value))
+    version.value =
+      versions.value.find((item) => item.id === grouping.value)?.id ??
+      versions.value.at(-1)?.id ??
+      ''
+  if (!localVersions.value.includes(annotation.value))
+    annotation.value = localVersions.value.at(-1) ?? ''
 }
 watch(
-  () => [store.current?.workspace_id, store.current?.revision],
+  () => [store.project?.path, store.current?.revision, sourceId.value],
   () => void refresh(),
   { immediate: true },
 )
 watch(
-  () => [version.value, annotation.value, tableKind.value, offset.value],
+  () => [
+    version.value,
+    annotation.value,
+    tableKind.value,
+    offset.value,
+    focusedOnly.value,
+    props.focusFeature,
+  ],
   () => void loadTable(),
 )
-watch(
-  () => [version.value, tableKind.value],
-  () => {
-    offset.value = 0
-    groupId.value = ''
-    hypothesisId.value = ''
-    relationIds.value = ''
-  },
-)
+watch(version, (value) => {
+  if (props.surface === 'review' && value) grouping.value = value
+  offset.value = 0
+  groupId.value = ''
+  hypothesisId.value = ''
+  relationIds.value = ''
+  groupRelations.value = undefined
+})
 async function loadTable() {
   if (!info.value?.initialized) return
   const key = ['candidates', 'unknown'].includes(tableKind.value) ? annotation.value : version.value
@@ -104,31 +159,63 @@ async function loadTable() {
     table.value = undefined
     return
   }
+  const token = ++tableGeneration
   const query = new URLSearchParams({
     version: key,
     kind: tableKind.value,
     offset: String(offset.value),
     limit: '100',
+    feature_id: focusedOnly.value ? props.focusFeature : '',
   })
-  const signature = query.toString()
   const result = await store.read<IonTable>(
     `${ionPath('table')}?${query}`,
     undefined,
-    () =>
-      signature ===
-      new URLSearchParams({
-        version: ['candidates', 'unknown'].includes(tableKind.value)
-          ? annotation.value
-          : version.value,
-        kind: tableKind.value,
-        offset: String(offset.value),
-        limit: '100',
-      }).toString(),
+    () => token === tableGeneration,
   )
   if (result) table.value = result
 }
+async function loadGroupRelations() {
+  const ec = groupId.value
+  const revision = version.value
+  if (!ec || !revision) return
+  const query = new URLSearchParams({
+    version: revision,
+    kind: 'relations',
+    ec_id: ec,
+    limit: '200',
+  })
+  const result = await store.read<IonTable>(
+    `${ionPath('table')}?${query}`,
+    undefined,
+    () => groupId.value === ec && version.value === revision,
+  )
+  if (result) groupRelations.value = result
+}
+watch(groupId, () => {
+  groupRelations.value = undefined
+  void loadGroupRelations()
+})
+async function reviewRelation(id: string, decision: string) {
+  await command('review', {
+    version: version.value,
+    kind: 'relation',
+    target_id: id,
+    decision,
+    reason: reason.value.trim() || '人工核对峰关系',
+    scope: { root_id: root.value },
+  })
+  await loadGroupRelations()
+}
+async function previewRepresentation() {
+  representation.value = await store.command(
+    ionPath('represent/preview'),
+    representationOptions.value,
+  )
+}
+
 async function command(action: string, body: Record<string, unknown> = {}) {
   const result = await store.command(ionPath(action), body)
+  if (result === undefined) return
   await refresh()
   await loadTable()
   return result
@@ -168,8 +255,27 @@ async function acceptGroup(decision: string) {
 }
 function chooseGroup(row: Record<string, unknown>) {
   groupId.value = String(row.ec_id)
-  // Selecting a group never accepts an interpretation. The operator selects the exact role ID below.
-  hypothesisId.value = ''
+  const previous =
+    row.selection && typeof row.selection === 'string' ? JSON.parse(row.selection) : undefined
+  hypothesisId.value = previous?.hypothesis_id ?? ''
+  relationIds.value = (previous?.relation_ids ?? []).join(',')
+  quantifier.value = previous?.quantifier_feature_id ?? ''
+  if (source.value)
+    selectTarget({
+      source: root.value,
+      sourceIdentity: source.value.identity,
+      kind: 'ec',
+      id: groupId.value,
+      version: version.value,
+      members: typeof row.feature_ids === 'string' ? JSON.parse(row.feature_ids) : [],
+      quantifier: previous?.quantifier_feature_id,
+    })
+}
+function toggleSupport(id: string, checked: boolean) {
+  const selected = new Set(ids(relationIds.value))
+  if (checked) selected.add(id)
+  else selected.delete(id)
+  relationIds.value = [...selected].join(',')
 }
 const selectedGroup = computed(() =>
   tableKind.value === 'groups'
@@ -184,9 +290,11 @@ const hypotheses = computed<
 })
 async function annotate() {
   const records = databaseFormat.value === 'json' ? JSON.parse(database.value) : []
-  await command('annotate', {
+  const result = (await command('annotate', {
     root_id: root.value,
-    version: version.value || null,
+    version: compoundTarget.value === 'group' ? version.value || null : null,
+    target_mode: compoundTarget.value === 'group' ? 'ec' : 'feature',
+    formula_targets: compoundTarget.value === 'group' ? JSON.parse(compoundFormulas.value) : [],
     polarity: polarity.value,
     ppm: ppm.value,
     species: species.value,
@@ -195,17 +303,12 @@ async function annotate() {
     content: databaseFormat.value === 'json' ? '' : database.value,
     format: databaseFormat.value,
     field_mapping: JSON.parse(fieldMapping.value),
-  })
-  tableKind.value = 'candidates'
-}
-async function importEvidence() {
-  await command('evidence', {
-    source_name: sourceName.value,
-    format: evidenceFormat.value,
-    records: evidenceFormat.value === 'json' ? JSON.parse(evidence.value) : [],
-    content: evidenceFormat.value === 'json' ? '' : evidence.value,
-  })
-  tableKind.value = 'evidence'
+  })) as { version: string } | undefined
+  if (result) {
+    annotation.value = result.version
+    tableKind.value = 'candidates'
+    offset.value = 0
+  }
 }
 async function linkEvidence() {
   linkResult.value = await store.command(
@@ -279,22 +382,12 @@ async function download(kind: string, key = '') {
     { label: '下载离子数据', phase: 'downloading' },
   )
 }
-async function fileText(event: Event, target: 'database' | 'evidence') {
+async function fileText(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
   const text = await file.text()
-  if (target === 'database') {
-    database.value = text
-    databaseFormat.value = file.name.toLowerCase().split('.').at(-1) ?? 'json'
-  } else {
-    evidence.value = text
-    sourceName.value = file.name
-    evidenceFormat.value = file.name.toLowerCase().endsWith('.mgf')
-      ? 'mgf'
-      : file.name.toLowerCase().endsWith('.msp')
-        ? 'msp'
-        : 'json'
-  }
+  database.value = text
+  databaseFormat.value = file.name.toLowerCase().split('.').at(-1) ?? 'json'
 }
 async function importFile(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
@@ -348,7 +441,11 @@ const polling = serialPolling(
   1500,
   () => {},
 )
-polling.start(false)
+if (props.surface === 'review') polling.start(false)
+onActivated(() => {
+  if (props.surface === 'review') polling.start(false)
+})
+onDeactivated(polling.stop)
 onUnmounted(() => {
   generation++
   polling.stop()
@@ -376,18 +473,11 @@ function label(view: IonView) {
 </script>
 <template>
   <section>
-    <h1>离子归组与化合物注释</h1>
-    <p class="muted">
-      先判断离子关系，再选择定量表示和化学身份。归组不等于鉴定；候选排序不代表鉴定概率。
-    </p>
-    <p>
-      <RouterLink to="/preprocess">进入统计预处理</RouterLink> ·
-      <RouterLink to="/analysis">进入分析</RouterLink>
-    </p>
+    <AnnotationHeader v-if="surface === 'quantitative'" title="定量视图" :grouping="version" />
     <div v-if="!store.project" class="card">请先创建或打开项目。</div>
     <template v-else>
-      <DataViewSelector />
-      <div v-if="!info?.initialized" class="card">
+      <DataViewSelector v-if="surface === 'quantitative'" />
+      <div v-if="!info?.initialized && surface === 'review'" class="card">
         <h2>建立不可变测量来源</h2>
         <p>采用完整预处理起点，保留当前分析及用户图。导入矩阵的线性丰度必须由使用者明确声明。</p>
         <label
@@ -398,23 +488,16 @@ function label(view: IonView) {
         >
         <button
           class="primary"
-          :disabled="store.busy || !store.project.dataset"
+          :disabled="store.busy || !store.project.dataset?.quantitation_available"
           @click="command('initialize', { linearity, origin_kind: 'imported_feature' })"
         >
           启用离子数据目录
         </button>
       </div>
       <template v-if="info?.initialized">
-        <div class="card">
-          <h2>1. 候选关系与竞争解释</h2>
+        <div v-if="surface === 'review' && root" class="card">
+          <h2>生成离子关系与竞争解释</h2>
           <div class="field-grid">
-            <label
-              >测量来源<select v-model="root">
-                <option v-for="row in info.roots" :key="row.id" :value="row.id">
-                  {{ row.id }}
-                </option>
-              </select></label
-            >
             <label
               ><FieldLabel name="采集极性" help-key="polarity" text="按采集极性分别归组" /><select
                 v-model="polarity"
@@ -490,12 +573,12 @@ function label(view: IonView) {
             </button>
           </div>
         </div>
-        <div class="card">
-          <h2>2. 审阅关系及离子角色</h2>
+        <details v-if="surface === 'review' && version" class="card" open>
+          <summary>峰关系与离子组审核</summary>
           <div class="field-grid">
             <label
               >归组版本<select v-model="version">
-                <option v-for="row in info.versions" :key="row.id" :value="row.id">
+                <option v-for="row in versions" :key="row.id" :value="row.id">
                   {{ row.id.slice(0, 8) }} · {{ row.relations }} 关系 / {{ row.groups }} 组 ·
                   {{ row.complete ? '搜索完成' : '未完成' }}
                 </option>
@@ -510,7 +593,6 @@ function label(view: IonView) {
                 <option value="unknown">未知目标</option>
                 <option value="evidence">外部证据</option>
                 <option value="reviews">审阅记录</option>
-                <option value="representations">定量映射与审计</option>
               </select></label
             >
           </div>
@@ -531,28 +613,77 @@ function label(view: IonView) {
               Math.min(offset + 100, table.total)
             }}。下载不受分页限制。
           </p>
-          <DataTableView v-if="table" :table="table.table" />
-          <details v-if="tableKind === 'relations'">
-            <summary>选择支持关系</summary>
-            <div class="actions">
-              <button
-                v-for="row in table?.table.rows"
-                :key="String(row.relation_id)"
-                :disabled="['neutral_loss', 'fragment_form'].includes(String(row.kind))"
-                @click="
-                  relationIds = [...new Set([...ids(relationIds), String(row.relation_id)])].join(
-                    ',',
-                  )
-                "
-              >
-                {{ row.left_feature_id }} → {{ row.right_feature_id }} · {{ row.kind }} · z={{
-                  row.charge_magnitude ?? '?'
-                }}
-                · {{ row.left_species }} / {{ row.right_species }} ·
-                {{ String(row.relation_id).slice(0, 8) }}
-              </button>
-            </div>
-          </details>
+          <label
+            v-if="focusFeature && ['groups', 'relations'].includes(tableKind)"
+            class="inline-check"
+          >
+            <input v-model="focusedOnly" type="checkbox" />仅当前峰 {{ focusFeature }}
+          </label>
+          <div v-if="tableKind === 'relations'" class="data-table relation-grid">
+            <table>
+              <thead>
+                <tr>
+                  <th>支持</th>
+                  <th>峰关系</th>
+                  <th>角色 / 电荷</th>
+                  <th>质量误差</th>
+                  <th>状态</th>
+                  <th>审核</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in table?.table.rows" :key="String(row.relation_id)">
+                  <td>
+                    <input
+                      type="checkbox"
+                      :aria-label="`支持关系 ${row.relation_id}`"
+                      :checked="ids(relationIds).includes(String(row.relation_id))"
+                      :disabled="['neutral_loss', 'fragment_form'].includes(String(row.kind))"
+                      @change="
+                        toggleSupport(
+                          String(row.relation_id),
+                          ($event.target as HTMLInputElement).checked,
+                        )
+                      "
+                    />
+                  </td>
+                  <td>{{ row.left_feature_id }} → {{ row.right_feature_id }} · {{ row.kind }}</td>
+                  <td>
+                    {{ row.left_species }} / {{ row.right_species }} · {{ row.charge_magnitude }}
+                  </td>
+                  <td>{{ row.ppm_error ?? row.mass_error_ppm ?? '—' }}</td>
+                  <td>{{ row.review }}</td>
+                  <td>
+                    <div class="actions">
+                      <button
+                        :disabled="
+                          store.busy ||
+                          row.review === 'accepted' ||
+                          ['neutral_loss', 'fragment_form'].includes(String(row.kind))
+                        "
+                        @click="reviewRelation(String(row.relation_id), 'accepted')"
+                      >
+                        接受峰关系
+                      </button>
+                      <button
+                        :disabled="store.busy || row.review === 'rejected'"
+                        @click="reviewRelation(String(row.relation_id), 'rejected')"
+                      >
+                        否定
+                      </button>
+                      <button
+                        :disabled="store.busy || row.review === 'pending'"
+                        @click="reviewRelation(String(row.relation_id), 'pending')"
+                      >
+                        恢复待审核
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <DataTableView v-else-if="table && tableKind !== 'groups'" :table="table.table" />
           <details v-if="['candidates', 'evidence'].includes(tableKind)">
             <summary>人工审阅当前候选 / 证据</summary>
             <label
@@ -592,8 +723,7 @@ function label(view: IonView) {
               下一页
             </button>
           </div>
-          <details v-if="tableKind === 'groups'">
-            <summary>选择候选组</summary>
+          <div v-if="tableKind === 'groups'" class="group-list" aria-label="候选离子组">
             <div class="actions">
               <button
                 v-for="row in table?.table.rows"
@@ -603,8 +733,8 @@ function label(view: IonView) {
                 {{ String(row.feature_ids) }} · {{ String(row.ec_id).slice(0, 8) }}
               </button>
             </div>
-          </details>
-          <div class="field-grid">
+          </div>
+          <div v-if="tableKind === 'groups' || groupId" class="field-grid">
             <label>候选离子组编号（EC）<input v-model="groupId" aria-label="EC ID" /></label>
             <label title="hypothesis_id：必须明确选择，不默认接受首个解释"
               >离子角色解释<select
@@ -623,17 +753,46 @@ function label(view: IonView) {
                 </option></select
               ><input v-else v-model="hypothesisId" aria-label="离子角色解释"
             /></label>
-            <label title="relation_ids：接受的关系必须符合选择的角色并连接全部成员"
-              >支持关系 ID（逗号分隔）<textarea
-                v-model="relationIds"
-                aria-label="支持关系 ID（逗号分隔）"
-                rows="2"
-              />
-            </label>
             <label title="quantifier_feature_id：留空按稳定检测规则选固定单体离子"
               >固定定量离子 ID（可选）<input v-model="quantifier"
             /></label>
             <label>审阅理由<input v-model="reason" aria-label="审阅理由" /></label>
+          </div>
+          <div v-if="groupId && groupRelations?.table.rows.length" class="group-relations">
+            <label
+              v-for="row in groupRelations.table.rows"
+              :key="String(row.relation_id)"
+              class="inline-check"
+            >
+              <input
+                type="checkbox"
+                :checked="ids(relationIds).includes(String(row.relation_id))"
+                :disabled="['neutral_loss', 'fragment_form'].includes(String(row.kind))"
+                :aria-label="`组内支持关系 ${row.relation_id}`"
+                @change="
+                  toggleSupport(
+                    String(row.relation_id),
+                    ($event.target as HTMLInputElement).checked,
+                  )
+                "
+              />
+              {{ row.left_feature_id }} → {{ row.right_feature_id }} · {{ row.kind }} ·
+              {{ row.left_species }} / {{ row.right_species }} · z={{ row.charge_magnitude }}
+            </label>
+          </div>
+          <div v-if="selectedGroup && hypothesisId" class="data-table">
+            <DataTableView
+              :table="{
+                columns: ['feature_id', 'species_id', 'isotope_shift', 'charge'],
+                rows: Object.entries(
+                  hypotheses.find((item) => item.hypothesis_id === hypothesisId)?.members ?? {},
+                ).map(([id, value]) => ({ feature_id: id, ...(value as Record<string, unknown>) })),
+                total: Object.keys(
+                  hypotheses.find((item) => item.hypothesis_id === hypothesisId)?.members ?? {},
+                ).length,
+              }"
+            />
+            <RouterLink to="/annotation/evidence">查看或关联此组的证据 →</RouterLink>
           </div>
           <div class="actions">
             <button
@@ -650,9 +809,28 @@ function label(view: IonView) {
               拒绝此组
             </button>
           </div>
-        </div>
-        <div class="card">
-          <h2>3. 构建 L1 / L2</h2>
+        </details>
+        <CompoundSourcePanel v-if="surface === 'quantitative'" :views="info.views" />
+        <div v-if="surface === 'quantitative'" class="card">
+          <h2>L0 / L1 / L2 来源与定量</h2>
+          <div class="actions">
+            <RouterLink to="/annotation">返回测量峰审核 →</RouterLink>
+            <RouterLink to="/preprocess">进入统计预处理</RouterLink>
+            <RouterLink to="/analysis">进入分析</RouterLink>
+          </div>
+          <ul>
+            <li v-for="view in info.views" :key="view.id">
+              {{ label(view) }} · 来源 {{ view.root_id.slice(0, 8) }}
+            </li>
+          </ul>
+          <label
+            >构建依据<select v-model="version">
+              <option value="">选择归组版本</option>
+              <option v-for="item in versions" :key="item.id" :value="item.id">
+                {{ item.id.slice(0, 8) }} · {{ item.complete ? '搜索完成' : '未完成' }}
+              </option>
+            </select></label
+          >
           <div class="field-grid">
             <label
               >决策方式<select v-model="mode">
@@ -671,15 +849,36 @@ function label(view: IonView) {
               </select></label
             >
           </div>
-          <button
-            class="primary"
-            :disabled="store.busy || !version"
-            @click="
-              command('represent', { version, mode, strategy, include_singletons: singletons })
-            "
-          >
-            建立来源视图与分析分支
-          </button>
+          <div class="actions">
+            <button
+              class="preview"
+              :disabled="store.busy || !version"
+              @click="previewRepresentation"
+            >
+              预览 L1 / L2
+            </button>
+            <button
+              class="primary"
+              :disabled="store.busy || !version"
+              @click="command('represent', representationOptions)"
+            >
+              建立来源视图与分析分支
+            </button>
+          </div>
+          <details v-if="representation" open>
+            <summary>预览结果与代表离子</summary>
+            <DataTableView
+              :table="{
+                columns: ['level', 'cells', 'variables', 'omitted_features'],
+                rows: representation.views,
+                total: representation.views.length,
+              }"
+            />
+            <details>
+              <summary>完整预览映射</summary>
+              <pre>{{ JSON.stringify(representation.metadata, null, 2) }}</pre>
+            </details>
+          </details>
           <p class="muted">
             L2
             仅使用固定代表离子，不加总不同离子。能归组但不能定量的实体保留原因；未知信号无需先鉴定即可参与分析。
@@ -731,18 +930,26 @@ function label(view: IonView) {
             <pre v-if="availability">{{ JSON.stringify(availability, null, 2) }}</pre>
           </details>
         </div>
-        <div class="card">
-          <h2>4. 化合物候选与外部证据</h2>
-          <p class="muted">
-            准确质量检索保留全部候选；证据按目标版本和作用域保存。群体 MS/MS
-            不自动提升单细胞身份，也不运行谱库搜索。
-          </p>
+        <div v-if="surface === 'search'" class="card">
+          <h3>本地化合物库 · 峰质量或组中性质量</h3>
+          <label
+            >目标<select v-model="compoundTarget">
+              <option value="features">测量峰 m/z</option>
+              <option value="group">已审阅离子组中性质量与已有分子式</option>
+            </select></label
+          >
+          <label v-if="compoundTarget === 'group'"
+            >已有分子式目标 JSON<textarea v-model="compoundFormulas" rows="2" />
+          </label>
+          <label
+            >质量容差（ppm）<input v-model.number="ppm" type="number" step="any" min="0.001"
+          /></label>
           <label>数据库命名空间<input v-model="namespace" /></label
           ><label
             >化合物库文件（JSON / CSV / TSV / SDF）<input
               type="file"
               accept=".json,.csv,.tsv,.sdf"
-              @change="fileText($event, 'database')"
+              @change="fileText($event)"
           /></label>
           <label title="record_id/name/formula/exact_mass：formula 与 exact_mass 至少提供一个"
             >候选库内容<textarea
@@ -755,14 +962,14 @@ function label(view: IonView) {
           <label>字段映射 JSON（标准字段到文件列名）<input v-model="fieldMapping" /></label
           ><button
             class="primary"
-            :disabled="store.busy || !root || !database"
+            :disabled="store.busy || !root || !database || (compoundTarget === 'group' && !version)"
             @click="safely(annotate)"
           >
             搜索质量与已有公式候选
           </button>
           <label
             >注释版本<select v-model="annotation">
-              <option v-for="key in info.annotation_versions" :key="key">{{ key }}</option>
+              <option v-for="key in localVersions" :key="key">{{ key }}</option>
             </select></label
           >
           <button
@@ -772,28 +979,46 @@ function label(view: IonView) {
           >
             下载完整候选
           </button>
+          <DataTableView
+            v-if="table && tableKind === 'candidates'"
+            :table="{
+              ...table.table,
+              columns: [
+                'target_id',
+                'target_kind',
+                'name',
+                'namespace',
+                'record_id',
+                'species_id',
+                'ppm_error',
+              ],
+            }"
+          />
+        </div>
+        <div v-if="surface === 'evidence'" class="card">
           <details>
-            <summary>导入标准品、空白、经验及群体 MS/MS 证据</summary>
-            <label
-              >证据文件<input
-                type="file"
-                accept=".json,.mgf,.msp"
-                @change="fileText($event, 'evidence')" /></label
-            ><label>来源名称<input v-model="sourceName" /></label
-            ><label
-              >格式<select v-model="evidenceFormat">
-                <option value="json">JSON</option>
-                <option value="mgf">MGF</option>
-                <option value="msp">MSP</option>
-              </select></label
-            >
-            <label>证据记录 / 谱表<textarea v-model="evidence" rows="5" /></label
-            ><button class="primary" :disabled="store.busy" @click="safely(importEvidence)">
-              导入证据
+            <summary>外部证据匹配预览</summary>
+            <label title="evidence_ids/targets/mapping/ppm：目标包含 kind/id/version/mz/scope"
+              >匹配请求 JSON<textarea v-model="evidenceLinks" rows="4" /></label
+            ><button class="preview" :disabled="store.busy" @click="safely(linkEvidence)">
+              预览版本与作用域匹配
+            </button>
+            <pre v-if="linkResult">{{ JSON.stringify(linkResult, null, 2) }}</pre>
+          </details>
+          <details>
+            <summary>鉴定标准与脂质结构层级声明</summary>
+            <p class="muted">
+              按实际证据分别填写 MSI、Schymanski、LSI
+              或自定义标准、版本、等级、criteria、evidence_ids、scope、structure_level 及
+              target。保存为未自动验证的人工声明。
+            </p>
+            <label>鉴定声明 JSON<textarea v-model="assertion" rows="5" /></label
+            ><button class="primary" :disabled="store.busy" @click="safely(saveAssertion)">
+              保存鉴定声明
             </button>
           </details>
         </div>
-        <div class="card">
+        <div v-if="surface === 'quantitative'" class="card">
           <details>
             <summary>EC 来源显式合并</summary>
             <label
@@ -821,28 +1046,7 @@ function label(view: IonView) {
               建立合并来源 L2
             </button>
           </details>
-          <details>
-            <summary>外部证据匹配预览</summary>
-            <label title="evidence_ids/targets/mapping/ppm：目标包含 kind/id/version/mz/scope"
-              >匹配请求 JSON<textarea v-model="evidenceLinks" rows="4" /></label
-            ><button class="preview" :disabled="store.busy" @click="safely(linkEvidence)">
-              预览版本与作用域匹配
-            </button>
-            <pre v-if="linkResult">{{ JSON.stringify(linkResult, null, 2) }}</pre>
-          </details>
-          <details>
-            <summary>鉴定标准与脂质结构层级声明</summary>
-            <p class="muted">
-              按实际证据分别填写 MSI、Schymanski、LSI
-              或自定义标准、版本、等级、criteria、evidence_ids、scope、structure_level 及
-              target。保存为未自动验证的人工声明。
-            </p>
-            <label>鉴定声明 JSON<textarea v-model="assertion" rows="5" /></label
-            ><button class="primary" :disabled="store.busy" @click="safely(saveAssertion)">
-              保存鉴定声明
-            </button>
-          </details>
-          <h2>5. 分析敏感性与重复汇总</h2>
+          <h2>分析敏感性与重复汇总</h2>
           <label>参与比较的分析分支（编号，逗号分隔）<textarea v-model="comparison" /></label
           ><label
             >归一化基准<select v-model="comparisonMode">
@@ -879,7 +1083,7 @@ function label(view: IonView) {
           </p>
         </div>
       </template>
-      <div class="card">
+      <div v-if="surface === 'quantitative'" class="card">
         <h2>完整项目与来源导入</h2>
         <div class="actions">
           <button
@@ -921,5 +1125,19 @@ pre {
 }
 label {
   overflow-wrap: anywhere;
+}
+.relation-grid,
+.group-list,
+.group-relations {
+  max-height: 260px;
+  overflow: auto;
+}
+.group-list .actions {
+  flex-wrap: wrap;
+}
+.group-relations {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
 }
 </style>

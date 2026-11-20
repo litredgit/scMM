@@ -9,7 +9,11 @@ import { useLipidImageExport } from './composables/useLipidImageExport'
 import DataTableView from '../../components/DataTable.vue'
 import type { LipidCharts, LipidChartView, LipidNode, LipidResults } from './lipids'
 
-const props = defineProps<{ results: LipidResults; filters: Record<string, unknown> }>()
+const props = defineProps<{
+  source: string
+  results: LipidResults
+  filters: Record<string, unknown>
+}>()
 const emit = defineEmits<{ select: [id: string]; updated: [] }>()
 const store = useWorkspace()
 const charts = ref<LipidCharts>()
@@ -39,31 +43,47 @@ async function load() {
   const token = ++generation
   const workspace = store.current?.workspace_id
   if (!workspace || !store.current) return
+  const revision = store.current.revision
+  const accept = () =>
+    token === generation &&
+    workspace === store.current?.workspace_id &&
+    revision === store.current?.revision
+  if (
+    props.filters.adduct_mode === 'specified' &&
+    !(props.filters.adducts as string[] | undefined)?.length
+  )
+    return
   let value: LipidCharts
   try {
     value = await request<LipidCharts>('/workspace/lipids/charts', {
       method: 'POST',
       workspace,
       body: {
-        revision: store.current.revision,
+        revision,
+        source: props.source,
         version: props.results.version,
         filters: props.filters,
         view,
       },
     })
   } catch (cause) {
-    if (token === generation && workspace === store.current?.workspace_id)
+    if (accept() && !store.busy)
       store.error = cause instanceof Error ? cause.message : String(cause)
     return
   }
-  if (value && token === generation && workspace === store.current?.workspace_id) {
+  if (value && accept()) {
     charts.value = value
     evidenceOffset.value = 0
     edgeOffset.value = 0
   }
 }
 watch(
-  () => props.results,
+  [
+    () => props.source,
+    () => props.results.version,
+    () => props.results.review_revision,
+    () => JSON.stringify(props.filters),
+  ],
   async () => {
     if (currentVersion !== props.results.version) {
       currentVersion = props.results.version
@@ -82,8 +102,8 @@ watch(
         props.results.chart_view ?? {},
       )
       node.value = undefined
+      charts.value = undefined
     }
-    charts.value = undefined
     await load()
   },
   { immediate: true },
@@ -254,7 +274,7 @@ async function save() {
   if (
     await store.mutate(
       '/lipids/charts/save',
-      { version: props.results.version, filters: props.filters, view },
+      { source: props.source, version: props.results.version, filters: props.filters, view },
       'POST',
       '',
     )
@@ -268,6 +288,7 @@ async function setRepresentative(reset = false) {
     await store.mutate(
       '/lipids/representative',
       {
+        source: props.source,
         version: props.results.version,
         database_id: node.value.id,
         feature_id: reset ? '' : representative.value,
@@ -289,7 +310,14 @@ async function download(kind: string) {
       const blob = await workspaceBlob('/lipids/export', {
         workspace,
         method: 'POST',
-        body: { revision, version: props.results.version, filters: props.filters, view, kind },
+        body: {
+          revision,
+          source: props.source,
+          version: props.results.version,
+          filters: props.filters,
+          view,
+          kind,
+        },
         isCurrent: () =>
           scope.isCurrent() &&
           store.current?.workspace_id === workspace &&

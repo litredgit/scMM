@@ -56,6 +56,71 @@ def query(workflow, version, **kwargs):
     return response.json()
 
 
+def test_msms_failed_fragments_can_be_linked_and_reopened(workflow, monkeypatch):
+    from base64 import b64encode
+
+    data = setup_lipids(workflow, monkeypatch)
+    post = workflow[-1]
+    version = run_lipids(workflow)
+    chosen = query(workflow, version, feature_id="f0")["suggested"][0]
+    spectrum = f"BEGIN IONS\nTITLE=scan\nPEPMASS={data.var.mz.iloc[0]}\n100 4\n120 1\nEND IONS\n"
+    response = post(
+        "/analysis/msms",
+        {
+            "source": "current",
+            "measured": spectrum,
+            "library": spectrum,
+            "sample_pool": "pooled fixture",
+            "polarity": "positive",
+        },
+    )
+    assert response.status_code == 200, response.text
+    record_id = response.json()["value"]["layout"]["meta"]["annotation_record"]
+    original = get(workflow, f"/analysis/annotation-evidence/record?key={record_id}").json()
+    assert original["rows"][0]["matched_fragments"] == 2
+    assert original["rows"][0]["passes_threshold"] is False
+    target = {
+        "source": "current",
+        "kind": "candidate",
+        "id": chosen,
+        "version": version,
+        "feature_id": "f0",
+    }
+    body = {"record_id": record_id, "row": 0, "target": target, "reason": "reference available"}
+    wrong = {**body, "target": {**target, "feature_id": "f1"}}
+    before = workflow[-2]()["revision"]
+    assert post("/analysis/annotation-evidence/apply", wrong).status_code == 400
+    preview = post("/analysis/annotation-evidence/preview", body)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["value"]["scope"]["sample_pool"] == "pooled fixture"
+    assert workflow[-2]()["revision"] == before
+    applied = post("/analysis/annotation-evidence/apply", body)
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["value"]["target"]["database"]["database_record_id"]
+    withdrawn = post("/analysis/annotation-evidence/apply", {**body, "decision": "withdrawn"})
+    assert withdrawn.json()["value"]["decision"] == "withdrawn"
+    assert len(withdrawn.json()["value"]["history"]) == 2
+    post("/project/save").raise_for_status()
+    post("/project/open", {"path": workflow[-2]()["project"]["path"]}).raise_for_status()
+    records = get(workflow, "/analysis/annotation-evidence?source=current&feature=f0").json()
+    assert records["searches"][0]["current"] is True
+    assert records["links"][0]["decision"] == "withdrawn"
+    assert get(workflow, f"/analysis/annotation-evidence/record?key={record_id}").json() == original
+    bundle = get(workflow, f"/exchange/annotation/export?revision={workflow[-2]()['revision']}")
+    assert bundle.status_code == 200, bundle.text
+    post("/project", {"name": "evidence-exchange"}).raise_for_status()
+    imported = post(
+        "/exchange/annotation/import",
+        {
+            "format": "package",
+            "filename": "evidence.zip",
+            "file_base64": b64encode(bundle.content).decode(),
+        },
+    )
+    assert imported.status_code == 200, imported.text
+    assert get(workflow, f"/analysis/annotation-evidence/record?key={record_id}").json() == original
+
+
 def test_lipid_http_roundtrip_preserves_matrix_snr_analysis_and_all_candidates(
     workflow, monkeypatch
 ):

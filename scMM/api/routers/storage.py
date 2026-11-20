@@ -27,6 +27,7 @@ def configuration(manager: Service):
         "processing": [
             {"name": key, "default": value, "help": PROCESSING_HELP[key]}
             for key, value in defaults.items()
+            if key != "extraction_method"
         ],
         "analysis": [
             {"name": key, "default": value, "help": ANALYSIS_SPECS[key][3]}

@@ -11,8 +11,8 @@ router = APIRouter(prefix="/api/v1/workspace/lipids", tags=["lipids"])
 
 
 @router.get("")
-def info(manager: Service, identity: Identity):
-    return manager.lipid_info(identity)
+def info(manager: Service, identity: Identity, source: str = ""):
+    return manager.lipid_info(identity, source)
 
 
 @router.post("/database")
@@ -23,7 +23,7 @@ def database(body: RevisionRequest, manager: Service, identity: Identity):
 @router.post("/run")
 def run(body: s.LipidRun, manager: Service, identity: Identity):
     return manager.lipid_run(
-        identity, body.revision, body.options.model_dump(), body.rules, body.label
+        identity, body.revision, body.options.model_dump(), body.rules, body.label, body.source
     )
 
 
@@ -34,7 +34,7 @@ def import_rules(body: s.LipidRulesImport, manager: Service, identity: Identity)
 
 @router.post("/rules/apply")
 def apply_rules(body: s.LipidRulesApply, manager: Service, identity: Identity):
-    return manager.lipid_apply_rules(identity, body.revision, body.version, body.rules)
+    return manager.lipid_apply_rules(identity, body.revision, body.version, body.rules, body.source)
 
 
 @router.post("/presets")
@@ -44,7 +44,7 @@ def preset(body: s.LipidPreset, manager: Service, identity: Identity):
 
 @router.post("/activate")
 def activate(body: s.LipidActivate, manager: Service, identity: Identity):
-    return manager.lipid_activate(identity, body.revision, body.version)
+    return manager.lipid_activate(identity, body.revision, body.version, body.source)
 
 
 @router.post("/review")
@@ -55,27 +55,51 @@ def review(body: s.LipidReview, manager: Service, identity: Identity):
 @router.post("/spectrum")
 def annotation_spectrum(body: s.LipidSpectrum, manager: Service, identity: Identity):
     return manager.lipid_spectrum(
-        identity, body.revision, body.version, body.feature_id, body.sample
+        identity, body.revision, body.version, body.feature_id, body.sample, body.source
+    )
+
+
+@router.post("/spectrum/axis")
+def spectrum_axis(body: s.LipidSpectrumAxis, manager: Service, identity: Identity):
+    return manager.lipid_spectrum_axis(
+        identity, body.revision, source=body.source, sample=body.sample
+    )
+
+
+@router.post("/spectrum/overlay")
+def spectrum_overlay(body: s.LipidSpectrumOverlay, manager: Service, identity: Identity):
+    return manager.lipid_spectrum_overlay(
+        identity,
+        body.revision,
+        source=body.source,
+        sample=body.sample,
+        version_id=body.version,
+        grouping=body.grouping,
     )
 
 
 @router.post("/isotope-spectrum")
 def spectrum(body: s.IsotopeSpectrum, manager: Service, identity: Identity):
+    from scMM.application.annotation_sources import feature_source
     from scMM.application.web_lipids import selected_version
     from scMM.application.web_support import figure_view
     from scMM.plot.isotopes import isotope_spectrum
 
     with manager.access(identity) as workspace:
         workspace.check(body.revision)
-        data = workspace.require_project().workspace.require_data()
-        _, version = selected_version(data, body.version)
+        project = workspace.require_project()
+        data, source_identity = feature_source(project, body.source)
+        _, version = selected_version(project, data, body.version, body.source)
         figure = isotope_spectrum(data, version, body.relation_id)
         metadata = dict(figure.layout.meta or {})
         metadata.update(
             lipid_version=version["id"],
             lipid_review_revision=version.get("review_revision", 0),
-            dataset_token=list(workspace.require_project().workspace.token),
+            annotation_source=body.source,
+            annotation_source_identity=source_identity,
         )
+        if body.source in {"", "current"}:
+            metadata["dataset_token"] = list(project.workspace.token)
         figure.update_layout(meta=metadata)
         return {
             "workspace": manager.view(workspace),
@@ -91,21 +115,31 @@ def query(body: s.LipidQuery, manager: Service, identity: Identity):
 @router.post("/charts")
 def charts(body: s.LipidCharts, manager: Service, identity: Identity):
     return manager.lipid_charts(
-        identity, body.revision, body.version, body.filters.model_dump(), body.view.model_dump()
+        identity,
+        body.revision,
+        body.version,
+        body.filters.model_dump(),
+        body.view.model_dump(),
+        body.source,
     )
 
 
 @router.post("/charts/save")
 def save_charts(body: s.LipidCharts, manager: Service, identity: Identity):
     return manager.lipid_chart_view(
-        identity, body.revision, body.version, body.filters.model_dump(), body.view.model_dump()
+        identity,
+        body.revision,
+        body.version,
+        body.filters.model_dump(),
+        body.view.model_dump(),
+        body.source,
     )
 
 
 @router.post("/representative")
 def representative(body: s.LipidRepresentative, manager: Service, identity: Identity):
     return manager.lipid_representative(
-        identity, body.revision, body.version, body.database_id, body.feature_id
+        identity, body.revision, body.version, body.database_id, body.feature_id, body.source
     )
 
 
@@ -119,6 +153,7 @@ def export(body: s.LipidExport, manager: Service, identity: Identity):
         body.kind,
         body.view.model_dump(),
         body.sorting.model_dump(),
+        body.source,
     )
     extension = "json" if body.kind in {"rules", "charts"} else "csv"
     return Response(

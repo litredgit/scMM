@@ -95,6 +95,10 @@ export function startMaintenance(router: Router) {
   document.addEventListener('change', capture)
   const identity = () =>
     JSON.stringify([auth.user?.id, store.current?.workspace_id, store.project?.path])
+  let navigated = false
+  const stopNavigation = router.beforeEach((_to, from) => {
+    if (from.matched.length) navigated = true
+  })
   const unwatch = watch(
     () => router.currentRoute.value.path,
     async () => {
@@ -146,7 +150,9 @@ export function startMaintenance(router: Router) {
           Object.assign(forms, value.forms)
           store.analysisDraft = value.analysisDraft || null
           store.selectedCells = value.selectedCells || []
-          if (value.route) await router.replace(value.route)
+          // Replay the saved page only during initial hydration. Later drafts can still restore form values.
+          if (!navigated && value.route && value.route !== router.currentRoute.value.path)
+            await router.replace(value.route)
           await nextTick()
           if (!current()) return
           const route = router.currentRoute.value.path
@@ -283,6 +289,7 @@ export function startMaintenance(router: Router) {
     clearTimeout(timer)
     unwatch()
     stopOwner()
+    stopNavigation()
     document.removeEventListener('input', capture)
     document.removeEventListener('change', capture)
   }

@@ -1,10 +1,20 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, nextTick } from 'vue'
-const props = defineProps<{ modelValue: unknown; scientific?: boolean; decimals?: number }>()
+const props = defineProps<{
+  modelValue: unknown
+  scientific?: boolean
+  decimals?: number
+  plain?: boolean
+}>()
 const emit = defineEmits<{ 'update:modelValue': [value: number | null] }>()
 const element = ref<HTMLInputElement>()
 let editing = false
 let invalid = ''
+function rawText(raw: unknown) {
+  return props.plain && typeof raw === 'number'
+    ? raw.toLocaleString('en-US', { useGrouping: false, maximumSignificantDigits: 21 })
+    : String(raw ?? '')
+}
 function render() {
   if (!element.value || editing) return
   const raw = props.modelValue
@@ -14,7 +24,7 @@ function render() {
     text = props.scientific
       ? value.toExponential(1)
       : props.decimals == null
-        ? String(value)
+        ? rawText(raw)
         : value.toFixed(props.decimals)
   }
   element.value.value = invalid || text
@@ -22,7 +32,7 @@ function render() {
 function focus() {
   editing = true
   if (element.value) {
-    element.value.value = invalid || String(props.modelValue ?? '')
+    element.value.value = invalid || rawText(props.modelValue)
     element.value.select()
   }
 }
@@ -56,7 +66,7 @@ watch(
     render()
   },
 )
-watch(() => [props.scientific, props.decimals], render)
+watch(() => [props.scientific, props.decimals, props.plain], render)
 </script>
 <template>
   <input

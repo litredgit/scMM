@@ -62,22 +62,36 @@ const resultStates = computed(() => {
 })
 </script>
 <template>
-  <DataViewSelector />
   <section
     v-if="store.project?.dataset && store.project.dataset.quantitation_available !== false"
     class="analysis-page"
   >
-    <div class="page-title">
-      <div>
-        <h1>探索与分析</h1>
-        <p>
-          {{ store.project.dataset.cells }}
-          {{ store.project.dataset.observation_kind === 'sample' ? '样本' : '细胞' }} ×
-          {{ store.project.dataset.features }} 特征 · 结果随数据与依赖字段失效。
-        </p>
+    <div class="page-title"><h1>探索与分析</h1></div>
+    <DataViewSelector />
+    <nav v-if="info" class="analysis-navigation" aria-label="分析功能">
+      <div v-for="group in moduleGroups" :key="group" class="analysis-group">
+        <h2 class="analysis-group-name">{{ group }}</h2>
+        <div class="actions">
+          <button
+            v-for="entry in analysisModules.filter((entry) => entry.group === group)"
+            :key="entry.id"
+            :aria-label="entry.name"
+            :class="{ selected: tab === entry.id }"
+            :aria-current="tab === entry.id ? 'page' : undefined"
+            @click="tab = entry.id"
+          >
+            {{ entry.name }}
+          </button>
+        </div>
       </div>
-      <RouterLink to="/annotation" class="muted">查看特征注释 →</RouterLink>
-    </div>
+    </nav>
+    <label v-if="info" class="analysis-mobile field"
+      >分析功能<select aria-label="分析功能" v-model="tab">
+        <option v-for="entry in analysisModules" :key="entry.id" :value="entry.id">
+          {{ entry.name }}
+        </option>
+      </select></label
+    >
     <div class="analysis-toolbar actions" aria-label="分析视图工具">
       <div>
         <label class="field"
@@ -95,119 +109,80 @@ const resultStates = computed(() => {
       <button :disabled="store.busy" @click="reloadAnalysis" class="preview">
         重新读取分析状态
       </button>
+      <p v-if="store.drafts['分析设置']" class="muted" role="status">
+        有未应用的视图设置，保存项目时也会纳入。
+      </p>
+      <RouterLink
+        v-if="!store.project.annotation?.statistics"
+        to="/annotation"
+        class="analysis-annotation-link"
+        >查看特征注释 →</RouterLink
+      >
     </div>
-    <p class="state-note" role="status">
-      {{
-        store.drafts['分析设置']
-          ? '未应用草稿：点击“应用视图设置”记入工作区；保存项目也会纳入当前分析设置，但不启动计算。'
-          : store.project.unsaved
-            ? '已应用未保存：请主动保存项目。'
-            : '已保存：分析设置已写入项目。'
-      }}
-    </p>
     <div v-if="recovery" class="state-note" role="status">
       {{ recovery.message
       }}<button class="preview" :disabled="store.busy" @click="retryPresentation">
         仅重试读取与绘图
       </button>
     </div>
-    <p v-if="store.busy" role="status" class="state-note">{{ store.operationMessage }}</p>
     <div v-for="state in resultStates" :key="state.name" class="result-state" role="status">
       <strong>{{ state.name }} · {{ state.state }}</strong> · {{ state.reason }}
     </div>
     <p v-if="!info" role="status">正在读取当前数据的分析状态…</p>
-    <div v-else class="analysis-layout">
-      <Teleport to="#method-menu"
-        ><nav class="analysis-navigation" aria-label="分析功能">
-          <div v-for="group in moduleGroups" :key="group" class="analysis-group">
-            <h2 class="analysis-group-name">{{ group }}</h2>
-            <div class="actions">
-              <button
-                v-for="entry in analysisModules.filter((entry) => entry.group === group)"
-                :key="entry.id"
-                :aria-label="entry.name"
-                :class="{ selected: tab === entry.id }"
-                :aria-current="tab === entry.id ? 'page' : undefined"
-                @click="tab = entry.id"
-              >
-                {{ entry.name }}
-              </button>
-            </div>
-          </div>
-        </nav></Teleport
-      >
-      <label class="analysis-mobile field"
-        >分析功能<select aria-label="分析功能" v-model="tab">
-          <option v-for="entry in analysisModules" :key="entry.id" :value="entry.id">
-            {{ entry.name }}
-          </option>
-        </select></label
-      >
-      <div class="analysis-content">
-        <component
-          v-for="entry in analysisModules"
-          :key="entry.id"
-          :is="entry.component"
-          v-show="tab === entry.id"
-        />
-      </div>
+    <div v-else class="analysis-content">
+      <component
+        v-for="entry in analysisModules"
+        :key="entry.id"
+        :is="entry.component"
+        v-show="tab === entry.id"
+      />
     </div>
     <CellSpectraPanel />
   </section>
   <div v-else class="card empty-state">
     <h1>{{ store.project?.dataset ? '当前仅有特征表' : '尚未建立当前数据集' }}</h1>
     <p>统计分析需要定量矩阵及相应元数据。可直接导入外部矩阵，或使用审核纳入的提取结果。</p>
+    <DataViewSelector v-if="store.project?.dataset" />
     <RouterLink to="/statistics">选择或导入统计数据 →</RouterLink>
   </div>
 </template>
 <style scoped>
-.analysis-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
-  align-items: start;
-}
 .analysis-navigation {
   position: static;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 0.85fr);
+  margin-bottom: 10px;
   border: 1px solid var(--border);
-  border-radius: 3px;
-  background: #fff;
-  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 .analysis-group {
-  padding: 0 0 8px;
+  min-width: 0;
+  padding: 8px 10px;
 }
 .analysis-group + .analysis-group {
-  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
 }
 .analysis-group-name {
-  margin: 0 0 5px;
-  padding: 9px 12px;
-  background: var(--panel-soft);
-  color: #42535b;
-  font-size: 12px;
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: var(--text-small);
   font-weight: 600;
-  letter-spacing: 0;
 }
 .analysis-group .actions {
-  display: grid;
-  gap: 1px;
+  gap: 4px;
   margin: 0;
 }
 .analysis-navigation button {
-  justify-content: flex-start;
-  min-height: 34px;
-  margin: 0 6px;
-  padding: 5px 8px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  font-size: 13px;
-  text-align: left;
+  min-height: 29px;
+  padding: 4px 8px;
+  border-color: #dfe8ed;
+  background: var(--panel-soft);
 }
 .analysis-navigation .selected {
   color: var(--teal);
-  border-color: #cee3e7;
-  background: #edf7f8;
+  border-color: #92c1bb;
+  background: #e6f5f2;
   font-weight: 600;
 }
 .analysis-content {
@@ -216,7 +191,18 @@ const resultStates = computed(() => {
 .analysis-toolbar {
   gap: 8px;
   align-items: center;
-  background: var(--panel-soft);
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+.analysis-toolbar p {
+  margin: 0;
+}
+.analysis-annotation-link {
+  margin-left: auto;
+  color: var(--teal);
+}
+.analysis-annotation-link:hover {
+  text-decoration: underline;
 }
 .analysis-toolbar .field {
   margin: 0;
@@ -225,9 +211,8 @@ const resultStates = computed(() => {
   display: none;
 }
 @media (max-width: 1050px) {
-  .analysis-layout {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
+  .analysis-navigation {
+    display: none;
   }
 
   .analysis-mobile {

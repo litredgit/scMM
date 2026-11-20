@@ -113,6 +113,15 @@ def test_complete_ion_http_path(workflow):
     )
     assert response.status_code == 200, response.text
     assert current()["project"]["dataset"]["features"] == 2
+    context = current()["project"]["annotation"]
+    assert context["default_source"] == root and context["statistics"]["level"] == "L2"
+    revision = current()["revision"]
+    axis = post("/lipids/spectrum/axis", {"source": root})
+    assert axis.status_code == 200, axis.text
+    assert {row["feature_id"] for row in axis.json()["peaks"]} == {"h", "iso", "na", "u"}
+    overlay = post("/lipids/spectrum/overlay", {"source": root, "grouping": task})
+    assert overlay.status_code == 200, overlay.text
+    assert overlay.json()["relations"] and current()["revision"] == revision
     before = manager._workspaces[current()["workspace_id"]].project.workspace.data.X.copy()
     response = post(
         "/ions/annotate",
@@ -209,6 +218,11 @@ def test_source_l2_import_materialization_ec_analysis_and_permissions(workflow):
     info = get(workflow, "/ions/info").json()
     assert info["roots"] == [] and info["branches"] == []
     imported = info["views"][0]
+    assert current()["project"]["annotation"]["sources"] == []
+    assert post("/lipids/spectrum/axis", {"source": "current"}).status_code == 400
+    ec = get(workflow, f"/ions/table?kind=source_ec&version={imported['id']}")
+    assert ec.status_code == 200, ec.text
+    assert "ec_id" in ec.json()["table"]["columns"]
     response = post(
         "/ions/availability", {"view_id": imported["id"], "cell_ids": imported["cell_ids"]}
     )

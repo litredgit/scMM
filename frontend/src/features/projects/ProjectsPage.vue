@@ -82,9 +82,7 @@ function date(value: string) {
 <template>
   <section class="projects-home">
     <div class="page-title">
-      <div>
-        <h1>选择项目</h1>
-      </div>
+      <h1>选择项目</h1>
     </div>
     <section class="card project-start">
       <form class="create-project" @submit.prevent="create">
@@ -112,7 +110,6 @@ function date(value: string) {
           <h2>
             已保存项目 <span class="count">{{ projects.length }}</span>
           </h2>
-          <p>打开项目继续已保存的工作；备注可在“添加原始文件”中编辑。</p>
         </div>
         <div class="actions">
           <input v-model="search" aria-label="搜索项目" placeholder="搜索项目名称或备注" /><button
@@ -142,29 +139,33 @@ function date(value: string) {
         <h3>{{ projects.length ? '没有匹配的项目' : '还没有保存的项目' }}</h3>
         <p>创建项目后，会在这里显示。</p>
       </div>
-      <div v-else class="table-scroll">
+      <div v-else class="table-scroll project-table">
         <table>
           <thead>
             <tr>
-              <th>项目名称</th>
-              <th>项目备注</th>
-              <th>样本数</th>
-              <th>数据状态</th>
-              <th>创建时间（北京时间）</th>
-              <th>最后修改时间（北京时间）</th>
-              <th><span class="sr-only">操作</span></th>
+              <th scope="col">项目名称</th>
+              <th scope="col">项目备注</th>
+              <th scope="col" class="project-sample-count">样本数</th>
+              <th scope="col">数据状态</th>
+              <th scope="col">最近保存（北京时间）</th>
+              <th scope="col">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in filtered" :key="item.path">
+            <tr
+              v-for="item in filtered"
+              :key="item.path"
+              :class="{ 'open-project': item.path === store.project?.path }"
+            >
               <td>
-                <strong>{{ item.name }}</strong
-                ><small class="path"
-                  >{{ item.path }} <HelpTip :text="item.path" label="项目完整路径"
-                /></small>
+                <strong>{{ item.name }}</strong>
+                <small class="project-path muted">
+                  <span>{{ item.path }}</span>
+                  <HelpTip :text="item.path" label="项目完整路径" />
+                </small>
               </td>
               <td class="project-note">{{ item.description || '—' }}</td>
-              <td>{{ item.samples }}</td>
+              <td class="project-sample-count">{{ item.samples }}</td>
               <td>
                 <template v-if="item.data_state === 'saved'"
                   >已保存数据 · {{ item.cells }} 个观测 × {{ item.features }} 特征</template
@@ -174,15 +175,21 @@ function date(value: string) {
                 >
                 <template v-else>尚未保存数据集</template>
               </td>
-              <td>{{ item.created_at ? date(item.created_at) : '未记录' }}</td>
-              <td>{{ date(item.saved_at) }}</td>
               <td>
-                <button :disabled="store.busy" @click="open(item.path)">打开项目 →</button>
-                <TrashAction
-                  :path="item.path"
-                  :disabled="item.path === store.project?.path"
-                  @changed="removed"
-                />
+                <span class="project-date">{{ date(item.saved_at) }}</span>
+                <small class="muted project-date"
+                  >创建于 {{ item.created_at ? date(item.created_at) : '未记录' }}</small
+                >
+              </td>
+              <td>
+                <div class="project-row-actions">
+                  <button :disabled="store.busy" @click="open(item.path)">打开项目 →</button>
+                  <TrashAction
+                    :path="item.path"
+                    :disabled="item.path === store.project?.path"
+                    @changed="removed"
+                  />
+                </div>
                 <small v-if="item.path === store.project?.path"
                   >当前项目，请先保存并关闭后管理。</small
                 >
@@ -199,9 +206,14 @@ function date(value: string) {
 <style scoped>
 .project-start > .create-project {
   display: grid;
-  grid-template-columns: minmax(190px, 1fr) minmax(220px, 1.5fr) max-content;
-  gap: 1.25rem;
+  grid-template-columns: minmax(190px, 250px) minmax(220px, 460px) max-content;
+  gap: 16px;
   align-items: end;
+}
+.project-start {
+  padding: 18px;
+  background: linear-gradient(105deg, #e9f5f8, var(--surface) 66%);
+  border-color: #c9dce6;
 }
 .project-create-heading h2 {
   margin: 0 0 0.25rem;
@@ -213,6 +225,70 @@ function date(value: string) {
 .create-project button {
   margin: 0;
   width: auto;
+}
+.project-list > .section-heading {
+  align-items: center;
+}
+.project-list > .section-heading h2 {
+  margin: 0;
+}
+.project-table {
+  max-height: 64vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+}
+.project-table table {
+  table-layout: fixed;
+  min-width: 980px;
+}
+.project-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.project-table th:first-child {
+  width: 26%;
+}
+.project-table th:nth-child(3) {
+  width: 75px;
+}
+.project-table th:nth-child(5) {
+  width: 206px;
+}
+.project-table th:last-child {
+  width: 218px;
+}
+.project-table td {
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+.project-table .open-project td:first-child {
+  box-shadow: inset 3px 0 var(--teal);
+}
+.project-sample-count {
+  text-align: center;
+}
+.project-path {
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+  gap: 4px;
+}
+.project-path > span:first-child {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.project-date {
+  display: block;
+  white-space: nowrap;
+}
+.project-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 @media (max-width: 1100px) {
   .project-start > .create-project {

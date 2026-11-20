@@ -144,20 +144,15 @@ async function exportH5ad() {
 }
 </script>
 <template>
-  <section v-if="store.project">
+  <section v-if="store.project" class="results-page">
     <div class="page-title">
-      <div>
-        <p class="eyebrow">共享 · 结果与保存</p>
-        <h1>结果与保存</h1>
-        <p>主动保存当前项目，导出完整数据和可追溯报告。</p>
-      </div>
-      <span class="step-badge">项目保存</span>
+      <h1>结果与保存</h1>
     </div>
-    <div class="card">
+    <div class="card result-save-panel">
       <div class="section-heading">
         <div>
           <h2>保存当前项目</h2>
-          <p>{{ store.project.unsaved ? '当前工作区有未保存修改。' : '当前修改已保存。' }}</p>
+          <p>保存完整工作区，供下次继续处理或打开报告。</p>
         </div>
         <button
           class="save"
@@ -167,7 +162,6 @@ async function exportH5ad() {
           保存项目
         </button>
       </div>
-      <p class="muted">保存项目用于继续完整工作；下载到本机与服务器独立导出不替代保存。</p>
       <SaveExplanation />
       <ProjectArtifacts scope="snapshots" :refresh-key="store.project.manifest.revision" />
     </div>
@@ -234,7 +228,9 @@ async function exportH5ad() {
             上次保存的快照不含未保存修改；下载不会保存当前项目。
           </p>
           <p v-if="kind === 'matrix'" class="muted">
-            MetaboAnalyst 格式：每行一个细胞，首列 Sample、第二列 Label 来自
+            MetaboAnalyst 格式每行一个{{
+              store.project.dataset.observation_kind === 'sample' ? '样本' : '细胞'
+            }}，首列 Sample、第二列 Label 来自
             group，其余列为特征强度。请先补齐分组；导出不自动归一化或补值。
           </p>
           <p v-if="['quality_pdf', 'report_zip'].includes(kind)" class="muted">
@@ -377,3 +373,22 @@ async function exportH5ad() {
   </div>
   <SavedItems />
 </template>
+
+<style scoped>
+.result-save-panel > .section-heading {
+  align-items: center;
+  margin-bottom: 0;
+}
+.result-save-panel > .section-heading h2 {
+  margin-bottom: 4px;
+}
+.result-export-grid > section {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--panel-soft);
+}
+.result-export-grid > section > h3 {
+  margin: 0 0 10px;
+}
+</style>

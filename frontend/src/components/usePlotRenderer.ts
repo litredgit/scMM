@@ -44,6 +44,7 @@ type RenderOptions = {
           pointNumber?: number
           curveNumber?: number
         }[]
+        xUnitsPerPixel?: number
       },
     ): void
   }
@@ -269,7 +270,17 @@ export function usePlotRenderer({
           graph.removeAllListeners?.('plotly_click')
           graph.on?.('plotly_click', (data) => {
             if (!fresh.value) return
-            emit('point-click', { points: data.points ?? [] })
+            const axis = (
+              graph as unknown as {
+                _fullLayout?: { xaxis?: { range?: number[]; _length?: number } }
+              }
+            )._fullLayout?.xaxis
+            const range = axis?.range
+            const xUnitsPerPixel =
+              range?.length === 2 && axis?._length
+                ? Math.abs(range[1]! - range[0]!) / axis._length
+                : undefined
+            emit('point-click', { points: data.points ?? [], xUnitsPerPixel })
             const customdata = data.points?.[0]?.customdata
             const id = Array.isArray(customdata)
               ? customdata[0]

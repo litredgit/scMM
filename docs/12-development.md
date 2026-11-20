@@ -110,6 +110,8 @@ scMM/
 
 `frontend/src/features/modules/` 管理三个板块的入口、内部步骤和导入导出展示，
 `features/annotation/` 承载谱图点峰、关联关系审核及外部证据入口。原有 URL 继续定位所属步骤。
+`application/annotation_sources.py` 分别解析测量来源和实际统计输入。谱图峰轴与强度摘要独立于候选覆盖读取，
+缩放和点峰留在页面。`annotation_evidence.py` 管理每次实测二级比对及显式关联，按版本和来源复核后发布。
 三个板块共用认证工作区、项目、任务和保存门禁，不拆成多个服务进程。
 `application/module_exchange.py` 负责导入候选、完整引用闭包和内容校验，HTTP 边界为
 `api/exchange_schemas.py` 与 `api/routers/exchange.py`，格式见[交换协议](06-data-output.md#模块交换协议-v1)。
@@ -611,4 +613,4 @@ Jupyter 环境依赖及其专用检查，不提供 Windows 本机一键发行版
 清理不会批量改写或删除现有项目。历史格式不承诺可读；版本号、来源与有效性证据仍须保存。
 
 
-上游接入新增的相关性/集合图使用既有数据图身份和 `export_tables` 保存完整表；MS/MS 的计算在释放工作区锁后进行，收集前复核工作区修订和数据 token。可逆标签的 `_selection_source` 是独立恢复池，目录快照、离子分支与维护编码均保存该状态；标签操作先构造候选再提交，不改不可变测量根或 `_original`。矩阵变换在启用标签时拒绝，降维/聚类等分析可继续运行。
+相关性/集合图使用既有数据图身份和 `export_tables` 保存完整表。MS/MS 在释放工作区锁后计算，收集前复核工作区修订和测量特征身份。可逆标签的 `_selection_source` 是独立恢复池，目录快照、离子分支与维护编码均保存该状态；标签操作先构造候选再提交，不改不可变测量根或 `_original`。矩阵变换在启用标签时拒绝，降维/聚类等分析可继续运行。

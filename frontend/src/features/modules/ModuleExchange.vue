@@ -6,7 +6,7 @@ import { workspaceBlob, saveBlob } from '../../api/workspaceDownload'
 import { base64File, type ModuleStatus } from '../../api/moduleExchange'
 import type { ModuleKey } from './modules'
 
-const props = defineProps<{ module: ModuleKey }>()
+const props = defineProps<{ module: ModuleKey; compact?: boolean }>()
 const store = useWorkspace()
 const status = ref<ModuleStatus>()
 const source = ref('current')
@@ -171,37 +171,66 @@ watch(exportChoices, (choices) => {
 </script>
 
 <template>
-  <section class="card module-exchange" aria-label="板块数据导入与导出">
-    <div class="section-heading">
-      <div>
-        <h2>选择本板块的数据</h2>
-      </div>
-    </div>
+  <section class="card module-exchange" :class="{ compact }" aria-label="板块数据导入与导出">
+    <h2 v-if="!compact">选择本板块的数据</h2>
     <p v-if="!store.project" class="state-note">
       请先<RouterLink to="/projects">创建或打开项目</RouterLink
       >，导入的数据和审核记录将保存在该项目中。
     </p>
     <template v-else>
-      <div class="module-source-tabs" role="group" aria-label="数据来源">
-        <button
-          type="button"
-          :class="{ active: source === 'current' }"
-          :aria-pressed="source === 'current'"
-          @click="source = 'current'"
-        >
-          使用当前项目数据
-        </button>
-        <button
-          type="button"
-          :class="{ active: source === 'import' }"
-          :aria-pressed="source === 'import'"
-          @click="source = 'import'"
-        >
-          导入外部数据
-        </button>
+      <div class="module-exchange-tools">
+        <div class="module-source-tabs" role="group" aria-label="数据来源">
+          <button
+            type="button"
+            :class="{ active: source === 'current' }"
+            :aria-pressed="source === 'current'"
+            @click="source = 'current'"
+          >
+            使用当前项目数据
+          </button>
+          <button
+            type="button"
+            :class="{ active: source === 'import' }"
+            :aria-pressed="source === 'import'"
+            @click="source = 'import'"
+          >
+            导入外部数据
+          </button>
+        </div>
+        <div class="module-export">
+          <label
+            >导出内容<select
+              v-model="exportFormat"
+              :disabled="store.busy || !currentAvailable"
+              aria-label="板块导出格式"
+            >
+              <option v-for="choice in exportChoices" :key="choice.value" :value="choice.value">
+                {{ choice.label }}
+              </option>
+            </select></label
+          >
+          <button
+            class="save"
+            :disabled="store.busy || !currentAvailable || !exportChoices.length"
+            @click="download"
+          >
+            导出本板块数据
+          </button>
+        </div>
       </div>
-      <div v-if="source === 'current'" class="module-data-summary">
-        <template v-if="currentAvailable">
+      <div
+        v-if="
+          source === 'current' && (!compact || !currentAvailable || lastImport || status?.notice)
+        "
+        class="module-data-summary"
+      >
+        <div v-if="compact && currentAvailable" class="compact-data-summary">
+          <p v-if="status?.feature_only" class="muted">
+            独立特征表可用于注释，统计分析需要定量矩阵。
+          </p>
+          <p v-if="lastImport" role="status">已导入：{{ lastImport }}</p>
+        </div>
+        <template v-else-if="currentAvailable">
           <strong
             >{{ status?.features.toLocaleString() }} 个特征<span v-if="!status?.feature_only">
               · {{ status?.observations.toLocaleString() }} 个{{ unit }}</span
@@ -217,11 +246,14 @@ watch(exportChoices, (choices) => {
           </p>
           <p v-if="status?.has_catalogue" class="muted">包含独立来源视图与分析分支。</p>
         </template>
+        <p v-else-if="!status">正在读取数据状态…</p>
         <p v-else>当前项目尚无可用数据。可导入已有数据，或在细胞提取中处理原始谱并审核纳入。</p>
         <p v-if="status?.notice" class="muted">{{ status.notice }}</p>
-        <p v-if="lastImport" role="status">已导入：{{ lastImport }}</p>
+        <p v-if="lastImport && (!compact || !currentAvailable)" role="status">
+          已导入：{{ lastImport }}
+        </p>
       </div>
-      <form v-else class="module-import" @submit.prevent="importData">
+      <form v-else-if="source === 'import'" class="module-import" @submit.prevent="importData">
         <fieldset :disabled="store.busy || preparing" class="module-import-fields">
           <div class="field-grid">
             <label
@@ -321,108 +353,83 @@ watch(exportChoices, (choices) => {
         </fieldset>
       </form>
       <p v-if="localError" role="alert" class="state-note">{{ localError }}</p>
-      <div class="module-export">
-        <label
-          >导出内容<select
-            v-model="exportFormat"
-            :disabled="store.busy || !currentAvailable"
-            aria-label="板块导出格式"
-          >
-            <option v-for="choice in exportChoices" :key="choice.value" :value="choice.value">
-              {{ choice.label }}
-            </option>
-          </select></label
-        >
-        <button
-          class="save"
-          :disabled="store.busy || !currentAvailable || !exportChoices.length"
-          @click="download"
-        >
-          导出本板块数据
-        </button>
-      </div>
     </template>
   </section>
 </template>
 
 <style scoped>
-.module-exchange > .section-heading {
-  margin-bottom: 0.75rem;
+.module-exchange.compact {
+  padding: 8px 12px;
+  margin-bottom: 10px;
 }
-.module-source-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  border-bottom: 1px solid var(--border);
-}
-.module-source-tabs button {
-  min-height: 36px;
-  margin-bottom: -1px;
-  padding: 0.5rem 1rem;
-  border: 1px solid transparent;
-  border-bottom: 2px solid transparent;
-  border-radius: 3px 3px 0 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-.module-source-tabs button.active {
-  border-color: var(--border);
-  border-bottom-color: var(--teal);
-  background: var(--panel-soft);
-  color: var(--teal);
-}
-.module-source-tabs button:hover {
-  background: var(--panel-soft);
-}
-.module-data-summary,
-.module-import {
-  margin: 0;
-  padding: 0.9rem 0;
-}
-.module-data-summary {
-  font-size: 0.88rem;
-}
-.module-data-summary strong {
-  font-weight: 600;
-}
-.module-data-summary p {
-  margin: 0.3rem 0 0;
-}
-.module-import {
-  background: var(--panel-soft);
-  padding: 0.9rem;
-}
-.module-import-fields {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
-.module-import .actions {
-  margin: 0.5rem 0;
-}
+.module-exchange-tools,
+.module-source-tabs,
 .module-export {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
   align-items: center;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border);
+  gap: 6px;
+}
+.module-exchange-tools {
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.module-source-tabs button {
+  min-height: 32px;
+  padding: 5px 10px;
+}
+.module-source-tabs button.active {
+  border-color: #91beb8;
+  background: #e8f5f2;
+  color: var(--teal);
+  font-weight: 650;
+}
+.module-data-summary,
+.module-import {
+  margin: 8px 0 0;
+  padding: 6px 0;
+}
+.module-data-summary p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+.compact .module-data-summary {
+  margin-top: 4px;
+  padding: 0;
+}
+.compact-data-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.module-import {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--panel-soft);
+}
+.module-import-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.module-import .actions {
+  margin: 8px 0;
 }
 .module-export label {
-  display: flex;
-  flex: 1 1 280px;
-  flex-wrap: wrap;
+  flex-direction: row;
   align-items: center;
-  gap: 0.5rem;
-  margin: 0;
-  font-size: 0.86rem;
+  gap: 8px;
+  color: var(--muted);
 }
 .module-export select {
-  flex: 1;
-  min-width: 180px;
-  max-width: 390px;
+  width: auto;
+  max-width: 100%;
+  min-height: 32px;
+}
+.module-export button {
+  min-height: 32px;
 }
 .import-preview {
   margin: 0.75rem 0;
@@ -436,11 +443,16 @@ watch(exportChoices, (choices) => {
   padding: 0.65rem;
 }
 @media (max-width: 560px) {
+  .module-export,
   .module-export label,
   .module-export select,
   .module-export button {
     width: 100%;
     max-width: none;
+  }
+  .module-export label {
+    flex-direction: column;
+    align-items: start;
   }
 }
 </style>

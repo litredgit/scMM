@@ -126,4 +126,6 @@ def test_global_presets_and_cpu_defaults(tmp_path, monkeypatch):
     assert load_preferences()["selected"] == "custom"
     monkeypatch.setattr("os.cpu_count", lambda: 12)
     monkeypatch.setattr("os.sched_getaffinity", lambda _: {0, 1})
-    assert cpu_default() == 2
+    assert cpu_default() == 1
+    monkeypatch.setattr("os.sched_getaffinity", lambda _: set(range(12)))
+    assert cpu_default() == 9

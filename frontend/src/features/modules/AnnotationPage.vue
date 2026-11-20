@@ -1,43 +1,68 @@
 <script setup lang="ts">
-import ModuleExchange from './ModuleExchange.vue'
+import { ref } from 'vue'
+import AnnotationHeader from '../annotation/AnnotationHeader.vue'
+import { useAnnotationSource } from '../annotation/useAnnotationSource'
 import LipidPanel from '../preprocess/LipidPanel.vue'
-import DataViewSelector from '../ions/DataViewSelector.vue'
+import IonsPage from '../ions/IonsPage.vue'
+import CompoundSourcePanel from '../ions/CompoundSourcePanel.vue'
 import { useWorkspace } from '../../stores/workspace'
 const store = useWorkspace()
+const { source, selectedTarget } = useAnnotationSource()
+const groupsOpen = ref(false)
+const groupsMounted = ref(false)
+function toggleGroups() {
+  groupsMounted.value = true
+  groupsOpen.value = !groupsOpen.value
+}
 </script>
+
 <template>
   <section class="module-home">
-    <div class="page-title">
-      <div>
-        <h1>特征注释</h1>
-        <p>选择数据库，核对谱图候选并完成人工审核。</p>
-      </div>
-      <nav class="annotation-links" aria-label="注释关联工作">
-        <RouterLink to="/ions">离子归组与来源视图 →</RouterLink
-        ><RouterLink to="/statistics">使用当前矩阵进行统计分析 →</RouterLink>
-      </nav>
-    </div>
-    <ModuleExchange module="annotation" />
-    <DataViewSelector v-if="store.project?.dataset" />
-    <LipidPanel v-if="store.project?.dataset" />
+    <LipidPanel v-if="source" :source="source">
+      <template #grouping-action>
+        <button
+          class="preview"
+          :aria-expanded="groupsOpen"
+          :disabled="!source.quantitation_available"
+          :title="source.quantitation_available ? '' : '需要测量定量矩阵'"
+          @click="toggleGroups"
+        >
+          {{ groupsOpen ? '收起离子关系设置' : '生成离子关系' }}
+        </button>
+      </template>
+      <template #grouping-settings>
+        <IonsPage
+          v-if="groupsMounted"
+          v-show="groupsOpen"
+          surface="review"
+          :focus-feature="
+            selectedTarget?.featureId ??
+            (selectedTarget?.kind === 'feature' ? selectedTarget.id : '')
+          "
+        />
+      </template>
+      <template #group-search>
+        <details v-if="source.id !== 'current'">
+          <summary>使用本地化合物库</summary>
+          <IonsPage surface="search" />
+        </details>
+      </template>
+      <template #group-relations>
+        <button class="preview" :disabled="!source.quantitation_available" @click="toggleGroups">
+          {{ groupsOpen ? '收起离子组审核' : '查看离子组审核' }}
+        </button>
+      </template>
+    </LipidPanel>
+    <template v-else>
+      <AnnotationHeader title="候选与关系审核" />
+      <section class="card">
+        <button class="preview" disabled title="当前缺少可用的实测 m/z 来源">查看完整谱图</button>
+        <p>
+          完整谱图需要独立 m/z 特征表或可访问的测量根。仅有源 L2 时可在定量视图核对 EC
+          和代表离子映射。
+        </p>
+      </section>
+      <CompoundSourcePanel v-if="store.project" />
+    </template>
   </section>
 </template>
-
-<style scoped>
-.annotation-links {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.4rem 1.25rem;
-  color: var(--teal);
-  font-size: 0.85rem;
-}
-.annotation-links a:hover {
-  text-decoration: underline;
-}
-@media (max-width: 760px) {
-  .annotation-links {
-    justify-content: flex-start;
-  }
-}
-</style>

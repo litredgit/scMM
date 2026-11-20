@@ -1,4 +1,5 @@
-import { navigate, test, expect } from './fixtures'
+import { navigate, test, expect, preprocessingStep } from './fixtures'
+import { createProject } from './support/project'
 
 test('continuous extraction and statistics steps guard missing quantitative data', async ({
   page,
@@ -48,7 +49,7 @@ test('three independent modules expose their own inputs and remain usable on nar
   const modules = page.getByRole('navigation', { name: '工作流程', exact: true })
   for (const [name, path] of [
     ['细胞提取', '/cell-extraction'],
-    ['特征注释', '/annotation'],
+    ['候选与关系审核', '/annotation'],
     ['统计分析', '/statistics'],
   ]) {
     await navigate(page, path!)
@@ -101,9 +102,9 @@ test('statistics imports an external sample matrix directly and exports a portab
   await exchange.getByRole('button', { name: '导出本板块数据' }).click()
   expect((await download).suggestedFilename()).toMatch(/scmm-exchange\.zip$/)
   await navigate(page, '/preprocess?step=normalize')
-  await expect(page.getByLabel('下一项操作', { exact: true })).toHaveValue('normalize')
+  await expect(preprocessingStep(page, 'normalize')).toHaveAttribute('aria-pressed', 'true')
   await navigate(page, '/preprocess?step=filter')
-  await expect(page.getByLabel('下一项操作', { exact: true })).toHaveValue('filter')
+  await expect(preprocessingStep(page, 'filter')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
@@ -124,9 +125,7 @@ test('feature-only annotation import cannot enable quantitative statistics', asy
   await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
   await expect(exchange).toContainText('独立特征表可用于注释')
   await navigate(page, '/statistics')
-  await expect(
-    page.locator('.state-note').filter({ hasText: /统计分析需要定量矩阵。请在上方/ }),
-  ).toBeVisible()
+  await expect(page.locator('#matrix-required')).toBeVisible()
   await expect(page.getByRole('button').filter({ hasText: '数据检查' })).toBeDisabled()
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
@@ -230,7 +229,9 @@ test('each workflow page restores its own scroll and first visits start at top',
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100)
   const rawPosition = await page.evaluate(() => scrollY)
   // DOM clicks avoid Playwright first scrolling the sidebar link into view.
-  await page.getByRole('link', { name: /提取/ }).evaluate((el: HTMLAnchorElement) => el.click())
+  await page
+    .locator('.sidebar a[href="/extraction"]')
+    .evaluate((el: HTMLAnchorElement) => el.click())
   await expect.poll(() => page.evaluate(() => scrollY)).toBe(0)
   await page.getByRole('link', { name: /预览/ }).evaluate((el: HTMLAnchorElement) => el.click())
   await expect.poll(() => page.evaluate(() => scrollY)).toBe(rawPosition)
@@ -251,4 +252,39 @@ test('project drafts survive workspace refresh and saving does not apply them', 
   await page.getByRole('button', { name: '应用项目信息', exact: true }).click()
   await expect(page.locator('.save-state')).toHaveText('已应用未保存')
   await expect(page.locator('.draft-state')).toHaveCount(0)
+})
+
+test('a late saved draft keeps the page chosen after reload', async ({ page }) => {
+  await createProject(page, '导航与延迟草稿')
+  const workspace = await page.evaluate(() => sessionStorage.getItem('scmm-workspace')!)
+  const project = await page.request.get('/api/v1/workspace', {
+    headers: { 'X-SCMM-Workspace': workspace },
+  })
+  expect(project.ok()).toBeTruthy()
+  const projectPath = (await project.json()).project.path
+  let release!: () => void
+  const delayed = new Promise<void>((resolve) => (release = resolve))
+  await page.route('**/workspace/maintenance/draft', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    await delayed
+    await route.fulfill({ json: { project_path: projectPath, route: '/samples', forms: {} } })
+  })
+  const recovering = page.waitForRequest(
+    (request) =>
+      request.url().endsWith('/workspace/maintenance/draft') && request.method() === 'GET',
+  )
+  try {
+    await page.reload()
+    await recovering
+    await navigate(page, '/raw')
+    await expect(page.getByRole('heading', { name: '预览', exact: true })).toBeVisible()
+    const checked = page.waitForResponse((response) =>
+      response.url().endsWith('/maintenance/status'),
+    )
+    release()
+    await checked
+    await expect(page).toHaveURL(/\/raw$/)
+  } finally {
+    release()
+  }
 })

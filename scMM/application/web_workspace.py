@@ -14,6 +14,7 @@ from copy import deepcopy
 
 from scMM.util.observations import observation_kind
 
+from .annotation_evidence import AnnotationEvidenceWorkflow
 from .identity import actor
 from .projects import ProjectStore
 from .storage import StorageCatalog
@@ -40,6 +41,7 @@ class WebWorkspaceService(
     AnalysisWorkflow,
     ResultWorkflow,
     LipidWorkflow,
+    AnnotationEvidenceWorkflow,
     IonWorkflow,
     TimeWorkflow,
     MergeWorkflow,
@@ -130,6 +132,8 @@ class WebWorkspaceService(
 
     @staticmethod
     def view(workspace):
+        from .annotation_sources import review_sources
+
         project = workspace.project
         payload = None
         if project is not None:
@@ -138,6 +142,7 @@ class WebWorkspaceService(
                 "path": str(project.folder),
                 "manifest": deepcopy(project.manifest),
                 "unsaved": project.unsaved,
+                "annotation": review_sources(project),
                 "presentation": deepcopy(project.views.get("legend_positions", {})),
                 "legend_orders": deepcopy(project.views.get("legend_orders", {})),
                 "dataset": None

@@ -1,5 +1,58 @@
-import { test, expect, navigate } from './fixtures'
+import { test, expect, navigate, type Page } from './fixtures'
 import { createProject } from './support/project'
+
+test.use({ viewport: { width: 1920, height: 1080 } })
+
+function peak(page: Page, id: string) {
+  return page
+    .getByRole('complementary', { name: '峰列表' })
+    .locator('button')
+    .filter({
+      has: page.getByText(id, { exact: true }),
+    })
+}
+
+test('complete feature spectrum is selectable before candidate search, including identical masses', async ({
+  page,
+}) => {
+  await createProject(page, '查库前全谱与重叠峰')
+  await navigate(page, '/annotation')
+  const exchange = page.getByRole('region', { name: '板块数据导入与导出' })
+  await exchange.getByRole('button', { name: '导入外部数据' }).click()
+  await exchange.getByLabel('板块导入格式').selectOption('feature_csv')
+  await exchange.getByLabel('板块数据文件').setInputFiles({
+    name: 'features.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      'feature_id,mz\nfirst,123.456789\nsecond,123.456789\ncandidate,316.320225793\n',
+    ),
+  })
+  await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
+  const spectrum = page.getByRole('region', { name: '谱图注释与关联峰' })
+  const plot = spectrum.locator('.js-plotly-plot')
+  await spectrum.getByRole('button', { name: '查看完整谱图', exact: true }).click()
+  await expect(plot).toContainText('Full feature spectrum')
+  await expect(plot).toBeInViewport({ ratio: 0.95 })
+  const markers = plot.locator('.scatterlayer .trace .points path.point')
+  await expect(markers).toHaveCount(3)
+  await markers.first().click({ force: true })
+  await expect(spectrum.getByText('此位置有 2 个可选峰')).toBeVisible()
+  await spectrum.getByRole('button', { name: /^second · m\/z/ }).click()
+  await expect(spectrum.locator('.selected-peak')).toContainText('选中 second')
+  await spectrum.getByLabel('定位峰').fill('first')
+  await expect(spectrum.getByText('当前峰在列表筛选范围之外。')).toBeVisible()
+  await spectrum.getByRole('button', { name: '恢复全谱', exact: true }).click()
+  await expect(spectrum.locator('.selected-peak')).toContainText('选中 second')
+  await spectrum.getByRole('button', { name: '返回局部谱图', exact: true }).click()
+  await expect(plot).toContainText('Local feature spectrum')
+  await expect(spectrum.locator('.selected-peak')).toContainText('选中 second')
+  await spectrum.getByRole('button', { name: '查找候选', exact: true }).click()
+  await page.getByLabel('脂质数据库文件').selectOption('preset:mammalian_cells')
+  await page.getByRole('button', { name: '运行精确质量候选注释', exact: true }).click()
+  await expect(spectrum.locator('.selected-peak')).toContainText('已查未命中')
+  await expect(spectrum.getByLabel('峰标签内容')).toHaveValue('both')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
 
 test('standalone feature annotation uses mammalian preset and persists reviewed MS2 labels', async ({
   page,
@@ -18,14 +71,15 @@ test('standalone feature annotation uses mammalian preset and persists reviewed 
     buffer: Buffer.from('feature_id,mz\nmc,316.320225793\nunknown,123.456789\n'),
   })
   await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
-  await expect(exchange).toContainText('独立特征表')
+  await expect(page.getByLabel('谱图来源')).toContainText('独立特征表')
+  await page.getByRole('button', { name: '查找候选', exact: true }).click()
   await page.getByLabel('脂质数据库文件').selectOption('preset:mammalian_cells')
   await page.getByRole('button', { name: '运行精确质量候选注释', exact: true }).click()
   const spectrum = page.getByRole('region', { name: '谱图注释与关联峰' })
   await expect(spectrum.locator('.js-plotly-plot')).toBeVisible()
   await expect(spectrum).toContainText('没有实测强度')
   await expect(spectrum.getByLabel('谱图强度显示')).toBeDisabled()
-  await page.getByLabel('脂质逐特征核对', { exact: true }).selectOption('mc')
+  await peak(page, 'mc').click()
   await expect(spectrum.locator('.selected-peak')).toContainText('SPB19:0;O2')
   await expect(spectrum.locator('.selected-peak')).toContainText('MS2: Not supplied')
   await page.getByLabel('人工注释名称', { exact: true }).fill('人工名称保留原文')
@@ -37,7 +91,7 @@ test('standalone feature annotation uses mammalian preset and persists reviewed 
   await page.getByRole('button', { name: '保存项目', exact: true }).first().click()
   await page.reload()
   await expect(page.getByLabel('脂质查看版本')).not.toHaveValue('')
-  await page.getByLabel('脂质逐特征核对', { exact: true }).selectOption('mc')
+  await peak(page, 'mc').click()
   await expect(page.getByLabel('人工注释名称', { exact: true })).toHaveValue('人工名称保留原文')
   await page.getByRole('button', { name: '关闭项目', exact: true }).click()
   await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
@@ -47,7 +101,7 @@ test('standalone feature annotation uses mammalian preset and persists reviewed 
     .getByRole('button', { name: '打开项目 →' })
     .click()
   await expect(page).toHaveURL(/\/annotation$/)
-  await page.getByLabel('脂质逐特征核对', { exact: true }).selectOption('mc')
+  await peak(page, 'mc').click()
   await expect(page.getByLabel('人工注释名称', { exact: true })).toHaveValue('人工名称保留原文')
   await expect(page.getByRole('alert')).toHaveCount(0)
   expect(errors).toEqual([])
@@ -64,18 +118,24 @@ test('clicking an observed peak links the candidate table and spectrum review co
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
   await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await navigate(page, '/annotation')
+  await page.getByRole('button', { name: '查看完整谱图', exact: true }).click()
+  await page.getByRole('button', { name: '查找候选', exact: true }).click()
   await page.getByRole('button', { name: '运行注释与同位素标记', exact: true }).click()
   const spectrum = page.getByRole('region', { name: '谱图注释与关联峰' })
   const chart = spectrum.locator('.js-plotly-plot')
-  await expect(chart).toBeVisible()
+  await expect(chart).toContainText('Full feature spectrum')
+  await chart.evaluate((element) => element.setAttribute('data-review-plot', 'mounted'))
   await chart.locator('.scatterlayer .trace .points path.point').first().click({ force: true })
-  await expect(page.getByLabel('脂质逐特征核对', { exact: true })).toHaveValue('f_h')
+  await expect(peak(page, 'f_h')).toHaveAttribute('aria-pressed', 'true')
   await expect(spectrum.locator('.selected-peak')).toContainText('f_h')
+  await spectrum.getByRole('button', { name: '峰关系', exact: true }).click()
   await expect(
     spectrum.getByRole('button', { name: '接受关联', exact: true }).first(),
   ).toBeVisible()
   await spectrum.getByRole('button', { name: '接受关联', exact: true }).first().click()
-  await expect(spectrum.getByRole('cell', { name: '已确认', exact: true }).first()).toBeVisible()
+  await expect(spectrum.getByText(/同位素 · 已确认|加合离子 · 已确认/).first()).toBeVisible()
+  await expect(chart).toHaveAttribute('data-review-plot', 'mounted')
+  await spectrum.getByRole('button', { name: '候选', exact: true }).click()
   await page.getByLabel('人工注释名称', { exact: true }).fill('Reviewed candidate')
   await page.getByRole('button', { name: '保存人工指定', exact: true }).click()
   await expect(spectrum.locator('.selected-peak')).toContainText('Reviewed candidate')
@@ -83,7 +143,6 @@ test('clicking an observed peak links the candidate table and spectrum review co
   await expect(chart).toContainText('Relative abundance (%)')
   await spectrum.getByRole('button', { name: '恢复全谱', exact: true }).click()
   await spectrum.screenshot({ path: test.info().outputPath('annotation-spectrum.png') })
-  await page.setViewportSize({ width: 390, height: 844 })
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
     .toBe(true)
@@ -114,7 +173,6 @@ test('clicking an observed peak links the candidate table and spectrum review co
       }),
     )
     .toEqual([])
-  await spectrum.screenshot({ path: test.info().outputPath('annotation-spectrum-mobile.png') })
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
@@ -133,6 +191,7 @@ test('an imported matrix with unknown intensity provenance can run mass-only ann
     buffer: Buffer.from('Sample,Label,316.320225793\ns1,A,10\ns2,B,11\n'),
   })
   await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
+  await page.getByRole('button', { name: '查找候选', exact: true }).click()
   await page.getByLabel('脂质数据库文件').selectOption('preset:mammalian_cells')
   await expect(page.getByLabel('注释证据模式')).toHaveValue('true')
   await page.getByRole('button', { name: '运行精确质量候选注释', exact: true }).click()
@@ -140,7 +199,7 @@ test('an imported matrix with unknown intensity provenance can run mass-only ann
   await expect(spectrum.locator('.js-plotly-plot')).toBeVisible()
   await expect(spectrum.locator('.js-plotly-plot')).toContainText('Mean matrix value')
   await expect(spectrum.getByLabel('谱图强度显示')).toBeDisabled()
-  await page.getByLabel('脂质逐特征核对', { exact: true }).selectOption('316.320225793')
+  await peak(page, '316.320225793').click()
   await expect(spectrum.locator('.selected-peak')).toContainText('SPB19:0;O2')
   await expect(page.getByRole('alert')).toHaveCount(0)
 })

@@ -92,6 +92,8 @@ def read_batch(path):
         if not live:
             # Read-only recovery: do not race a live writer with a state-file rewrite.
             state = {**state, "status": "interrupted", "message": "Worker no longer running"}
+    if state["status"] in {"queued", "running"} and (path.parent / "stop.requested").is_file():
+        state["stop_requested"] = True
     return state
 
 

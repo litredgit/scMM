@@ -62,26 +62,35 @@ class IonWorkflow:
                 )
             return self.ion_jobs
 
+    def ion_tasks(self, identity, *, active_only=False):
+        with self.access(identity) as workspace:
+            project = workspace.require_project()
+            if not hasattr(self, "ion_jobs"):
+                return []
+            jobs = self.ion_jobs
+            principal = actor.get()
+            owner = principal["id"] if principal else workspace.owner_id
+            with jobs.lock:
+                return [
+                    deepcopy(r)
+                    for r in jobs.jobs.values()
+                    if r["owner"] == owner
+                    and r["workspace"] == identity
+                    and r["binding"]["project"] == str(project.folder)
+                    and (not active_only or r["status"] in {"queued", "running"})
+                ]
+
     def ion_info(self, identity):
         with self.access(identity) as workspace:
             project = workspace.require_project()
             state = project.ion_state
-            jobs = self._ion_jobs()
-            principal = actor.get()
-            owner = principal["id"] if principal else workspace.owner_id
-            with jobs.lock:
-                tasks = [
-                    deepcopy(r)
-                    for r in jobs.jobs.values()
-                    if r["owner"] == owner and r["workspace"] == identity
-                ]
+            tasks = self.ion_tasks(identity)
             if state is None:
                 return {
                     "initialized": False,
                     "species": [{"id": s.id, "polarity": s.polarity} for s in ION_SPECS.values()],
                     "tasks": tasks,
                 }
-            state = freeze_active_branch(project)
             return {
                 "initialized": True,
                 "catalog_revision": state["revision"],
@@ -94,8 +103,16 @@ class IonWorkflow:
                     {
                         "id": key,
                         "view_id": entry["view_id"],
-                        "cells": entry["workspace"]["data"].n_obs,
-                        "variables": entry["workspace"]["data"].n_vars,
+                        "cells": (
+                            project.workspace.data
+                            if key == state["active_branch_id"]
+                            else entry["workspace"]["data"]
+                        ).n_obs,
+                        "variables": (
+                            project.workspace.data
+                            if key == state["active_branch_id"]
+                            else entry["workspace"]["data"]
+                        ).n_vars,
                     }
                     for key, entry in state["branches"].items()
                 ],
@@ -112,6 +129,10 @@ class IonWorkflow:
                     for key, entry in state["registry"]["grouping"].items()
                 ],
                 "annotation_versions": list(state["registry"]["annotation"]),
+                "annotation_roots": {
+                    key: entry.get("root_id")
+                    for key, entry in state["registry"]["annotation"].items()
+                },
                 "tasks": tasks,
                 "species": [{"id": s.id, "polarity": s.polarity} for s in ION_SPECS.values()],
             }
@@ -319,31 +340,63 @@ class IonWorkflow:
 
         return self._ion_mutate(identity, revision, apply)
 
-    def ion_represent(self, identity, revision, **options):
+    @staticmethod
+    def _ion_representation(project, options):
         from scMM.ion.representation import build_exploratory_representations, build_representations
 
+        entry = grouping_version(project, options["version"])
+        data = measurement(project, entry["root_id"])
+        common = {
+            "strategy": options["strategy"],
+            "include_singletons": options["include_singletons"],
+        }
+        if options["mode"] == "exploratory_v1":
+            result = build_exploratory_representations(
+                data, entry["grouping"], entry["ratio_assessments"], **common
+            )
+        else:
+            result = build_representations(
+                data,
+                entry["grouping"],
+                entry["selections"],
+                relation_reviews=entry["relation_reviews"],
+                **common,
+            )
+        return entry, data, result
+
+    def ion_representation_preview(self, identity, revision, **options):
+        with self.access(identity, operation="ion_representation_preview") as workspace:
+            workspace.check(revision)
+            entry, data, (l1, l2, metadata) = self._ion_representation(
+                workspace.require_project(), options
+            )
+            kept = set(l1.var_names) if l1 is not None else set()
+            views = [
+                {
+                    "level": level,
+                    "cells": matrix.n_obs if matrix is not None else 0,
+                    "variables": matrix.n_vars if matrix is not None else 0,
+                    "omitted_features": data.n_vars - len(kept) if level == "L1" else None,
+                }
+                for level, matrix in (("L0", data), ("L1", l1), ("L2", l2))
+            ]
+            return {
+                "workspace": self.view(workspace),
+                "value": {
+                    "views": views,
+                    "metadata": {
+                        **metadata,
+                        "root_id": entry["root_id"],
+                        "omitted_l1": [f for f in data.var_names if f not in kept],
+                    },
+                },
+            }
+
+    def ion_represent(self, identity, revision, **options):
         from .data_views import add_source_view
 
         def apply(project):
-            entry = grouping_version(project, options["version"])
-            data = measurement(project, entry["root_id"])
-            common = {
-                "strategy": options["strategy"],
-                "include_singletons": options["include_singletons"],
-            }
-            if options["mode"] == "exploratory_v1":
-                result = build_exploratory_representations(
-                    data, entry["grouping"], entry["ratio_assessments"], **common
-                )
-            else:
-                result = build_representations(
-                    data,
-                    entry["grouping"],
-                    entry["selections"],
-                    relation_reviews=entry["relation_reviews"],
-                    **common,
-                )
-            l1, l2, metadata = result
+            entry, data, (l1, l2, metadata) = self._ion_representation(project, options)
             views = []
             for level, key in [("L1", "l1"), ("L2", "l2")]:
                 matrix = l1 if key == "l1" else l2
@@ -413,16 +466,20 @@ class IonWorkflow:
                     "digest": json_identity(records),
                 },
             )
-            targets = [
-                {
-                    "target_id": str(f),
-                    "target_kind": "feature",
-                    "mass": float(mz),
-                    "polarity": options["polarity"],
-                }
-                for f, mz in zip(data.var_names, data.var.mz, strict=True)
-            ]
-            if options["version"]:
+            targets = (
+                [
+                    {
+                        "target_id": str(f),
+                        "target_kind": "feature",
+                        "mass": float(mz),
+                        "polarity": options["polarity"],
+                    }
+                    for f, mz in zip(data.var_names, data.var.mz, strict=True)
+                ]
+                if options.get("target_mode") != "ec"
+                else []
+            )
+            if options["version"] and options.get("target_mode") != "feature":
                 entry = grouping_version(project, options["version"])
                 if entry["root_id"] != options["root_id"]:
                     raise ValueError("annotation/grouping roots differ")
@@ -441,6 +498,8 @@ class IonWorkflow:
                         }
                     )
             targets.extend(options["formula_targets"])
+            if not targets:
+                raise ValueError("所选来源没有可搜索的已审阅离子组或分子式。")
             result = search_candidates(
                 targets,
                 database,
@@ -484,7 +543,7 @@ class IonWorkflow:
 
         return self._ion_mutate(identity, revision, apply)
 
-    def ion_table(self, identity, *, version, kind, offset=0, limit=100):
+    def ion_table(self, identity, *, version, kind, offset=0, limit=100, feature_id="", ec_id=""):
         import pandas as pd
 
         from .web_support import table_view
@@ -493,7 +552,32 @@ class IonWorkflow:
             project = workspace.require_project()
             registry = project.ion_state["registry"]
             if kind in {"relations", "groups", "diagnostics"}:
-                rows = grouping_version(project, version)["grouping"][kind]
+                entry = grouping_version(project, version)
+                rows = entry["grouping"][kind]
+                if kind == "relations":
+                    if ec_id:
+                        group = next(
+                            (r for r in entry["grouping"]["groups"] if r["ec_id"] == ec_id), None
+                        )
+                        ids = set(group["feature_ids"]) if group else set()
+                        rows = [
+                            r for r in rows if {r["left_feature_id"], r["right_feature_id"]} <= ids
+                        ]
+                    elif feature_id:
+                        rows = [
+                            r
+                            for r in rows
+                            if feature_id in {r["left_feature_id"], r["right_feature_id"]}
+                        ]
+                    rows = [
+                        {**r, "review": entry["relation_reviews"].get(r["relation_id"], "pending")}
+                        for r in rows
+                    ]
+                if kind == "groups":
+                    if feature_id:
+                        rows = [r for r in rows if feature_id in r["feature_ids"]]
+                    selected = {r["ec_id"]: r for r in entry["selections"]}
+                    rows = [{**r, "selection": selected.get(r["ec_id"])} for r in rows]
             elif kind in {"evidence", "reviews"}:
                 rows = list(registry[kind].values()) if kind == "evidence" else registry[kind]
             elif kind in {"candidates", "unknown"}:
@@ -502,6 +586,27 @@ class IonWorkflow:
                 ]
             elif kind == "representations":
                 rows = list(registry.get("representations", {}).values())
+            elif kind == "source_ec":
+                source = project.ion_state.get("source_matrices", {}).get(version)
+                view = project.ion_state["views"].get(version)
+                if source is None or not view or view["level"] != "L2":
+                    raise ValueError("所选来源不包含 L2 定量映射。")
+                available = [
+                    field
+                    for field in (
+                        "neutral_mass",
+                        "quantifier_feature_id",
+                        "feature_ids",
+                        "member_feature_ids",
+                        "ion_role",
+                        "identity_status",
+                        "quantification_rule",
+                        "structure_level",
+                    )
+                    if field in source.var
+                ]
+                summary = source.var[available].rename_axis("ec_id").reset_index()
+                rows = summary.to_dict("records")
             else:
                 raise ValueError("unknown ion table")
             display = [

@@ -392,25 +392,66 @@ def _spectrum_annotation(
     }
 
 
-def annotation_spectrum(data, version, *, feature_id="", sample=""):
-    from .intensity import intensity_states
-    from .lipid_annotation import dataset_inputs, feature_only
+def measured_spectrum(data, *, sample="", layer=""):
+    """Read the complete peak axis without requiring a candidate version."""
+    from scipy.sparse import issparse
 
-    mass_only = version.get("mass_only", False)
-    ids, masses, values, samples, layer, _ = dataset_inputs(
-        data, version["intensity_layer"], mass_only=mass_only
-    )
+    from .intensity import intensity_states
+    from .lipid_annotation import feature_axis, feature_only, feature_samples
+
+    ids, masses = feature_axis(data)
+    missing = feature_only(data)
+    layer = layer or "X"
+    value_state = intensity_states(data).get(layer, "unknown")
+    selected = feature_samples(data) == sample if sample else slice(None)
+    count = data.n_obs if not sample else int(selected.sum())
+    if sample and not count:
+        raise ValueError("所选样本不存在或未提供定量数据。")
+    relative = False
+    intensities = [None] * len(ids)
+    if not missing:
+        if not count:
+            raise ValueError("所选样本不存在。")
+        values = data.X if layer == "X" else data.layers[layer]
+        if sample:
+            values = values[selected]
+        explicit_values = values.data if issparse(values) else np.asarray(values)
+        if not np.isfinite(explicit_values).all():
+            raise ValueError("特征谱需要有限矩阵数值。")
+        intensities = np.asarray(values.mean(axis=0)).ravel().tolist()
+        relative = value_state in {"raw", "normalized"} and bool((explicit_values >= 0).all())
+    return {
+        "spectrum_kind": "feature_sticks",
+        "intensity_label": "Intensity not supplied"
+        if missing
+        else "Mean intensity"
+        if value_state == "raw"
+        else "Mean matrix value",
+        "intensity_missing": missing,
+        "relative_intensity_allowed": relative,
+        "intensity_source": {
+            "layer": layer,
+            "aggregation": "mean_over_observations",
+            "sample": sample,
+            "quantitation_available": not missing,
+            "observation_count": count,
+            "value_state": value_state,
+            "kind": "not_supplied"
+            if missing
+            else "intensity"
+            if value_state == "raw"
+            else "matrix_values",
+        },
+        "peaks": [
+            {"feature_id": feature, "mz": float(mz), "intensity": intensity}
+            for feature, mz, intensity in zip(ids, masses, intensities, strict=True)
+        ],
+    }
+
+
+def spectrum_overlay(version, ids, *, feature_id="", sample=""):
     if feature_id and feature_id not in ids:
         raise ValueError("所选特征不存在。")
-    missing = feature_only(data)
-    value_state = intensity_states(data).get(layer or "X", "unknown")
-    relative_allowed = (
-        not missing and value_state in {"raw", "normalized"} and bool((values >= 0).all())
-    )
-    selected = np.ones(data.n_obs, dtype=bool) if not sample else samples == sample
-    if sample and (missing or not selected.any()):
-        raise ValueError("所选样本不存在或未提供定量数据。")
-    intensities = [None] * len(ids) if missing else values[selected].mean(axis=0).tolist()
     relations = spectrum_relations(version, sample)
     families = _spectrum_family_ids(version, feature_id, relations) if feature_id else None
     roles = _related_roles(version, feature_id, relations, families) if feature_id else {}
@@ -424,7 +465,12 @@ def annotation_spectrum(data, version, *, feature_id="", sample=""):
     )
     by_candidate = {r["candidate_id"]: r for r in version["candidates"]}
     effective = {}
+    counts = {}
+    names = {}
+    reviewed = set(version.get("reviewed_features", []))
     for row in version["candidates"]:
+        counts[row["feature_id"]] = counts.get(row["feature_id"], 0) + 1
+        names.setdefault(row["feature_id"], set()).add(row["name"])
         selection = version["selected"].get(row["feature_id"])
         if (selection is not None and row["candidate_id"] in selection) or (
             selection is None and row["top_ranked"]
@@ -436,7 +482,7 @@ def annotation_spectrum(data, version, *, feature_id="", sample=""):
         if relation["type"] == "isotope" and relation.get("review") != "rejected":
             isotopes.setdefault(relation["target"], []).append(relation)
     peaks = []
-    for feature, mz, intensity in zip(ids, masses, intensities, strict=True):
+    for feature in ids:
         candidates = effective.get(feature, [])
         annotations = [
             _spectrum_annotation(row, input_identity=version["input_identity"])
@@ -537,11 +583,12 @@ def annotation_spectrum(data, version, *, feature_id="", sample=""):
         peaks.append(
             {
                 "feature_id": feature,
-                "mz": float(mz),
-                "intensity": intensity,
                 "label": "; ".join(dict.fromkeys(descriptions)),
                 "role": roles.get(feature, "unrelated"),
                 "candidate_ids": [r["candidate_id"] for r in candidates],
+                "candidate_count": counts.get(feature, 0),
+                "candidate_names": sorted(names.get(feature, ())),
+                "reviewed": feature in reviewed,
                 "ms2_status": ms2,
                 "annotations": annotations,
             }
@@ -549,22 +596,6 @@ def annotation_spectrum(data, version, *, feature_id="", sample=""):
     return {
         "version": version["id"],
         "review_revision": version.get("review_revision", 0),
-        "spectrum_kind": "feature_sticks",
-        "intensity_label": "Intensity not supplied"
-        if missing
-        else ("Mean matrix value" if mass_only else "Mean intensity"),
-        "relative_intensity_allowed": relative_allowed,
-        "mass_only": mass_only,
-        "intensity_source": {
-            "layer": layer or "X",
-            "aggregation": "mean_over_observations",
-            "sample": sample,
-            "quantitation_available": not missing,
-            "observation_count": int(selected.sum()),
-            "value_state": value_state,
-            "kind": "not_supplied" if missing else ("matrix_values" if mass_only else "intensity"),
-        },
-        "intensity_missing": missing,
         "peaks": peaks,
         "relations": relations,
         "selected_feature_id": feature_id,
@@ -575,3 +606,16 @@ def annotation_spectrum(data, version, *, feature_id="", sample=""):
         "review_conflicts": deepcopy(version.get("review_conflicts", [])),
         "audit": deepcopy(version.get("audit", [])),
     }
+
+
+def annotation_spectrum(data, version, *, feature_id="", sample=""):
+    axis = measured_spectrum(data, sample=sample, layer=version["intensity_layer"])
+    overlay = spectrum_overlay(version, data.var_names, feature_id=feature_id, sample=sample)
+    result = {**axis, **overlay, "mass_only": version.get("mass_only", False)}
+    result["peaks"] = [
+        {**peak, **label} for peak, label in zip(axis["peaks"], overlay["peaks"], strict=True)
+    ]
+    if result["mass_only"] and not axis["intensity_missing"]:
+        result["intensity_label"] = "Mean matrix value"
+        result["intensity_source"]["kind"] = "matrix_values"
+    return result

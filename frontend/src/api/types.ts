@@ -39,6 +39,19 @@ export interface ProjectView {
   legend_orders: Record<string, string[]>
   unsaved: boolean
   dataset: DatasetSummary | null
+  annotation?: {
+    sources: AnnotationSource[]
+    default_source: string
+    statistics: { branch_id: string; view_id: string; level: string } | null
+  }
+}
+
+export interface AnnotationSource {
+  id: string
+  identity: string
+  label: string
+  features: number
+  quantitation_available: boolean
 }
 
 export interface WorkspaceView {
@@ -137,6 +150,7 @@ export interface AnalysisInfo {
   figures: string[]
 }
 export interface Batch {
+  stop_requested?: boolean
   stage?: string
   stage_progress?: number | null
   started_at?: string

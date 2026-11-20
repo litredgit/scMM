@@ -25,6 +25,7 @@ export interface LipidInfo {
   adducts: Record<string, { polarity: string }>
   presets: Record<string, LipidRules>
   active: string
+  grouping_versions?: string[]
   layers: string[]
   molecule_layers: string[]
   sample_field: string
@@ -53,17 +54,20 @@ export interface LipidResults {
   }[]
   candidate_group_total?: number
   version: string
+  review_revision?: number
   parameters: Record<string, unknown>
   rules: LipidRules
   database: { filename: string; sha256: string; records: number }
   intensity_layer: string
   features: { id: string; mz: number; candidates: number; isotope: boolean; reviewed: boolean }[]
   candidates: DataTable
+  feature_candidates: DataTable
   isotopes: DataTable
   selected: Record<string, string[]>
   annotation_names?: Record<string, string>
   suggested: string[]
   diagnostics: Record<string, unknown>[]
+  audit?: Record<string, unknown>[]
   classification: Record<string, string[]>
   classification_tree: Record<string, string>[]
   chart_view?: Partial<LipidChartView>
@@ -80,7 +84,7 @@ export function ms2Label(status: unknown): string {
         available: 'MS2: Available in database',
         matched: 'MS2: Matched',
         no_match: 'MS2: No match',
-        unavailable: 'MS2: No record',
+        unavailable: 'MS2: No spectrum in database',
         unknown: 'MS2: Unknown',
         mixed: 'MS2: Mixed (see candidates)',
       } as Record<string, string>
@@ -106,6 +110,9 @@ export interface AnnotationSpectrum {
     label: string
     role: 'selected' | 'isotope' | 'adduct' | 'unrelated'
     candidate_ids: string[]
+    candidate_count?: number
+    candidate_names?: string[]
+    reviewed?: boolean
     ms2_status: string
     annotations?: {
       candidate_id: string
@@ -123,12 +130,17 @@ export interface AnnotationSpectrum {
     id: string
     source: string
     target: string
-    type: 'isotope' | 'adduct'
+    type: 'isotope' | 'adduct' | 'charge' | 'multimer' | 'neutral_loss' | 'fragment_form'
     review: string
     candidate_ids: string[]
     sample?: string
     name?: string
     adduct?: string
+    shared_review?: string
+    origin?: string
+    left_species?: string
+    right_species?: string
+    ppm_error?: number
   }[]
   selected_feature_id: string
   linked_feature_ids: string[]

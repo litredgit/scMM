@@ -76,6 +76,7 @@ class Materialize(RevisionRequest):
 
 class Annotate(RevisionRequest):
     version: str | None = None
+    target_mode: Literal["both", "feature", "ec"] = "both"
     root_id: str
     polarity: Literal["pos", "neg"] = "pos"
     species: list[str] = Field(default_factory=lambda: ["[M+H]+", "[M+Na]+", "[M+K]+", "[M+NH4]+"])

@@ -1,4 +1,4 @@
-import { navigate, test, expect, type Page } from './fixtures'
+import { navigate, test, expect, type Page, preprocessingStep } from './fixtures'
 import { readFile } from 'node:fs/promises'
 import { createProject as create } from './support/project'
 import { serialPolling } from '../src/api/polling'
@@ -27,7 +27,7 @@ test('explicit result selection, detailed help, stable QC and readable narrow la
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
   await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await navigate(page, '/preprocess')
-  await page.getByLabel('下一项操作', { exact: true }).selectOption('filter')
+  await preprocessingStep(page, 'filter').click()
   const helper = page.getByRole('button', { name: 'min_detected说明', exact: true })
   await helper.hover()
   await expect(page.getByRole('tooltip')).toContainText('等于阈值保留')
@@ -36,7 +36,7 @@ test('explicit result selection, detailed help, stable QC and readable narrow la
   await expect(page.getByRole('tooltip')).toBeVisible()
   await helper.press('Escape')
   await expect(page.getByRole('tooltip')).toHaveCount(0)
-  await page.getByLabel('下一项操作', { exact: true }).selectOption('normalize')
+  await preprocessingStep(page, 'normalize').click()
   await page.getByText('查看全部 normalization 方法', { exact: true }).click()
   await expect(page.locator('.method-list .help-trigger')).toHaveCount(7)
   await page.getByLabel('normalization', { exact: true }).selectOption('log')

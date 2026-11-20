@@ -78,7 +78,28 @@ class DatasetSummary(BaseModel):
     observation_kind: Literal["cell", "sample"] = "cell"
 
 
+class AnnotationSource(BaseModel):
+    id: str
+    identity: str
+    label: str
+    features: int
+    quantitation_available: bool
+
+
+class AnnotationStatistics(BaseModel):
+    branch_id: str
+    view_id: str
+    level: Literal["L0", "L1", "L2"]
+
+
+class AnnotationContext(BaseModel):
+    sources: list[AnnotationSource]
+    default_source: str
+    statistics: AnnotationStatistics | None
+
+
 class ProjectView(BaseModel):
+    annotation: AnnotationContext | None = None
     path: str
     manifest: dict[str, Any]
     unsaved: bool

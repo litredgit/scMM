@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { DataTable } from '../api/types'
 const labels: Record<string, string> = {
   source_file: '文件名',
@@ -35,6 +36,13 @@ const headerHelp: Record<string, string> = {
 const props = withDefaults(defineProps<{ table: DataTable; qc?: boolean; exact?: boolean }>(), {
   qc: false,
 })
+const columns = computed(() => props.table.columns.filter((key) => key !== 'source_path'))
+const numericColumns = computed(
+  () =>
+    new Set(
+      columns.value.filter((key) => props.table.rows.some((row) => typeof row[key] === 'number')),
+    ),
+)
 function formatted(value: unknown, key: string, row: Record<string, unknown>) {
   if (key === 'extraction_method' && value === 'snr_v1') return 'snr'
   if (value === null || value === undefined) return '—'
@@ -54,7 +62,9 @@ function formatted(value: unknown, key: string, row: Record<string, unknown>) {
       return value.toExponential(1)
     if (props.qc && row.metric === '检出特征数')
       return value.toLocaleString('en-US', { maximumFractionDigits: 1, useGrouping: false })
-    if (/intensity|signal|snr|mean_a|mean_b/.test(key)) return value.toExponential(1)
+    if (/snr|cell_min_signal/.test(key))
+      return value.toLocaleString('en-US', { useGrouping: false, maximumSignificantDigits: 21 })
+    if (/intensity|signal|mean_a|mean_b/.test(key)) return value.toExponential(1)
     return Number.isInteger(value)
       ? String(value)
       : value.toLocaleString('en-US', { maximumSignificantDigits: 6, useGrouping: false })
@@ -74,7 +84,12 @@ function span(table: DataTable, index: number) {
     <table>
       <thead>
         <tr>
-          <th v-for="key in table.columns.filter((c) => c !== 'source_path')" :key="key">
+          <th
+            v-for="key in columns"
+            :key="key"
+            scope="col"
+            :class="{ numeric: numericColumns.has(key) }"
+          >
             <FieldLabel
               :name="qc ? (labels[key] ?? key) : key"
               :help-key="key"
@@ -85,7 +100,7 @@ function span(table: DataTable, index: number) {
       </thead>
       <tbody>
         <tr v-for="(row, i) in table.rows" :key="i">
-          <template v-for="key in table.columns.filter((c) => c !== 'source_path')" :key="key"
+          <template v-for="key in columns" :key="key"
             ><td
               v-if="
                 !qc ||
@@ -97,6 +112,7 @@ function span(table: DataTable, index: number) {
                   ? span(table, i)
                   : 1
               "
+              :class="{ numeric: numericColumns.has(key) }"
             >
               {{ formatted(row[key], key, row)
               }}<HelpTip
@@ -114,3 +130,12 @@ function span(table: DataTable, index: number) {
     当前显示 {{ table.rows.length }} / {{ table.total }} 行；下载保留完整精度和全部记录。
   </p>
 </template>
+
+<style scoped>
+.numeric {
+  text-align: right;
+}
+.numeric :deep(.field-label) {
+  justify-content: flex-end;
+}
+</style>

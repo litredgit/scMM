@@ -1,4 +1,4 @@
-import { navigate, test, expect, type Page } from './fixtures'
+import { navigate, test, expect, type Page, preprocessingStep } from './fixtures'
 import { importDataset as importData } from './support/project'
 
 test.use({ actionTimeout: 15000 })
@@ -14,10 +14,10 @@ test('preprocessing preview applies and restores the full origin', async ({ page
   await importData(page, 'Vue 全部分析')
   await navigate(page, '/preprocess')
   await expect(page.getByRole('heading', { name: '预处理' })).toBeVisible()
-  await page.getByLabel('下一项操作', { exact: true }).selectOption('filter')
+  await preprocessingStep(page, 'filter').click()
   await expect(page.getByLabel('min_feature_fraction', { exact: true })).toHaveValue('0.2')
   await expect(page.getByRole('heading', { name: '操作前 · 当前数据', exact: true })).toBeVisible()
-  await page.getByLabel('下一项操作', { exact: true }).selectOption('normalize')
+  await preprocessingStep(page, 'normalize').click()
   await page.getByRole('button', { name: '检查影响', exact: true }).click()
   await expect(page.getByRole('heading', { name: '候选数据（尚未应用）' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '数据规模', exact: true })).toBeVisible()
@@ -66,7 +66,7 @@ test('preprocessing preview applies and restores the full origin', async ({ page
 test('advanced preprocessing controls stay manual and record applied options', async ({ page }) => {
   await importData(page, '高级预处理')
   await navigate(page, '/preprocess')
-  await page.getByLabel('下一项操作', { exact: true }).selectOption('normalize')
+  await preprocessingStep(page, 'normalize').click()
   await page.getByText('预处理高级参数', { exact: true }).click()
   await page.getByLabel('归一化总量尺度', { exact: true }).fill('100')
   const pending = page.waitForRequest(
@@ -75,7 +75,7 @@ test('advanced preprocessing controls stay manual and record applied options', a
   await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
   expect((await pending).postDataJSON().options.scale).toBe(100)
   await expect(page.getByRole('button', { name: '应用到当前数据', exact: true })).toBeEnabled()
-  await page.getByLabel('下一项操作', { exact: true }).selectOption('impute')
+  await preprocessingStep(page, 'impute').click()
   await page.getByLabel('imputation', { exact: true }).selectOption('knn')
   await page.getByLabel('插补近邻数', { exact: true }).fill('3')
   await page.getByLabel('插补近邻权重', { exact: true }).selectOption('distance')
@@ -99,17 +99,17 @@ test('explicit ID subset previews, applies and restores full preprocessing origi
 }) => {
   await importData(page, '稳定ID子集')
   await navigate(page, '/preprocess')
-  await page.getByLabel('下一项操作', { exact: true }).selectOption('subset')
+  await preprocessingStep(page, 'subset').click()
   await page.getByLabel('子集特征ID', { exact: true }).fill('f3,f0')
   await page.getByRole('button', { name: '检查影响', exact: true }).click()
   await expect(
     page.getByRole('heading', { name: '候选数据（尚未应用）', exact: true }),
   ).toBeVisible()
   await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
-  await expect(page.locator('.page-title').getByText(/64 细胞 × 2 特征/)).toBeVisible()
+  await expect(page.locator('.project-heading')).toContainText(/64\s+细胞 ×\s+2 特征/)
   await page.getByRole('button', { name: '历史与恢复', exact: true }).click()
   await page.getByRole('button', { name: '恢复到预处理起点', exact: true }).click()
-  await expect(page.locator('.page-title').getByText(/64 细胞 × 8 特征/)).toBeVisible()
+  await expect(page.locator('.project-heading')).toContainText(/64\s+细胞 ×\s+8 特征/)
   await noError(page)
 })
 

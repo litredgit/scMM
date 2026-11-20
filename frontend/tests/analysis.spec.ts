@@ -111,9 +111,9 @@ test('legacy settings, independent parameters, draft and project reset, narrow p
     'aria-current',
     'page',
   )
-  await expect(page.getByRole('button', { name: '监督与 SHAP', exact: true })).toHaveCSS(
-    'background-color',
-    'rgb(237, 247, 248)',
+  await expect(page.getByRole('button', { name: '监督与 SHAP', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
   )
   await expect(
     page.getByLabel('random_state', { exact: true }).filter({ visible: true }),

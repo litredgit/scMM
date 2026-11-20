@@ -26,9 +26,7 @@ test('target correlations, candidate evidence and manual annotation', async ({ p
   await panel.getByRole('button', { name: '计算并绘图' }).click()
   await expect(panel.locator('.js-plotly-plot')).toBeVisible()
   await navigate(page, '/annotation/evidence')
-  const annotations = page
-    .getByRole('heading', { name: '外部注释与谱图证据', exact: true })
-    .locator('..')
+  const annotations = page.locator('.evidence-input')
   await annotations.getByLabel('注释文件', { exact: true }).setInputFiles({
     name: 'manual.csv',
     mimeType: 'text/csv',
@@ -37,6 +35,7 @@ test('target correlations, candidate evidence and manual annotation', async ({ p
   await annotations.getByRole('button', { name: '预览匹配' }).click()
   await expect(annotations.getByText('匹配 1 · 歧义 0 · 未匹配 7')).toBeVisible()
   await annotations.getByRole('button', { name: '应用注释', exact: true }).click()
+  await annotations.getByRole('button', { name: 'MS/MS 搜索', exact: true }).click()
   const text = 'BEGIN IONS\nTITLE=synthetic\nPEPMASS=150\n100 4\n120 1\nEND IONS\n'
   for (const label of ['实测谱文件', '参考谱库'])
     await annotations
@@ -45,7 +44,21 @@ test('target correlations, candidate evidence and manual annotation', async ({ p
   await annotations.getByLabel('样本池与适用范围').fill('synthetic pooled sample')
   await annotations.getByLabel('最少匹配碎片').fill('2')
   await annotations.getByRole('button', { name: '搜索候选证据' }).click()
-  await expect(annotations.locator('.js-plotly-plot')).toBeVisible()
+  const records = page.locator('.evidence-records')
+  await expect(records.getByLabel('已保存证据记录')).not.toHaveValue('')
+  const row = records.locator('.msms-results tbody tr').first()
+  await expect(row).toContainText('f0')
+  await row.getByRole('button').click()
+  await expect(records.locator('.fragment-detail .js-plotly-plot')).toBeVisible()
+  await records.getByRole('button', { name: '以此测量峰为关联目标' }).click()
+  await records.getByRole('button', { name: '预览关联范围' }).click()
+  await expect(records.getByText(/输入版本.+pooled sample/)).toBeVisible()
+  await records.getByLabel('证据关联理由').fill('synthetic review')
+  await records.getByRole('button', { name: '保存证据关联' }).click()
+  await expect(row).toContainText('已关联')
+  const downloadEvidence = page.waitForEvent('download')
+  await records.getByRole('button', { name: '下载完整证据 JSON' }).click()
+  expect((await downloadEvidence).suggestedFilename()).toMatch(/annotation-evidence-.+\.json$/)
   expect(errors).toEqual([])
 })
 

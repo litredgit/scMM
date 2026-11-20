@@ -25,9 +25,9 @@ export const modules = [
     input: 'm/z 特征表 · 定量矩阵 · scMM 交换包',
     output: '候选与证据 · 峰关系 · 审核记录 · 注释数据',
     steps: [
-      { path: '/annotation', name: '谱图与候选审核' },
-      { path: '/ions', name: '离子归组与来源视图' },
-      { path: '/annotation/evidence', name: '外部注释与二级谱图' },
+      { path: '/annotation', name: '候选与关系审核' },
+      { path: '/annotation/evidence', name: '证据与导入' },
+      { path: '/ions', name: '定量视图' },
     ],
   },
   {

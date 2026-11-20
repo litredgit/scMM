@@ -2,6 +2,26 @@ import { test as base, expect, type Page, type APIRequestContext } from '@playwr
 export type { Page } from '@playwright/test'
 export { expect }
 
+export function preprocessingStep(page: Page, key: string) {
+  const labels: Record<string, string> = {
+    remove_outliers: '异常值处理',
+    filter: '筛选',
+    impute: '零值插补',
+    normalize: '归一化 / 标准化',
+    subset: '按稳定 ID 取子集',
+  }
+  return page
+    .getByRole('group', { name: '预处理操作', exact: true })
+    .getByRole('button', { name: labels[key] ?? key, exact: true })
+}
+
+export async function pinAnalysisParameters(page: Page) {
+  const pin = page.getByRole('button', { name: '固定参数区', exact: true }).first()
+  const unpin = page.getByRole('button', { name: '取消固定参数区', exact: true }).first()
+  await expect(pin.or(unpin)).toBeVisible()
+  if (await pin.isVisible()) await pin.click()
+}
+
 /** Follow the visible module navigation without reloading the scientific workspace. */
 export async function navigate(page: Page, path: string) {
   const modules: Record<string, string> = {
@@ -40,12 +60,10 @@ export async function navigate(page: Page, path: string) {
       page.getByRole('heading', { name: /^(预处理|尚未建立当前数据集|当前输入为独立特征表)$/ }),
     ).toBeVisible()
   const step = new URLSearchParams(path.split('?')[1]).get('step')
-  if (
-    step &&
-    path.startsWith('/preprocess') &&
-    (await page.getByLabel('下一项操作', { exact: true }).count())
-  )
-    await page.getByLabel('下一项操作', { exact: true }).selectOption(step)
+  if (step && path.startsWith('/preprocess')) {
+    const button = preprocessingStep(page, step)
+    if (await button.count()) await button.click()
+  }
 }
 
 export async function closeDocument(page: Page) {

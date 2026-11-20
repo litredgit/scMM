@@ -12,13 +12,6 @@ import SupervisedPanel from './modules/supervised/SupervisedPanel.vue'
 import type { AnalysisModule } from './types'
 export const analysisModules: readonly AnalysisModule[] = [
   {
-    id: 'exploration',
-    name: '相关性与集合',
-    group: '统计比较',
-    component: ExplorationPanel,
-    requires: ['matrix'],
-  },
-  {
     id: 'embedding',
     name: '降维',
     group: '探索 / QC',
@@ -61,18 +54,25 @@ export const analysisModules: readonly AnalysisModule[] = [
     requires: ['matrix'],
   },
   {
-    id: 'differential',
-    name: '差异与 Marker',
-    group: '统计比较',
-    component: DifferentialPanel,
-    requires: ['matrix', 'observations'],
-  },
-  {
     id: 'network',
     name: '相关网络',
     group: '探索 / QC',
     component: NetworkPanel,
     requires: ['matrix'],
+  },
+  {
+    id: 'exploration',
+    name: '相关性与集合',
+    group: '统计比较',
+    component: ExplorationPanel,
+    requires: ['matrix'],
+  },
+  {
+    id: 'differential',
+    name: '差异与 Marker',
+    group: '统计比较',
+    component: DifferentialPanel,
+    requires: ['matrix', 'observations'],
   },
   {
     id: 'supervised',
