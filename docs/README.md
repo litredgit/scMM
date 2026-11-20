@@ -1,16 +1,24 @@
 # scMM 文档
 
-首次使用请从[项目简介](../README.md)开始。下列编号与文档标题及网站导航一致。
+[项目概览](../README.md)
 
 ## 按任务阅读
 
-| 任务 | 文档 |
+| 要完成的任务 | 阅读入口 |
 |---|---|
-| 安装与使用 | [01 安装与部署](01-installation.md) · [02 网页流程](02-workflow.md) · [03 细胞与特征识别](03-cell-feature-identification.md) |
-| 查参数、内部实现或读结果 | [04 参数](04-parameters.md) · [05 内部计算参考](05-python-api.md) · [06 数据与文件](06-data-output.md) |
-| 理解分析方法 | [07 分析](07-analysis.md) · [08 时间与趋势](08-time-analysis.md) · [09 脂质注释](09-lipid-analysis.md) |
-| 独立板块与数据交换 | [三板块入口](02-workflow.md#三板块入口与数据交换) · [交换协议 v1](06-data-output.md#模块交换协议-v1) · [注释数据库](09-lipid-analysis.md#可选数据库与二级匹配状态) |
-| 读取 RAW 或排错 | [10 Thermo RAW](10-thermo-raw.md) · [11 常见问题](11-troubleshooting.md) |
-| 开发、测试和查进展 | [12 开发](12-development.md) · [13 测试](13-testing.md) · [14 路线图](14-roadmap.md) |
+| 打开项目、选择交换格式、保存、导出或恢复 | [项目与数据](projects-and-data.md) |
+| 从原始谱建立矩阵 | [细胞提取](extraction.md) |
+| 用特征表或矩阵查库、审阅峰关系和证据 | [特征注释](annotation.md) |
+| 检查定量矩阵、预处理并分析 | [统计分析](statistics.md) |
 
-[协作约定](../AGENTS.md) · [变更记录](../CHANGELOG.md) · [原始验证报告](validation/)
+每个功能页提供网页步骤、参数、结果解释和相关排错。部署与验证资料按维护任务查阅。
+
+| 维护任务 | 阅读入口 |
+|---|---|
+| 安装服务器、配置资源与账号、发布和维护 | [部署与运维](deployment.md) |
+| 开发功能、运行检查或查看待办 | [开发与验证](development.md) |
+| 查 Python 内部调用、文件格式或持久化约定 | [内部接口与数据契约](internal-reference.md) |
+
+## 规则、证据与历史
+
+[验证报告](validation/README.md) · [脂质规则说明](../rules/lipids/README.md) · [变更记录](../CHANGELOG.md) · [协作约定](../AGENTS.md)

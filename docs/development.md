@@ -1,12 +1,10 @@
-# 12 开发与质量检查
+# 开发与验证
 
-[返回文档索引](README.md) · [安装说明](01-installation.md)
+[文档导航](README.md)
 
-本页维护架构职责及跨模块契约。按[任务导航](README.md#按任务阅读)选择代码、必读主题和测试；
-检查入口见[测试指南](13-testing.md)，服务操作见[安装与部署](01-installation.md#发布更新与回滚)。
-默认只读根规则和任务相关主题，跨模块时沿调用和状态依赖追查；历史不作为每次任务的必读材料。
-任务调查无需另行授权，修改与发布的授权边界见[协作约定](../AGENTS.md#协作约定)。
-网页实现优先遵循[新手交互、1080p 桌面与紧凑布局目标](../AGENTS.md#网页界面设计)，不再将手机或其他非目标视口适配列为开发要求。
+开发从[环境与部署](deployment.md)开始。修改功能前先核对状态归属和调用边界，再按影响范围选择验证。内部调用与存储细节见[内部接口与数据契约](internal-reference.md)。
+
+[架构](#代码结构) · [功能接入](#分析功能接入指南) · [完整验证](#完整验证) · [专项复现](#专项验证与复现) · [待办与恢复条件](#未完成事项与恢复条件)
 
 ## 代码结构
 
@@ -26,7 +24,7 @@ AI 网络调用继续不占科学工作区锁。
 
 项目持久化与批次编排分别在 `application/projects.py` 和 `application/project_batch.py`，
 RAW 流读取在 `file/readers/`。
-下列树保留其他模块职责，使用流程以 [当前网页指南](02-workflow.md) 为准。
+下列树保留其他模块职责，使用流程以 [当前网页指南](projects-and-data.md) 为准。
 
 ```text
 scMM/
@@ -104,7 +102,7 @@ scMM/
 `ion/annotation.py`、`ion/evidence.py` 与 `application/compound_database.py` 提供本地通用候选、旧脂质排序适配及外部证据导入/作用域预览；不执行自动MS/MS匹配。
 目录由离子页显式启用；启用后的提取/导入在保留旧分支基础上建立新测量来源。目录项目走版本2完整快照，正式保存与维护恢复分别处理报告与白名单模型，不降级为只保存活动矩阵。
 `data_view_storage.py` 与 `project_references.py` 管理完整快照/引用闭包；`analysis_inputs.py` 统一来源、空间与敏感性报告。
-`web_ions.py` 负责短锁事务与身份复核，`ion_jobs.py`/`ion_worker.py` 只为新增离子流程提供冻结输入、独立进程及校验后收集；状态与预算见[后台资源](01-installation.md#离子后台资源)。Vue 只持表单/摘要/分页，不持计算矩阵。
+`web_ions.py` 负责短锁事务与身份复核，`ion_jobs.py`/`ion_worker.py` 只为新增离子流程提供冻结输入、独立进程及校验后收集；状态与预算见[后台资源](deployment.md#离子后台资源)。Vue 只持表单/摘要/分页，不持计算矩阵。
 
 ### 板块与交换状态所有权
 
@@ -114,7 +112,7 @@ scMM/
 缩放和点峰留在页面。`annotation_evidence.py` 管理每次实测二级比对及显式关联，按版本和来源复核后发布。
 三个板块共用认证工作区、项目、任务和保存门禁，不拆成多个服务进程。
 `application/module_exchange.py` 负责导入候选、完整引用闭包和内容校验，HTTP 边界为
-`api/exchange_schemas.py` 与 `api/routers/exchange.py`，格式见[交换协议](06-data-output.md#模块交换协议-v1)。
+`api/exchange_schemas.py` 与 `api/routers/exchange.py`，格式见[交换协议](internal-reference.md#模块交换协议-v1)。
 `AnalysisWorkspace.require_features()` 允许带明确标记的零观测特征表；`require_data()` 继续保护需要真实定量的操作。
 谱图展示由共享 `spectrumPresentation.ts` 处理副本，保留数据精度和独立数值下载；
 注释谱图按数据 token、注释版本及审核修订验证导出有效性。
@@ -134,7 +132,7 @@ scMM/
 ## 开发环境
 
 日常修改在 `dev` worktree，`main` worktree 专用于生产；目录、服务与发布/回滚命令见
-[开发与生产分离](01-installation.md#开发与生产分离)。5007 用于开发检验，5006 用于正式实验。
+[开发与生产分离](deployment.md#开发与生产分离)。5007 用于开发检验，5006 用于正式实验。
 
 ```bash
 uv sync --locked --all-extras --dev
@@ -176,7 +174,7 @@ uv sync --locked --all-extras --dev
   子进程不得修改活跃项目或前端对象；失败、关闭和过期结果不能启用下载或确认。
   任务完成后释放工作进程；工作进程重新读取原始文件，页面已加载的原始谱仍保留，需计入额外内存。
   每会话只运行一个预览，跨会话与提取批次的资源限制尚未统一。
-  原始文件打开、单扫描、分析与保存仍同步，剩余后台化见[待办清单](14-roadmap.md)。
+  原始文件打开、单扫描、分析与保存仍同步，剩余后台化见[待办清单](#未完成事项与恢复条件)。
 
 ## 文档维护与历史追溯
 
@@ -206,7 +204,7 @@ git show bc3e35d:docs/16-thermo-raw.md
 必需目录在启动时检查，注释及 RAW 可选资源在功能使用时检查；服务器模式下失效路径不回退到其他位置。
 普通启动不创建缺失目录，不自动扩展数据白名单。
 部署布局使用[通用模板](../config/environments.example.json)，网页资源使用[独立模板](../config/server.example.json)；
-优先级、环境变量和命令见[安装部署](01-installation.md#访问与路径配置)。
+优先级、环境变量和命令见[安装部署](deployment.md#访问与路径配置)。
 
 认证专项运行 `PYTHONUTF8=1 .venv/bin/python -m pytest tests/api/test_authentication.py tests/api/test_server_config.py -q -W error`。
 原有 HTTP 回归使用真实临时数据库及登录，不绕过中间件；浏览器使用隔离合成账号，不读取线上凭据。
@@ -255,7 +253,7 @@ HTTP `/presence/register` 与 `/presence/heartbeat` 为登录页提供受限租�
 工作区满额/计算锁占用不影响直接访问监控。前端轮询独立于实验 busy 状态，离开监控页停止轮询，旧响应不覆盖新页面状态。
 
 
-首次认证迁移使用 `release --migrate-auth`，前提及人工维护窗口证据见[安装部署](01-installation.md#监控初始化与生产只读检查)。
+首次认证迁移使用 `release --migrate-auth`，前提及人工维护窗口证据见[安装部署](deployment.md#监控初始化与生产只读检查)。
 该路径仅支持旧版、不能覆盖新监控状态；测试覆盖非零/非法旧计数、新协议拒绝及安装/同步/健康失败后旧启动器和代码共同恢复。
 常规发布继续使用新协议和时效检查。恢复备份位于仓库外；配置、认证库和监控库不随代码回滚。
 
@@ -265,7 +263,7 @@ HTTP `/presence/register` 与 `/presence/heartbeat` 为登录页提供受限租�
 `maintenance.py` 管理页面握手和维护状态，`maintenance_runner.py` 在独立 systemd 任务中执行重启及配置回滚。
 `deployment_maintenance.py` 管理部署通知、请求准入、正式写入保护及限时逐会话暂存/隔离恢复；超时线程只能留下未引用产物，不能迟到发布指针。
 `deployment_client.py` 为本机维护建立及时撤销的审计管理员会话，串联通知、worker 身份核实/退出、暂存及报告；只读运维令牌不变。
-部署默认允许临时状态损失；严格会话维护保留为可选入口。期限、容量及首次旧版升级边界见[安装部署](01-installation.md#发布更新与回滚)。
+部署默认允许临时状态损失；严格会话维护保留为可选入口。期限、容量及首次旧版升级边界见[安装部署](deployment.md#发布更新与回滚)。
 `maintenance_closure.py` 管理维护轮次内的一次性关闭审阅：只对经人工核实的失联记录及历史未登记请求更新证据，
 不删除工作区，不授予只读运维令牌写权限；新活动、过期或审计失败不应用旧确认。
 `api/routers/maintenance.py` 只开放认证管理入口。公开维护状态只含收集 nonce/完成标记，完整状态只给管理员。
@@ -325,7 +323,7 @@ RawPage 保留原 DOM、参数键、视图键和展示入口，只组装 `featur
 | `application/time_analysis.py` | Palantir/窗口/速度编排及稳定兼容门面 | 保留原函数签名/导出，趋势适配器直接依赖 inputs，避免反向导入门面 |
 | `application/time_outputs.py` | 经身份验证的表、metadata 与图 | 只读，不重新拟合；所有读取继续 require_run 和绘图输入身份校验 |
 
-前端路径相对 `frontend/src/`；Python 路径相对 `scMM/`。局部回归入口见[测试职责](13-testing.md#场景隔离与失败归属)。
+前端路径相对 `frontend/src/`；Python 路径相对 `scMM/`。局部回归入口见[测试职责](#场景隔离与失败归属)。
 
 ## 项目内产物管理与批次比较
 
@@ -339,7 +337,7 @@ RawPage 保留原 DOM、参数键、视图键和展示入口，只组装 `featur
 ## 分析功能接入指南
 
 本节是网页分析扩展的主要接入说明，示例全部来自已有四类分析，不增加演示算法。
-先核对实际代码与分支；能力限制见[能力覆盖](#前后端能力覆盖)，科学解释见[分析说明](07-analysis.md)。
+先核对实际代码与分支；能力限制见[能力覆盖](#前后端能力覆盖)，科学解释见[分析说明](statistics.md)。
 下文 `frontend/` 相对仓库根，Python 路径带 `scMM/`。不要仅凭注册导航就声明后端能力已经接通。
 
 ### 先判断扩展类型
@@ -502,7 +500,7 @@ if (has('network')) await loadWithPlot('network', 'network_plot')
 `workflow.spec.ts` 贯通四类分析、保存重载和完整导出。共享 store 改动还要选择导航/认证/其他读请求的受影响回归。
 类型/构建为 `npm --prefix frontend run build`，文档链接/锚点为
 `uv run --no-sync python -m pytest tests/tooling/test_documentation.py -q -W error`。
-按[分块验证](13-testing.md#完整验证)选择受影响检查；仅改帮助文案或已有显示参数时，不机械重跑全部算法和真实实验。
+按[分块验证](#完整验证)选择受影响检查；仅改帮助文案或已有显示参数时，不机械重跑全部算法和真实实验。
 
 ## 添加归一化方法
 
@@ -594,23 +592,232 @@ Jupyter 环境依赖及其专用检查，不提供 Windows 本机一键发行版
 4. 验证网页边界、结果生命周期及当前项目保存重载；分别记录合成、真实实验和用户验收。
 5. 记录已移植及未移植范围、上游版本和本工程差异，再更新开发服务供验收。
 
-### 结构精简清单
-
-| 范围 | 处理与依据 |
-|---|---|
-| Notebook、分析 CLI | 删除模板、入口、依赖和专用测试；不再同步交付 |
-| Python 包结构与内部方法 | 网页 worker 仍直接调用，保留内部组织；不承诺公共接口稳定 |
-| 已处理目录 CSV 回退、缺失元数据合成 | 删除；必须具备当前 worker 写出的三张 pickle 表，CSV 仅用于导出 |
-| 独立导入/合并的历史目录与 trust_pickle 开关 | 删除；仅接收独立 H5AD，当前 worker 产物由受控内部路径加载 |
-| 构造器目录加载简写 | 删除；内部统一使用显式加载方法 |
-| 项目缺少 cell_min_signal 的自动补齐 | 删除；明确拒绝不完整的历史参数，避免默默改变提取行为 |
-| 环境配置 dev_frontend/prod_frontend/origins 别名 | 删除；未知配置键明确报错 |
-| 项目 schema 1/2 | 都是当前网页写出的结构，分别服务普通矩阵/配置与完整离子目录，保留 |
-| H5AD、RAW/XML | 当前数据交换和原始输入能力，保留；外部 H5AD 的初始化不属于旧项目迁移 |
-| 原子写入、锁、修订、回收引用闭包 | 当前数据安全职责，保留 |
-| 维护包白名单、版本校验、认证与审计 | 当前恢复及访问安全职责，保留 |
-
-清理不会批量改写或删除现有项目。历史格式不承诺可读；版本号、来源与有效性证据仍须保存。
-
-
 相关性/集合图使用既有数据图身份和 `export_tables` 保存完整表。MS/MS 在释放工作区锁后计算，收集前复核工作区修订和测量特征身份。可逆标签的 `_selection_source` 是独立恢复池，目录快照、离子分支与维护编码均保存该状态；标签操作先构造候选再提交，不改不可变测量根或 `_original`。矩阵变换在启用标签时拒绝，降维/聚类等分析可继续运行。
+
+## 完整验证
+
+日常本地检查运行修改及受影响块；自动 CI 使用同一计划的轻量配置，手动 CI 执行完整配置。先看计划，再执行；没有修改且不受影响的块跳过。
+逐块整理时先对准备修改的块建立基线，修改后验证该块与受影响部分；已经通过且后续未受影响的块不重复运行，
+不在结束时默认再跑全量。`-W error` 继续将警告作为错误。
+
+```bash
+# 默认比较 HEAD 与暂存区/工作区，并纳入未跟踪文件；只输出计划
+uv run --no-sync python scripts/test_blocks.py
+# 执行计划中的检查（使用已同步的开发环境）
+uv run --no-sync python scripts/test_blocks.py --run
+# 比较完整提交范围；本地 feature 分支可将 --base 指向共同祖先
+uv run --no-sync python scripts/test_blocks.py --base origin/dev --head HEAD
+# 显式指定块，不混入当前工作区的其他改动；适用于逐块基线与验证
+uv run --no-sync python scripts/test_blocks.py --block spectra --phase python --run
+# 只查看指定文件的影响，不需要实际修改文件
+uv run --no-sync python scripts/test_blocks.py --files frontend/src/features/monitor/MonitorPage.vue
+```
+
+唯一映射为 [`tests/blocks.json`](../tests/blocks.json)，选择器为
+[`scripts/test_blocks.py`](../scripts/test_blocks.py)。每次输出选择、原因和跳过的块；
+`--write-plan` 保存计划，`--plan` 复用同一份计划，`--phase` 只执行其中一个阶段。
+`--files` 可提供明确的文件集合，`--block` 可重复。移动文件同时检查旧/新路径，不能只看重命名后的路径。
+选择器使用目录/文件列表与显式依赖关系，不使用全局 `-k`。
+
+### 测试目录与块
+
+```text
+tests/
+  support/       # 显式导入的小型谱、项目、脂质与认证/HTTP 构造
+  domain/        # 数值定义、数据容器、RAW/XML、统计、注释与绘图
+  application/   # 参数、预览/提取、持久任务、项目、回收和结果生命周期
+  api/           # HTTP 请求、权限、修订、下载及必要贯通检查；局部 conftest
+  tooling/       # 发布/回滚、扫描、快照、选择器、文档
+  blocks.json    # 本地/CI 共用的文件 → 块及依赖方映射
+frontend/tests/  # fixtures.ts、server.py 和按交互划分的 spec
+```
+
+| 块 | 保障范围 |
+|---|---|
+| `spectra` | 谱 I/O、峰/细胞、SNR、ppm、RAW 协议/资源回收与 RAW/XML 等价 |
+| `data` | 矩阵/元数据、合并、H5AD/旧目录、原子写入、归一化及零分母 |
+| `analysis` | 统计、分组验证、监督诊断、统一降维 |
+| `ion-grouping` | 离子关系、竞争 EC、审阅/探索表示、根/轴/数值身份及数值空间 |
+| `annotation` | 质量候选、同位素、规则、数据库下载/完整性 |
+| `plotting` | 内部绘图、轨迹、趋势及网页显示精度 |
+| `processing` | 原始预览、参数、缓存、持久 worker、提取审核、质量产物 |
+| `projects` | 项目/快照、恢复起点、修订冲突、路径与回收保护、UTF-8 持久边界 |
+| `workbench` | 变换事务、结果失效、历史层与潜变量持久化 |
+| `time` / `api-time` | 时间应用输入/依赖/登记、只读重载及 HTTP 修订、权限和下载身份 |
+| `api` / `api-raw` / `api-lipids` / `api-ions` | 工作区/样本/分析/保存下载、原始谱与提取、脂质 HTTP 契约 |
+| `auth` / `monitor` | 认证/服务器配置及管理员监控 |
+| `tooling` | 发布阻塞与回滚、扫描、上游快照、跨平台导入与分块选择 |
+| `docs` | 受影响文档的链接/锚点与 Python 示例 |
+| `browser-*` | 项目、工作流/分析、导航、登录/普通 HTTP、监控、脂质及 AI；实际 spec 与影响范围以 blocks.json 为准 |
+
+两批次比较的只读、ID/输入身份、摘要损坏与旧版证据边界在 `test_project_batch.py` 和 `test_web_api.py`；
+项目内清理在 API 与 saved-items/retention 块验证未保存及跨项目引用保护。
+浏览器 workflow 保留两批信号联动与清理贯通，raw 验证真实拖动、复位再缩放、完整范围导出及旧标签/用户输入区分，
+analysis 验证三维视角导出和集中设置；这些仍是隔离合成检查。
+
+网页布局与交互按[界面设计目标](../AGENTS.md#网页界面设计)检查：使用普通 1920×1080 屏幕、浏览器 100% 缩放下的实际可用视口，
+核对小字号可读性、步骤与常用参数、主操作和关键结果的展示，以及新手的输入、运行、错误恢复与下载路径。
+停止新增或维护手机、平板及其他非目标视口的兼容性检查，不将其作为后续界面验收门槛；
+已有报告中的窄屏覆盖保留为当时证据，不代表持续支持承诺。
+
+数值断言集中领域层，应用层验证失败/恢复和生命周期，API 验证边界/序列化/状态，浏览器保留真实交互。
+不同边界不能只因功能同名而删除；共享构造从 `support` 导入，不从另一个测试文件导入。
+根目录不放通用重型 fixture，HTTP 工作流 fixture 只在 `tests/api/conftest.py` 注册。
+
+### 选择规则与 CI
+
+- 测试文件变化只运行其所属块；共享 fixture 变化只运行实际使用它的块，不扩展到业务依赖方。
+- 业务源码变化按映射扩展到使用者；公共数据层、接口/工作区契约、依赖锁文件会扩大范围，并输出原因。
+- 纯前端变化不运行 Python 测试；按功能选浏览器 spec。共享组件、路由、状态/客户端及前端依赖会影响全部浏览器块。
+  Prettier 配置单独变化只检查前端格式，不运行构建或浏览器测试；格式规则/前端依赖变化时检查全部前端格式输入。
+- 文档变化只检查相关文档；链接目标变化同时检查引用它的文档。文档检查器本身改变时检查全部维护文档。
+  已移除 Notebook 交付及其专用检查。
+- 已知目录中的新文件若缺少细分映射，明确报告 `UNMAPPED` 并选择该区域的保守范围；其他未知路径报错，须补映射。
+  不能静默当作无影响，也不把每次常规改动都退回全量。
+
+自动 CI 在 dev/main push 与 PR 触发，Python 版本为部署一致的 3.12；保留公开支持范围，
+3.11 在依赖/兼容性改动时本地验证，手动 `workflow_dispatch` 完整检查同时运行 3.11/3.12。
+`changes` 只计算一次计划：PR 比较 merge-base→head，push 比较 before→after；首次 push 检查全部输入。
+main 快进仅包含 dev 已有提交时跳过重复检查，main 独有提交继续检查；这不表示 dev 失败检查自动通过。
+每次 push 保留各自区间的轻量检查，不以较新提交取消旧检查，避免连续推送文档时漏掉前一实现区间。
+比较失败直接失败，不能当作无改动。
+
+自动配置 `--lightweight` 保留相关文档/链接、改动 Python Ruff/格式与源码扫描；前端按需格式和类型检查，
+不自动构建前端、运行浏览器或发行包。业务/构建改动的少量干净环境冒烟为选择器及服务器配置测试，
+仅安装锁定 base/dev/web，不依赖本地前端产物。配置测试显式 `static_root=None`，
+生产缺少静态资源仍须明确拒绝启动；不能以配置测试替代正式启动或浏览器测试。
+
+本地与手动完整配置保留原有 Python、浏览器、前端构建、发行包及产物扫描阶段。
+本地日常先运行相关块；里程碑按改动补共享边界、主要浏览器和发行包。
+发行包包含静态资源，打包前构建前端；测试或 Markdown 单独变化不构建发行包。
+查看自动配置可使用 `python scripts/test_blocks.py --files 路径 --lightweight`，
+`--write-plan` / `--plan` 保证本地与 CI 执行同一选择结果，不维护第二套测试列表。
+
+浏览器自动启动 5117 的隔离服务，使用临时项目和合成数据，不访问开发或生产实验。
+通用夹具在同一 worker 内复用合成账号认证，避免大套件耗尽地址登录预算；每例仍新建浏览器上下文和工作区。
+显式退出/撤销后重新登录，认证与不安全 HTTP 专项保留独立真实登录流程，不更改服务认证限制。
+`SCMM_E2E_PORT`、`SCMM_TEST_PYTHON`、`SCMM_CHROMIUM` 可指定端口、解释器与已有浏览器；
+`SCMM_TEST_STATIC_ROOT` 可显式指向本次已验证的暂存 Vite 资源；未指定时，隔离服务启动时在临时目录新建资源，
+单个 spec 不读取仓库历史构建。共用入口整轮运行时复用该轮刚完成的构建；独立浏览器阶段自动临时构建。
+首次浏览器执行前安装依赖及 Chromium：
+
+```bash
+npm --prefix frontend ci
+npm --prefix frontend exec -- playwright install chromium
+```
+
+截图、trace 和报告保留在被忽略的测试输出目录。普通 HTTP 用例的浏览器显式隔离继承的代理变量，固定测试域映射至本地；代理返回的 502 不能归为元素等待假失败。
+Linux Chromium 仍需系统动态库和字体，缺库属于浏览器未启动，不能记为页面断言失败。
+合成检查不替代真实实验、用户验收或远端 CI。
+原始预览使用独立进程、提取使用持久 worker；新离子流程使用冻结输入与独立 worker，短锁校验收集；其余 HTTP 计算持有工作区锁。
+`/api/v1/runtime` 的未保存/繁忙工作区与页面活动证据继续约束发布，不因测试分块而放松。
+
+### 手动全量入口
+
+需要全量验证时运行：
+
+```bash
+uv run --no-sync python scripts/test_blocks.py --all --run
+# 只运行全部 Python 测试并统计覆盖率
+uv run --no-sync python -m pytest -W error --cov=scMM --cov-report=term-missing
+```
+
+单文件诊断仍可使用 `uv run --no-sync python -m pytest tests/domain/test_data.py -q -W error`。
+从仓库根使用 `python -m pytest`，确保本地 `scripts` 与 `tests.support` 可导入。
+依赖同步、真实 RAW 对照及规模检查按实际改动单独执行，不作为每次运行的隐含前置。
+
+## 专项验证与复现
+
+### 脂质注释规模检查
+
+网页领域计算在 `util/lipid_annotation.py` / `lipid_isotopes.py`，声明式规则在 `lipid_rules.py`；
+数据库下载、摘要及加载在 `application/lipid_database.py`，事务/版本/审阅/导出在 `web_lipids.py`，
+严格 HTTP 契约在 `api/lipid_schemas.py`，页面组件在 `frontend/src/features/preprocess/LipidPanel.vue`。
+不通过任意函数执行接口，不改变 `CyESIData.deisotope()` 的原有算法或默认值。
+
+质量搜索对数据库排序索引二分查找，仅对匹配的母峰/理论同位素/观测特征计算关系；
+质量/同位素搜索不构造特征平方矩阵。相关网络在 `util/lipid_network.py` 按样本使用临时特征平方相关矩阵，
+只对绘图阈值以上或化学关系对计算共同检出相关；审阅感知的饼图/分子映射/显示投影在 `lipid_network_views.py`。
+节点显示上限不减少辅助证据计算，完整候选包括同质量异构记录，公式分布缓存复用，不以截断候选节省资源。
+本检查只覆盖最多 500 特征的同步请求。
+
+合成规模报告可在数据库已准备的环境复现：
+
+```sh
+python tools/benchmark_lipid_annotation.py --cells 3000 --samples 10 --features 500 --output /tmp/lipid-3000.json
+python tools/benchmark_lipid_annotation.py --cells 10000 --samples 10 --features 500 --output /tmp/lipid-10000.json
+```
+
+输出仅为参数/规模/耗时/进程峰值内存与数量，不保存矩阵。实际报告见
+[3,000 × 500](validation/lipid-annotation-synthetic-3000x500.json)和
+[10,000 × 500](validation/lipid-annotation-synthetic-10000x500.json)。耗时分开记录数据库首次加载与领域计算，
+峰值内存包含解释器、数据库、矩阵和工作区输入副本，不等于单个算法数组占用；尚不包含完整 HTTP 保存流程峰值。
+用户选择手动验收，不以这些合成结果声明真实样本准确率。
+
+相关网络的当前合成规模证据另见
+[3,000 × 500 网络报告](validation/lipid-network-synthetic-3000x500.json)和
+[10,000 × 500 网络报告](validation/lipid-network-synthetic-10000x500.json)。复用上述命令并更换输出文件名可复现；
+总耗时包含相关网络。报告还记录边对数、化学关系数和注释 JSON 大小。
+图表/网络模块在安装包内，版本数据随 H5AD/项目保存；前端不持有矩阵或执行化学判定。
+
+专项检查为 `tests/domain/test_lipid_annotation.py`、`tests/api/test_web_lipids.py` 和 `frontend/tests/lipids.spec.ts`，
+覆盖双侧比例边界、加合物组成、并列/重复质量、失败原子性、版本/预设、过期下载及保存重载；
+浏览器使用本地合成 SDF，不访问或下载真实数据库，也不打开用户项目。
+
+### 场景隔离与失败归属
+
+| 层 | 必要检查 | 起点与依赖 |
+|---|---|---|
+| 领域 | 数值定义、算法边界、维度、有限值 | 小型确定性输入；不启动 HTTP/浏览器 |
+| 应用 | 编排、候选事务、失败恢复、结果生命周期 | 每例构造新数据/项目；时间公共构造在 `tests/support/time_analysis.py`，不共享可变矩阵 |
+| API | 参数、权限、修订、序列化与下载身份 | 临时认证/项目和局部 HTTP fixture；不要求前端先构建 |
+| 浏览器 | 真实操作反馈、异步竞态及少量贯通 | 每例独立 context/工作区；认证仅同 worker 复用；不依赖前例页面或构建残留 |
+| 工具 | 文档、选择器、构建/发布脚本 | 临时 Git/资源目录；缺少映射显式失败或保守报告 |
+
+原 `workflow.spec.ts` 的混合场景分成 preprocessing、storage、raw、operations 与 analysis-journey，
+保留 workflow 的独立 worker 提取→人工审核→分析贯通。预处理应用/reset 与分析导出/重载各自导入输入，
+单独运行不借用前一场景状态。轮询/请求代次及导出竞态归 operations，原始谱诊断归 raw。
+时间应用按命名结果/Palantir、速度和趋势分文件；精确数值算法仍主要由领域 trajectory 测试维护。
+脂质 useLipid* 只选脂质浏览器块，时间适配器只选 time/api-time 与实际浏览器使用者；
+数据层、工作区、公共模式及 PlotView 变更继续扩大共享回归。
+
+失败先按证据区分产品断言、测试夹具/起点耦合、环境依赖和基础设施。
+浏览器等待超时应检查 trace、请求和页面反馈，不默认认定为假失败；不吞错、无界重试或统一扩大超时。
+旧 CI 配置测试的构建依赖与修复见[历史结论](../CHANGELOG.md#第二至第三节点一致性安全与分析能力完善)。
+
+### 离子工程规模证据
+
+使用项目环境运行 `python scripts/benchmark_ions.py --output docs/validation/ion-engineering.json`，
+每个尺寸在独立进程中测量，种子 1024。原始[机器报告](validation/ion-engineering.json)记录 1×1000×500 与
+10×1000×500 的冻结/提交、独立 worker、L1/L2 注册、完整保存回读时间、主进程/worker 峰值 RSS、快照和临时文件体积。
+本机两档搜索均完成、源矩阵数值往返一致；10×1000×500 的完整快照约 622 MB，主进程峰值约 3.3 GiB，
+反映多分支副本与独立重置起点的工程成本，不代表单个算法数组占用。该例未接受任何关系，全部未知保留，
+不能用变量数下降评价归组准确率。高密度 30 特征组件使用较小显式预算，触限正确保留未完成状态，禁止作为完整归组发布。
+
+HTTP 检查覆盖源 L2 无根导入、物化、PCA/聚类/差异/Marker/网络/监督接入、工作区隔离及保存重开；
+浏览器覆盖人工审阅、任务刷新、分支选择、候选叠加、完整下载和 390px 页面。
+这些均为合成与工程检查；没有空白/标准品/真实单细胞验证数据，不报告真实错误率、灵敏度或实验有效性。
+
+## 发布前的敏感信息检查
+
+用 `python scripts/check_sensitive.py` 扫描当前源码和发行产物。历史需单独运行
+`python scripts/check_sensitive.py --history --report /tmp/scmm-security-audit.json`。
+输出只列类别、位置和对象摘要。超出扫描上限的产物需要另行核查。
+
+[历史审计报告](validation/open-source-audit.json)记录了个人路径、内网地址和旧 Notebook 输出。当前文件清理只影响现有版本。
+历史重写需要另行授权，并先在隔离镜像备份、复查和验证。发现真实凭据时先撤销或轮换。
+
+## 未完成事项与恢复条件
+
+### 待真实样本验证
+
+- 使用真实样本独立验证化学归组与二级证据的准确性。
+
+### 明确暂缓
+
+| 编号 | 范围与原因 | 恢复前条件 |
+|---|---|---|
+| ALG-03/04 | 上游轨迹根/分支/断连语义未满足验收 | 先定义方法，再测试根点非零、断连和方向；不替换现有 Palantir |
+| ML-02 | 上游 R2/Q2 是 one-hot 概率空间指标 | 先澄清统计定义；如保留 Q2，复用分组 CV 的 OOF，避免重复拟合 |
+
+暂缓算法来源为上游快照 `f961809`，定义与反例见[方法依据](statistics.md#暂缓方法的依据)。

@@ -13,7 +13,11 @@ ROOT = Path(__file__).resolve().parents[2]
 MARKDOWN_FILES = (
     [ROOT / p for p in json.loads(os.environ["SCMM_DOCUMENTS"])]
     if "SCMM_DOCUMENTS" in os.environ
-    else [*ROOT.glob("*.md"), *sorted((ROOT / "docs").glob("*.md"))]
+    else [
+        *ROOT.glob("*.md"),
+        *sorted((ROOT / "docs").rglob("*.md")),
+        *sorted((ROOT / "rules" / "lipids").glob("*.md")),
+    ]
 )
 
 
@@ -29,7 +33,7 @@ def anchors(text):
     return result
 
 
-@pytest.mark.parametrize("path", MARKDOWN_FILES, ids=lambda path: path.name)
+@pytest.mark.parametrize("path", MARKDOWN_FILES, ids=lambda path: path.relative_to(ROOT).as_posix())
 def test_guide_links_anchors_and_python_examples(path):
     text = path.read_text(encoding="utf-8")
     for target in re.findall(r"\[[^]]*\]\(([^)]+)\)", text):

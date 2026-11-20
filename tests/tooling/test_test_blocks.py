@@ -37,7 +37,7 @@ def test_shared_frontend_changes_include_assistant_browser_checks():
 @pytest.mark.parametrize(
     "file,expected",
     [
-        ("docs/04-parameters.md", {"docs"}),
+        ("docs/extraction.md", {"docs"}),
         ("frontend/src/features/monitor/MonitorPage.vue", {"browser-monitor"}),
         ("tests/domain/test_normalize.py", {"data"}),
         ("frontend/tests/lipids.spec.ts", {"browser-lipids"}),
@@ -216,12 +216,11 @@ def test_commands_keep_warnings_as_errors_and_no_unselected_execution(tmp_path, 
 
 
 def test_related_documents_include_reverse_link_targets():
-    assert "docs/12-development.md" in document_inputs(["docs/12-development.md"])
-    assert "docs/12-development.md" in document_inputs(
-        ["scripts/check_sensitive.py"]
-    ) or "docs/12-development.md" not in document_inputs(["scripts/check_sensitive.py"])
-    assert "docs/README.md" in document_inputs(["docs/12-development.md"])
-    assert len(document_inputs(["tests/tooling/test_documentation.py"])) > 10
+    related = set(document_inputs(["docs/development.md"]))
+    assert {"docs/development.md", "docs/README.md", "docs/validation/README.md"} <= related
+    assert "rules/lipids/README.md" in document_inputs(["docs/annotation.md"])
+    all_documents = document_inputs(["tests/tooling/test_documentation.py"])
+    assert {"docs/validation/README.md", "rules/lipids/README.md"} <= set(all_documents)
 
 
 def test_support_mapping_matches_actual_transitive_consumers():
@@ -289,7 +288,7 @@ def test_lightweight_ci_keeps_clean_tree_smoke_but_no_browser_or_package():
     frontend = lightweight(plan("frontend/src/components/PlotView.vue"))
     assert list(commands(frontend, "frontend"))[-1][-1] == "typecheck"
     assert frontend["node"]
-    assert not lightweight(plan("docs/04-parameters.md"))["python_paths"]
+    assert not lightweight(plan("docs/extraction.md"))["python_paths"]
     # The same local plan retains the full affected regression and build.
     assert plan("scMM/application/time_analysis.py")["package"]
 

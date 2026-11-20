@@ -1,59 +1,17 @@
 # scMM
 
-`scMM` 是用于处理和分析 CyESI 单细胞质谱数据的服务器网页应用。它可以从
-Thermo profile RAW、mzML/mzXML 原始谱构建“细胞 × m/z 特征”矩阵，并完成细胞事件识别、谱峰对齐、
-归一化、缺失值填补、去同位素、精确质量注释、降维聚类、时间轨迹和代谢趋势分析。
+scMM 是 CyESI 单细胞质谱的服务器网页应用。从 Thermo profile RAW、mzML 或 mzXML 可提取细胞 × 特征矩阵，也可以从已有特征表或定量矩阵开始。当前版本为 0.2.0（Alpha）。
 
-核心目标是模仿 MetaboAnalyst 的 UI，为新手提供友好的分步分析工作流；以普通 1920×1080 桌面屏幕为目标，
-采用清晰的小字号和紧凑布局充分展示内容。界面设计与维护范围见[项目约定](AGENTS.md#网页界面设计)。
+## 开始使用
 
-## 功能入口
+用管理员创建的账号登录网页，创建或打开项目，再按手上的数据进入相应板块。
 
-服务器网页是唯一正式使用入口。Python 模块服务网页内部计算，不提供公共 API、Notebook 或独立分析 CLI 支持。
-
-当前版本为 0.2.0（Alpha）。
-
-| 场景 | 文档 |
+| 手上的数据 | 操作指南 |
 |---|---|
-| 网页：细胞提取、特征注释、统计分析三板块 | [网页操作](docs/02-workflow.md#三板块入口与数据交换) |
-| 质谱提取与候选注释 | [细胞与特征识别](docs/03-cell-feature-identification.md) · [离子归组](docs/02-workflow.md#离子归组与化合物证据) |
-| 统计、降维、监督模型与时间趋势 | [分析](docs/07-analysis.md) · [时间与趋势](docs/08-time-analysis.md) |
-| 查看文件、图表和矩阵导出格式 | [数据与输出](docs/06-data-output.md) |
+| 原始谱 | [细胞提取](docs/extraction.md) |
+| m/z 特征表或待注释矩阵 | [特征注释](docs/annotation.md) |
+| 细胞或样本定量矩阵 | [统计分析](docs/statistics.md) |
 
-三个板块可独立导入和导出：支持完整 scMM 交换包、H5AD 和开放表格。特征注释提供可选数据库、谱图点峰联动及关联组人工审核；
-内置用户提供的哺乳动物细胞脂质候选库。格式与边界见[交换协议](docs/06-data-output.md#模块交换协议-v1)。
+[项目保存与数据交换](docs/projects-and-data.md) · [文档导航](docs/README.md) · [部署与运维](docs/deployment.md)
 
-## 从这里开始
-
-- [安装与部署](docs/01-installation.md) → [网页工作流程](docs/02-workflow.md)
-- [参数参考](docs/04-parameters.md) · [内部计算参考](docs/05-python-api.md) · [分析](docs/07-analysis.md)
-- [排错](docs/11-troubleshooting.md) · [待办](docs/14-roadmap.md) · [完整文档索引](docs/README.md)
-
-## 最短使用路径
-
-创建环境并安装项目：
-
-```bash
-uv sync --locked --all-extras --dev
-```
-
-该命令根据 `pyproject.toml` 和已提交的 `uv.lock` 创建项目专用 `.venv`，并以可编辑模式安装
-scMM。后续命令统一通过 `uv run` 执行，无需手工激活环境。
-
-本机生产网页使用 main / 5006，开发使用 dev / 5007，Python 环境及结果分别隔离；
-启动、发布与回滚见 [安装部署](docs/01-installation.md#开发与生产分离)。
-网页启动前必须完成仓库外资源配置和管理员初始化，不支持匿名启动；普通成员不能配置服务器路径。
-网页操作见 [三板块流程](docs/02-workflow.md#三板块入口与数据交换)。
-## 支持范围
-
-- Python：3.11–3.12；`.python-version` 将本地开发默认固定为 Python 3.12。
-- 原始谱：mzML、mzXML；Thermo RAW 仅接受 profile，需另行部署 .NET 8 reader，
-  `uv sync` 不安装厂商组件，详见[安装说明](docs/01-installation.md#thermo-raw-额外依赖)。
-- 核心依赖：PyOpenMS、NumPy、pandas、SciPy、scikit-learn、AnnData。
-- 可选分析：Matplotlib、Seaborn、UMAP、Palantir、Leiden/Louvain。
-- Vue 网页：Vue 3、TypeScript、FastAPI；Python 使用 `web` extra，前端需 Node.js 构建，
-  运行入口为 `scmm-web`。专门适配和验收以 1080p 桌面为准，停止手机、平板和其他非目标视口的兼容性维护。
-  网页功能与构建步骤见[安装部署](docs/01-installation.md#vuefastapi-网页)。
-
-正式分析前应使用标准样品和实验质控数据验证
-参考离子、ppm 容差、SNR 阈值及归一化方案。
+网页以普通 1920 × 1080 桌面为设计和验收目标，采用紧凑的分步操作。正式使用入口为 scMM 网页。开发、验证和当前支持范围见[文档导航](docs/README.md)。

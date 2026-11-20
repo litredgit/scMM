@@ -205,7 +205,11 @@ def select(files, config, *, explicit=(), all_blocks=False):
 
 def document_inputs(files):
     """Changed Markdown plus guides linking to changed/deleted files or anchors."""
-    guides = [*ROOT.glob("*.md"), *(ROOT / "docs").glob("*.md")]
+    guides = [
+        *ROOT.glob("*.md"),
+        *(ROOT / "docs").rglob("*.md"),
+        *(ROOT / "rules" / "lipids").glob("*.md"),
+    ]
     changed = set(files)
     chosen = set(p for p in guides if p.relative_to(ROOT).as_posix() in changed)
     # A changed target can invalidate a link in an unchanged guide.
