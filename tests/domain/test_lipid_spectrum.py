@@ -52,6 +52,67 @@ def test_curation_preserves_conflicts_and_never_executes_source_notes():
     assert result["curation"]["excluded_rows"][0]["reason"] == "unnamed_formula"
 
 
+def test_algae_preset_matches_only_explicit_reference_ions(monkeypatch):
+    from scMM.application.lipid_database import database_status
+    from scMM.util.lipid_isotopes import adduct_shift, isotope_evidence
+
+    monkeypatch.setenv("SCMM_SERVER_CONFIG_ACTIVE", "1")
+    monkeypatch.delenv("SCMM_LIPID_DATABASE_DIR", raising=False)
+    database_id = "preset:algae"
+    assert any(entry["id"] == database_id for entry in database_status()["presets"])
+    frame, source = load_database(database_id)
+    assert source["records"] == 251
+    assert source["curation"]["formula_conflict_rows"] == [
+        11,
+        18,
+        115,
+        116,
+        117,
+        137,
+        138,
+        139,
+        248,
+    ]
+    assert set(frame["source_annotation_level"].value_counts().items()) == {
+        ("MS1 only", 143),
+        ("MS2 class/homolog-supported", 86),
+        ("MS2 matched", 22),
+    }
+    combined, combined_source = load_databases([database_id, "preset:mammalian_cells"])
+    parameters = {**options(), "adducts": frame["reference_adduct"].unique().tolist()}
+    observed_ions = frame["reference_mz"].to_numpy()
+    feature_ids = frame["record_id"].tolist()
+    candidates = mass_candidates(combined, feature_ids, observed_ions, parameters, combined_source)
+    by_source_ion = {
+        row["feature_id"]: row
+        for row in candidates
+        if row["database_filename"] == database_id
+        and row["feature_id"] == row["database_record_id"]
+    }
+    assert set(by_source_ion) == set(feature_ids)
+    assert by_source_ion["S1-30"]["adduct"] == "[M]+"
+    assert by_source_ion["S1-21"]["source_annotation_level"] == "MS2 matched"
+    assert by_source_ion["S1-21"]["ms2_status"] == "not_supplied"
+
+    reference = by_source_ion["S1-117"]
+    assert reference["theoretical_mz"] == 734.5929
+    assert reference["source_formula_conflict"]
+    assert reference["database_sha256"] == source["sha256"]
+    mass = frame.loc[frame["record_id"] == "S1-117", "EXACT_MASS"].iloc[0]
+    unrelated_adduct_mz = mass + adduct_shift("[M+Na]+")
+    assert all(
+        row["database_record_id"] != "S1-117"
+        for row in mass_candidates(
+            frame, ["other"], [unrelated_adduct_mz], options("[M+Na]+"), source
+        )
+    )
+    relations, diagnostics = isotope_evidence(
+        [reference], observed_ions, feature_ids, np.empty((0, len(frame))), np.array([]), parameters
+    )
+    assert not relations
+    assert [item["feature_id"] for item in diagnostics] == ["S1-117"]
+
+
 def test_multiple_databases_keep_namespace_and_stable_candidate_identity(tmp_path, monkeypatch):
     first = sdf_record(identifier="same-id", name="First")
     second = sdf_record(identifier="same-id", name="Second")

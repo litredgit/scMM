@@ -107,6 +107,38 @@ test('standalone feature annotation uses mammalian preset and persists reviewed 
   expect(errors).toEqual([])
 })
 
+test('algae database shows original evidence and inconsistent formula in candidate review', async ({
+  page,
+}) => {
+  await createProject(page, '藻类数据库注释')
+  await navigate(page, '/annotation')
+  const exchange = page.getByRole('region', { name: '板块数据导入与导出' })
+  await exchange.getByRole('button', { name: '导入外部数据' }).click()
+  await exchange.getByLabel('板块导入格式').selectOption('feature_csv')
+  await exchange.getByLabel('板块数据文件').setInputFiles({
+    name: 'algae-features.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('feature_id,mz\nsource_ms2,451.319438\nconflict,734.5929\n'),
+  })
+  await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
+  await page.getByRole('button', { name: '查找候选', exact: true }).click()
+  await page.getByLabel('脂质数据库文件').selectOption({ label: '藻类数据库 · 251 条候选' })
+  await page.getByRole('button', { name: '运行精确质量候选注释', exact: true }).click()
+
+  await peak(page, 'source_ms2').click()
+  const cards = page.locator('.candidate-card').filter({ visible: true })
+  const sourceCandidate = cards.filter({ hasText: 'ST 28:3;O3' })
+  await expect(sourceCandidate).toContainText('原表注释 MS2 matched · MSI Level 2')
+  await expect(sourceCandidate).toContainText('MS2: Not supplied')
+  await sourceCandidate.getByText('候选详情', { exact: true }).click()
+  await expect(sourceCandidate).toContainText('451.319438')
+
+  await peak(page, 'conflict').click()
+  const conflict = cards.filter({ hasText: 'DGTS 34:3' })
+  await expect(conflict).toContainText('原表理论 m/z 与分子式及加合物不一致')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
 test('clicking an observed peak links the candidate table and spectrum review controls', async ({
   page,
 }) => {

@@ -24,18 +24,21 @@ from .projects import project_lock, write_json
 LMSD_URL = "https://lipidmaps.org/files/?ext=sdf.zip&file=LMSD"
 DATABASE_ROOT = Path("~/data/results/databases/lipidmaps").expanduser()
 _LOCK = threading.RLock()
-MAMMALIAN_PRESET = "preset:mammalian_cells"
+BUILTIN_DATABASES = {
+    "preset:mammalian_cells": "mammalian_cells.json",
+    "preset:algae": "algae.json",
+}
 
 
-@lru_cache(maxsize=1)
-def mammalian_database():
-    resource = files("scMM").joinpath("resources/lipid_databases/mammalian_cells.json")
+@lru_cache(maxsize=len(BUILTIN_DATABASES))
+def _load_preset(database_id):
+    resource = files("scMM").joinpath("resources/lipid_databases", BUILTIN_DATABASES[database_id])
     content = resource.read_bytes()
     payload = json.loads(content)
     frame = pd.DataFrame(payload["records"]).sort_values("EXACT_MASS", kind="stable")
     metadata = {key: value for key, value in payload.items() if key != "records"}
     metadata.update(
-        filename=MAMMALIAN_PRESET,
+        filename=database_id,
         sha256=hashlib.sha256(content).hexdigest(),
         records=len(frame),
         invalid_mass_records=0,
@@ -45,18 +48,30 @@ def mammalian_database():
 
 
 def database_presets(local_files=()):
-    _, mammalian = mammalian_database()
+    presets = []
+    for database_id in BUILTIN_DATABASES:
+        _, metadata = _load_preset(database_id)
+        presets.append(
+            {
+                "id": database_id,
+                "available": True,
+                **{
+                    key: metadata[key]
+                    for key in (
+                        "label",
+                        "records",
+                        "source",
+                        "ms2_status",
+                        "sha256",
+                        "curation",
+                        "description",
+                    )
+                    if key in metadata
+                },
+            }
+        )
     return [
-        {
-            "id": MAMMALIAN_PRESET,
-            "label": mammalian["label"],
-            "available": True,
-            "records": mammalian["records"],
-            "source": mammalian["source"],
-            "ms2_status": mammalian["ms2_status"],
-            "sha256": mammalian["sha256"],
-            "curation": mammalian["curation"],
-        },
+        *presets,
         *[
             {
                 "id": item["filename"],
@@ -213,8 +228,8 @@ def _load_cached(path, size, modified):
 
 
 def load_database(filename=""):
-    if filename == MAMMALIAN_PRESET:
-        frame, metadata = mammalian_database()
+    if filename in BUILTIN_DATABASES:
+        frame, metadata = _load_preset(filename)
         return frame.copy(deep=True), json.loads(json.dumps(metadata))
     root = database_root()
     with _LOCK:

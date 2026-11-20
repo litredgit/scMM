@@ -16,6 +16,7 @@ ADDUCTS = {
     "[M+K]+": {"polarity": "pos", "add": "K", "remove": "", "charge": 1},
     "[M+NH4]+": {"polarity": "pos", "add": "NH4", "remove": "", "charge": 1},
     "[M+2Na-H]+": {"polarity": "pos", "add": "Na2", "remove": "H", "charge": 1},
+    "[M]+": {"polarity": "pos", "add": "", "remove": "", "charge": 1},
     "[M-H]-": {"polarity": "neg", "add": "", "remove": "H", "charge": -1},
     "[M+Cl]-": {"polarity": "neg", "add": "Cl", "remove": "", "charge": -1},
     "[M+HCOO]-": {"polarity": "neg", "add": "CHO2", "remove": "", "charge": -1},
@@ -99,6 +100,16 @@ def isotope_evidence(rows, mz, feature_ids, values, samples, parameters):
     groups = [(sample, np.flatnonzero(samples == sample)) for sample in dict.fromkeys(samples)]
     distributions = {}
     for row in rows:
+        if row.get("source_formula_conflict"):
+            diagnostics.append(
+                {
+                    "feature_id": row["feature_id"],
+                    "formula": row["formula"],
+                    "adduct": row["adduct"],
+                    "message": "原表理论 m/z 与分子式及加合物不一致，跳过天然同位素计算。",
+                }
+            )
+            continue
         key = row["feature_id"], row["formula"], row["adduct"]
         if key not in distributions:
             try:

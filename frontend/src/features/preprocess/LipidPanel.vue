@@ -563,6 +563,12 @@ watch(
               <p>
                 {{ ms2Label(row.ms2_status) }} · {{ row.top_ranked ? '规则推荐' : '容差内候选' }}
               </p>
+              <p v-if="row.source_annotation_level">
+                原表注释 {{ row.source_annotation_level }} · MSI {{ row.source_msi_level }}
+              </p>
+              <p v-if="row.source_formula_conflict">
+                原表理论 m/z 与分子式及加合物不一致，仅提供质量候选。
+              </p>
               <details>
                 <summary>候选详情</summary>
                 <dl class="candidate-details">
@@ -583,6 +589,18 @@ watch(
                     <dt><FieldLabel :name="key" /></dt>
                     <dd>{{ row[key] ?? '—' }}</dd>
                   </template>
+                </dl>
+                <dl v-if="row.source_row" class="candidate-details">
+                  <dt>原表编号</dt>
+                  <dd>{{ row.source_row }}</dd>
+                  <dt>原表实测 m/z</dt>
+                  <dd>{{ row.source_observed_mz }}</dd>
+                  <dt>原表加合物</dt>
+                  <dd>{{ row.source_adduct }}</dd>
+                  <dt>原表质量误差（ppm）</dt>
+                  <dd>{{ row.source_ppm_error }}</dd>
+                  <dt>原表理论值与分子式计算值之差（ppm）</dt>
+                  <dd>{{ row.source_formula_ppm_error }}</dd>
                 </dl>
                 <button class="preview" @click="evidenceFor(String(row.candidate_id))">
                   关联此候选的证据

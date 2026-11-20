@@ -287,7 +287,12 @@ def apply_support(version):
     # Share these observations only at the same measured feature; never recurse.
     equivalent, candidate_keys = {}, {}
     for row in version["candidates"]:
-        key = row["feature_id"], row["formula"], row["adduct"]
+        key = (
+            row["feature_id"],
+            row["formula"],
+            row["adduct"],
+            row["candidate_id"] if row.get("source_formula_conflict") else "",
+        )
         candidate_keys[row["candidate_id"]] = key
         equivalent.setdefault(key, []).append(row["candidate_id"])
     for link in links:

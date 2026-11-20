@@ -12,6 +12,16 @@ from .lipid_isotopes import ADDUCTS, adduct_shift, isotope_evidence
 from .lipid_rules import rank_candidates, validate_rules
 
 STORAGE_KEY = "scmm_lipid_annotations_json"
+REFERENCE_ION_FIELDS = (
+    "source_row",
+    "source_observed_mz",
+    "source_adduct",
+    "source_ppm_error",
+    "source_annotation_level",
+    "source_msi_level",
+    "source_formula_ppm_error",
+    "source_formula_conflict",
+)
 
 
 def feature_only(data):
@@ -83,66 +93,81 @@ def dataset_inputs(data, layer="", *, mass_only=False):
 def mass_candidates(database, feature_ids, mz, parameters, database_identity):
     masses = database["EXACT_MASS"].to_numpy(dtype=float)
     records = database.to_dict(orient="records")
+    record_indices = np.arange(len(records))
+    reference_adducts = (
+        database["reference_adduct"].to_numpy() if "reference_adduct" in database else None
+    )
     rows = []
     for adduct in parameters["adducts"]:
         spec = ADDUCTS[adduct]
         if parameters["polarity"] != "both" and spec["polarity"] != parameters["polarity"]:
             raise ValueError("所选加合物与搜索极性不一致。")
         shift = adduct_shift(adduct)
+        indices = record_indices
+        theoretical_mz = masses + shift
+        if reference_adducts is not None:
+            reference = reference_adducts == adduct
+            theoretical_mz[reference] = database.loc[reference, "reference_mz"].to_numpy(
+                dtype=float
+            )
+            eligible = record_indices[(reference_adducts == "") | reference]
+            indices = eligible[np.argsort(theoretical_mz[eligible], kind="stable")]
+        indexed_mz = theoretical_mz[indices]
         ppm = parameters["annotation_ppm"] * 1e-6
         for feature_id, query in zip(feature_ids, mz, strict=True):
             # Query-relative bounds are converted back to theoretical-relative ppm bounds.
-            low, high = query / (1 + ppm) - shift, query / (1 - ppm) - shift
+            low, high = query / (1 + ppm), query / (1 - ppm)
             start, end = np.searchsorted(
-                masses, [np.nextafter(low, -np.inf), np.nextafter(high, np.inf)]
+                indexed_mz, [np.nextafter(low, -np.inf), np.nextafter(high, np.inf)]
             )
-            for index in range(start, end):
+            for index in indices[start:end]:
                 record = records[index]
                 source_sha256 = record.get("database_sha256", database_identity["sha256"])
                 source_record_id = record.get("database_record_id", record["record_id"])
-                theoretical = masses[index] + shift
+                theoretical = theoretical_mz[index]
                 error = (query - theoretical) / theoretical * 1e6
                 if abs(error) > np.nextafter(parameters["annotation_ppm"], np.inf):
                     continue
                 identity = json.dumps([source_sha256, feature_id, source_record_id, adduct])
-                rows.append(
-                    {
-                        "candidate_id": hashlib.sha256(identity.encode()).hexdigest()[:24],
-                        "feature_id": feature_id,
-                        "query_mz": float(query),
-                        "database_id": record["record_id"],
-                        "database_record_id": source_record_id,
-                        "name": str(record["COMMON_NAME"]),
-                        "species": str(record.get("species", record["COMMON_NAME"])),
-                        "formula": str(record["FORMULA"]),
-                        "adduct": adduct,
-                        "polarity": spec["polarity"],
-                        "theoretical_mz": float(theoretical),
-                        "ppm_error": float(error),
-                        "abs_ppm_error": float(abs(error)),
-                        "database_sha256": source_sha256,
-                        "database_source": record.get(
-                            "database_source", database_identity.get("source", "local")
-                        ),
-                        "database_filename": record.get(
-                            "database_filename", database_identity.get("filename", "")
-                        ),
-                        "ms2_status": ms2_status(record),
-                        "source_ms2_status": record.get("ms2_status", "not_supplied"),
-                        "ms2_evidence": record.get("ms2_evidence", []),
-                        **{
-                            key: str(record.get(key, ""))
-                            for key in (
-                                "LM_ID",
-                                "CATEGORY",
-                                "MAIN_CLASS",
-                                "SUB_CLASS",
-                                "ABBREVIATION",
-                                "INCHI_KEY",
-                            )
-                        },
-                    }
-                )
+                candidate = {
+                    "candidate_id": hashlib.sha256(identity.encode()).hexdigest()[:24],
+                    "feature_id": feature_id,
+                    "query_mz": float(query),
+                    "database_id": record["record_id"],
+                    "database_record_id": source_record_id,
+                    "name": str(record["COMMON_NAME"]),
+                    "species": str(record.get("species", record["COMMON_NAME"])),
+                    "formula": str(record["FORMULA"]),
+                    "adduct": adduct,
+                    "polarity": spec["polarity"],
+                    "theoretical_mz": float(theoretical),
+                    "ppm_error": float(error),
+                    "abs_ppm_error": float(abs(error)),
+                    "database_sha256": source_sha256,
+                    "database_source": record.get(
+                        "database_source", database_identity.get("source", "local")
+                    ),
+                    "database_filename": record.get(
+                        "database_filename", database_identity.get("filename", "")
+                    ),
+                    "ms2_status": ms2_status(record),
+                    "source_ms2_status": record.get("ms2_status", "not_supplied"),
+                    "ms2_evidence": record.get("ms2_evidence", []),
+                    **{
+                        key: str(record.get(key, ""))
+                        for key in (
+                            "LM_ID",
+                            "CATEGORY",
+                            "MAIN_CLASS",
+                            "SUB_CLASS",
+                            "ABBREVIATION",
+                            "INCHI_KEY",
+                        )
+                    },
+                }
+                if record.get("reference_adduct"):
+                    candidate.update({key: record[key] for key in REFERENCE_ION_FIELDS})
+                rows.append(candidate)
     return rows
 
 
