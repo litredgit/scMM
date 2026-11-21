@@ -48,6 +48,7 @@ _ENV = {
     "ion_max_states": "SCMM_ION_MAX_STATES",
     "ion_max_hypotheses": "SCMM_ION_MAX_HYPOTHESES",
     "ion_memory_mb": "SCMM_ION_MEMORY_MB",
+    "enabled_plugins": "SCMM_ENABLED_PLUGINS",
 }
 _STATE = Path("~/.local/state/scmm")
 DEFAULTS = {
@@ -82,6 +83,7 @@ DEFAULTS = {
     "ion_max_states": 100000,
     "ion_max_hypotheses": 10000,
     "ion_memory_mb": 16384,
+    "enabled_plugins": [],
 }
 
 
@@ -114,6 +116,10 @@ class ServerConfig:
     @property
     def origins(self):
         return tuple(self.values["origins"])
+
+    @property
+    def enabled_plugins(self):
+        return self.values.get("enabled_plugins", ())
 
     def validate(self):
         from .auth import AuthStore
@@ -205,10 +211,20 @@ def load_server_config(path=None, overrides=None, *, environ=None):
     for key, name in _ENV.items():
         if name in environ:
             value = environ[name]
-            if key in {"storage", "output", "origins", "cookie_secure", "ai_private_urls"}:
+            if key in {
+                "storage",
+                "output",
+                "origins",
+                "cookie_secure",
+                "ai_private_urls",
+                "enabled_plugins",
+            }:
                 value = json.loads(value)
             values[key] = value
     values.update({k: v for k, v in (overrides or {}).items() if v is not None})
+    from scMM.plugins._registry import enabled_ids
+
+    values["enabled_plugins"] = list(enabled_ids(values["enabled_plugins"]))
     for key in _PATHS:
         if values.get(key) is not None:
             values[key] = str(Path(values[key]).expanduser().absolute())

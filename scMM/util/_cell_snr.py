@@ -27,6 +27,8 @@ def find_cell_peaks_snr(
     reference_ppm_tol: float = 10.0,
     progress_callback=None,
     cell_min_signal: float = 1e5,
+    detector=None,
+    quantifier=None,
     **filter_kwargs,
 ):
     """Extract cells using reference EICs and quantify features with true SNR.
@@ -71,57 +73,103 @@ def find_cell_peaks_snr(
 
     X = data.to_numpy(dtype=output_dtype, copy=False)
     mz_values = np.asarray(data.columns, dtype=np.float64)
-    reference_indices = np.asarray(
-        [int(np.abs(mz_values - value).argmin()) for value in references],
-        dtype=np.int64,
-    )
-    errors = np.abs(mz_values[reference_indices] - references) / references * 1e6
-    if np.any(errors > reference_ppm_tol):
-        raise ValueError("reference m/z not detected within reference_ppm_tol")
-    reference_indices = np.unique(reference_indices)
-    matched_reference_mz = mz_values[reference_indices]
+    if detector is None:
+        reference_indices = np.asarray(
+            [int(np.abs(mz_values - value).argmin()) for value in references],
+            dtype=np.int64,
+        )
+        errors = np.abs(mz_values[reference_indices] - references) / references * 1e6
+        if np.any(errors > reference_ppm_tol):
+            raise ValueError("reference m/z not detected within reference_ppm_tol")
+        reference_indices = np.unique(reference_indices)
+        matched_reference_mz = mz_values[reference_indices]
 
-    reference_signal = X[:, reference_indices]
-    reference_baseline = _filter(
-        reference_signal,
-        size=baseline_window,
-        filter=baseline_filter,
-        **filter_kwargs,
-    )
-    eps = np.finfo(output_dtype).eps
-    reference_ratio = reference_signal / np.maximum(reference_baseline, eps)
-    reference_masks = reference_ratio > float(cell_signal_threshold)
-    if cell_min_signal > 0:
-        reference_masks &= reference_signal - reference_baseline > cell_min_signal
-    cell_mask = (
-        np.any(reference_masks, axis=1)
-        if reference_mode == "union"
-        else np.all(reference_masks, axis=1)
-    )
+        reference_signal = X[:, reference_indices]
+        reference_baseline = _filter(
+            reference_signal,
+            size=baseline_window,
+            filter=baseline_filter,
+            **filter_kwargs,
+        )
+        eps = np.finfo(output_dtype).eps
+        reference_ratio = reference_signal / np.maximum(reference_baseline, eps)
+        reference_masks = reference_ratio > float(cell_signal_threshold)
+        if cell_min_signal > 0:
+            reference_masks &= reference_signal - reference_baseline > cell_min_signal
+        cell_mask = (
+            np.any(reference_masks, axis=1)
+            if reference_mode == "union"
+            else np.all(reference_masks, axis=1)
+        )
 
-    labeled_mask, n_cells = label(cell_mask.astype(np.int8))
-    padded = np.concatenate(([False], cell_mask, [False]))
-    transitions = np.diff(padded.astype(np.int8))
-    starts = np.flatnonzero(transitions == 1)
-    stops = np.flatnonzero(transitions == -1)
-    window_slices = [
-        slice(int(start), int(stop)) for start, stop in zip(starts, stops, strict=True)
-    ]
-    if len(window_slices) != n_cells:
-        raise RuntimeError("cell-window labeling produced inconsistent results")
+        labeled_mask, n_cells = label(cell_mask.astype(np.int8))
+        padded = np.concatenate(([False], cell_mask, [False]))
+        transitions = np.diff(padded.astype(np.int8))
+        starts = np.flatnonzero(transitions == 1)
+        stops = np.flatnonzero(transitions == -1)
+        window_slices = [
+            slice(int(start), int(stop)) for start, stop in zip(starts, stops, strict=True)
+        ]
+        if len(window_slices) != n_cells:
+            raise RuntimeError("cell-window labeling produced inconsistent results")
 
-    reference_score = np.mean(reference_ratio, axis=1)
-    peak_frames = np.asarray(
-        [slc.start + int(np.argmax(reference_score[slc])) for slc in window_slices],
-        dtype=np.int64,
-    )
-    window_ranges = [(slc.start, slc.stop - 1) for slc in window_slices]
+        reference_score = np.mean(reference_ratio, axis=1)
+        peak_frames = np.asarray(
+            [slc.start + int(np.argmax(reference_score[slc])) for slc in window_slices],
+            dtype=np.int64,
+        )
+        window_ranges = [(slc.start, slc.stop - 1) for slc in window_slices]
+        background_mask = ~np.any(reference_masks, axis=1)
+        reference_matches = [
+            {
+                "requested": float(requested),
+                "matched": float(mz_values[int(np.abs(mz_values - requested).argmin())]),
+                "ppm_error": float(error),
+            }
+            for requested, error in zip(references, errors, strict=True)
+        ]
+    else:
+        events = detector(data)
+        n_cells = len(events)
+        labeled_mask = np.zeros(len(X), dtype=np.int64)
+        peak_frames = np.asarray([apex for _, apex, _ in events], dtype=np.int64)
+        window_ranges = [(start, stop) for start, _, stop in events]
+        window_slices = [slice(start, stop + 1) for start, stop in window_ranges]
+        for index, window in enumerate(window_slices, start=1):
+            labeled_mask[window] = index
+        cell_mask = labeled_mask > 0
+        background_mask = ~cell_mask
+        reference_indices = np.empty(0, dtype=np.int64)
+        matched_reference_mz = np.empty(0, dtype=np.float64)
+        reference_baseline = np.empty((len(X), 0))
+        reference_signal = np.empty((len(X), 0))
+        reference_ratio = np.empty((len(X), 0))
+        reference_matches = []
+
+    detection = {
+        "cell_mask": cell_mask,
+        "labeled_mask": labeled_mask,
+        "reference_baseline": reference_baseline,
+        "reference_signal": reference_signal,
+        "reference_ratio": reference_ratio,
+        "reference_indices": reference_indices,
+        "reference_mz_matched": matched_reference_mz,
+        "reference_matches": reference_matches,
+        "peak_frames": peak_frames,
+        "window_ranges": window_ranges,
+    }
+    if quantifier is not None:
+        return {
+            **detection,
+            "cell_df": quantifier(data, window_ranges, peak_frames),
+            "baseline": None,
+            "feature_snr": None,
+        }
 
     _, n_features = X.shape
     baseline_full = np.empty_like(X) if return_full_baseline else None
     cell_matrix = np.zeros((n_cells, n_features), dtype=output_dtype)
     feature_snr = np.zeros((n_cells, n_features), dtype=output_dtype)
-    background_mask = ~np.any(reference_masks, axis=1)
     non_cell = background_mask.astype(np.float64)[:, None]
 
     progress = tqdm(
@@ -213,25 +261,9 @@ def find_cell_peaks_snr(
     )
 
     return {
+        **detection,
         "cell_df": cell_df,
-        "cell_mask": cell_mask,
-        "labeled_mask": labeled_mask,
         "baseline": baseline_full,
-        "reference_baseline": reference_baseline,
-        "reference_signal": reference_signal,
-        "reference_ratio": reference_ratio,
-        "reference_indices": reference_indices,
-        "reference_mz_matched": matched_reference_mz,
-        "reference_matches": [
-            {
-                "requested": float(requested),
-                "matched": float(mz_values[int(np.abs(mz_values - requested).argmin())]),
-                "ppm_error": float(error),
-            }
-            for requested, error in zip(references, errors, strict=True)
-        ],
-        "peak_frames": peak_frames,
-        "window_ranges": window_ranges,
         "feature_snr": feature_snr[:, keep_mask],
         "zero_fraction": pd.Series(zero_fraction_values, index=data.columns),
         "kept_columns": pd.Series(keep_mask, index=data.columns),

@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-from dataclasses import asdict
 from pathlib import Path
 from uuid import uuid4
 
@@ -31,7 +30,9 @@ def digest_file(path):
 
 
 def signature(path, parameters):
-    params = asdict(parameters) if not isinstance(parameters, dict) else dict(parameters)
+    params = parameters.to_dict() if not isinstance(parameters, dict) else dict(parameters)
+    if params.get("method_plugins") == {}:
+        params.pop("method_plugins")
     return {"version": 4, "file": file_identity(path), "parameters": json.loads(json.dumps(params))}
 
 

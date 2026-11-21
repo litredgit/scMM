@@ -42,6 +42,7 @@ def test_shared_frontend_changes_include_assistant_browser_checks():
         ("tests/domain/test_normalize.py", {"data"}),
         ("frontend/tests/lipids.spec.ts", {"browser-lipids"}),
         ("tests/support/lipids.py", {"annotation", "api-lipids"}),
+        ("tests/support/method_package.py", {"api", "browser-workflow"}),
     ],
 )
 def test_changes_select_only_affected_blocks(file, expected):
@@ -50,7 +51,10 @@ def test_changes_select_only_affected_blocks(file, expected):
     assert set(selected["skipped"]).isdisjoint(expected)
     assert set(selected["selected"]) | set(selected["skipped"]) == set(CONFIGURATION["blocks"])
     if file.endswith(".md") or file.startswith("tests/"):
-        assert not selected["frontend"] and not selected["package"]
+        assert not selected["package"]
+        assert selected["frontend"] == any(
+            CONFIGURATION["blocks"][name]["kind"] == "browser" for name in expected
+        )
     if file.startswith("frontend/"):
         assert not selected["python_paths"] and not selected["doc_paths"]
 
@@ -224,6 +228,8 @@ def test_related_documents_include_reverse_link_targets():
 
 
 def test_support_mapping_matches_actual_transitive_consumers():
+    blocks = CONFIGURATION["blocks"]
+
     def imports(path):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         modules = {
@@ -245,7 +251,7 @@ def test_support_mapping_matches_actual_transitive_consumers():
         if helper.name == "__init__.py":
             continue
         actual = set()
-        for name, block in CONFIGURATION["blocks"].items():
+        for name, block in blocks.items():
             if block["kind"] != "python":
                 continue
             pending = [ROOT / p for p in block["tests"]]
@@ -258,7 +264,10 @@ def test_support_mapping_matches_actual_transitive_consumers():
                 pending.extend(imports(path))
             if helper in seen:
                 actual.add(name)
-        assert actual == set(CONFIGURATION["support"][helper.relative_to(ROOT).as_posix()]), helper
+        declared = set(CONFIGURATION["support"][helper.relative_to(ROOT).as_posix()])
+        browser = {name for name in declared if blocks[name]["kind"] == "browser"}
+        assert not browser or helper in imports(ROOT / "frontend/tests/server.py"), helper
+        assert actual == declared - browser, helper
 
 
 def test_format_configuration_needs_only_formatter_and_all_tracked_inputs_are_mapped():

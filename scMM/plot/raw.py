@@ -20,6 +20,17 @@ def cell_detection_figure(result):
         else None,
     )
     peaks = frame.loc[frame.cell_apex]
+    if "aligned_intensity" in frame:
+        display = _peak_preserving_downsample(frame, 30_000, "aligned_intensity")
+        figure.add_scattergl(
+            x=display.rt_seconds,
+            y=display.aligned_intensity,
+            name="Aligned MS1 signal",
+            mode="lines",
+        )
+        figure.add_scatter(
+            x=peaks.rt_seconds, y=peaks.aligned_intensity, name="Cell apices", mode="markers"
+        )
     for i, mass in enumerate(result.reference_mz):
         display = _peak_preserving_downsample(frame, 30_000, f"reference_{i}")
         figure.add_scattergl(
@@ -59,7 +70,9 @@ def cell_detection_figure(result):
             )
     times = frame.rt_seconds.to_numpy()
     figure.update_layout(
-        title="Cell windows and reference apices",
+        title="Cell windows and apices"
+        if "aligned_intensity" in frame
+        else "Cell windows and reference apices",
         xaxis_title="RT (s)",
         yaxis_title="Intensity",
         meta={

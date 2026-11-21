@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import math
 import os
-from dataclasses import asdict, dataclass, fields
+from dataclasses import dataclass, fields
 from pathlib import Path
 
 from .preferences import cpu_default, load_preferences
@@ -28,6 +28,7 @@ PROCESSING_HELP = {
     "mz_min": "正式提取的 m/z 下限（含边界），用于合谱、选峰与对齐。须小于上限，并覆盖参考离子；改变图形显示范围不会修改此值。",
     "mz_max": "正式提取的 m/z 上限（含边界），须大于下限并覆盖参考离子。范围越宽通常计算和内存越多；原始谱图的显示范围单独设置。",
     "extraction_method": "固定使用 snr_v1：扣除基线后定量，并使用背景噪声判断特征检出。",
+    "method_plugins": "项目选择的细胞识别或特征定量插件及其版本和参数。",
     "reference_mz": "SNR 细胞窗口检测的参考离子 m/z 列表，逗号分隔；留空使用 ref_mz。各值须在提取范围内且在 reference_ppm_tol 内匹配到特征；多个离子按 reference_mode 合并。",
     "reference_mode": "多个参考通道的逐扫描判定如何合并：union 任一通道达标即可，intersection 需所有通道同时达标。只填写一个参考离子时两者等效；交集可能减少或清空细胞窗口。",
     "reference_ppm_tol": "参考离子与特征轴最近 m/z 匹配允许的最大相对质量误差，单位 ppm。超过阈值会明确报错；与扫描峰对齐 ppm_tol 不同，不会自动放宽。",
@@ -158,7 +159,7 @@ class WorkbenchDefaults:
     processing_overrides: frozenset[str] = frozenset()
 
     def to_dict(self):
-        return {"processing": asdict(self.processing), "analysis": dict(self.analysis)}
+        return {"processing": self.processing.to_dict(), "analysis": dict(self.analysis)}
 
 
 def load_defaults(path: str | Path | None = None) -> WorkbenchDefaults:
@@ -168,13 +169,11 @@ def load_defaults(path: str | Path | None = None) -> WorkbenchDefaults:
     if not isinstance(override, dict) or set(override) - {"processing", "analysis"}:
         raise ValueError("config sections must be processing and/or analysis")
     preferences = load_preferences()
-    processing = asdict(
-        ProcessingParameters(
-            ref_mz=preferences["presets"][preferences["selected"]],
-            n_jobs=cpu_default(),
-            extraction_method="snr_v1",
-        )
-    )
+    processing = ProcessingParameters(
+        ref_mz=preferences["presets"][preferences["selected"]],
+        n_jobs=cpu_default(),
+        extraction_method="snr_v1",
+    ).to_dict()
     updates = override.get("processing", {})
     if not isinstance(updates, dict) or set(updates) - set(processing):
         raise ValueError("unknown processing parameter or invalid section")

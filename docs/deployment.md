@@ -194,6 +194,7 @@ uv run --locked scmm-admin --server-config ~/.config/scmm/dev.json rotate-operat
 | 监听地址/端口 | `--address` / `--port` | `SCMM_ADDRESS` / `SCMM_PORT` | `address` / `port` |
 | Cookie 名/HTTPS 标记 | `--cookie-name` / `--cookie-secure` / `--no-cookie-secure` | `SCMM_SESSION_COOKIE` / `SCMM_COOKIE_SECURE`，后者为 JSON 布尔值 | `cookie_name` / `cookie_secure` |
 | 允许来源 | 重复 `--origin` | `SCMM_ALLOWED_ORIGINS`，JSON 列表 | `origins` |
+| 启用插件 | — | `SCMM_ENABLED_PLUGINS`，JSON 列表 | `enabled_plugins` |
 | 空闲/最长会话秒数 | `--session-idle-seconds` / `--session-absolute-seconds` | `SCMM_SESSION_IDLE_SECONDS` / `SCMM_SESSION_ABSOLUTE_SECONDS` | `session_idle_seconds` / `session_absolute_seconds` |
 
 外部 Nginx 反代时，管理员在仓库外资源配置 `origins` 中填写浏览器实际访问来源（含协议及非默认端口），
@@ -207,6 +208,16 @@ uv run --locked scmm-admin --server-config ~/.config/scmm/dev.json rotate-operat
 默认监听 `127.0.0.1`，代理头信任关闭；允许来源为空时只接受当前同源，填写时必须是含协议的完整来源。
 
 Windows 完整安装和后台任务未验收，当前项目网页使用 Linux；缺少 fcntl 的最小兼容不代表完整 Windows 支持。
+
+### 启用插件
+
+`enabled_plugins` 默认为 `[]`。相关网络、监督与 SHAP、伪时间与趋势随 scMM 提供，可分别用 `network`、`supervised`、`time` 启用。
+例如在对应服务器资源配置中添加 `"enabled_plugins": ["network", "time"]` 即可在重启后使用这两组功能。
+已有项目的数据、有效报告与图仍可读取和下载。监督与 SHAP 使用 `supervised` 依赖组，Palantir 使用 `plot` 依赖组。
+
+需要自定义主体方法时，先将审阅过的插件安装到该服务的 Python 环境，再把包声明的入口 ID 加入同一列表。
+依赖应与 scMM 锁定环境兼容。精确同步环境后，管理员应按该环境的插件清单安装对应版本，再启动服务。
+方法的输入、输出、交互和版本见[主体方法插件协议](method-plugins.md)。
 
 ## 个人 AI 配置
 

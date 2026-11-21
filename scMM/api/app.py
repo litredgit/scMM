@@ -27,6 +27,7 @@ from .routers import (
     ions,
     lipids,
     maintenance,
+    methods,
     monitor,
     preferences,
     projects,
@@ -55,8 +56,13 @@ def create_app(
         StorageRoot("项目结果", project_root),
         *(StorageRoot(root.label, root.path) for root in output_roots if root.label != "项目结果"),
     )
+    values = getattr(server_config, "values", {})
     manager = WebWorkspaceService(
-        tuple(roots), result_roots, project_root, defaults or load_defaults()
+        tuple(roots),
+        result_roots,
+        project_root,
+        defaults or load_defaults(),
+        enabled_plugins=getattr(server_config, "enabled_plugins", ()),
     )
 
     from scMM.application.monitor import MonitorService
@@ -90,7 +96,6 @@ def create_app(
     from scMM.application.ai_client import ChatClient, EndpointPolicy
     from scMM.application.ai_config import AIConfigStore, AIError
 
-    values = getattr(server_config, "values", {})
     manager.ion_resources = {
         key: values.get(key, default)
         for key, default in {
@@ -346,6 +351,7 @@ def create_app(
         extraction.router,
         exchange.router,
         analysis.router,
+        methods.router,
         lipids.router,
         ions.router,
         results.router,

@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 
 from scMM.plot.presentation import style_figure
 from scMM.plot.raw import _peak_preserving_downsample, cell_detection_figure
+from scMM.plugins._extraction import normalize_selection, selected_packages
 
 from .cell_preview import initialize_ranges, submit_preview
 from .parameters import automatic_mz_range
@@ -30,11 +31,11 @@ from .raw_preview import RawPreviewService
 from .web_support import figure_view, table_view
 
 
-def validated_parameters(values):
+def validated_parameters(values, plugins):
     try:
-        result = asdict(ProcessingParameters(**values))
-        if result["extraction_method"] != "snr_v1":
-            raise ValueError("网页新提取仅支持 snr，请在第二步检查并应用 SNR 参数。")
+        result = ProcessingParameters(**values).to_dict()
+        if "method_plugins" in result:
+            result["method_plugins"] = normalize_selection(result["method_plugins"], plugins)
         return result
     except TypeError as exc:
         raise ValueError(f"提取参数不合法：{exc}") from exc
@@ -55,8 +56,12 @@ class RawWorkflow:
     ):
         def action(workspace):
             project = workspace.require_project()
-            values = validated_parameters(parameters)
+            values = validated_parameters(parameters, self.plugins)
             if sample_id:
+                if values.pop("method_plugins", {}) != project.manifest["parameters"].get(
+                    "method_plugins", {}
+                ):
+                    raise ValueError("提取方法为项目级设置，请选择应用到项目默认。")
                 sample = self.sample(project, sample_id)
                 sample.update(parameters=values, manual_parameters=True)
             else:
@@ -77,9 +82,14 @@ class RawWorkflow:
         def action(workspace):
             project = workspace.require_project()
             validated = [
-                (self.sample(project, key), validated_parameters(value))
+                (self.sample(project, key), validated_parameters(value, self.plugins))
                 for key, value in edits.items()
             ]
+            for _, values in validated:
+                if values.pop("method_plugins", {}) != project.manifest["parameters"].get(
+                    "method_plugins", {}
+                ):
+                    raise ValueError("逐样本参数须使用项目的提取方法。")
             if set(edits) == {sample["id"] for sample in project.samples}:
                 from .project_batch import SHARED_FIELDS
 
@@ -91,7 +101,7 @@ class RawWorkflow:
                     base = sample_parameters(project, None)
                     base.update({key: deepcopy(first[key]) for key in SHARED_FIELDS})
                     project.manifest.update(
-                        parameters=validated_parameters(base), manual_parameters=True
+                        parameters=validated_parameters(base, self.plugins), manual_parameters=True
                     )
             for sample, values in validated:
                 sample.update(parameters=values, manual_parameters=True)
@@ -318,7 +328,7 @@ class RawWorkflow:
             sample = self.sample(project, sample_id)
             if not workspace.raw or workspace.raw["sample_id"] != sample_id:
                 raise ValueError("请先打开当前样本。")
-            values = validated_parameters(parameters)
+            values = validated_parameters(parameters, self.plugins)
             selected = (
                 project.samples if project.manifest["feature_strategy"] == "shared" else [sample]
             )
@@ -337,6 +347,8 @@ class RawWorkflow:
                 "roots": [(r.label, str(r.path)) for r in self.storage.roots],
                 "inputs": inputs,
             }
+            if values.get("method_plugins"):
+                request["extraction_plugins"] = selected_packages(values["method_plugins"])
             future, state_path = submit_preview(request)
             workspace.revision += 1
             workspace.preview_job = {
@@ -445,7 +457,7 @@ class RawWorkflow:
             candidate = project_candidate(workspace.require_project())
             self.require_snr(candidate)
             initialize_ranges(candidate, RawPreviewService(self.storage))
-            return preflight(candidate, self.storage)
+            return preflight(candidate, self.storage, plugin_registry=self.plugins)
 
     def extraction_batches(self, identity):
         with self.access(identity) as workspace:
@@ -469,7 +481,7 @@ class RawWorkflow:
             candidate = project_candidate(workspace.require_project())
             self.require_snr(candidate)
             initialize_ranges(candidate, RawPreviewService(self.storage))
-            preflight(candidate, self.storage)
+            preflight(candidate, self.storage, plugin_registry=self.plugins)
             if retry_path:
                 self.batch_path(candidate, retry_path)
             if any(read_batch(p)["status"] in {"queued", "running"} for p in batches(candidate)):
@@ -480,7 +492,9 @@ class RawWorkflow:
             workspace.project = candidate
             workspace.revision += 1
             try:
-                path = submit(candidate, self.storage, retry_path=retry_path)
+                path = submit(
+                    candidate, self.storage, retry_path=retry_path, plugin_registry=self.plugins
+                )
                 with workspace.ai_lock:
                     workspace.ai_batches = (*workspace.ai_batches, path)
             except Exception as exc:

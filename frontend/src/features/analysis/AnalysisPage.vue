@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DataViewSelector from '../ions/DataViewSelector.vue'
 import CellSpectraPanel from './components/CellSpectraPanel.vue'
+import MethodPanel from '../methods/MethodPanel.vue'
 import { computed, provide, watch } from 'vue'
 import { useAnalysis } from './composables/useAnalysis'
 import { analysisKey } from './types'
@@ -18,11 +19,22 @@ const {
   recovery,
   retryPresentation,
 } = analysis
-const moduleGroups = [...new Set(analysisModules.map((entry) => entry.group))]
+const enabledModules = computed(() =>
+  analysisModules.filter(
+    (entry) => !entry.plugin || store.configuration?.enabled_plugins.includes(entry.plugin),
+  ),
+)
+const moduleGroups = computed(() => [...new Set(enabledModules.value.map((entry) => entry.group))])
+const methodKind = computed(() => {
+  if (tab.value === 'embedding') return 'reduction'
+  if (tab.value === 'clustering') return 'clustering'
+  if (tab.value === 'differential') return 'statistics'
+  return undefined
+})
 watch(
-  tab,
-  (value) => {
-    if (!analysisModules.some((entry) => entry.id === value)) tab.value = 'embedding'
+  [tab, enabledModules],
+  ([value, entries]) => {
+    if (!entries.some((entry) => entry.id === value)) tab.value = 'embedding'
   },
   { immediate: true },
 )
@@ -73,7 +85,7 @@ const resultStates = computed(() => {
         <h2 class="analysis-group-name">{{ group }}</h2>
         <div class="actions">
           <button
-            v-for="entry in analysisModules.filter((entry) => entry.group === group)"
+            v-for="entry in enabledModules.filter((entry) => entry.group === group)"
             :key="entry.id"
             :aria-label="entry.name"
             :class="{ selected: tab === entry.id }"
@@ -87,7 +99,7 @@ const resultStates = computed(() => {
     </nav>
     <label v-if="info" class="analysis-mobile field"
       >分析功能<select aria-label="分析功能" v-model="tab">
-        <option v-for="entry in analysisModules" :key="entry.id" :value="entry.id">
+        <option v-for="entry in enabledModules" :key="entry.id" :value="entry.id">
           {{ entry.name }}
         </option>
       </select></label
@@ -130,8 +142,15 @@ const resultStates = computed(() => {
     </div>
     <p v-if="!info" role="status">正在读取当前数据的分析状态…</p>
     <div v-else class="analysis-content">
+      <MethodPanel
+        v-if="methodKind"
+        :key="methodKind"
+        :kind="methodKind"
+        :info="info"
+        @completed="reloadAnalysis"
+      />
       <component
-        v-for="entry in analysisModules"
+        v-for="entry in enabledModules"
         :key="entry.id"
         :is="entry.component"
         v-show="tab === entry.id"
@@ -149,16 +168,19 @@ const resultStates = computed(() => {
 <style scoped>
 .analysis-navigation {
   position: static;
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 0.85fr);
+  display: flex;
   margin-bottom: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
 }
 .analysis-group {
+  flex: 1;
   min-width: 0;
   padding: 8px 10px;
+}
+.analysis-group:first-child {
+  flex: 3;
 }
 .analysis-group + .analysis-group {
   border-left: 1px solid var(--border);

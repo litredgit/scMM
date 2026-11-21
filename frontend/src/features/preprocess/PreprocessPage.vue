@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MethodPanel from '../methods/MethodPanel.vue'
 import ScientificInput from '../../components/ScientificInput.vue'
 import { useRoute } from 'vue-router'
 import SelectionLabels from './SelectionLabels.vue'
@@ -237,6 +238,7 @@ useViewState('preprocess', {
       </div>
     </div>
     <DataViewSelector />
+    <MethodPanel kind="preprocessing" :info="info" @completed="refresh" />
     <section class="card preprocess-toolbar">
       <div class="actions preprocess-stages" role="group" aria-label="预处理操作">
         <button

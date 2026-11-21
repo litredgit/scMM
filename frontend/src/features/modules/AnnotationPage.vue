@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import AnnotationHeader from '../annotation/AnnotationHeader.vue'
+import MethodPanel from '../methods/MethodPanel.vue'
 import { useAnnotationSource } from '../annotation/useAnnotationSource'
 import LipidPanel from '../preprocess/LipidPanel.vue'
 import IonsPage from '../ions/IonsPage.vue'
@@ -10,6 +11,7 @@ const store = useWorkspace()
 const { source, selectedTarget } = useAnnotationSource()
 const groupsOpen = ref(false)
 const groupsMounted = ref(false)
+const annotationRun = ref(0)
 function toggleGroups() {
   groupsMounted.value = true
   groupsOpen.value = !groupsOpen.value
@@ -18,7 +20,8 @@ function toggleGroups() {
 
 <template>
   <section class="module-home">
-    <LipidPanel v-if="source" :source="source">
+    <MethodPanel v-if="source" kind="annotation" :source="source.id" @completed="annotationRun++" />
+    <LipidPanel v-if="source" :key="annotationRun" :source="source">
       <template #grouping-action>
         <button
           class="preview"

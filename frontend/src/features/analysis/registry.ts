@@ -1,14 +1,12 @@
 import ExplorationPanel from './modules/ExplorationPanel.vue'
 import StabilityPanel from './modules/StabilityPanel.vue'
-import TimePanel from './modules/TimePanel.vue'
 import FeatureEmbeddingPanel from './modules/FeatureEmbeddingPanel.vue'
 import FeatureScatterPanel from './modules/FeatureScatterPanel.vue'
 import HeatmapPanel from './modules/HeatmapPanel.vue'
 import ClusteringPanel from './modules/embedding/ClusteringPanel.vue'
 import EmbeddingPanel from './modules/embedding/EmbeddingPanel.vue'
 import DifferentialPanel from './modules/differential/DifferentialPanel.vue'
-import NetworkPanel from './modules/network/NetworkPanel.vue'
-import SupervisedPanel from './modules/supervised/SupervisedPanel.vue'
+import { bundledAnalysis } from './bundledAnalysis'
 import type { AnalysisModule } from './types'
 export const analysisModules: readonly AnalysisModule[] = [
   {
@@ -54,13 +52,6 @@ export const analysisModules: readonly AnalysisModule[] = [
     requires: ['matrix'],
   },
   {
-    id: 'network',
-    name: '相关网络',
-    group: '探索 / QC',
-    component: NetworkPanel,
-    requires: ['matrix'],
-  },
-  {
     id: 'exploration',
     name: '相关性与集合',
     group: '统计比较',
@@ -74,18 +65,5 @@ export const analysisModules: readonly AnalysisModule[] = [
     component: DifferentialPanel,
     requires: ['matrix', 'observations'],
   },
-  {
-    id: 'supervised',
-    name: '监督与 SHAP',
-    group: '监督建模',
-    component: SupervisedPanel,
-    requires: ['matrix', 'observations'],
-  },
-  {
-    id: 'time',
-    name: '伪时间与轨迹',
-    group: '时间与趋势',
-    component: TimePanel,
-    requires: ['matrix'],
-  },
+  ...bundledAnalysis,
 ]

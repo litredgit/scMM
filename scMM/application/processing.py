@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import shutil
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -40,6 +40,7 @@ class ProcessingParameters:
     cell_min_signal: float = 1e5
     rt_range: tuple[float, float] | None = None
     frame_range: tuple[int, int] | None = None
+    method_plugins: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         from scMM.file._dataset_loading import validate_mz_range
@@ -52,6 +53,9 @@ class ProcessingParameters:
         validate_mz_range((self.mz_min, self.mz_max), self.ref_mz)
         if self.extraction_method != "snr_v1":
             raise ValueError("Only snr_v1 extraction is supported")
+        from scMM.plugins._extraction import validate_selection
+
+        validate_selection(self.method_plugins)
         if self.reference_mode not in {"union", "intersection"}:
             raise ValueError("reference_mode must be union or intersection")
         for reference in self.reference_mz:
@@ -113,13 +117,22 @@ class ProcessingParameters:
             raise ValueError(f"Unknown processing preset: {preset}") from exc
         return cls(ref_mz=ref_mz, **values)
 
-    def load_kwargs(self) -> dict[str, Any]:
-        """Return keyword arguments consumed by ``CyESIData.load_from_file``."""
+    def to_dict(self):
         values = asdict(self)
+        if not values["method_plugins"]:
+            values.pop("method_plugins")
+        return values
+
+    def load_kwargs(self, *, method_kwargs=None) -> dict[str, Any]:
+        """Return keyword arguments consumed by ``CyESIData.load_from_file``."""
+        values = self.to_dict()
+        values.pop("method_plugins", None)
+        if (method_kwargs or {}).get("method_plugins", {}) != self.method_plugins:
+            raise ValueError("未解析冻结请求中的提取插件。")
         values.pop("ref_mz")
         values["mz_range"] = (values.pop("mz_min"), values.pop("mz_max"))
         values["reference_mz"] = values["reference_mz"] or None
-        return values
+        return {**values, **(method_kwargs or {})}
 
 
 @dataclass(frozen=True)

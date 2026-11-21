@@ -32,11 +32,20 @@ def _check_figure_identity(metadata, manager, identity):
             "time_result_key",
             "lipid_version",
             "annotation_source_identity",
+            "method_result",
         )
     ):
         return
     with manager.access(identity) as workspace:
         project = workspace.require_project()
+        if metadata.get("method_result"):
+            from scMM.application.method_reports import current_reports
+
+            reports = current_reports(project.workspace.require_data())
+            key = metadata["method_result"]
+            report = reports.get(key) if isinstance(key, str) else None
+            if not report or metadata.get("method_result_identity") != report["identity"]:
+                raise ValueError("方法结果已失效，请重新读取后导出。")
         source = metadata.get("annotation_source", "")
         if metadata.get("annotation_source_identity") or metadata.get("lipid_version"):
             from scMM.application.annotation_sources import feature_source
@@ -298,7 +307,12 @@ def annotation_table(
         root_scope = source != "current"
         if not root_scope and project.workspace._selection_source is not None:
             raise ValueError("请先关闭全部标签筛选，再导入注释。")
-        data, source_identity = evidence_source(project, source)
+        if root_scope:
+            data, source_identity = evidence_source(project, source)
+        else:
+            from scMM.application.annotation_sources import feature_source
+
+            data, _ = feature_source(project, source)
         table, matched = align_annotations(
             data,
             frame,

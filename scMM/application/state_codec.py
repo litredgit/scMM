@@ -1,13 +1,12 @@
 """Explicit service-only state codec. No pickle or dynamically selected constructors."""
 
 import importlib.metadata
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from anndata import AnnData, read_h5ad
-
-from scMM.analysis.supervised import SupervisedAnalyzer
 
 TRUSTED = {
     "scMM.analysis.supervised.PLSDAClassifier",
@@ -83,7 +82,8 @@ class StateCodec:
             from dataclasses import asdict
 
             return {"@": "detection", "value": self.encode(asdict(value))}
-        if isinstance(value, SupervisedAnalyzer):
+        supervised = sys.modules.get("scMM.analysis.supervised")
+        if supervised is not None and isinstance(value, supervised.SupervisedAnalyzer):
             import skops.io as sio
 
             attrs = {
@@ -172,6 +172,8 @@ class StateCodec:
             return CellDetectionPreview(**self.decode(value["value"]))
         if tag == "analyzer":
             import skops.io as sio
+
+            from scMM.analysis.supervised import SupervisedAnalyzer
 
             if value["versions"] != versions():
                 raise ValueError("Model recovery dependency/implementation version differs")

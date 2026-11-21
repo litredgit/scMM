@@ -1,4 +1,3 @@
-from dataclasses import asdict
 from typing import Literal
 
 from fastapi import APIRouter, Query
@@ -15,7 +14,7 @@ router = APIRouter(prefix="/api/v1", tags=["storage", "parameters"])
 
 @router.get("/configuration", response_model=s.ConfigurationView)
 def configuration(manager: Service):
-    defaults = asdict(manager.defaults.processing)
+    defaults = manager.defaults.processing.to_dict()
     return {
         "storage": [
             {"label": root.label, "path": str(root.path)} for root in manager.storage.roots
@@ -27,13 +26,14 @@ def configuration(manager: Service):
         "processing": [
             {"name": key, "default": value, "help": PROCESSING_HELP[key]}
             for key, value in defaults.items()
-            if key != "extraction_method"
         ],
         "analysis": [
             {"name": key, "default": value, "help": ANALYSIS_SPECS[key][3]}
             for key, value in manager.defaults.analysis.items()
         ],
         "workspace_idle_seconds": manager.idle_seconds,
+        "enabled_plugins": sorted(manager.plugins.bundled),
+        "methods": [method.view() for method in manager.plugins.methods.values()],
     }
 
 

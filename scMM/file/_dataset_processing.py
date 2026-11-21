@@ -48,6 +48,10 @@ class DatasetProcessingMixin:
         debug_full_baseline: bool = True,
         progress_callback=None,
         cell_min_signal: float = 1e5,
+        cell_detector=None,
+        cell_quantifier=None,
+        method_plugins=None,
+        plugin_intensity_definition="",
         **kwargs,
     ) -> Self:
         input_state = dataset_intensity_state(self)
@@ -72,6 +76,16 @@ class DatasetProcessingMixin:
             feature_block_size=feature_block_size or self.data.shape[1],
             return_full_baseline=debug_hook is not None and debug_full_baseline,
             progress_callback=progress_callback,
+            detector=(lambda aligned: cell_detector(aligned, frame_metadata))
+            if cell_detector
+            else None,
+            quantifier=(
+                lambda aligned, windows, apex: cell_quantifier(
+                    aligned, frame_metadata, windows, apex
+                )
+            )
+            if cell_quantifier
+            else None,
             **kwargs,
         )
         if debug_hook is not None:
@@ -118,9 +132,10 @@ class DatasetProcessingMixin:
         for i, mz in enumerate(result["reference_mz_matched"]):
             observations[f"reference_intensity_{mz:.8g}"] = result["reference_signal"][frames, i]
             observations[f"reference_ratio_{mz:.8g}"] = result["reference_ratio"][frames, i]
-        snr = pd.DataFrame(result["feature_snr"], index=data.index, columns=data.columns)
+        if result["feature_snr"] is not None:
+            snr = pd.DataFrame(result["feature_snr"], index=data.index, columns=data.columns)
         metadata["processing"] = {
-            "extraction_method": extraction_method,
+            "extraction_method": "plugin" if method_plugins else extraction_method,
             "baseline_filter_size": baseline_filter_size,
             "cell_snr": cell_snr,
             "cell_min_signal": cell_min_signal,
@@ -138,6 +153,11 @@ class DatasetProcessingMixin:
         )
         metadata["length"] = data.shape[0]
         metadata["intensity_state"] = "transformed" if input_state == "normalized" else input_state
+        if method_plugins:
+            metadata["processing"]["method_plugins"] = deepcopy(method_plugins)
+        if cell_quantifier is not None:
+            metadata["processing"]["intensity_definition"] = plugin_intensity_definition
+            metadata["intensity_state"] = "unknown"
         variables = (
             self.feature_meta.reindex(data.columns)
             if hasattr(self, "feature_meta")

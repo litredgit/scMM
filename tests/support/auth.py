@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from scMM.application.auth import AuthStore
 
 
-def auth_options(tmp_path):
+def auth_options(tmp_path, *, enabled_plugins=()):
     path = tmp_path / "auth.sqlite3"
     if path.exists():
         store = AuthStore(path)
@@ -19,6 +19,7 @@ def auth_options(tmp_path):
             cookie_name="scmm_test",
             cookie_secure=False,
             origins=(),
+            enabled_plugins=enabled_plugins,
         ),
     }, credential
 

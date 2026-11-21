@@ -10,7 +10,6 @@ from uuid import uuid4
 import numpy as np
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 
 from scMM.plot.presentation import feature_label, qc_file_table, style_figure
 from scMM.plot.workbench import (
@@ -20,6 +19,7 @@ from scMM.plot.workbench import (
     violin_figure,
     volcano_figure,
 )
+from scMM.plugins import _bundled
 from scMM.util.observations import observation_kind
 
 from .result_catalog import (
@@ -42,10 +42,7 @@ ANALYSES = {
     "cluster",
     "differential",
     "markers",
-    "network",
-    "train",
-    "explain_shap",
-    "save_latent",
+    *_bundled.OPERATIONS,
 }
 
 
@@ -204,6 +201,8 @@ def analysis_settings(project):
 
 class AnalysisWorkflow:
     def analysis_info(self, identity):
+        from .method_reports import report_summaries
+
         with self.access(identity) as workspace:
             project = workspace.require_project()
             state = project.workspace
@@ -228,6 +227,7 @@ class AnalysisWorkflow:
                 "feature_columns": list(data.var.columns),
                 "history": state.history(),
                 "results": results,
+                "method_reports": report_summaries(data),
                 "live_results": list(state.results),
                 "latent_supported": "supervised" in state.results
                 and state.result("supervised").supports_latent_scores,
@@ -303,6 +303,8 @@ class AnalysisWorkflow:
 
         if operation not in PREPROCESS | ANALYSES or (preview and operation not in PREPROCESS):
             raise ValueError("不支持的分析操作。")
+        if operation in _bundled.OPERATIONS:
+            self.require_plugin(_bundled.OPERATIONS[operation])
         with self.access(identity, operation=operation) as workspace:
             from .analysis_inputs import resolve_analysis_input
 
@@ -381,6 +383,10 @@ class AnalysisWorkflow:
             return self.view(workspace)
 
     def invalidate_results(self, identity, revision, names):
+        for name in names:
+            if name in _bundled.RESULTS:
+                self.require_plugin(_bundled.RESULTS[name])
+
         def action(workspace):
             project = workspace.project
             selected = related_results(names)
@@ -423,6 +429,8 @@ class AnalysisWorkflow:
             return json_view(result)
 
     def analysis_plot(self, identity, revision, kind, options):
+        if kind in _bundled.PLOTS:
+            self.require_plugin(_bundled.PLOTS[kind])
         with self.access(identity) as workspace:
             workspace.check(revision)
             project = workspace.require_project()
@@ -482,62 +490,9 @@ class AnalysisWorkflow:
 
                 figure = feature_scatter_figure(data, **options)
             elif kind == "confusion":
-                report = self.result_value(project, "supervised")
-                try:
-                    classes = np.asarray(report["classes"])
-                    values = np.asarray(report["diagnostics"]["confusion_matrix"], dtype=float)
-                except (KeyError, TypeError, ValueError) as exc:
-                    raise ValueError("监督报告缺少有效混淆矩阵，请重新训练。") from exc
-                if (
-                    classes.ndim != 1
-                    or values.shape != (len(classes), len(classes))
-                    or not len(classes)
-                    or not np.isfinite(values).all()
-                    or (values < 0).any()
-                    or not np.equal(values, np.floor(values)).all()
-                ):
-                    raise ValueError("监督报告的混淆矩阵无效，请重新训练。")
-                normalized = np.divide(
-                    values,
-                    values.sum(axis=1, keepdims=True),
-                    out=np.zeros_like(values, dtype=float),
-                    where=values.sum(axis=1, keepdims=True) > 0,
-                )
-                display = normalized if options.get("normalize", False) else values
-                figure = go.Figure(
-                    go.Heatmap(
-                        z=display,
-                        x=classes.astype(str),
-                        y=classes.astype(str),
-                        colorscale="Blues",
-                        text=display,
-                        texttemplate="%{text:.2f}"
-                        if options.get("normalize", False)
-                        else "%{text}",
-                    )
-                )
-                figure.update_layout(
-                    title="Held-out confusion matrix",
-                    xaxis_title="Predicted class",
-                    yaxis_title="True class",
-                    meta={
-                        "export_tables": {
-                            "counts.csv": pd.DataFrame(
-                                values, index=classes, columns=classes
-                            ).to_csv(),
-                            "row_normalized.csv": pd.DataFrame(
-                                np.divide(
-                                    values,
-                                    values.sum(axis=1, keepdims=True),
-                                    out=np.zeros_like(values, dtype=float),
-                                    where=values.sum(axis=1, keepdims=True) > 0,
-                                ),
-                                index=classes,
-                                columns=classes,
-                            ).to_csv(),
-                        }
-                    },
-                )
+                from scMM.plugins._supervised import confusion_figure
+
+                figure = confusion_figure(self.result_value(project, "supervised"), options)
             elif kind in {"roc", "pr", "calibration"}:
                 if "supervised" not in state.results:
                     if kind in project.views.get("figures", {}):

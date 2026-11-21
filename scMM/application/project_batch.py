@@ -11,7 +11,7 @@ import subprocess
 import sys
 import threading
 import traceback
-from dataclasses import asdict
+from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
 
@@ -22,6 +22,12 @@ from scMM.file._dataset_loading import DatasetState, _annotate_single_file_frame
 from scMM.file._sequential import merge_objects
 from scMM.file.data import CyESIData
 from scMM.file.io import align_frame, extract_peaks, load_single_file, sum_spec, validate_ms_file
+from scMM.plugins._extraction import (
+    extraction_kwargs,
+    extraction_registry,
+    normalize_selection,
+    selected_packages,
+)
 from scMM.util.peak import filter_spectrum
 
 from .naming import beijing_time
@@ -40,7 +46,7 @@ SHARED_FIELDS = (
 )
 
 
-def preflight(project, storage):
+def preflight(project, storage, *, plugin_registry=None):
     project.validate_samples()
     if not project.samples:
         raise ValueError("Add at least one raw sample")
@@ -48,8 +54,10 @@ def preflight(project, storage):
         raise ValueError("Unknown feature strategy")
     base = ProcessingParameters(**sample_parameters(project, None))
     samples = []
-    if project.manifest["feature_strategy"] == "shared":
-        base = ProcessingParameters(**sample_parameters(project, None))
+    if plugin_registry is not None:
+        base = replace(
+            base, method_plugins=normalize_selection(base.method_plugins, plugin_registry)
+        )
     for sample in project.samples:
         if sample.get("result_only"):
             raise ValueError("Result-only samples require raw-file relocation before extraction")
@@ -57,6 +65,8 @@ def preflight(project, storage):
         validate_ms_file(path)
         values = sample_parameters(project, sample)
         params = ProcessingParameters(**values)
+        if plugin_registry is not None:
+            params = replace(params, method_plugins=base.method_plugins)
         if project.manifest["feature_strategy"] == "shared" and any(
             getattr(base, key) != getattr(params, key) for key in SHARED_FIELDS
         ):
@@ -65,7 +75,7 @@ def preflight(project, storage):
             {
                 **sample,
                 "path": str(path),
-                "parameters": asdict(params),
+                "parameters": params.to_dict(),
                 "parameter_source": "sample" if sample.get("parameters") else "project",
             }
         )
@@ -73,7 +83,7 @@ def preflight(project, storage):
         "peak_algorithm": "valley_centroid_v1",
         "project_folder": str(project.folder),
         "samples": samples,
-        "parameters": asdict(base),
+        "parameters": base.to_dict(),
         "feature_strategy": project.manifest["feature_strategy"],
         "feature_merge_ppm": project.manifest.get("feature_merge_ppm", 10.0),
     }
@@ -111,10 +121,14 @@ def batches(project):
     )
 
 
-def submit(project, storage, *, retry_path=None):
+def submit(project, storage, *, retry_path=None, plugin_registry=None):
     if not background_tasks_supported():
         raise RuntimeError("Project extraction currently requires Linux")
-    request = preflight(project, storage)
+    request = preflight(project, storage, plugin_registry=plugin_registry)
+    selection = request["parameters"].get("method_plugins", {})
+    normalize_selection(selection, plugin_registry)
+    if selection:
+        request["extraction_plugins"] = selected_packages(selection)
     from .identity import actor
 
     request["submitted_by"] = (actor.get() or {}).get("id")
@@ -266,6 +280,8 @@ def run_batch(path):
         check_inputs()
         targets = None
         base = ProcessingParameters(**request["parameters"])
+        registry = extraction_registry(request.get("extraction_plugins"))
+        method_kwargs = extraction_kwargs(base.method_plugins, registry)
         if request.get("reuse_shared_features"):
             report("复用已验证共同特征", stage="shared")
             targets = np.load(path.parent / "shared_features.npy", allow_pickle=False)
@@ -372,7 +388,7 @@ def run_batch(path):
                         progress_callback=progress,
                         debug_hook=capture,
                         debug_full_baseline=False,
-                        **params.load_kwargs(),
+                        **params.load_kwargs(method_kwargs=method_kwargs),
                     )
                 else:
                     exp, meta = load_single_file(sample["path"])
@@ -388,7 +404,7 @@ def run_batch(path):
                     )
                     _annotate_single_file_frames(obs, meta)
                     meta.update(ref_mz=params.ref_mz, mz_range=[params.mz_min, params.mz_max])
-                    kwargs = params.load_kwargs()
+                    kwargs = params.load_kwargs(method_kwargs=method_kwargs)
                     for key in (
                         "mz_range",
                         "rt_range",

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ExtractionMethods from '../methods/ExtractionMethods.vue'
 import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ScientificInput from '../../components/ScientificInput.vue'
@@ -137,6 +138,11 @@ watch(
     <div class="workflow-columns raw-workflow" :class="{ 'signal-only': signalOnly }">
       <div v-show="!signalOnly" class="card raw-parameter-panel">
         <h2>提取参数</h2>
+        <ExtractionMethods
+          v-model="parameters"
+          :disabled="store.busy || applicationScope === 'sample'"
+          @edited="edited"
+        />
         <p v-if="unsupportedParameters" class="alert">
           此项目或样本的提取参数已不受支持。请核对当前 SNR
           参数并应用后重新提取；已保存产物保留原始来源。

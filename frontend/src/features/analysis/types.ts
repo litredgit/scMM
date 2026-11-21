@@ -28,5 +28,6 @@ export interface AnalysisModule {
   group: string
   component: Component
   requires: readonly string[]
+  plugin?: string
 }
 export const analysisKey: InjectionKey<ReturnType<typeof useAnalysis>> = Symbol('analysis')

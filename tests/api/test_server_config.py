@@ -55,6 +55,18 @@ def test_resource_precedence_and_no_implicit_storage(resources, monkeypatch):
     assert list(load_server_config(path).values["storage"]) == ["Only"]
 
 
+def test_plugin_configuration_is_explicit_and_validated(resources, monkeypatch):
+    path, values, _ = resources
+    assert load_server_config(path).enabled_plugins == []
+    path.write_text(json.dumps({**values, "enabled_plugins": ["network"]}))
+    assert load_server_config(path).enabled_plugins == ["network"]
+    monkeypatch.setenv("SCMM_ENABLED_PLUGINS", '["time", "local-methods"]')
+    assert load_server_config(path).enabled_plugins == ["time", "local-methods"]
+    monkeypatch.setenv("SCMM_ENABLED_PLUGINS", '["network", "network"]')
+    with pytest.raises(ValueError, match="enabled_plugins"):
+        load_server_config(path)
+
+
 def test_retention_database_precedence_and_private_location(resources, monkeypatch):
     path, values, folders = resources
     local = path.parent / "retention.sqlite3"

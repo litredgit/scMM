@@ -196,7 +196,18 @@ def main():
             "recycle_root": str(root / "recycle"),
             "preferences": str(root / "preferences.json"),
             "lipid_database_dir": str(database),
+            "enabled_plugins": json.loads(
+                os.environ.get("SCMM_E2E_ENABLED_PLUGINS", '["network", "supervised", "time"]')
+            ),
         }
+        if "fixture-methods" in values["enabled_plugins"]:
+            from tests.support.method_package import install_method_package
+
+            site = str(install_method_package(root / "method-site"))
+            sys.path.insert(0, site)
+            os.environ["PYTHONPATH"] = os.pathsep.join(
+                filter(None, (site, os.environ.get("PYTHONPATH")))
+            )
         private_config.write_text(json.dumps(values))
         private_config.chmod(0o600)
         app = create_app(

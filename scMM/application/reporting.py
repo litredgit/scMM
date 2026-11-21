@@ -9,6 +9,7 @@ import pandas as pd
 from scMM import __version__
 from scMM.analysis.quality_pdf import quality_report_bytes, report_bundle
 
+from .method_reports import current_reports, report_frame
 from .result_catalog import RESULTS, project_result_identities, rebind_figure_identity
 
 
@@ -34,6 +35,10 @@ def report_artifact(project, result_value, kind, key):
 
     time_results = [row for row in time_info(data) if row["valid"]]
     available = sorted((set(state.results) | set(project.saved_reports)) & RESULTS.keys())
+    methods = {
+        f"method_{key.replace(':', '-')[:59]}_{value['identity']}": value
+        for key, value in current_reports(data).items()
+    }
     metadata = {
         "report_schema": 1,
         "created_at": datetime.now(UTC).isoformat(),
@@ -46,7 +51,11 @@ def report_artifact(project, result_value, kind, key):
         "unsaved": project.unsaved,
         "loaded_project_revision": project.manifest.get("revision"),
         "last_saved_snapshot": project.manifest.get("artifacts", {}).get("current"),
-        "available_results": [*available, *(f"time_{row['key']}" for row in time_results)],
+        "available_results": [
+            *available,
+            *methods,
+            *(f"time_{row['key']}" for row in time_results),
+        ],
         "figures": sorted(project.views.get("figures", {})),
         "history": state.history(),
         "scope": "当前矩阵 QC 和现有有效数值结果；不自动分析，不代替科学验收",  # noqa: RUF001
@@ -81,6 +90,13 @@ def report_artifact(project, result_value, kind, key):
             if "correlation" in value:
                 reports[name]["correlation"] = value["correlation"]
     figures = {}
+    for name, report in methods.items():
+        reports[name] = {
+            "summary": {"method": report["method"], "analysis_input": report["analysis_input"]},
+            "table": report_frame(report),
+        }
+        if report.get("figure") is not None:
+            figures[name] = report["figure"]
     omitted = {}
     for name, source in project.views.get("figures", {}).items():
         figure = json.loads(source) if isinstance(source, str) else deepcopy(source)

@@ -15,16 +15,15 @@ import pandas as pd
 from anndata import read_h5ad
 from sklearn.ensemble import IsolationForest
 
-from scMM.analysis import SupervisedAnalyzer, differential_features
 from scMM.analysis.embedding import reduce_dimension
 from scMM.analysis.quality import quality_metrics
-from scMM.analysis.statistics import feature_correlation_network, marker_features
+from scMM.analysis.statistics import differential_features, marker_features
 from scMM.ion.semantics import transform_value_state, value_states, write_value_states
 from scMM.util.intensity import intensity_states, transformed_state, write_intensity_states
 from scMM.util.normalize import normalize
 from scMM.util.observations import observation_kind
 
-from .result_catalog import metadata_dependencies, serialize_reports, stale_metadata_results
+from .result_catalog import serialize_reports, stale_metadata_results
 
 
 def dense(matrix):
@@ -165,7 +164,8 @@ class AnalysisWorkspace:
             )
             states["X"] = states.get(parameters["layer"], "unknown")
         elif operation != "reset":
-            semantics["X"] = transform_value_state(semantics["X"], operation, parameters)
+            source = (parameters["layer"] or "X") if operation == "plugin_preprocess" else "X"
+            semantics["X"] = transform_value_state(semantics[source], operation, parameters)
             states["X"] = transformed_state(states["X"], operation, parameters)
         # Reset's candidate is the full baseline, including its actual X lineage.
         if clear_derived:
@@ -560,20 +560,9 @@ class AnalysisWorkspace:
         return result
 
     def train(self, label_key, *, group_key=None, layer=None, model="logistic", **options):
-        token = self.token
-        analyzer = SupervisedAnalyzer(
-            self.require_data(),
-            label_key,
-            group_key=group_key,
-            layer=layer,
-            random_state=options.pop("random_state", 42),
-        )
-        analyzer.label_key = label_key
-        analyzer.group_key = group_key
-        analyzer.evaluate(model, **options)
-        self.results.pop("shap", None)
-        self.put_result("supervised", analyzer, token)
-        return analyzer
+        from scMM.plugins._supervised import train
+
+        return train(self, label_key, group_key=group_key, layer=layer, model=model, **options)
 
     def markers(
         self, group_key, *, method="mannwhitney", layer=None, effect_layer=None, test_layer=None
@@ -600,77 +589,19 @@ class AnalysisWorkspace:
         return result
 
     def network(self, **options):
-        self.results.pop("network", None)
-        token = self.token
-        graph, corr = feature_correlation_network(self.require_data(), **options)
-        table = pd.DataFrame(
-            [(a, b, attrs["correlation"]) for a, b, attrs in graph.edges(data=True)],
-            columns=["source", "target", "correlation"],
-        )
-        result = {"graph": graph, "correlation": corr, "table": table, "parameters": options}
-        self.put_result("network", result, token)
-        return result
+        from scMM.plugins._network import network
+
+        return network(self, **options)
 
     def explain_shap(self, **options):
-        self.results.pop("shap", None)
-        token = self.token
-        analyzer = self.result("supervised")
-        explanation = analyzer.explain_shap(**options)
-        values = np.abs(explanation.values)
-        if values.ndim not in (2, 3):
-            raise ValueError("Unsupported SHAP value shape")
-        importance = values.mean(axis=(0, 2) if values.ndim == 3 else 0)
-        table = pd.DataFrame({"feature_id": analyzer.feature_names, "mean_abs_shap": importance})
-        result = {
-            "table": table.sort_values("mean_abs_shap", ascending=False),
-            "parameters": {**options, **analyzer.shap_parameters_},
-            "output_space": analyzer.shap_output_space_,
-            "background_obs": analyzer.shap_background_obs_.tolist(),
-            "obs_names": analyzer.shap_obs_names_.tolist(),
-            "values": explanation.values,
-            "base_values": explanation.base_values,
-            "data": explanation.data,
-            "feature_names": list(analyzer.feature_names),
-            "classes": analyzer.classes_.tolist(),
-        }
-        self.put_result("shap", result, token)
-        return result
+        from scMM.plugins._supervised import explain_shap
+
+        return explain_shap(self, **options)
 
     def save_latent(self, key):
-        analyzer = self.result("supervised")
-        candidate = self.require_data().copy()
-        if key in candidate.obsm or f"{key}_split" in candidate.obs:
-            raise ValueError("Latent output key already exists")
-        if not key or "/" in key:
-            raise ValueError("Invalid output key")
-        scores = analyzer.latent_scores().reindex(candidate.obs_names)
-        candidate.obsm[key] = scores.to_numpy()
-        split = pd.Series("unlabeled", index=candidate.obs_names)
-        split.loc[analyzer.train_obs_names_] = "train"
-        split.loc[analyzer.test_obs_names_] = "test"
-        candidate.obs[f"{key}_split"] = pd.Categorical(split)
-        metadata = candidate.uns["scmm_workbench"]
-        metadata["derived_obs"] = [*metadata.get("derived_obs", []), f"{key}_split"]
-        fields = sorted(metadata_dependencies("supervised", analyzer, {}))
-        rules = json.loads(metadata.get("latent_dependencies_json", "{}"))
-        if not isinstance(rules, dict):
-            raise ValueError("invalid latent dependency metadata")
-        rules[key] = fields
-        metadata["latent_dependencies_json"] = json.dumps(rules)
-        self._commit(
-            candidate,
-            "latent",
-            {
-                "model": analyzer.model_name_,
-                "store_key": key,
-                "label_key": analyzer.label_key,
-                "group_key": analyzer.group_key,
-                "observation_dependencies": fields,
-            },
-            clear_derived=False,
-            save_layer=False,
-        )
-        self.put_result("supervised", analyzer, self.token)
+        from scMM.plugins._supervised import save_latent
+
+        return save_latent(self, key)
 
     def save_h5ad(self, storage, label, directory, filename):
         data = self.require_features()

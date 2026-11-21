@@ -12,7 +12,7 @@ import os
 import re
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from uuid import uuid4
 
@@ -185,9 +185,13 @@ def validate_stored_parameters(values):
 
 def sample_parameters(project, sample):
     """Resolve explicit overrides separately from automatic file-derived limits."""
-    if sample and sample["parameters"] is not None:
-        return operational_parameters(sample["parameters"])
     values = operational_parameters(project.manifest["parameters"])
+    if sample and sample["parameters"] is not None:
+        selected = operational_parameters(sample["parameters"])
+        selected.pop("method_plugins", None)
+        if values.get("method_plugins"):
+            selected["method_plugins"] = values["method_plugins"]
+        return selected
     if project.manifest.get("auto_ranges", True) and not project.manifest.get("manual_parameters"):
         if project.manifest["feature_strategy"] == "shared":
             ranges = [s["auto_mz_range"] for s in project.samples if s.get("auto_mz_range")]
@@ -277,7 +281,7 @@ class ProjectStore:
                 "created_at": created_at,
                 "samples": [],
                 "artifacts": {},
-                "parameters": asdict((defaults or load_defaults()).processing),
+                "parameters": (defaults or load_defaults()).processing.to_dict(),
                 "feature_strategy": "shared",
                 "feature_merge_ppm": 10.0,
             },

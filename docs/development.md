@@ -21,6 +21,8 @@ AI 网络调用继续不占科学工作区锁。
 前端 `features/analysis/results.contract.json` 保留显式映射，由契约测试与目录逐项核对。
 `plot/presentation.py`、`plot/raw.py`、`plot/workbench.py` 提供网页使用的共享图形构建。
 矩阵与模型留在 Python 应用层，前端只接收摘要和展示数据。`api/cli.py` 是唯一网页启动入口。
+`scMM/plugins` 提供主体方法的版本化协议，`application/web_methods.py` 与提取 worker 负责执行和校验。
+随附分析的启用与现有项目的只读结果目录相互独立。
 
 项目持久化与批次编排分别在 `application/projects.py` 和 `application/project_batch.py`，
 RAW 流读取在 `file/readers/`。
@@ -122,10 +124,10 @@ scMM/
 
 | 能力 | 网页入口与主要边界 |
 |---|---|
-| 原始谱、提取与预处理 | Vue 提供原始谱、SNR 预览、批次、人工审核、QC 和变换。网页和内部提取统一使用 snr_v1，历史产物保留来源记录。 |
+| 原始谱、提取与预处理 | Vue 提供原始谱、预览、批次、人工审核、QC 和变换。默认使用 snr_v1，已启用识别及定量插件可在原始谱页选择。 |
 | 脂质与离子归组 | 脂质注释保留测量峰；离子页构建独立 L0/L1/L2 视图。Python 的旧去同位素可删峰或求和。 |
-| 降维、聚类、统计、监督 | Vue 提供降维、聚类、差异、Marker、网络和模型诊断。分析模块的接入路径见下文。 |
-| 时间分析 | Vue 提供 Palantir、窗口轨迹、代谢速度、趋势和趋势聚类。趋势聚类在请求内等待短进程。 |
+| 降维、聚类与统计 | Vue 提供降维、聚类、差异与 Marker。相关网络和监督与 SHAP 可由服务器独立启用。 |
+| 时间分析 | 随附插件提供 Palantir、窗口轨迹、代谢速度、趋势和趋势聚类。趋势聚类在请求内等待短进程。 |
 | 数据管理 | Vue 提供显式子集、已处理矩阵合并、起点恢复、主动保存、QC/分析报告与矩阵 CSV。 |
 | Python 工具 | 峰重建、秩一分解和部分绘图辅助由 Python 直接调用。入口的默认值和返回值以各自文档为准。 |
 
@@ -336,7 +338,7 @@ RawPage 保留原 DOM、参数键、视图键和展示入口，只组装 `featur
 
 ## 分析功能接入指南
 
-本节是网页分析扩展的主要接入说明，示例全部来自已有四类分析，不增加演示算法。
+新增主体方法使用[主体方法插件协议](method-plugins.md)。本节用于维护已有内置页面和随附插件的内部实现。
 先核对实际代码与分支；能力限制见[能力覆盖](#前后端能力覆盖)，科学解释见[分析说明](statistics.md)。
 下文 `frontend/` 相对仓库根，Python 路径带 `scMM/`。不要仅凭注册导航就声明后端能力已经接通。
 
@@ -447,7 +449,7 @@ if (has('network')) await loadWithPlot('network', 'network_plot')
 
 现有操作示例：`Network` API 模型约束 threshold 0～1、top_features 1～1000；应用层只在
 候选中调用 `network`；领域函数返回图和相关矩阵；网页只读边表与 Plotly 图描述，完整边表按 CSV 下载。
-前端注册、API 类型和 Python 映射有意保持显式，尚无自动生成的跨语言协议或动态插件加载器。
+这些映射维护内置与随附分析的兼容边界。主体方法插件从启用的包入口读取版本化声明，界面按方法声明生成相应控件。
 
 ### 输入、输出及生命周期声明
 
@@ -490,9 +492,9 @@ if (has('network')) await loadWithPlot('network', 'network_plot')
 - **算法/输入变化**：小型合成数值对照、边界/非有限值、缺可选依赖、seed 重现；真实实验另记，不能以浏览器成功代替。
 - **状态/输出变化**：非法输入与计算失败保留旧状态、图失败保留新结果并可重试、输出键冲突、矩阵变更清理及无关元数据保留。
 - **API 变化**：额外字段/非法操作拒绝、参数类型/范围、工作区修订冲突、越权身份与候选原子性。
-- **前端流程变化**：四模块切换不计算、草稿与旧设置恢复、项目/数据切换重置；重复点击、报告/绘图等待期间互斥、旧成功/旧失败响应；宽屏与 700/390px，控制台无运行错误。
+- **前端流程变化**：核对模块切换、旧设置恢复、工作区和结果身份、重复点击、报告与绘图互斥。检查 1080p 桌面的主操作、状态与下载路径。
 - **生命周期/存储变化**：主动保存后重载报告/图、模型只读限制、旧结果与图下载拒绝；完整 CSV/JSON/H5AD 精度，分页不影响导出；依赖字段和纯展示变化分别覆盖。
-- **文档**：使用行为改 `02-workflow.md`，默认值/单位改 `04-parameters.md`，科学解释改 `07-analysis.md`，持久化改 `06-data-output.md`；本节保持唯一主指南，更新 CHANGELOG/roadmap 的验证与待验收状态。
+- **收尾**：按 [任务收尾检查](../AGENTS.md#任务收尾检查)复核受影响的文档、测试和页面布局，按[文档索引](README.md#按任务阅读)更新所属正文。
 
 现有定位：`tests/domain/test_analysis.py`、`test_analysis_views.py` 验证算法/图；
 `tests/application/test_workbench_state.py` 验证生命周期；`tests/api/test_web_api.py`、`test_web_workflow.py`
@@ -504,7 +506,7 @@ if (has('network')) await loadWithPlot('network', 'network_plot')
 
 ## 添加归一化方法
 
-归一化方法通过注册表扩展：
+内部归一化函数使用本地注册表。网页新增预处理方法按[主体方法插件协议](method-plugins.md)接入。
 
 ```python
 from scMM.util.normalize import register_norm
@@ -520,7 +522,7 @@ def norm_custom(X, params):
 
 ## 添加降维方法
 
-轻量接口使用 `register_dim`：
+内部轻量绘图入口使用 `register_dim`。网页新增降维方法按[主体方法插件协议](method-plugins.md)接入。
 
 ```python
 from scMM.plot.embedding import register_dim

@@ -180,6 +180,9 @@
         "scMM/application/raw_preview.py",
         "scMM/application/raw_diagnostics.py",
         "scMM/application/processing.py",
+        "scMM/plugins/__init__.py",
+        "scMM/plugins/_extraction.py",
+        "scMM/plugins/_registry.py",
         "scMM/application/tasks.py",
         "scMM/application/worker.py",
         "scMM/application/project_batch.py",
@@ -250,6 +253,9 @@
         "scMM/application/merge_metadata.py",
         "scMM/application/merge_audit.py",
         "scMM/application/result_catalog.py",
+        "scMM/application/web_methods.py",
+        "scMM/application/method_annotation.py",
+        "scMM/application/method_reports.py",
         "scMM/application/cell_spectra.py",
         "scMM/application/recovery.py",
         "scMM/application/state_codec.py",
@@ -269,6 +275,7 @@
         "tests/api/test_upstream_update.py",
         "tests/api/test_web_api.py",
         "tests/api/test_web_workflow.py",
+        "tests/api/test_method_plugins.py",
         "tests/api/test_merge_api.py",
         "tests/api/test_web_cli.py",
         "tests/api/test_maintenance.py",
@@ -281,6 +288,10 @@
         "scMM/application/matrix_export.py",
         "scMM/api/routers/samples.py",
         "scMM/api/routers/storage.py",
+        "scMM/api/routers/methods.py",
+        "scMM/plugins/_bundled.py",
+        "scMM/plugins/_network.py",
+        "scMM/plugins/_supervised.py",
         "scMM/api/routers/preferences.py",
         "scMM/api/routers/maintenance.py",
         "scMM/api/exchange_schemas.py",
@@ -419,11 +430,13 @@
         "frontend/tests/workflow.spec.ts",
         "frontend/tests/reads.spec.ts",
         "frontend/tests/analysis.spec.ts",
+        "frontend/tests/method-plugins.spec.ts",
         "frontend/tests/interface.spec.ts"
       ],
       "sources": [
         "frontend/src/features/extraction/*",
         "frontend/src/features/analysis/*",
+        "frontend/src/features/methods/*",
         "frontend/src/features/results/*"
       ],
       "downstream": [],
@@ -516,7 +529,7 @@
     "api-time": {
       "kind": "python",
       "tests": ["tests/api/test_time_api.py"],
-      "sources": ["scMM/application/web_time.py"],
+      "sources": ["scMM/application/web_time.py", "scMM/plugins/_time.py"],
       "downstream": ["browser-workflow"],
       "extras": ["web", "plot", "cluster"]
     },
@@ -588,6 +601,7 @@
       "api-time"
     ],
     "tests/support/lipids.py": ["annotation", "api-lipids"],
+    "tests/support/method_package.py": ["api", "browser-workflow"],
     "tests/support/workflow.py": [
       "api-ions",
       "api",

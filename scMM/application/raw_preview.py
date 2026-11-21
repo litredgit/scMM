@@ -41,6 +41,8 @@ def detection_from_payload(payload):
     )
     traces.loc[payload["cell_idx"], "cell_apex"] = True
     baseline = payload.get("reference_baseline")
+    if not references:
+        traces["aligned_intensity"] = signal.sum(axis=1).to_numpy()
     for i, mz in enumerate(references):
         values = signal[mz].to_numpy(copy=True)
         traces[f"reference_{i}"] = values
@@ -112,6 +114,7 @@ class RawFilePreview:
         feature_block_size=None,
         progress_callback=None,
         targets=None,
+        method_kwargs=None,
     ) -> CellDetectionPreview:
         """Preview production cell windows (RAW sources reopen for each pass).
 
@@ -124,6 +127,8 @@ class RawFilePreview:
 
         from .preview_cache import file_identity
 
+        if (method_kwargs or {}).get("method_plugins", {}) != parameters.method_plugins:
+            raise ValueError("未解析冻结请求中的提取插件。")
         if file_identity(self.path) != self.open_identity:
             raise ValueError("Input changed since opening; reopen the file")
         config = _raw_config(
@@ -192,6 +197,7 @@ class RawFilePreview:
                 "progress_callback": progress_callback,
                 "debug_hook": capture,
                 "debug_full_baseline": False,
+                **(method_kwargs or {}),
             },
         )
         if file_identity(self.path) != self.open_identity:

@@ -5,7 +5,6 @@ from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from . import time_analysis
-from .result_catalog import project_result_identities, rebind_figure_identity
 from .web_support import table_view
 
 
@@ -61,50 +60,10 @@ class TimeWorkflow:
             }
 
     def run_time(self, identity, revision, operation, options):
-        from .web_projects import project_candidate
+        self.require_plugin("time")
+        from scMM.plugins._time import run_time
 
-        if operation not in {"palantir", "trajectory", "velocity", "trends", "trend_clusters"}:
-            raise ValueError("不支持的时间分析操作")
-        with self.access(identity, operation=operation) as workspace:
-            workspace.check(revision)
-            project = workspace.require_project()
-            time_analysis.check_size(project.workspace.require_data())
-            candidate = project_candidate(project)
-            if candidate.ion_state is not None:
-                from .analysis_inputs import resolve_analysis_input
-
-                resolve_analysis_input(candidate, purpose=operation)
-            state = candidate.workspace
-            result = getattr(time_analysis, operation)(state.data, **options)
-            state._commit(
-                state.data,
-                operation,
-                {"key": options["key"], **result["parameters"]},
-                clear_derived=False,
-                save_layer=False,
-            )
-            for key, source in list(candidate.views.get("figures", {}).items()):
-                try:
-                    figure = json.loads(source) if isinstance(source, str) else source
-                except (TypeError, ValueError):
-                    continue
-                rebind_figure_identity(
-                    figure,
-                    state,
-                    previous_token=project.workspace.token,
-                    kind=key,
-                    identities=project_result_identities(candidate),
-                )
-                candidate.views["figures"][key] = figure
-            candidate.report_token = state.token
-            candidate.dirty = True
-            workspace.project = candidate
-            workspace.revision += 1
-            workspace.ai_completed = operation
-            return {
-                "workspace": self.view(workspace),
-                "value": {"key": options["key"], "parameters": result["parameters"]},
-            }
+        return run_time(self, identity, revision, operation, options)
 
     def time_download(self, identity, key):
         with self.access(identity) as workspace:

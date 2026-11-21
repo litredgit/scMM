@@ -88,6 +88,34 @@ export interface Configuration {
   processing: Parameter[]
   analysis: Parameter[]
   workspace_idle_seconds: number
+  enabled_plugins: string[]
+  methods: PluginMethod[]
+}
+export type PluginKind =
+  | 'cell_detection'
+  | 'cell_extraction'
+  | 'annotation'
+  | 'preprocessing'
+  | 'reduction'
+  | 'clustering'
+  | 'statistics'
+export type PluginValue = number | string | boolean | null
+export interface PluginParameter {
+  key: string
+  label: string
+  kind: 'integer' | 'number' | 'text' | 'boolean' | 'choice' | 'observation'
+  default: PluginValue
+  minimum: number | null
+  maximum: number | null
+  help: string
+  choices: string[]
+}
+export interface PluginMethod {
+  id: string
+  version: string
+  label: string
+  kind: PluginKind
+  parameters: PluginParameter[]
 }
 export interface FileEntry {
   name: string
@@ -143,6 +171,7 @@ export interface AnalysisInfo {
   observations: Record<string, string[]>
   history: Record<string, unknown>[]
   results: string[]
+  method_reports: { id: string; label: string; identity: string }[]
   live_results: string[]
   latent_supported: boolean
   settings: Record<string, unknown>

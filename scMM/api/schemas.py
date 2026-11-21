@@ -177,3 +177,5 @@ class ConfigurationView(BaseModel):
     processing: list[ParameterDefinition]
     analysis: list[ParameterDefinition]
     workspace_idle_seconds: int
+    enabled_plugins: list[str]
+    methods: list[dict]

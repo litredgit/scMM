@@ -23,7 +23,7 @@ def api(tmp_path, monkeypatch):
     for name in ("alpha.mzML", "beta.mzXML"):
         (raw / name).write_text("synthetic input; no extraction in this milestone")
     monkeypatch.setenv("SCMM_PREFERENCES", str(tmp_path / "preferences.json"))
-    options, credential = auth_options(tmp_path)
+    options, credential = auth_options(tmp_path, enabled_plugins=("network", "supervised"))
     app = create_app(
         [StorageRoot("Raw", raw)],
         [StorageRoot("Results", results)],

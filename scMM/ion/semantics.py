@@ -63,5 +63,7 @@ def transform_value_state(state, operation, parameters):
         result["normalization"].append(deepcopy(parameters))
     elif operation == "impute":
         result["imputed"] = True
+    elif operation == "plugin_preprocess":
+        result.update(space="other", normalization=[])
     result["history"].append({"operation": operation, "parameters": deepcopy(parameters)})
     return result

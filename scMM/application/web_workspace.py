@@ -12,6 +12,8 @@ import time
 from contextlib import contextmanager
 from copy import deepcopy
 
+from scMM.plugins._bundled import BUNDLED
+from scMM.plugins._registry import MethodRegistry
 from scMM.util.observations import observation_kind
 
 from .annotation_evidence import AnnotationEvidenceWorkflow
@@ -23,6 +25,7 @@ from .web_analysis import AnalysisWorkflow
 from .web_ions import IonWorkflow
 from .web_lipids import LipidWorkflow
 from .web_merge import MergeWorkflow
+from .web_methods import MethodWorkflow
 from .web_projects import ProjectWorkflow
 from .web_projects import prepare_mapping as prepare_mapping
 from .web_projects import project_candidate as project_candidate
@@ -45,9 +48,18 @@ class WebWorkspaceService(
     IonWorkflow,
     TimeWorkflow,
     MergeWorkflow,
+    MethodWorkflow,
 ):
     def __init__(
-        self, roots, result_roots, project_root, defaults, *, idle_seconds=3600, capacity=128
+        self,
+        roots,
+        result_roots,
+        project_root,
+        defaults,
+        *,
+        idle_seconds=3600,
+        capacity=128,
+        enabled_plugins=(),
     ):
         self.store = ProjectStore(project_root)
         self.storage = StorageCatalog(roots)
@@ -59,10 +71,17 @@ class WebWorkspaceService(
         )
         self.idle_seconds = idle_seconds
         self.capacity = capacity
+        self.plugins = MethodRegistry(enabled_plugins)
         self._workspaces = {}
         self._lock = threading.RLock()
         self._project_openings = {}
         self._retention_operations = set()
+
+    def require_plugin(self, key):
+        if key not in self.plugins.bundled:
+            raise WorkspaceError(
+                f"插件「{BUNDLED[key].label}」未启用。", code="plugin_disabled", status=409
+            )
 
     def _prune(self):
         now = time.monotonic()

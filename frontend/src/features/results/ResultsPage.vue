@@ -8,6 +8,7 @@ import { resultDownloads, resultTitles } from '../analysis/results'
 import ProjectArtifacts from '../../components/ProjectArtifacts.vue'
 import SaveExplanation from '../../components/SaveExplanation.vue'
 import PlotView from '../../components/PlotView.vue'
+import MethodReport from '../methods/MethodReport.vue'
 import { useReadScope } from '../../api/readScope'
 const store = useWorkspace(),
   info = ref<AnalysisInfo>()
@@ -24,6 +25,7 @@ watch(root, (value) => {
 })
 const figureKey = ref(''),
   figure = ref<Figure>()
+const methodReport = ref('')
 const context = () => [
   store.current?.workspace_id,
   store.project?.path,
@@ -78,8 +80,19 @@ const downloadReason = computed(() => {
     return '该分析暂无有效结果，可能尚未计算或已失效；请重新计算。'
   return ''
 })
+const resultOwners: Record<string, string> = {
+  network: 'network',
+  supervised: 'supervised',
+  shap: 'supervised',
+}
 const unavailable = computed(() =>
-  Object.entries(resultTitles).filter(([key]) => !info.value?.results.includes(key)),
+  Object.entries(resultTitles).filter(([key]) => {
+    const owner = resultOwners[key]
+    return (
+      (!owner || store.configuration?.enabled_plugins.includes(owner)) &&
+      !info.value?.results.includes(key)
+    )
+  }),
 )
 async function refresh() {
   const accept = infoScope.begin()
@@ -108,6 +121,7 @@ async function refresh() {
     info.value = value
     embedding.value = value?.embeddings[0] ?? ''
     figureKey.value = value?.figures[0] ?? ''
+    methodReport.value = value?.method_reports[0]?.id ?? ''
   }
 }
 watch(
@@ -282,6 +296,18 @@ async function exportH5ad() {
           </p>
         </section>
       </div>
+      <details v-if="info?.method_reports.length" class="card">
+        <summary>插件方法报告</summary>
+        <label class="field">
+          <FieldLabel name="已生成报告" />
+          <select v-model="methodReport" aria-label="插件方法报告">
+            <option v-for="item in info.method_reports" :key="item.identity" :value="item.id">
+              {{ item.label }}
+            </option>
+          </select>
+        </label>
+        <MethodReport v-if="methodReport" :report-id="methodReport" />
+      </details>
       <template v-if="info?.figures.length">
         <h3>项目图形</h3>
         <div class="field-grid">

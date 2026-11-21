@@ -14,14 +14,19 @@ from tests.support.project import setup_project
 
 
 @pytest.fixture
-def workflow(tmp_path, monkeypatch):
+def workflow_plugins():
+    return ("network", "supervised", "time")
+
+
+@pytest.fixture
+def workflow(tmp_path, monkeypatch, workflow_plugins):
     raw, output, projects = [tmp_path / name for name in ("raw", "output", "projects")]
     for folder in (raw, output, projects):
         folder.mkdir()
     reference, _ = setup_project(raw)
     reference.manifest["parameters"].update(extraction_method="snr_v1", reference_ppm_tol=50.0)
     monkeypatch.setenv("SCMM_PREFERENCES", str(tmp_path / "preferences.json"))
-    options, credential = auth_options(tmp_path)
+    options, credential = auth_options(tmp_path, enabled_plugins=workflow_plugins)
     app = create_app(
         [StorageRoot("Raw", raw)],
         [StorageRoot("Output", output)],

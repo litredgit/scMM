@@ -60,6 +60,7 @@ export function operationDetails(
   path: string,
   body: Record<string, unknown> = {},
 ): OperationDetails {
+  if (path === '/methods/run') return { label: '运行插件方法', phase: 'running' }
   if (path === '/analysis/operation')
     return {
       label: operations[String(body.operation)] ?? '分析数据',

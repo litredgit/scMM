@@ -23,6 +23,7 @@ def invalidate_derived(data):
             "umap",
             "tsne",
             "scmm_saved_reports",
+            "scmm_method_reports_json",
         }:
             del data.uns[key]
 

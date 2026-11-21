@@ -7,9 +7,10 @@ import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
-from dataclasses import asdict
 from pathlib import Path
 from uuid import uuid4
+
+from scMM.plugins._extraction import extraction_kwargs, extraction_registry
 
 from .parameters import automatic_mz_range
 from .preview_cache import (
@@ -84,6 +85,9 @@ def run_preview(request, state_path):
             report("建立或复用全项目共同特征")
             targets = prepare_shared_targets(project, batch)
         params = ProcessingParameters(**parameters)
+        method_kwargs = extraction_kwargs(
+            params.method_plugins, extraction_registry(request.get("extraction_plugins"))
+        )
         before = signature(sample["path"], params)
         cached = reusable_preview(project.folder, {**sample, "parameters": parameters}, targets)
         if cached:
@@ -93,14 +97,14 @@ def run_preview(request, state_path):
         else:
             report("读取当前样本并完整提取细胞")
             preview = service.open(sample["storage"], sample["path"])
-            detection = preview.cell_detection(params, targets=targets)
+            detection = preview.cell_detection(params, targets=targets, method_kwargs=method_kwargs)
             report("写入预览缓存")
             artifact = save_preview(project, sample, preview, params, before)
         check_inputs()
         result = {
             "detection": detection,
             "artifact": artifact,
-            "parameters": asdict(params),
+            "parameters": params.to_dict(),
             "reused": cached is not None,
             "ranges": {
                 s["id"]: {key: s[key] for key in ("auto_mz_range", "range_initialized") if key in s}
