@@ -409,3 +409,54 @@ def test_release_reports_unknown_evidence_without_claiming_tabs_still_open(monke
     assert "Missing close receipts" in str(caught.value)
     assert "失联记录不等于页面仍打开" in str(caught.value)
     assert "save and close them first" not in str(caught.value)
+
+
+def test_environment_plugin_pins_are_scoped_and_check_wheel_hash(tmp_path):
+    from hashlib import sha256
+
+    dev = tmp_path / "dev.json"
+    prod = tmp_path / "prod.json"
+    values = {"dev_server_config": dev, "prod_server_config": prod}
+    wheel = tmp_path / "lab_tools-1.0-py3-none-any.whl"
+    wheel.write_bytes(b"reviewed package")
+    dev.with_suffix(".plugins.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "wheels": [{"file": wheel.name, "sha256": sha256(wheel.read_bytes()).hexdigest()}],
+            }
+        )
+    )
+    assert manager.plugin_wheels(values, "dev") == [wheel]
+    assert manager.plugin_wheels(values, "prod") == []
+    wheel.write_bytes(b"package edited after review")
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        manager.plugin_wheels(values, "dev")
+
+
+def test_failed_release_recovers_last_deployed_plugin_wheels(worktrees, monkeypatch):
+    values, old, _, _ = worktrees
+    config = values["state"] / "prod.json"
+    values["prod_server_config"] = config
+    first = values["state"] / "lab_tools-1.0-py3-none-any.whl"
+    second = values["state"] / "lab_tools-2.0-py3-none-any.whl"
+    first.parent.mkdir(parents=True, exist_ok=True)
+    first.write_bytes(b"version 1")
+    second.write_bytes(b"version 2")
+    manager.write_deployed_plugins(first.parent / "prod/plugin-revisions" / f"{old}.json", [first])
+    manager.write_deployed_plugins(config.with_suffix(".plugins.json"), [second])
+    monkeypatch.setattr(manager, "prepare_deployment", lambda *_: None)
+    monkeypatch.setattr(manager, "compatible_recovery", lambda *_: None)
+    attempted = []
+
+    def sync(_, name, wheels):
+        assert name == "prod"
+        attempted.append(wheels)
+        if wheels == [second]:
+            raise RuntimeError("plugin dependency conflict")
+
+    monkeypatch.setattr(manager, "sync", sync)
+    with pytest.raises(RuntimeError, match="plugin dependency conflict"):
+        manager.deploy(values, "dev")
+    assert attempted == [[second], [first]]
+    assert manager.git(values["prod"], "rev-parse", "HEAD") == old

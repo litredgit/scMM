@@ -130,22 +130,43 @@ def analysis(manager: Service, identity: Identity):
 
 @router.get("/workspace/analysis/annotated-features")
 def annotated_features(manager: Service, identity: Identity):
-    from scMM.util.lipid_annotation import annotation_store, version_valid
+    from scMM.application.annotation_sources import analysis_annotations
 
     with manager.access(identity) as workspace:
-        data = workspace.require_project().workspace.require_data()
-        store = annotation_store(data)
-        version = next((v for v in store["versions"] if v["id"] == store.get("active")), None)
-        if not version or not version_valid(data, version):
-            raise ValueError("请先计算并激活当前数据的注释。")
-        ids = list(
-            dict.fromkeys(
-                row["feature_id"]
-                for row in version["candidates"]
-                if row["feature_id"] in data.var_names
-            )
-        )
-        return {"features": ids, "source": "active_annotation_candidates", "summed": False}
+        project = workspace.require_project()
+        names, version = analysis_annotations(project, project.workspace.require_data())
+        if version is None:
+            raise ValueError("请先为当前统计输入的测量来源激活有效注释。")
+        return {"features": list(names), "source": "active_annotation_candidates", "summed": False}
+
+
+@router.get("/workspace/analysis/feature-review-target")
+def feature_review_target(manager: Service, identity: Identity, feature: str):
+    from scMM.application.annotation_sources import analysis_review_source
+
+    with manager.access(identity) as workspace:
+        project = workspace.require_project()
+        source, mapping = analysis_review_source(project, project.workspace.require_data())
+        if feature not in mapping:
+            raise ValueError("所选变量没有可回看的实测峰。")
+        return {"source": source, "feature": mapping[feature]}
+
+
+@router.get("/workspace/analysis/marker-features")
+def marker_features(manager: Service, identity: Identity, group: str | None = None):
+    with manager.access(identity) as workspace:
+        value = manager.result_value(workspace.require_project(), "markers")
+        table = value["table"]
+        if value.get("method") != "classifier" or not {"group", "weight", "rank"} <= set(table):
+            raise ValueError("请先运行分类 Marker，再按组选择正权重特征。")
+        groups = table["group"].astype(str).drop_duplicates().tolist()
+        if group is None:
+            return {"groups": groups, "features": []}
+        if group not in groups:
+            raise ValueError("所选分组不在当前分类 Marker 结果中。")
+        selected = table[(table["group"].astype(str) == group) & (table["weight"] > 0)]
+        features = selected.sort_values("rank")["feature_id"].drop_duplicates().head(50).tolist()
+        return {"groups": groups, "features": features}
 
 
 @router.get("/workspace/analysis/features")
@@ -289,144 +310,9 @@ def annotation_table(
     manager: Service,
     identity: Identity,
 ):
-    import json
-    from datetime import UTC, datetime
+    from scMM.application.annotation_tables import apply_annotation_table
 
-    from scMM.analysis.external_annotations import align_annotations, read_table, write_annotations
-    from scMM.application.annotation_evidence import evidence_registry, evidence_source
-    from scMM.application.web_projects import project_candidate
-    from scMM.application.web_support import table_view
-
-    frame = read_table(
-        body.content, format=body.format, header=body.header, transpose=body.transpose
-    )
-    with manager.access(identity, operation="manual_annotations") as workspace:
-        workspace.check(body.revision)
-        project = workspace.require_project()
-        source = body.source or "current"
-        root_scope = source != "current"
-        if not root_scope and project.workspace._selection_source is not None:
-            raise ValueError("请先关闭全部标签筛选，再导入注释。")
-        if root_scope:
-            data, source_identity = evidence_source(project, source)
-        else:
-            from scMM.application.annotation_sources import feature_source
-
-            data, _ = feature_source(project, source)
-        table, matched = align_annotations(
-            data,
-            frame,
-            **body.model_dump(
-                include={"mapping", "source_key", "target_key", "ppm", "mode", "row_positions"}
-            ),
-        )
-        if action == "preview":
-            return {
-                "workspace": manager.view(workspace),
-                "value": {
-                    "table": table_view(table),
-                    "matched": int(matched.sum()),
-                    "ambiguous": int((table.status == "ambiguous").sum()),
-                    "unmatched": int((table.status == "unmatched").sum()),
-                },
-            }
-        candidate = project_candidate(project)
-        if root_scope:
-            registry = evidence_registry(candidate, write=True)
-            fields = registry.setdefault("feature_fields", {}).setdefault(source, {})
-            for column, values in fields.items():
-                if data is project.ion_state["roots"][source]["data"]:
-                    data = data.copy()
-                data.var[column] = data.var_names.map(values).fillna("")
-            updated = write_annotations(
-                data,
-                table,
-                matched,
-                mapping=body.mapping,
-                clear_unmatched=body.clear_unmatched,
-            )
-            for column in body.mapping.values():
-                fields[column] = dict(
-                    zip(map(str, updated.var_names), updated.var[column].astype(str), strict=True)
-                )
-            registry.setdefault("tables", []).append(
-                {
-                    "source": source,
-                    "source_identity": source_identity,
-                    "at": datetime.now(UTC).isoformat(),
-                    "user_id": workspace.owner_id,
-                    "source_sha256": __import__("hashlib")
-                    .sha256(body.content.encode())
-                    .hexdigest(),
-                    "mapping": body.mapping,
-                    "mode": body.mode,
-                    "clear_unmatched": body.clear_unmatched,
-                    "matched": int(matched.sum()),
-                    "rows": table_view(table, limit=len(table))["rows"],
-                }
-            )
-            candidate.dirty = True
-            workspace.project = candidate
-            workspace.revision += 1
-            return {"workspace": manager.view(workspace), "value": {"matched": int(matched.sum())}}
-        previous_names = candidate.workspace.data.var.get("display_name")
-        candidate.workspace.data = write_annotations(
-            candidate.workspace.data,
-            table,
-            matched,
-            mapping=body.mapping,
-            clear_unmatched=body.clear_unmatched,
-        )
-        # The reset origin receives matching annotations by stable feature ID.
-        baseline = candidate.workspace._original
-        for key in body.mapping.values():
-            values = (
-                baseline.var[key].astype(object).copy()
-                if key in baseline.var
-                else __import__("pandas").Series("", index=baseline.var_names, dtype=object)
-            )
-            common = baseline.var_names.intersection(candidate.workspace.data.var_names)
-            values.loc[common] = candidate.workspace.data.var.loc[common, key]
-            baseline.var[key] = values
-        records = json.loads(candidate.workspace.data.uns.get("scmm_manual_annotations_json", "[]"))
-        import hashlib
-
-        records.append(
-            {
-                "at": datetime.now(UTC).isoformat(),
-                "workspace_id": identity,
-                "user_id": workspace.owner_id,
-                "changes": [
-                    {
-                        "feature_id": str(key),
-                        "before": str(previous_names.loc[key])
-                        if previous_names is not None
-                        else "",
-                        "after": str(value),
-                    }
-                    for key, value in candidate.workspace.data.var.loc[
-                        candidate.workspace.data.var_names[matched], "display_name"
-                    ].items()
-                    if previous_names is None or str(previous_names.loc[key]) != str(value)
-                ]
-                if "display_name" in body.mapping.values()
-                else [],
-                "source_sha256": hashlib.sha256(body.content.encode()).hexdigest(),
-                "mapping": body.mapping,
-                "mode": body.mode,
-                "source_key": body.source_key,
-                "target_key": body.target_key,
-                "ppm": body.ppm,
-                "matched": int(matched.sum()),
-                "clear_unmatched": body.clear_unmatched,
-            }
-        )
-        candidate.workspace.data.uns["scmm_manual_annotations_json"] = json.dumps(records)
-        baseline.uns["scmm_manual_annotations_json"] = json.dumps(records)
-        candidate.dirty = True
-        workspace.project = candidate
-        workspace.revision += 1
-        return {"workspace": manager.view(workspace), "value": {"matched": int(matched.sum())}}
+    return apply_annotation_table(manager, identity, action, body.model_dump())
 
 
 @router.post("/workspace/analysis/msms")
@@ -534,4 +420,4 @@ def workflow_status(manager: Service, identity: Identity):
     from scMM.application.data_inspection import workflow_status as status
 
     with manager.access(identity) as workspace:
-        return status(workspace.require_project().workspace)
+        return status(workspace.require_project())

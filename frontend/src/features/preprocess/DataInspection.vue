@@ -28,6 +28,12 @@ watch(nameFilter, () => {
 })
 const featureDrafts = ref<Record<string, string>>({})
 watch(
+  () => Object.keys(featureDrafts.value).length,
+  (count) => {
+    store.drafts['特征显示名称'] = count > 0
+  },
+)
+watch(
   () =>
     JSON.stringify([
       store.current?.workspace_id,
@@ -41,7 +47,16 @@ watch(
   },
 )
 let sampleSource = ''
-const rows = ref<{ id: string; name: string; group: string; subject: string; batch: string }[]>([])
+const rows = ref<
+  {
+    id: string
+    name: string
+    group: string
+    subject: string
+    batch: string
+    unresolved: string[]
+  }[]
+>([])
 const reads = useReadScope(() => [store.current?.workspace_id, store.current?.revision])
 async function refresh() {
   const accept = reads.begin()
@@ -68,6 +83,7 @@ async function refresh() {
         s.group,
         s.subject,
         s.batch,
+        s.metadata_unresolved,
       ]),
     ])
     if (source !== sampleSource) {
@@ -78,6 +94,7 @@ async function refresh() {
         group: s.group || '',
         subject: s.subject || '',
         batch: s.batch || '',
+        unresolved: s.metadata_unresolved ?? [],
       }))
     }
   }
@@ -119,7 +136,16 @@ async function featurePage(direction: number) {
   await refresh()
 }
 async function save() {
-  await store.mutate('/samples', { samples: rows.value }, 'PATCH', '元数据已应用。')
+  const saved = new Map(store.project?.manifest.samples.map((sample) => [sample.id, sample]))
+  const samples = rows.value.flatMap((row) => {
+    const previous = saved.get(row.id)
+    if (!previous) return []
+    const changes = (['name', 'group', 'subject', 'batch'] as const)
+      .filter((key) => row[key] !== (previous[key] ?? ''))
+      .map((key) => [key, row[key]])
+    return changes.length ? [{ id: row.id, ...Object.fromEntries(changes) }] : []
+  })
+  if (samples.length) await store.mutate('/samples', { samples }, 'PATCH', '元数据已应用。')
 }
 </script>
 <template>
@@ -179,6 +205,9 @@ async function save() {
                   <td v-for="key in ['name', 'group', 'subject', 'batch'] as const" :key="key">
                     <input
                       v-model="row[key]"
+                      :placeholder="
+                        row.unresolved.includes(key) ? '多个值，保留观测原值' : undefined
+                      "
                       :aria-label="`${row.id} ${key}`"
                       :disabled="store.busy"
                     />

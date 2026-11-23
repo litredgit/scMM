@@ -109,8 +109,8 @@ scMM/
 ### 板块与交换状态所有权
 
 `frontend/src/features/modules/` 管理三个板块的入口、内部步骤和导入导出展示，
-`features/annotation/` 承载谱图点峰、关联关系审核及外部证据入口。原有 URL 继续定位所属步骤。
-`application/annotation_sources.py` 分别解析测量来源和实际统计输入。谱图峰轴与强度摘要独立于候选覆盖读取，
+`features/annotation/` 承载谱图点峰及外部证据入口，`features/ions/` 按关系审核、本地查库、鉴定声明和定量视图分页面组件，共用测量来源读取。原有 URL 继续定位所属步骤。
+`application/annotation_sources.py` 分别解析测量来源和实际统计输入，并把分支变量投影到测量峰。`application/annotation_tables.py` 管理外部注释表的匹配、审阅预览及事务写入。谱图峰轴与强度摘要独立于候选覆盖读取，
 缩放和点峰留在页面。`annotation_evidence.py` 管理每次实测二级比对及显式关联，按版本和来源复核后发布。
 三个板块共用认证工作区、项目、任务和保存门禁，不拆成多个服务进程。
 `application/module_exchange.py` 负责导入候选、完整引用闭包和内容校验，HTTP 边界为

@@ -15,7 +15,7 @@ def add_samples(body: s.AddSamples, manager: Service, identity: Identity):
 @router.patch("/samples", response_model=s.WorkspaceView)
 def edit_samples(body: s.EditSamples, manager: Service, identity: Identity):
     return manager.edit_samples(
-        identity, body.revision, [sample.model_dump() for sample in body.samples]
+        identity, body.revision, [sample.model_dump(exclude_none=True) for sample in body.samples]
     )
 
 

@@ -134,16 +134,23 @@ class MethodRegistry:
         enabled = enabled_ids(enabled)
         self.bundled = frozenset(key for key in enabled if key in BUNDLED)
         self.methods = {}
+        self.status = {
+            key: {"id": key, "configured": True, "loaded": True, "version": None, "error": None}
+            for key in enabled
+            if key in BUNDLED
+        }
         external = [key for key in enabled if key not in BUNDLED]
         if not external:
             return
         available = entry_points(group=ENTRY_POINT_GROUP)
         for key in external:
+            version = None
             try:
                 entries = [entry for entry in available if entry.name == key]
                 if len(entries) != 1:
                     raise ValueError("应恰好存在一个已安装的同名入口。")
                 entry = entries[0]
+                version = entry.dist.version
                 plugin = entry.load()
                 if (
                     not isinstance(plugin, Plugin)
@@ -151,7 +158,6 @@ class MethodRegistry:
                     or plugin.api_version != API_VERSION
                 ):
                     raise ValueError("插件协议版本不兼容。")
-                version = entry.dist.version
                 if not isinstance(version, str) or not 0 < len(version) <= 128:
                     raise ValueError("插件安装包必须声明版本。")
                 methods = {}
@@ -164,8 +170,27 @@ class MethodRegistry:
                 if not methods:
                     raise ValueError("插件未声明方法。")
                 self.methods.update(methods)
+                self.status[key] = {
+                    "id": key,
+                    "configured": True,
+                    "loaded": True,
+                    "version": version,
+                    "error": None,
+                }
             except Exception as exc:
                 log.warning("无法加载 scMM 插件 %s：%s", key, exc)
+                error = (
+                    str(exc)
+                    if isinstance(exc, ValueError)
+                    else f"{type(exc).__name__}，请检查服务日志。"
+                )
+                self.status[key] = {
+                    "id": key,
+                    "configured": True,
+                    "loaded": False,
+                    "version": version,
+                    "error": error,
+                }
 
     def get(self, identity, *, kind=None, version=None):
         method = self.methods.get(identity)

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AnnotationHeader from './AnnotationHeader.vue'
 import AnnotationEvidencePanel from '../analysis/modules/AnnotationEvidencePanel.vue'
-import IonsPage from '../ions/IonsPage.vue'
+import IonEvidencePanel from '../ions/IonEvidencePanel.vue'
 import { useWorkspace } from '../../stores/workspace'
 const store = useWorkspace()
 </script>
@@ -11,7 +11,7 @@ const store = useWorkspace()
     <AnnotationHeader title="证据与导入" />
     <template v-if="store.project">
       <AnnotationEvidencePanel />
-      <IonsPage surface="evidence" />
+      <IonEvidencePanel />
     </template>
   </section>
 </template>

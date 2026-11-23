@@ -168,6 +168,10 @@ function downloadPreflight() {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 async function start(retry = false) {
+  if (Object.keys(pendingParameters.value).length) return
+  await submitExtraction(retry)
+}
+async function submitExtraction(retry = false) {
   const result = await store.command<{ path: string }>('/extraction/start', {
     retry_path: retry ? path.value : null,
   })
@@ -196,6 +200,39 @@ async function review(compare = false) {
 }
 const parameterDrafts = ref<Record<string, Record<string, unknown>>>({})
 const parameterSample = ref('')
+const appliedParameters = ref<Record<string, string>>({})
+const pendingParameters = computed(() =>
+  Object.fromEntries(
+    Object.entries(parameterDrafts.value).filter(
+      ([id, values]) => JSON.stringify(values) !== appliedParameters.value[id],
+    ),
+  ),
+)
+const pendingCount = computed(() => Object.keys(pendingParameters.value).length)
+watch(pendingCount, (count) => {
+  store.drafts['逐样本提取参数'] = count > 0
+})
+async function applyAndStart() {
+  await store.analysisTransaction(async (api) => {
+    const edits = pendingParameters.value
+    if (!Object.keys(edits).length) return
+    applyingParameters.value = true
+    try {
+      await api.mutate('/parameters/rows', { edits }, 'PUT')
+      markApplied(edits)
+      preflightStale.value = true
+      const result = await api.command<{ path: string }>('/extraction/start', { retry_path: null })
+      if (result) path.value = result.path
+    } finally {
+      applyingParameters.value = false
+    }
+  })
+  if (path.value) await polling.refresh()
+}
+function markApplied(edits: Record<string, unknown>) {
+  for (const [key, values] of Object.entries(edits))
+    appliedParameters.value[key] = JSON.stringify(values)
+}
 const comparisonPage = ref(0)
 const compareParameters = ref(false)
 const parameterSections = [
@@ -256,6 +293,8 @@ watch(
         JSON.parse(JSON.stringify(row.parameters ?? {})) as Record<string, unknown>,
       ]),
     )
+    appliedParameters.value = {}
+    markApplied(parameterDrafts.value)
     if (!parameterIds.value.includes(parameterSample.value))
       parameterSample.value = parameterIds.value[0] ?? ''
   },
@@ -272,6 +311,7 @@ async function saveParameters(id?: string) {
     if (
       await store.mutate('/parameters/rows', { edits }, 'PUT', '逐样本参数已应用，请重新预检。')
     ) {
+      markApplied(edits)
       preflightStale.value = true
     }
   } finally {
@@ -292,6 +332,7 @@ useViewState('extraction', {
   included,
   checked,
   parameterDrafts,
+  appliedParameters,
   parameterSample,
   comparisonSection,
   compareParameters,
@@ -486,13 +527,28 @@ useViewState('extraction', {
           检查参数与输入</button
         ><button
           class="primary"
-          :disabled="store.busy || active || !store.project.manifest.samples.length"
+          :disabled="
+            store.busy ||
+            active ||
+            !!pendingCount ||
+            !store.project.manifest.samples.some((sample) => sample.path)
+          "
           @click="start()"
         >
           开始提取</button
-        ><button class="primary" :disabled="store.busy || active || !path" @click="start(true)">
+        ><button
+          class="primary"
+          :disabled="store.busy || active || !!pendingCount || !path"
+          @click="start(true)"
+        >
           重试失败批次
         </button>
+        <template v-if="pendingCount">
+          <span role="status">{{ pendingCount }} 个样本的参数待应用</span>
+          <button class="primary" :disabled="store.busy || active" @click="applyAndStart">
+            应用并开始提取
+          </button>
+        </template>
       </div>
       <p class="page-note">
         开始或重试先预检并完整保存项目：已有当前矩阵时也会生成新快照，再将逐样本结果写入 processing

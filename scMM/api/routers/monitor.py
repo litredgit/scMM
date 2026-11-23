@@ -98,7 +98,10 @@ async def heartbeat(body: Heartbeat, request: Request):
 
 @router.get("/admin/monitor")
 async def monitor(request: Request):
-    return request.app.state.monitor.snapshot()
+    return {
+        **request.app.state.monitor.snapshot(),
+        "plugins": list(request.app.state.workspaces.plugins.status.values()),
+    }
 
 
 @router.get("/admin/monitor/history")

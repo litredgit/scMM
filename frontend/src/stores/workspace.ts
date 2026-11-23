@@ -26,6 +26,7 @@ export const useWorkspace = defineStore('workspace', () => {
   )
   const maintenancePaused = ref(false)
   const error = ref('')
+  const saveConflict = ref(false)
   const notice = ref('')
   const analysisDraft = ref<{
     path: string
@@ -75,6 +76,7 @@ export const useWorkspace = defineStore('workspace', () => {
   watch(
     () => project.value?.path,
     () => {
+      saveConflict.value = false
       drafts.value = {}
       analysisDraft.value = null
       batches.value = null
@@ -125,6 +127,7 @@ export const useWorkspace = defineStore('workspace', () => {
         return { status: 'stale' }
       }
       const message = cause instanceof Error ? cause.message : String(cause)
+      if (cause instanceof ApiError && cause.code === 'save_conflict') saveConflict.value = true
       error.value = message
       notice.value = ''
       if (cause instanceof ApiError && cause.code === 'extraction_not_started' && current.value) {
@@ -254,6 +257,7 @@ export const useWorkspace = defineStore('workspace', () => {
           })
           if (!valid()) throw new ApiError('项目已改变，旧操作结果已丢弃。', 'operation_stale', 409)
           current.value = value
+          if (['/project/save', '/project/open'].includes(path)) saveConflict.value = false
           return value
         },
         success,
@@ -533,6 +537,7 @@ export const useWorkspace = defineStore('workspace', () => {
 
   return {
     drafts,
+    saveConflict,
     draftNames,
     selectedCells,
     selectCell,

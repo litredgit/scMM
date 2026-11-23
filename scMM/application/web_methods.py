@@ -46,6 +46,21 @@ def matrix_input(data, layer, embedding, fields):
     )
 
 
+def check_output_axes(output, inputs, *, check_features=False):
+    """Labeled outputs must preserve the input identities in their original order."""
+    if (
+        isinstance(output, (pd.DataFrame, pd.Series))
+        and tuple(output.index) != inputs.observation_ids
+    ):
+        raise ValueError("插件输出的观测 ID 或顺序与输入不一致。")
+    if (
+        check_features
+        and isinstance(output, pd.DataFrame)
+        and tuple(output.columns) != inputs.feature_ids
+    ):
+        raise ValueError("插件输出的特征 ID 或顺序与输入不一致。")
+
+
 def apply_coordinates(state, data, kind, result, key, provenance):
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,63}", key) or key.startswith("scmm_"):
         raise ValueError("请填写有效且未保留的输出名称。")
@@ -127,6 +142,8 @@ class MethodWorkflow:
                 fields = method.observation_fields(options)
                 inputs = matrix_input(data, layer, embedding, fields)
                 output = method.method.run(inputs, options.copy())
+                if kind in {"preprocessing", "reduction", "clustering"}:
+                    check_output_axes(output, inputs, check_features=kind == "preprocessing")
                 provenance = {
                     "plugin": method.provenance(options),
                     "layer": layer,

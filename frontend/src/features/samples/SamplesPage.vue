@@ -230,11 +230,11 @@ async function importDataset() {
     manual.value = ''
   }
 }
-async function saveSample(sample: Sample) {
-  const { id, name, group, subject, batch } = sample
+async function saveSample(sample: Sample, field: 'name' | 'group' | 'subject' | 'batch') {
+  const { id } = sample
   const result = await store.mutate(
     '/samples',
-    { samples: [{ id, name, group, subject, batch }] },
+    { samples: [{ id, [field]: sample[field] }] },
     'PATCH',
     '样本信息已更新。',
   )
@@ -514,7 +514,7 @@ async function applyMapping() {
                   v-model="sample[key]"
                   :aria-label="`${sample.name} ${key}`"
                   :disabled="store.busy"
-                  @change="saveSample(sample)"
+                  @change="saveSample(sample, key)"
                 />
               </td>
               <td>

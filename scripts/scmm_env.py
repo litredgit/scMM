@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import json
 import math
 import os
@@ -101,7 +102,61 @@ def environment(values, name, *, create=True):
     return env, results
 
 
-def sync(values, name):
+def wheel_digest(wheel):
+    checksum = hashlib.sha256()
+    with wheel.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            checksum.update(chunk)
+    return checksum.hexdigest()
+
+
+def plugin_wheels(values, name, manifest=None):
+    """Read the environment's reviewed wheel manifest before replacing packages."""
+    config = values.get(f"{name}_server_config")
+    if manifest is None:
+        if config is None:
+            return []
+        manifest = config.with_name(f"{config.stem}.plugins.json")
+    if not manifest.exists():
+        return []
+    spec = json.loads(manifest.read_text(encoding="utf-8"))
+    if (
+        not isinstance(spec, dict)
+        or set(spec) != {"schema_version", "wheels"}
+        or type(spec["schema_version"]) is not int
+        or spec["schema_version"] != 1
+    ):
+        raise ValueError(f"Invalid plugin manifest: {manifest}")
+    if not isinstance(spec["wheels"], list):
+        raise ValueError("Plugin wheels must be a list")
+    paths = []
+    for item in spec["wheels"]:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"file", "sha256"}
+            or not isinstance(item["file"], str)
+            or not isinstance(item["sha256"], str)
+        ):
+            raise ValueError("Each plugin wheel requires a file and SHA-256")
+        wheel = (manifest.parent / item["file"]).resolve(strict=True)
+        digest = item["sha256"]
+        if (
+            wheel.suffix != ".whl"
+            or not wheel.is_file()
+            or not re.fullmatch(r"[a-f0-9]{64}", digest)
+        ):
+            raise ValueError(f"Invalid plugin wheel entry: {wheel.name}")
+        if wheel_digest(wheel) != digest:
+            raise ValueError(f"Plugin wheel SHA-256 mismatch: {wheel.name}")
+        paths.append(wheel)
+    if len(paths) != len(set(paths)):
+        raise ValueError("Plugin manifest lists a wheel more than once")
+    return paths
+
+
+def sync(values, name, wheels=None):
+    if wheels is None:
+        wheels = plugin_wheels(values, name)
     env, _ = environment(values, name)
     uv = shutil.which("uv") or str(Path.home() / ".local/bin/uv")
     subprocess.run(
@@ -110,6 +165,30 @@ def sync(values, name):
         env=env,
         check=True,
     )
+    if wheels:
+        interpreter = values[name] / ".venv/bin/python"
+        subprocess.run(
+            [
+                uv,
+                "pip",
+                "install",
+                "--python",
+                str(interpreter),
+                "--offline",
+                "--no-deps",
+                "--reinstall",
+                *map(str, wheels),
+            ],
+            cwd=values[name],
+            env=env,
+            check=True,
+        )
+        subprocess.run(
+            [uv, "pip", "check", "--python", str(interpreter)],
+            cwd=values[name],
+            env=env,
+            check=True,
+        )
     frontend = values[name] / "frontend"
     if (frontend / "package-lock.json").is_file():
         npm = shutil.which("npm")
@@ -435,6 +514,25 @@ def compatible_recovery(values):
         print("Older code: temporary deployment sessions isolated; saved projects retained")
 
 
+def write_deployed_plugins(path, wheels):
+    """Record the audited wheels used by this release for later rollback."""
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    record = {
+        "schema_version": 1,
+        "wheels": [{"file": str(wheel), "sha256": wheel_digest(wheel)} for wheel in wheels],
+    }
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=path.parent, delete=False
+    ) as tmp:
+        temporary = Path(tmp.name)
+        try:
+            json.dump(record, tmp)
+            tmp.close()
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
 def deploy(values, target, *, rollback=False, migrate_auth=False, config=CONFIG):
     root = values["prod"]
     clean(root, "main")
@@ -442,6 +540,12 @@ def deploy(values, target, *, rollback=False, migrate_auth=False, config=CONFIG)
     target = git(root, "rev-parse", "--verify", f"{target}^{{commit}}")
     if not rollback:
         git(root, "merge-base", "--is-ancestor", previous, target)
+    plugin_records = values["state"] / "prod/plugin-revisions"
+    previous_wheels = plugin_wheels(values, "prod", plugin_records / f"{previous}.json")
+    target_record = plugin_records / f"{target}.json"
+    target_wheels = plugin_wheels(
+        values, "prod", target_record if rollback and target_record.exists() else None
+    )
     launchers = None
     if migrate_auth:
         if rollback:
@@ -467,17 +571,18 @@ def deploy(values, target, *, rollback=False, migrate_auth=False, config=CONFIG)
             git(root, "reset", "--hard", target)
         else:
             git(root, "merge", "--ff-only", target)
-        sync(values, "prod")
+        sync(values, "prod", target_wheels)
         compatible_recovery(values)
         run("systemctl", "--user", "start", SERVICE)
         health()
+        write_deployed_plugins(target_record, target_wheels)
     except Exception:
         print("Deployment failed; restoring previous code and locked environment", file=sys.stderr)
         run("systemctl", "--user", "stop", SERVICE)
         git(root, "reset", "--hard", previous)
         if launchers:
             restore_launchers(launchers)
-        sync(values, "prod")
+        sync(values, "prod", previous_wheels)
         compatible_recovery(values)
         run("systemctl", "--user", "start", SERVICE)
         health()

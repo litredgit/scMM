@@ -14,6 +14,13 @@ type Decision = {
   monitor_pages?: number
 }
 type Snapshot = {
+  plugins?: {
+    id: string
+    configured: boolean
+    loaded: boolean
+    version: string | null
+    error: string | null
+  }[]
   environment: string
   instance: string
   uptime: number
@@ -482,6 +489,30 @@ onUnmounted(stop)
         <p class="muted">账号停用、密码重置等操作请前往“账号与管理”。监控界面不提供处置操作。</p>
       </article>
     </template>
+    <details v-if="auth.admin && state?.plugins" class="card">
+      <summary>方法插件（{{ state.plugins.length }} 已配置）</summary>
+      <p v-if="!state.plugins.length" class="muted">当前环境未配置方法插件。</p>
+      <div v-else class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>插件 ID</th>
+              <th>加载状态</th>
+              <th>安装版本</th>
+              <th>失败原因</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="plugin in state.plugins" :key="plugin.id">
+              <td>{{ plugin.id }}</td>
+              <td>{{ plugin.loaded ? '已加载' : '加载失败' }}</td>
+              <td>{{ plugin.version ?? '—' }}</td>
+              <td>{{ plugin.error ?? '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
   </section>
 </template>
 <style scoped>

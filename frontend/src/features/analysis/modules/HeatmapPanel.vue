@@ -60,23 +60,29 @@ async function useAnnotated() {
   )
   if (accept() && value) features.value = value.features.join('\n')
 }
+const markerGroups = ref<string[]>([])
+const markerGroup = ref('')
+watch(
+  () => [store.current?.workspace_id, store.current?.revision],
+  () => {
+    markerGroups.value = []
+    markerGroup.value = ''
+  },
+)
 async function useMarkers() {
   const accept = featureReads.begin()
-  const result = await store.read<{ table: { rows: Record<string, unknown>[] } }>(
-    '/analysis/results/markers?limit=1000',
+  const query = markerGroup.value ? '?' + new URLSearchParams({ group: markerGroup.value }) : ''
+  const result = await store.read<{ groups: string[]; features: string[] }>(
+    '/analysis/marker-features' + query,
     undefined,
     accept,
   )
-  if (accept() && result)
-    features.value = [
-      ...new Set(
-        result.table.rows
-          .filter((r) => r.weight === undefined || Number(r.weight) > 0)
-          .map((r) => String(r.feature_id)),
-      ),
-    ]
-      .slice(0, 50)
-      .join('\n')
+  if (!accept() || !result) return
+  markerGroups.value = result.groups
+  if (markerGroup.value) {
+    features.value = result.features.join('\n')
+    if (!result.features.length) store.notice = '所选分组没有正权重 Marker。'
+  }
 }
 async function draw() {
   const requested = signature.value
@@ -219,11 +225,18 @@ useViewState('heatmap', {
       <div class="actions">
         <button @click="features = selectedFeatures.join('\n')">使用已选特征</button
         ><button class="preview" :disabled="store.busy" @click="useMarkers">
-          使用前 50 个正向 Marker</button
+          {{ markerGroup ? '使用该组前 50 个正向 Marker' : '选择分类 Marker 分组' }}</button
         ><button class="preview" :disabled="store.busy" @click="useAnnotated">
           使用已注释特征
         </button>
       </div>
+      <label v-if="markerGroups.length">
+        分类 Marker 分组
+        <select v-model="markerGroup" :disabled="store.busy">
+          <option value="">选择分组</option>
+          <option v-for="item in markerGroups" :key="item" :value="item">{{ item }}</option>
+        </select>
+      </label>
       <div class="field-grid">
         <label
           >强度层<select v-model="layer">

@@ -114,8 +114,10 @@ function span(table: DataTable, index: number) {
               "
               :class="{ numeric: numericColumns.has(key) }"
             >
-              {{ formatted(row[key], key, row)
-              }}<HelpTip
+              <slot :name="key" :value="row[key]" :row="row">{{
+                formatted(row[key], key, row)
+              }}</slot
+              ><HelpTip
                 v-if="key === 'source_file'"
                 :text="String(row.source_path ?? row.source_file)"
                 label="完整路径"

@@ -1,6 +1,8 @@
 import { navigate, test, expect, preprocessingStep } from './fixtures'
 import { createProject } from './support/project'
 
+test.use({ viewport: { width: 1920, height: 1080 } })
+
 test('continuous extraction and statistics steps guard missing quantitative data', async ({
   page,
 }) => {
@@ -10,13 +12,16 @@ test('continuous extraction and statistics steps guard missing quantitative data
   await page.getByLabel('项目名称', { exact: true }).fill('步骤切换验收')
   await page.getByRole('button', { name: '创建并添加样本' }).click()
   const navigation = page.getByRole('navigation', { name: '步骤切换', exact: true })
-  await expect(navigation.getByRole('button', { name: /上一步：项目首页/ })).toBeEnabled()
+  await expect(navigation.getByRole('button', { name: /上一步：选择数据来源/ })).toBeEnabled()
   await navigation.getByRole('button', { name: /下一步：预览/ }).click()
   await expect(page).toHaveURL(/\/raw$/)
   await navigation.getByRole('button', { name: /下一步：提取/ }).click()
   await expect(page).toHaveURL(/\/extraction$/)
-  await expect(navigation.getByRole('button', { name: /下一步：预处理/ })).toBeDisabled()
+  await navigation.getByRole('button', { name: /下一步：选择统计分析数据/ }).click()
+  await expect(page).toHaveURL(/\/statistics$/)
+  await expect(navigation.getByRole('button', { name: /下一步：数据检查/ })).toBeDisabled()
   await expect(navigation.getByText(/请先审核纳入提取结果/)).toBeVisible()
+  await navigate(page, '/extraction')
   await navigation.getByRole('button', { name: /上一步：预览/ }).click()
   await navigation.getByRole('button', { name: /上一步：添加原始文件/ }).click()
   await page.getByRole('button', { name: '导入 H5AD 数据', exact: true }).click()
@@ -25,13 +30,23 @@ test('continuous extraction and statistics steps guard missing quantitative data
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
   await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await expect(page.getByRole('heading', { name: '结果与样本关联' })).toBeVisible()
-  for (const target of ['raw', 'extraction', 'preprocess', 'analysis', 'results']) {
+  for (const target of [
+    'raw',
+    'extraction',
+    'statistics',
+    'data-check',
+    'data-editor',
+    'preprocess',
+    'analysis',
+    'results',
+  ]) {
     await navigation.getByRole('button', { name: /下一步：/ }).click()
     await expect(page).toHaveURL(new RegExp(`/${target}$`))
     await expect(page.getByRole('alert')).toHaveCount(0)
   }
   await expect(navigation.getByRole('button', { name: /下一步：/ })).toHaveCount(0)
-  for (const target of ['analysis', 'preprocess', 'extraction', 'raw', 'samples', 'projects']) {
+  await navigate(page, '/analysis')
+  for (const target of ['preprocess', 'data-editor', 'data-check', 'statistics', 'projects']) {
     await navigation.getByRole('button', { name: /上一步：/ }).click()
     await expect(page).toHaveURL(new RegExp(`/${target}$`))
   }
@@ -82,10 +97,10 @@ test('statistics imports an external sample matrix directly and exports a portab
 }) => {
   await page.goto('/')
   await page.getByLabel('项目名称', { exact: true }).fill('独立统计入口')
-  await page.getByRole('button', { name: '创建并添加样本' }).click()
-  await navigate(page, '/statistics')
+  await page.getByLabel('已有数据').selectOption('matrix')
+  await page.getByRole('button', { name: '创建并导入矩阵' }).click()
+  await expect(page).toHaveURL(/\/statistics\?import=matrix_csv/)
   const exchange = page.getByRole('region', { name: '板块数据导入与导出' })
-  await exchange.getByRole('button', { name: '导入外部数据' }).click()
   await exchange.getByLabel('板块导入格式').selectOption('matrix_csv')
   await exchange.getByLabel('观测单位').selectOption('sample')
   await exchange.getByLabel('板块数据文件').setInputFiles({
@@ -95,7 +110,9 @@ test('statistics imports an external sample matrix directly and exports a portab
       'Sample,Class,150.0,151.003355\ns1,A,10,2\ns2,A,12,3\ns3,B,25,5\ns4,B,28,6\n',
     ),
   })
-  await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
+  await exchange.getByRole('button', { name: '检查导入内容' }).click()
+  await expect(exchange.getByRole('status')).toContainText('分组示例 A、B')
+  await exchange.getByRole('button', { name: /应用导入|导入并替换全部数据来源/ }).click()
   await expect(exchange).toContainText('4 个样本')
   await expect(exchange).toContainText('2 个特征')
   const download = page.waitForEvent('download')
@@ -122,11 +139,12 @@ test('feature-only annotation import cannot enable quantitative statistics', asy
     mimeType: 'text/csv',
     buffer: Buffer.from('feature_id,mz\nf1,150\nf2,151.003355\n'),
   })
-  await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
+  await exchange.getByRole('button', { name: '检查导入内容' }).click()
+  await exchange.getByRole('button', { name: /应用导入|导入并替换全部数据来源/ }).click()
   await expect(exchange).toContainText('独立特征表可用于注释')
   await navigate(page, '/statistics')
   await expect(page.locator('#matrix-required')).toBeVisible()
-  await expect(page.getByRole('button').filter({ hasText: '数据检查' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '数据检查', exact: true })).toBeDisabled()
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
@@ -287,4 +305,38 @@ test('a late saved draft keeps the page chosen after reload', async ({ page }) =
   } finally {
     release()
   }
+})
+
+test('a save conflict can export this workspace and open the disk version', async ({ page }) => {
+  await createProject(page, '保存冲突检查')
+  const workspace = await page.evaluate(() => sessionStorage.getItem('scmm-workspace')!)
+  const read = await page.request.get('/api/v1/workspace', {
+    headers: { 'X-SCMM-Workspace': workspace },
+  })
+  const project = await read.json()
+  const user = await (await page.request.get('/api/v1/auth/me')).json()
+  const mutationHeaders = { 'X-SCMM-Client': 'web', 'X-SCMM-CSRF': user.csrf }
+  const second = await page.request.post('/api/v1/workspaces', { headers: mutationHeaders })
+  expect(second.ok()).toBeTruthy()
+  const peer = await second.json()
+  const headers = { ...mutationHeaders, 'X-SCMM-Workspace': peer.workspace_id }
+  const opened = await page.request.post('/api/v1/workspace/project/open', {
+    headers,
+    data: { path: project.project.path, revision: peer.revision },
+  })
+  expect(opened.ok()).toBeTruthy()
+  const disk = await opened.json()
+  const saved = await page.request.post('/api/v1/workspace/project/save', {
+    headers,
+    data: { revision: disk.revision },
+  })
+  expect(saved.ok()).toBeTruthy()
+  await page.getByRole('button', { name: '保存项目', exact: true }).click()
+  await expect(page.getByText('磁盘上的项目已被其他会话保存。', { exact: false })).toBeVisible()
+  const file = page.waitForEvent('download')
+  await page.getByRole('button', { name: '导出当前工作区交换包', exact: true }).click()
+  expect((await file).suggestedFilename()).toBe('current-workspace.scmm-exchange.zip')
+  await page.getByRole('button', { name: '打开磁盘版本', exact: true }).click()
+  await expect(page.getByRole('button', { name: '打开磁盘版本', exact: true })).toHaveCount(0)
+  await expect(page.getByText('已打开磁盘上的项目版本。', { exact: true })).toBeVisible()
 })

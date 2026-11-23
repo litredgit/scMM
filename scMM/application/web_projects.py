@@ -302,10 +302,18 @@ class ProjectWorkflow:
             before = {key: dict(lookup[key]) for key in ids}
             for edit in edits:
                 sample = lookup[edit["id"]]
-                sample.update(
-                    {key: str(value).strip() for key, value in edit.items() if key != "id"}
-                )
-                sample["metadata_unresolved"] = []
+                fields = {
+                    key: str(edit[key]).strip()
+                    for key in ("name", "group", "subject", "batch")
+                    if key in edit
+                }
+                unresolved = sample.get("metadata_unresolved", [])
+                # A blank display value for mixed metadata is not a replacement.
+                for key in unresolved:
+                    if key in fields and not fields[key]:
+                        del fields[key]
+                sample.update(fields)
+                sample["metadata_unresolved"] = [key for key in unresolved if key not in fields]
 
             if candidate.workspace.data is not None:
                 import json
@@ -326,7 +334,7 @@ class ProjectWorkflow:
                     for key in ids
                     if any(
                         before[key].get(field) != lookup[key].get(field)
-                        for field in ("name", "group", "subject", "batch")
+                        for field in ("name", "group", "subject", "batch", "metadata_unresolved")
                     )
                 ]
                 for data in (

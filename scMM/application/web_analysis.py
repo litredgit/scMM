@@ -271,23 +271,19 @@ class AnalysisWorkflow:
                 .sort_values(ascending=not descending, kind="stable", na_position="last")
                 .index
             )
-            from scMM.util.lipid_annotation import annotation_store, version_valid
+            from .annotation_sources import analysis_annotations
 
-            annotations = annotation_store(data)
-            active = next(
-                (v for v in annotations["versions"] if v["id"] == annotations.get("active")), None
-            )
-            names = {}
-            if active and version_valid(data, active):
-                for candidate in active["candidates"]:
-                    names.setdefault(candidate["feature_id"], set()).add(
-                        str(candidate.get("name", ""))
-                    )
+            names, _ = analysis_annotations(workspace.require_project(), data)
+            display_names = data.var.get("display_name")
             rows = []
             for j in order:
                 name = str(data.var_names[j])
                 mz = data.var.iloc[j].get("mz")
                 label = f"{feature_label(name, mz)} · {name} · #{j + 1}"
+                if display_names is not None and pd.notna(display_names.iloc[j]):
+                    display = str(display_names.iloc[j]).strip()
+                    if display:
+                        label += f" · {display}"
                 if names.get(name):
                     label += " · " + " / ".join(sorted(names[name]))
                 if query.casefold() in f"{label} {mz}".casefold():
@@ -414,8 +410,8 @@ class AnalysisWorkflow:
             result = self.result_value(workspace.require_project(), name)
             if "table" in result:
                 table = result["table"]
-                payload = table_view(table.iloc[offset : offset + limit])
-                payload["total"] = len(table)
+                payload = table_view(table.iloc[offset : offset + limit], limit=limit)
+                payload.update(total=len(table), offset=offset)
                 return {
                     "table": payload,
                     "parameters": json_view(

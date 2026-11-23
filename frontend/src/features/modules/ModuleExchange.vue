@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useWorkspace } from '../../stores/workspace'
 import { useReadScope } from '../../api/readScope'
 import { workspaceBlob, saveBlob } from '../../api/workspaceDownload'
@@ -9,8 +10,23 @@ import type { ModuleKey } from './modules'
 const props = defineProps<{ module: ModuleKey; compact?: boolean }>()
 const store = useWorkspace()
 const status = ref<ModuleStatus>()
+const route = useRoute()
 const source = ref('current')
 const format = ref('package')
+watch(
+  () => [route.path, route.query.import],
+  () => {
+    const requested = route.query.import
+    if (
+      route.path === (props.module === 'annotation' ? '/annotation' : '/statistics') &&
+      (requested === 'feature_csv' || requested === 'matrix_csv')
+    ) {
+      source.value = 'import'
+      format.value = requested
+    }
+  },
+  { immediate: true },
+)
 const orientation = ref('observations_rows')
 const observationKind = ref('cell')
 const upload = ref<File>()
@@ -21,6 +37,26 @@ const localError = ref('')
 const lastImport = ref('')
 const preview = ref('')
 const preparing = ref(false)
+type ImportSummary = {
+  observations: number
+  features: number
+  observation_kind: 'cell' | 'sample'
+  groups: string[]
+  scope: 'all' | 'active' | 'source'
+}
+const inspected = ref<{ summary: ImportSummary; body: Record<string, unknown> }>()
+watch(
+  [upload, metadata, features, format, orientation, observationKind, () => store.current?.revision],
+  () => {
+    inspected.value = undefined
+  },
+)
+watch(format, () => {
+  upload.value = undefined
+  metadata.value = undefined
+  features.value = undefined
+  preview.value = ''
+})
 watch(
   () => [store.current?.workspace_id, store.project?.path],
   () => {
@@ -30,7 +66,7 @@ watch(
     lastImport.value = ''
     preview.value = ''
     localError.value = ''
-    source.value = 'current'
+    source.value = route.query.import ? 'import' : 'current'
   },
 )
 const reads = useReadScope(
@@ -81,7 +117,7 @@ function template(kind: 'matrix' | 'features' | 'observations') {
   }
   saveBlob(new Blob([values[kind]], { type: 'text/csv;charset=utf-8' }), `${kind}-template.csv`)
 }
-async function importData() {
+async function inspectImport() {
   if (!canImport.value || !upload.value) return
   preparing.value = true
   localError.value = ''
@@ -109,21 +145,29 @@ async function importData() {
       localError.value = '项目或数据已改变，请重新检查导入文件。'
       return
     }
-    const value = await store.mutate(
-      `/exchange/${props.module}/import`,
-      body,
-      'POST',
-      '导入已完成，请检查数据摘要。',
-    )
-    if (value) {
-      lastImport.value = file.name
-      source.value = 'current'
-      await refresh()
-    }
+    const value = await store.inspect<ImportSummary>(`/exchange/${props.module}/inspect`, body)
+    if (value && store.current?.revision === revision && store.current?.workspace_id === workspace)
+      inspected.value = { summary: value, body }
   } catch (cause) {
     localError.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
     preparing.value = false
+  }
+}
+async function applyImport() {
+  const candidate = inspected.value
+  if (!candidate || !canImport.value) return
+  const value = await store.mutate(
+    `/exchange/${props.module}/import`,
+    candidate.body,
+    'POST',
+    '导入已完成，请检查数据摘要。',
+  )
+  if (value) {
+    lastImport.value = String(candidate.body.filename)
+    source.value = 'current'
+    upload.value = undefined
+    await refresh()
   }
 }
 async function download() {
@@ -253,13 +297,14 @@ watch(exportChoices, (choices) => {
           已导入：{{ lastImport }}
         </p>
       </div>
-      <form v-else-if="source === 'import'" class="module-import" @submit.prevent="importData">
+      <form v-else-if="source === 'import'" class="module-import" @submit.prevent="inspectImport">
         <fieldset :disabled="store.busy || preparing" class="module-import-fields">
           <div class="field-grid">
             <label
               >文件格式<select v-model="format" :disabled="store.busy" aria-label="板块导入格式">
                 <option value="package">scMM 完整交换包</option>
                 <option value="h5ad">H5AD 矩阵</option>
+                <option value="tables_zip">开放表格包 ZIP</option>
                 <option value="matrix_csv">定量矩阵 CSV</option>
                 <option v-if="module === 'annotation'" value="feature_csv">
                   独立 m/z 特征表 CSV
@@ -269,7 +314,14 @@ watch(exportChoices, (choices) => {
             <label
               >数据文件<input
                 type="file"
-                :accept="format === 'package' ? '.zip' : format === 'h5ad' ? '.h5ad' : '.csv,.txt'"
+                :key="format"
+                :accept="
+                  ['package', 'tables_zip'].includes(format)
+                    ? '.zip'
+                    : format === 'h5ad'
+                      ? '.h5ad'
+                      : '.csv,.txt'
+                "
                 :disabled="store.busy"
                 aria-label="板块数据文件"
                 @change="selected($event, 'main')"
@@ -296,18 +348,21 @@ watch(exportChoices, (choices) => {
             <summary>文件内容预览（前 8 行）</summary>
             <pre>{{ preview }}</pre>
           </details>
+          <div v-if="format === 'matrix_csv' || format === 'h5ad'" class="field-grid">
+            <label
+              >观测单位<select v-model="observationKind" aria-label="观测单位">
+                <option value="cell">单细胞</option>
+                <option value="sample">普通样本</option>
+              </select></label
+            >
+            <p v-if="format === 'h5ad'" class="muted">优先采用文件已有的 scMM 观测单位。</p>
+          </div>
           <template v-if="format === 'matrix_csv'">
             <div class="field-grid">
               <label
                 >矩阵方向<select v-model="orientation" aria-label="矩阵方向">
                   <option value="observations_rows">细胞 / 样本在行，特征在列</option>
                   <option value="observations_columns">特征在行，细胞 / 样本在列</option>
-                </select></label
-              >
-              <label
-                >每行观测对象<select v-model="observationKind" aria-label="观测单位">
-                  <option value="cell">单细胞</option>
-                  <option value="sample">普通样本</option>
                 </select></label
               >
               <label
@@ -341,15 +396,43 @@ watch(exportChoices, (choices) => {
           <p v-else class="muted">
             导入将替换当前活动数据，完整校验通过后生效。请先保存需要保留的当前状态。
           </p>
-          <button class="primary" :disabled="!canImport">
+          <div class="actions">
+            <button class="preview" :disabled="!canImport">
+              {{ preparing ? '正在检查…' : '检查导入内容' }}
+            </button>
+            <button
+              v-if="inspected"
+              type="button"
+              class="primary"
+              :disabled="!canImport"
+              @click="applyImport"
+            >
+              {{ inspected.summary.scope === 'all' ? '导入并替换全部数据来源' : '应用导入' }}
+            </button>
+          </div>
+          <div v-if="inspected" class="state-note" role="status">
+            {{ inspected.summary.observations }}
             {{
-              preparing
-                ? '正在读取与检查文件…'
-                : format === 'package'
-                  ? '导入并替换全部数据来源'
-                  : '检查并导入本板块'
+              inspected.summary.observations === 0
+                ? '个定量观测'
+                : inspected.summary.observation_kind === 'sample'
+                  ? '个样本'
+                  : '个细胞'
             }}
-          </button>
+            × {{ inspected.summary.features }} 个特征
+            <span v-if="inspected.summary.groups.length">
+              · 分组示例 {{ inspected.summary.groups.join('、') }}</span
+            >
+            <p>
+              {{
+                {
+                  all: '替换全部数据来源、分支和报告。',
+                  active: '替换当前数据，建立预处理起点。',
+                  source: '加入独立来源视图。',
+                }[inspected.summary.scope]
+              }}
+            </p>
+          </div>
         </fieldset>
       </form>
       <p v-if="localError" role="alert" class="state-note">{{ localError }}</p>

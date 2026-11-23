@@ -3,7 +3,7 @@
 
 import json
 
-from scMM.util.lipid_annotation import annotation_store
+from scMM.util.lipid_annotation import annotation_store, feature_axis
 
 
 def review_sources(project):
@@ -32,7 +32,15 @@ def review_sources(project):
         default = ""
     if data is not None and not sources:
         context = json.loads(data.uns.get("scmm_analysis_input_json", "{}"))
+        has_masses = False
         if context.get("variable_kind") != "empirical_compound":
+            try:
+                feature_axis(data)
+            except (TypeError, ValueError):
+                pass
+            else:
+                has_masses = True
+        if has_masses:
             default = "current"
             sources.append(
                 {
@@ -85,3 +93,42 @@ def source_versions(project, data, source=""):
         if versions["versions"]:
             return versions
     return annotation_store(data)
+
+
+def analysis_review_source(project, data):
+    """Map active branch variables back to the measured peak IDs."""
+    state = project.ion_state
+    if state is None:
+        source = "current" if review_sources(project)["sources"] else ""
+    else:
+        branch = state["branches"].get(state["active_branch_id"])
+        source = state["views"][branch["view_id"]]["root_id"] if branch else ""
+        if source not in state["roots"]:
+            source = ""
+    if not source:
+        return "", {}
+    measured, _ = feature_source(project, source)
+    peaks = data.var.get("quantifier_feature_id", data.var_names)
+    return source, {
+        str(variable): str(peak)
+        for variable, peak in zip(data.var_names, peaks, strict=True)
+        if str(peak) in measured.var_names
+    }
+
+
+def analysis_annotations(project, data):
+    """Read active candidates from the measurement source, projected onto the branch."""
+    from scMM.util.lipid_annotation import version_valid
+
+    source, mapping = analysis_review_source(project, data)
+    if not source:
+        return {}, None
+    measured, _ = feature_source(project, source)
+    store = source_versions(project, measured, source)
+    version = next((v for v in store["versions"] if v["id"] == store["active"]), None)
+    if not version or not version_valid(measured, version):
+        return {}, None
+    names = {}
+    for candidate in version["candidates"]:
+        names.setdefault(candidate["feature_id"], set()).add(str(candidate.get("name", "")))
+    return {variable: names[peak] for variable, peak in mapping.items() if peak in names}, version

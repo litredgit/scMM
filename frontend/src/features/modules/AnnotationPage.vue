@@ -1,14 +1,40 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import AnnotationHeader from '../annotation/AnnotationHeader.vue'
 import MethodPanel from '../methods/MethodPanel.vue'
 import { useAnnotationSource } from '../annotation/useAnnotationSource'
 import LipidPanel from '../preprocess/LipidPanel.vue'
-import IonsPage from '../ions/IonsPage.vue'
+import IonRelationReview from '../ions/IonRelationReview.vue'
+import IonCompoundSearch from '../ions/IonCompoundSearch.vue'
 import CompoundSourcePanel from '../ions/CompoundSourcePanel.vue'
 import { useWorkspace } from '../../stores/workspace'
 const store = useWorkspace()
-const { source, selectedTarget } = useAnnotationSource()
+const { source, sourceId, sources, selectedTarget, selectTarget } = useAnnotationSource()
+const route = useRoute()
+let followedTarget = ''
+watch(
+  () => [route.path, route.query.source, route.query.feature, sources.value] as const,
+  ([path, id, feature, available]) => {
+    if (path !== '/annotation' || typeof feature !== 'string') {
+      followedTarget = ''
+      return
+    }
+    const measured = available.find((entry) => entry.id === id)
+    const signature = JSON.stringify([store.project?.path, id, feature])
+    if (!measured || followedTarget === signature) return
+    followedTarget = signature
+    sourceId.value = measured.id
+    selectTarget({
+      source: measured.id,
+      sourceIdentity: measured.identity,
+      kind: 'feature',
+      id: feature,
+      featureId: feature,
+    })
+  },
+  { immediate: true },
+)
 const groupsOpen = ref(false)
 const groupsMounted = ref(false)
 const annotationRun = ref(0)
@@ -34,10 +60,9 @@ function toggleGroups() {
         </button>
       </template>
       <template #grouping-settings>
-        <IonsPage
+        <IonRelationReview
           v-if="groupsMounted"
           v-show="groupsOpen"
-          surface="review"
           :focus-feature="
             selectedTarget?.featureId ??
             (selectedTarget?.kind === 'feature' ? selectedTarget.id : '')
@@ -47,7 +72,7 @@ function toggleGroups() {
       <template #group-search>
         <details v-if="source.id !== 'current'">
           <summary>使用本地化合物库</summary>
-          <IonsPage surface="search" />
+          <IonCompoundSearch />
         </details>
       </template>
       <template #group-relations>

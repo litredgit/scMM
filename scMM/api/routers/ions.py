@@ -282,6 +282,20 @@ def assertion(body: s.Assertion, manager: Service, identity: Identity):
         if kind == "candidate":
             rows = registry["annotation"].get(version, {}).get("candidates", [])
             valid = any(row["candidate_id"] == target for row in rows)
+            if not valid:
+                from scMM.application.annotation_sources import feature_source, source_versions
+                from scMM.util.lipid_annotation import version_valid
+
+                root_id = body.scope.get("root_id")
+                if root_id in project.ion_state["roots"]:
+                    data, _ = feature_source(project, root_id)
+                    store = source_versions(project, data, root_id)
+                    valid = any(
+                        item["id"] == version
+                        and version_valid(data, item)
+                        and any(row["candidate_id"] == target for row in item["candidates"])
+                        for item in store["versions"]
+                    )
         elif kind == "feature":
             valid = any(
                 target in root["data"].var_names and version == key

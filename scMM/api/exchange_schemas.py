@@ -7,7 +7,7 @@ from pydantic import Field
 from .schemas import RevisionRequest
 
 ModuleName = Literal["extraction", "annotation", "statistics"]
-ExchangeFormat = Literal["package", "h5ad", "matrix_csv", "feature_csv"]
+ExchangeFormat = Literal["package", "h5ad", "matrix_csv", "feature_csv", "tables_zip"]
 
 
 class ExchangeImport(RevisionRequest):

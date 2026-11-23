@@ -147,6 +147,7 @@ export interface Mapping {
 }
 
 export interface DataTable {
+  offset?: number
   columns: string[]
   rows: Record<string, unknown>[]
   total: number

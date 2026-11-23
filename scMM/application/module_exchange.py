@@ -129,7 +129,7 @@ def module_status(manager, identity, module):
             "observations": data.n_obs if data is not None else 0,
             "features": data.n_vars if data is not None else 0,
             "observation_kind": metadata.get("observation_kind", "cell"),
-            "imports": ["package", "h5ad", "matrix_csv"]
+            "imports": ["package", "h5ad", "matrix_csv", "tables_zip"]
             + (["feature_csv"] if module == "annotation" else []),
             "exports": (
                 ["package", "csv", "h5ad", "features"] if data is not None else ["package"]
@@ -342,6 +342,7 @@ def import_matrix_csv(
     orientation="observations_rows",
     observation_kind="cell",
     source="uploaded_matrix.csv",
+    embedded_group=True,
 ):
     table = _read_csv(text)
     if table.shape[1] < 2 or table.empty:
@@ -351,7 +352,11 @@ def import_matrix_csv(
     values.index = identifiers
     group = None
     if orientation == "observations_columns":
-        group_rows = [key for key in values.index if key.casefold() in {"group", "class", "label"}]
+        group_rows = [
+            key
+            for key in values.index
+            if embedded_group and key.casefold() in {"group", "class", "label"}
+        ]
         if len(group_rows) > 1:
             raise ValueError("矩阵只能有一行 Group、Class 或 Label。")
         if group_rows:
@@ -360,7 +365,9 @@ def import_matrix_csv(
         values = values.T
     elif orientation == "observations_rows":
         group_columns = [
-            key for key in values.columns if key.casefold() in {"group", "class", "label"}
+            key
+            for key in values.columns
+            if embedded_group and key.casefold() in {"group", "class", "label"}
         ]
         if len(group_columns) > 1:
             raise ValueError("矩阵只能有一列 Group、Class 或 Label。")
@@ -486,20 +493,67 @@ def _safe_import_samples(project, manager):
             sample.update(path="", storage="exchange", result_only=True)
 
 
-def import_exchange(manager, identity, module, values):
+def read_open_tables(content, filename):
+    with TemporaryDirectory(prefix="scmm-open-tables-") as temporary:
+        root = Path(temporary)
+        _extract_archive(content, root, max_bytes=140_000_000, max_files=4)
+        names = {"matrix.csv", "observations.csv", "features.csv", "metadata.json"}
+        if {path.name for path in root.iterdir() if path.is_file()} != names:
+            raise ValueError("开放表格包必须包含矩阵、观测表、特征表及 metadata.json。")
+        try:
+            metadata = json.loads((root / "metadata.json").read_text(encoding="utf-8"))
+            if (
+                not isinstance(metadata, dict)
+                or metadata.get("schema_version") != 1
+                or metadata.get("kind") != "scmm_matrix_tables"
+                or metadata.get("matrix_orientation") != "observations_rows"
+                or metadata.get("observation_kind") not in {"cell", "sample"}
+                or type(metadata.get("quantitation_available")) is not bool
+            ):
+                raise ValueError("不支持的开放表格包声明。")
+            features = (root / "features.csv").read_text(encoding="utf-8-sig")
+            if not metadata["quantitation_available"]:
+                return import_feature_csv(features, source=filename)
+            return import_matrix_csv(
+                (root / "matrix.csv").read_text(encoding="utf-8-sig"),
+                observations_csv=(root / "observations.csv").read_text(encoding="utf-8-sig"),
+                features_csv=features,
+                observation_kind=metadata["observation_kind"],
+                source=filename,
+                embedded_group=False,
+            )
+        except (UnicodeError, json.JSONDecodeError) as exc:
+            raise ValueError("开放表格包含无效的 UTF-8 或清单。") from exc
+
+
+def _import_summary(data, scope):
+    groups = [] if data is None else data.obs.get("group", [])
+    return {
+        "observations": data.n_obs if data is not None else 0,
+        "features": data.n_vars if data is not None else 0,
+        "observation_kind": exchange_metadata(data).get("observation_kind", "cell"),
+        "groups": list(
+            dict.fromkeys(
+                str(value).strip() for value in groups if pd.notna(value) and str(value).strip()
+            )
+        )[:8],
+        "scope": scope,
+    }
+
+
+def import_exchange(manager, identity, module, values, *, preview=False):
     _validate_module(module)
     kind = values["format"]
     if kind == "feature_csv" and module != "annotation":
         raise ValueError("独立特征表请从特征注释板块导入；统计分析需要定量矩阵。")
 
-    def action(workspace):
-        project = workspace.project
+    def prepare(workspace):
+        project = workspace.require_project()
+        scope = "all" if kind == "package" else "active"
         if kind == "package":
             imported, description = read_package(_uploaded_bytes(values))
-            if (
-                module == "statistics"
-                and imported.workspace.data is not None
-                and imported.workspace.data.n_obs == 0
+            if module == "statistics" and (
+                imported.workspace.data is None or imported.workspace.data.n_obs == 0
             ):
                 raise ValueError("该交换包仅有特征表，不能作为统计分析输入。")
             candidate = project_candidate(project)
@@ -544,9 +598,7 @@ def import_exchange(manager, identity, module, values):
 
                     candidate = project_candidate(project)
                     import_compound_source(candidate, content)
-                    candidate.dirty = True
-                    workspace.project = candidate
-                    return
+                    return candidate, _import_summary(data, "source")
                 AnalysisWorkspace._validate(data)
                 axis_identity(data.obs_names)
                 axis_identity(data.var_names)
@@ -566,6 +618,8 @@ def import_exchange(manager, identity, module, values):
                     )
                 if module == "statistics" and data.n_obs == 0:
                     raise ValueError("该 H5AD 仅有特征表，统计分析需要定量矩阵。")
+            elif kind == "tables_zip":
+                data = read_open_tables(_uploaded_bytes(values), values["filename"])
             else:
                 text = values.get("matrix_csv", "")
                 if not text:
@@ -588,6 +642,9 @@ def import_exchange(manager, identity, module, values):
                     )
             candidate = project_candidate(project)
             if data.n_obs == 0:
+                if module != "annotation":
+                    raise ValueError("独立特征表请从特征注释板块导入。")
+                scope = "all"
                 candidate.ion_state = None
                 candidate.workspace = AnalysisWorkspace()
                 candidate.workspace.replace(data, source=f"uploaded:{values['filename']}")
@@ -624,8 +681,19 @@ def import_exchange(manager, identity, module, values):
                 "format": kind,
             }
         candidate.validate_samples()
+        return candidate, _import_summary(candidate.workspace.data, scope)
+
+    if preview:
+        with manager.access(identity) as workspace:
+            workspace.check(values["revision"])
+            _, summary = prepare(workspace)
+            return summary
+
+    def action(workspace):
+        candidate, summary = prepare(workspace)
         candidate.dirty = True
-        workspace.discard_views()
+        if summary["scope"] != "source":
+            workspace.discard_views()
         workspace.project = candidate
 
     return manager.mutate(identity, values["revision"], action, operation="module_import")
@@ -642,7 +710,10 @@ def _csv_package(project, module):
     obs = data.obs.copy()
     obs.index.name = "observation_id"
     matrix = pd.DataFrame(dense(data.X), index=data.obs_names, columns=data.var_names)
-    matrix.index.name = "observation_id"
+    identifier_header = "observation_id"
+    while identifier_header in matrix.columns:
+        identifier_header = "_" + identifier_header
+    matrix.index.name = identifier_header
     metadata = {
         "schema_version": 1,
         "kind": "scmm_matrix_tables",

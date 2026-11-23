@@ -336,6 +336,7 @@
         "scMM/api/lipid_schemas.py",
         "scMM/api/routers/lipids.py",
         "scMM/application/annotation_sources.py",
+        "scMM/application/annotation_tables.py",
         "scMM/application/annotation_evidence.py",
         "scMM/application/web_lipids.py",
         "scMM/application/matrix_export.py",

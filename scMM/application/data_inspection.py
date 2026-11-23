@@ -94,23 +94,27 @@ def inspect_data(data, feature_offset=0, feature_query="", name_filter="all"):
     )
 
 
-def workflow_status(state):
-    from scMM.util.lipid_annotation import annotation_store, version_valid
+def workflow_status(project):
+    from .annotation_sources import analysis_annotations
+    from .method_reports import current_reports
+
+    state = project.workspace
 
     data = state.require_features()
     history = json.loads(data.uns.get("scmm_workbench", {}).get("history_json", "[]"))
-    annotations = annotation_store(data)
+    _, annotation = analysis_annotations(project, data)
     return {
         "/data-editor": bool(json.loads(data.uns.get("scmm_metadata_edits_json", "[]")))
         or bool(json.loads(data.uns.get("scmm_manual_annotations_json", "[]")))
         or any(row.get("operation") == "selection_labels" for row in history),
         "/preprocess": any(
-            row.get("operation") in {"filter", "impute", "normalize", "remove_outliers"}
+            row.get("operation")
+            in {"filter", "impute", "normalize", "remove_outliers", "plugin_preprocess"}
             for row in history
         ),
         "/analysis": bool(data.obsm)
+        or bool(project.saved_reports)
+        or bool(current_reports(data))
         or any(token == state.token for token, _ in state.results.values()),
-        "/annotation": any(
-            version_valid(data, version) for version in annotations.get("versions", [])
-        ),
+        "/annotation": annotation is not None,
     }

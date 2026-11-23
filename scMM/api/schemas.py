@@ -33,10 +33,10 @@ class AddSamples(RevisionRequest):
 
 class SampleEdit(RequestModel):
     id: str
-    name: str = Field(min_length=1, max_length=200)
-    group: str = Field(max_length=1000)
-    subject: str = Field(max_length=1000)
-    batch: str = Field(max_length=1000)
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    group: str | None = Field(default=None, max_length=1000)
+    subject: str | None = Field(default=None, max_length=1000)
+    batch: str | None = Field(default=None, max_length=1000)
 
 
 class EditSamples(RevisionRequest):

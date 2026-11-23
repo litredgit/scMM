@@ -120,3 +120,39 @@ def test_invalid_observation_declaration_rejects_before_publishing(workflow, met
     failed = post("/dataset/import", {"root": "Output", "path": "invalid-unit.h5ad"})
     assert failed.status_code == 400, failed.text
     assert current() == before
+
+
+def test_preview_and_open_tables_round_trip_preserve_mixed_source_groups(workflow):
+    _, _, manager, *_, current, post = workflow
+    body = {
+        "format": "matrix_csv",
+        "matrix_csv": "Sample,Group,150.5\nc1,A,1\nc2,B,2\n",
+    }
+    before = current()
+    preview = post("/exchange/statistics/inspect", body)
+    assert preview.json() == {
+        "observations": 2,
+        "features": 1,
+        "observation_kind": "cell",
+        "groups": ["A", "B"],
+        "scope": "active",
+    }
+    assert current() == before
+    post("/exchange/statistics/import", body).raise_for_status()
+    sample = current()["project"]["manifest"]["samples"][0]
+    assert sample["metadata_unresolved"] == ["group"]
+    post(
+        "/samples", {"samples": [{"id": sample["id"], "name": "New source"}]}, method="PATCH"
+    ).raise_for_status()
+    with manager.access(current()["workspace_id"]) as workspace:
+        state = workspace.project.workspace
+        for data in (state.data, state._original):
+            assert data.obs["group"].tolist() == ["A", "B"]
+    bundle = get(
+        workflow, f"/exchange/statistics/export?format=csv&revision={current()['revision']}"
+    )
+    bundle.raise_for_status()
+    round_trip = {"format": "tables_zip", "file_base64": base64.b64encode(bundle.content).decode()}
+    assert post("/exchange/statistics/inspect", round_trip).json()["groups"] == ["A", "B"]
+    post("/exchange/statistics/import", round_trip).raise_for_status()
+    assert current()["project"]["dataset"]["cells"] == 2

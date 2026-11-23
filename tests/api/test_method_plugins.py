@@ -189,3 +189,70 @@ def test_extraction_plugin_workers_share_frozen_selection_and_cache_identity(wor
         post("/extraction/start", {"retry_path": started.json()["value"]["path"]}).status_code
         == 409
     )
+
+
+def test_plugin_labeled_outputs_reject_reordered_axes_and_report_progress(workflow, monkeypatch):
+    from dataclasses import replace
+
+    import pandas as pd
+
+    import_data(workflow)
+    current = workflow[-2]
+    registry = workflow[2].plugins
+    key = f"{PLUGIN}:scale"
+    registered = registry.methods[key]
+
+    def reversed_observations(inputs, _):
+        return pd.DataFrame(
+            inputs.values, index=inputs.observation_ids, columns=inputs.feature_ids
+        ).iloc[::-1]
+
+    monkeypatch.setitem(
+        registry.methods,
+        key,
+        replace(registered, method=replace(registered.method, run=reversed_observations)),
+    )
+    before = current()
+    assert "观测 ID" in run(workflow, "scale").json()["error"]["message"]
+    assert current() == before
+    monkeypatch.setitem(registry.methods, key, registered)
+    run(workflow, "scale").raise_for_status()
+    run(workflow, "report", options={"column": "group"}).raise_for_status()
+    progress = get(workflow, "/analysis/workflow-status").json()
+    assert progress["/preprocess"] and progress["/analysis"]
+
+
+def test_measurement_root_candidates_are_available_in_statistics(workflow):
+    import_data(workflow)
+    post = workflow[-1]
+    post(
+        "/ions/initialize", {"linearity": "unknown", "origin_kind": "imported_feature"}
+    ).raise_for_status()
+    root = get(workflow, "/ions/info").json()["roots"][0]["id"]
+    run(workflow, "annotate", source=root).raise_for_status()
+    assert get(workflow, "/analysis/annotated-features").json()["features"] == ["f0"]
+    target = get(workflow, "/analysis/feature-review-target?feature=f0").json()
+    assert target == {"source": root, "feature": "f0"}
+    assert get(workflow, "/analysis/workflow-status").json()["/annotation"]
+
+
+def test_heatmap_uses_full_positive_classifier_markers_for_selected_group(workflow):
+    import pandas as pd
+
+    import_data(workflow)
+    manager, current = workflow[2], workflow[-2]
+    rows = pd.DataFrame(
+        {
+            "group": ["A"] * 250 + ["B"] * 2,
+            "weight": [1.0] * 251 + [-0.1],
+            "rank": [*range(1, 251), 1, 2],
+            "feature_id": [f"a{i}" for i in range(250)] + ["positive", "negative"],
+        }
+    )
+    with manager.access(current()["workspace_id"]) as workspace:
+        state = workspace.project.workspace
+        state.put_result("markers", {"method": "classifier", "table": rows}, state.token)
+    table = get(workflow, "/analysis/results/markers?limit=1000").json()["table"]
+    assert len(table["rows"]) == table["total"] == 252
+    response = get(workflow, "/analysis/marker-features?group=B")
+    assert response.json() == {"groups": ["A", "B"], "features": ["positive"]}

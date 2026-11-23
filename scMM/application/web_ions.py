@@ -88,6 +88,7 @@ class IonWorkflow:
             if state is None:
                 return {
                     "initialized": False,
+                    "evidence": [],
                     "species": [{"id": s.id, "polarity": s.polarity} for s in ION_SPECS.values()],
                     "tasks": tasks,
                 }
@@ -133,6 +134,10 @@ class IonWorkflow:
                     key: entry.get("root_id")
                     for key, entry in state["registry"]["annotation"].items()
                 },
+                "evidence": [
+                    {"id": key, "label": entry.get("kind", entry.get("type", "外部证据"))}
+                    for key, entry in state["registry"]["evidence"].items()
+                ],
                 "tasks": tasks,
                 "species": [{"id": s.id, "polarity": s.polarity} for s in ION_SPECS.values()],
             }

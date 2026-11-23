@@ -26,7 +26,8 @@ test('raw overlap and acquisition MS2 stay traceable through the desktop review 
     mimeType: 'text/csv',
     buffer: Buffer.from('feature_id,mz\nparent,758.569434493991\ncompeting,760.585084557791\n'),
   })
-  await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
+  await exchange.getByRole('button', { name: '检查导入内容' }).click()
+  await exchange.getByRole('button', { name: /应用导入|导入并替换全部数据来源/ }).click()
   await navigate(page, '/samples')
   await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
   await page.getByRole('button', { name: /annotation-profile.mzML/ }).click()
@@ -94,7 +95,8 @@ test('complete feature spectrum is selectable before candidate search, including
       'feature_id,mz\nfirst,123.456789\nsecond,123.456789\ncandidate,316.320225793\n',
     ),
   })
-  await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
+  await exchange.getByRole('button', { name: '检查导入内容' }).click()
+  await exchange.getByRole('button', { name: /应用导入|导入并替换全部数据来源/ }).click()
   const spectrum = page.getByRole('region', { name: '谱图注释与关联峰' })
   const plot = spectrum.locator('.js-plotly-plot')
   await spectrum.getByRole('button', { name: '查看完整谱图', exact: true }).click()
@@ -137,7 +139,8 @@ test('standalone feature annotation uses mammalian preset and persists reviewed 
     mimeType: 'text/csv',
     buffer: Buffer.from('feature_id,mz\nmc,316.320225793\nunknown,123.456789\n'),
   })
-  await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
+  await exchange.getByRole('button', { name: '检查导入内容' }).click()
+  await exchange.getByRole('button', { name: /应用导入|导入并替换全部数据来源/ }).click()
   await expect(page.getByLabel('谱图来源')).toContainText('独立特征表')
   await page.getByRole('button', { name: '查找候选', exact: true }).click()
   await page.getByLabel('脂质数据库文件').selectOption('preset:mammalian_cells')
@@ -187,7 +190,8 @@ test('algae database shows original evidence and inconsistent formula in candida
     mimeType: 'text/csv',
     buffer: Buffer.from('feature_id,mz\nsource_ms2,451.319438\nconflict,734.5929\n'),
   })
-  await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
+  await exchange.getByRole('button', { name: '检查导入内容' }).click()
+  await exchange.getByRole('button', { name: /应用导入|导入并替换全部数据来源/ }).click()
   await page.getByRole('button', { name: '查找候选', exact: true }).click()
   await page.getByLabel('脂质数据库文件').selectOption({ label: '藻类数据库 · 251 条候选' })
   await page.getByRole('button', { name: '运行精确质量候选注释', exact: true }).click()
@@ -289,7 +293,8 @@ test('an imported matrix with unknown intensity provenance can run mass-only ann
     mimeType: 'text/csv',
     buffer: Buffer.from('Sample,Label,316.320225793\ns1,A,10\ns2,B,11\n'),
   })
-  await exchange.getByRole('button', { name: '检查并导入本板块' }).click()
+  await exchange.getByRole('button', { name: '检查导入内容' }).click()
+  await exchange.getByRole('button', { name: /应用导入|导入并替换全部数据来源/ }).click()
   await page.getByRole('button', { name: '查找候选', exact: true }).click()
   await page.getByLabel('脂质数据库文件').selectOption('preset:mammalian_cells')
   await expect(page.getByLabel('注释证据模式')).toHaveValue('true')

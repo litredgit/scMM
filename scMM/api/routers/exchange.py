@@ -23,6 +23,11 @@ def status(module: ModuleName, manager: Service, identity: Identity):
     return module_status(manager, identity, module)
 
 
+@router.post("/{module}/inspect")
+def inspect_data(module: ModuleName, body: ExchangeImport, manager: Service, identity: Identity):
+    return import_exchange(manager, identity, module, body.model_dump(), preview=True)
+
+
 @router.post("/{module}/import", response_model=WorkspaceView)
 def import_data(module: ModuleName, body: ExchangeImport, manager: Service, identity: Identity):
     return import_exchange(manager, identity, module, body.model_dump())

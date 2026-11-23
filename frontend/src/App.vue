@@ -11,6 +11,8 @@ import { startPresence, updatePresence } from './api/presence'
 import LoginPanel from './components/LoginPanel.vue'
 import AssistantPanel from './features/assistant/AssistantPanel.vue'
 import { modules, moduleForPath } from './features/modules/modules'
+import { workspaceBlob, saveBlob } from './api/workspaceDownload'
+import { clearPendingViews } from './api/viewState'
 import type { Job } from './api/types'
 import type { IonTask } from './api/ions'
 
@@ -73,17 +75,6 @@ onUnmounted(() => {
   presence?.stop()
   stopMaintenance?.()
 })
-const stages = [
-  { path: '/raw', name: '预览' },
-  { path: '/extraction', name: '提取' },
-  { path: '/preprocess', name: '预处理' },
-  { path: '/analysis', name: '分析' },
-]
-const workflow = [
-  { path: '/samples', name: '添加原始文件' },
-  ...stages,
-  { path: '/results', name: '结果与保存' },
-]
 const activeModule = computed(() => moduleForPath(route.path))
 const pageGuide = computed(() => {
   const guides: Record<string, [string, string]> = {
@@ -290,34 +281,79 @@ watch(
 function stepCompleted(path: string) {
   if (!store.project) return false
   if (path === '/data-check') return checkedDatasets.value.has(checkIdentity.value)
-  if (path === '/samples') return !!store.project.manifest.samples.length
+  if (path === '/samples') return store.project.manifest.samples.some((sample) => !!sample.path)
   if (path === '/raw') return !!store.project.manifest.manual_parameters
   if (path === '/extraction')
     return !!store.batches?.some((batch) =>
       batch.samples.some((sample) => sample.status === 'succeeded'),
     )
   if (path in workflowState.value) return workflowState.value[path]
-  if (['/cell-extraction', '/statistics'].includes(path)) return !!store.project.dataset
+  if (path === '/cell-extraction')
+    return store.project.manifest.samples.some((sample) => !!sample.path)
+  if (path === '/statistics') return !!store.project.dataset?.cells
   return false
 }
-const stepIndex = computed(() => workflow.findIndex((step) => step.path === route.path))
+const workflow = computed(() => activeModule.value?.steps ?? [])
+const stepIndex = computed(() => workflow.value.findIndex((step) => step.path === route.path))
 const previousStep = computed(() =>
-  stepIndex.value === 0 ? { path: '/projects', name: '项目首页' } : workflow[stepIndex.value - 1],
+  stepIndex.value === 0
+    ? { path: '/projects', name: '项目首页' }
+    : workflow.value[stepIndex.value - 1],
 )
-const nextStep = computed(() => workflow[stepIndex.value + 1])
+const nextStep = computed(
+  () =>
+    workflow.value[stepIndex.value + 1] ??
+    (activeModule.value?.key === 'extraction'
+      ? { path: '/statistics', name: '选择统计分析数据' }
+      : { path: '/results', name: '结果与保存' }),
+)
 const nextBlocked = computed(
   () =>
     !store.project ||
-    (['/preprocess', '/analysis'].includes(nextStep.value?.path ?? '') &&
+    (['/data-check', '/data-editor', '/preprocess', '/analysis'].includes(nextStep.value.path) &&
       !store.project.dataset?.cells),
 )
 const nextHelp = computed(() =>
   !store.project
     ? '请先创建或打开项目。'
     : nextBlocked.value
-      ? '请先审核纳入提取结果，或导入已有 H5AD，建立当前数据集。'
+      ? '请先审核纳入提取结果，或导入已有定量矩阵，建立当前数据集。'
       : '',
 )
+async function exportConflictingProject() {
+  const current = store.current
+  const module = activeModule.value?.key ?? 'statistics'
+  if (!current?.project) return
+  await store.run(
+    async (operation) => {
+      const blob = await workspaceBlob(
+        `/exchange/${module}/export?format=package&revision=${current.revision}`,
+        {
+          workspace: current.workspace_id,
+          isCurrent: () => operation.isCurrent() && store.current === current,
+        },
+      )
+      saveBlob(blob, 'current-workspace.scmm-exchange.zip')
+    },
+    '已下载当前工作区。',
+    { label: '导出当前工作区', phase: 'reading' },
+  )
+}
+const viewGeneration = ref(0)
+async function openDiskProject() {
+  const path = store.project?.path
+  if (!path) return
+  const result = await store.mutate('/project/open', { path }, 'POST', '已打开磁盘上的项目版本。')
+  if (!result) return
+  clearPendingViews()
+  store.drafts = {}
+  store.analysisDraft = null
+  viewGeneration.value++
+  const data = result.project?.dataset
+  await router.push(
+    data?.quantitation_available === false ? '/annotation' : data ? '/preprocess' : '/samples',
+  )
+}
 </script>
 
 <template>
@@ -482,6 +518,17 @@ const nextHelp = computed(() =>
         tabindex="-1"
         :aria-busy="!standalone && store.busy"
       >
+        <div v-if="store.saveConflict && store.project" class="state-note" role="status">
+          <p>磁盘上的项目已被其他会话保存。可先导出本工作区，再打开磁盘上的版本。</p>
+          <div class="actions">
+            <button class="save" :disabled="store.busy" @click="exportConflictingProject">
+              导出当前工作区交换包
+            </button>
+            <button class="restore" :disabled="store.busy" @click="openDiskProject">
+              打开磁盘版本
+            </button>
+          </div>
+        </div>
         <div v-if="store.error" role="alert" class="alert error workspace-feedback">
           <span>{{ store.error }}</span>
           <div class="actions">
@@ -521,7 +568,7 @@ const nextHelp = computed(() =>
             </details>
           </section>
           <RouterView v-slot="{ Component }"
-            ><KeepAlive><component :is="Component" /></KeepAlive
+            ><KeepAlive :key="viewGeneration"><component :is="Component" /></KeepAlive
           ></RouterView>
           <nav v-if="stepIndex >= 0" class="workflow-navigation" aria-label="步骤切换">
             <button v-if="previousStep" @click="router.push(previousStep.path)">

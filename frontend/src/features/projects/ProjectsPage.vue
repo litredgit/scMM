@@ -13,6 +13,7 @@ async function removed() {
   await load()
 }
 const name = ref('')
+const inputKind = ref('raw')
 const search = ref('')
 const projects = ref<SavedProject[]>([])
 const loading = ref(false)
@@ -40,15 +41,16 @@ async function load() {
 }
 onMounted(load)
 async function create() {
-  const result = await store.mutate(
-    '/project',
-    { name: name.value },
-    'POST',
-    '项目已创建，可以添加样本。',
-  )
+  const result = await store.mutate('/project', { name: name.value }, 'POST', '项目已创建。')
   if (result) {
     name.value = ''
-    await router.push('/samples')
+    await router.push(
+      inputKind.value === 'raw'
+        ? '/samples'
+        : inputKind.value === 'features'
+          ? { path: '/annotation', query: { import: 'feature_csv' } }
+          : { path: '/statistics', query: { import: 'matrix_csv' } },
+    )
   }
 }
 async function open(path: string) {
@@ -99,8 +101,21 @@ function date(value: string) {
             placeholder="例如：细胞代谢实验 A"
             :disabled="store.busy"
         /></label>
+        <label
+          >已有数据
+          <select v-model="inputKind" :disabled="store.busy">
+            <option value="raw">原始谱</option>
+            <option value="features">m/z 特征表</option>
+            <option value="matrix">定量矩阵</option>
+          </select>
+        </label>
         <button class="primary" :disabled="store.busy || !name.trim()">
-          创建并添加样本 <span aria-hidden="true">→</span>
+          {{
+            { raw: '创建并添加样本', features: '创建并导入特征', matrix: '创建并导入矩阵' }[
+              inputKind
+            ]
+          }}
+          <span aria-hidden="true">→</span>
         </button>
       </form>
     </section>
@@ -206,7 +221,7 @@ function date(value: string) {
 <style scoped>
 .project-start > .create-project {
   display: grid;
-  grid-template-columns: minmax(190px, 250px) minmax(220px, 460px) max-content;
+  grid-template-columns: minmax(150px, 220px) minmax(180px, 380px) minmax(120px, 160px) max-content;
   gap: 16px;
   align-items: end;
 }
