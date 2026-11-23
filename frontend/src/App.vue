@@ -455,7 +455,7 @@ async function openDiskProject() {
 
     <div
       class="main-shell"
-      :class="{ 'assistant-expanded': assistantOpen && route.path !== '/admin/monitor' }"
+      :class="{ 'assistant-expanded': assistantOpen && route.meta.assistantPage }"
     >
       <header class="topbar">
         <div class="project-heading">
@@ -497,10 +497,7 @@ async function openDiskProject() {
             关闭项目
           </button>
           <div class="topbar-utilities">
-            <AssistantPanel
-              v-if="route.path !== '/admin/monitor'"
-              @update:open="assistantOpen = $event"
-            />
+            <AssistantPanel v-if="route.meta.assistantPage" @update:open="assistantOpen = $event" />
             <details class="account-menu" :key="route.path">
               <summary>{{ auth.user.username }} · 账号</summary>
               <div class="account-menu-body">

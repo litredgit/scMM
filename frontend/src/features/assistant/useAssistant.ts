@@ -6,6 +6,30 @@ import { useAuth } from '../../stores/auth'
 
 type Turn = { role: 'user' | 'assistant'; content: string; note?: string | null }
 type Configuration = { configured: boolean; model: string; available: boolean }
+type GuideExcerpt = { guide: string; section: string; excerpt: string }
+type Context = Record<string, unknown> & { documents?: GuideExcerpt[] }
+const MAX_MESSAGE_CHARS = 8000
+const MAX_CHAT_CHARS = 48000
+const MAX_CHAT_MESSAGES = 24
+
+function chatMessages(turns: Turn[], question: string) {
+  const history: Pick<Turn, 'role' | 'content'>[] = []
+  let size = question.length
+  for (let i = turns.length - 1; i > 0 && history.length + 2 < MAX_CHAT_MESSAGES; i--) {
+    const answer = turns[i]
+    const user = turns[i - 1]
+    if (answer.role !== 'assistant' || user.role !== 'user') continue
+    i--
+    const pair = [user, answer]
+    if (pair.some((turn) => turn.note || !turn.content || turn.content.length > MAX_MESSAGE_CHARS))
+      continue
+    size += user.content.length + answer.content.length
+    if (size > MAX_CHAT_CHARS) break
+    history.unshift(...pair.map(({ role, content }) => ({ role, content })))
+  }
+  return [...history, { role: 'user', content: question }]
+}
+
 export function useAssistant() {
   const store = useWorkspace()
   const auth = useAuth()
@@ -14,9 +38,11 @@ export function useAssistant() {
   const input = ref('')
   const busy = ref(false)
   const error = ref('')
-  const context = ref<unknown>(null)
+  const context = ref<Context | null>(null)
   const model = ref('')
+  const responseModel = ref('')
   const configured = ref(false)
+  const configStatus = ref<'loading' | 'ready' | 'disabled' | 'unavailable'>('loading')
   let controller: AbortController | undefined
   let epoch = 0
   let configGeneration = 0
@@ -28,6 +54,7 @@ export function useAssistant() {
   let writes: Promise<unknown> = Promise.resolve()
   const revisions = new Map<string, number>()
   const historyStatus = ref('')
+  const historyIssue = ref('')
   function snapshot() {
     return JSON.parse(
       JSON.stringify({
@@ -35,7 +62,7 @@ export function useAssistant() {
         draft: input.value,
         streaming: busy.value,
         summary: context.value && typeof context.value === 'object' ? context.value : null,
-        model: model.value,
+        model: responseModel.value,
       }),
     )
   }
@@ -56,11 +83,16 @@ export function useAssistant() {
           },
         })
         revisions.set(key, value.revision)
-        if (key === historyKey) historyStatus.value = '聊天已加密保存'
+        if (key === historyKey && owner === historyOwner) {
+          historyStatus.value = '聊天已加密保存'
+          historyIssue.value = ''
+        }
       })
       .catch((cause) => {
-        if (auth.user?.id === owner && key === historyKey)
-          historyStatus.value = `聊天未保存：${String(cause)}`
+        if (auth.user?.id === owner && key === historyKey) {
+          historyStatus.value = '聊天保存失败'
+          historyIssue.value = `聊天未保存：${String(cause)}`
+        }
         throw cause
       })
     return writes
@@ -88,7 +120,7 @@ export function useAssistant() {
         messages: Turn[]
         draft: string
         streaming: boolean
-        summary: unknown
+        summary: Context | null
         model?: string
       }>(`/ai/history?${new URLSearchParams({ context: key })}`)
       if (!currentSession()) return
@@ -96,7 +128,7 @@ export function useAssistant() {
       messages.value = value.messages
       input.value = value.draft
       context.value = value.summary
-      if (value.model) model.value = value.model
+      responseModel.value = value.model ?? ''
       if (value.streaming && messages.value.at(-1)?.role === 'assistant')
         messages.value.at(-1)!.note = '上次生成已中断，已恢复接收内容；未自动重新发送。'
       await nextTick()
@@ -104,7 +136,10 @@ export function useAssistant() {
       historyReady.value = true
       historyStatus.value = '聊天已恢复'
     } catch (cause) {
-      if (generation === historyGeneration) historyStatus.value = `聊天恢复不可用：${String(cause)}`
+      if (generation === historyGeneration) {
+        historyStatus.value = ''
+        historyIssue.value = `聊天恢复不可用：${String(cause)}`
+      }
     }
   }
   function stop(note = '已停止生成；已接收部分仅供参考。') {
@@ -122,22 +157,26 @@ export function useAssistant() {
     messages.value = []
     input.value = ''
     context.value = null
+    responseModel.value = ''
     error.value = ''
     if (stored) void persist().catch(() => {})
   }
   async function loadConfig() {
     const session = sessionVersion(),
       generation = ++configGeneration
+    configStatus.value = 'loading'
     try {
       const value = await request<Configuration>('/ai/config')
       ensureSession(session)
       if (generation !== configGeneration) return
       configured.value = value.configured
       model.value = value.model
+      configStatus.value = value.available ? 'ready' : 'disabled'
     } catch {
       if (session !== sessionVersion() || generation !== configGeneration) return
       configured.value = false
       model.value = ''
+      configStatus.value = 'unavailable'
     }
   }
   const configChanged = () => {
@@ -151,6 +190,7 @@ export function useAssistant() {
       if (historyReady.value && auth.user?.id === historyOwner) void persist().catch(() => {})
       historyReady.value = false
       historyStatus.value = store.current ? '正在恢复聊天…' : '进入项目首页后可开始对话'
+      historyIssue.value = ''
       if (historyTimer) clearTimeout(historyTimer)
       ++historyGeneration
       clear(false)
@@ -179,12 +219,22 @@ export function useAssistant() {
     window.removeEventListener('scmm-ai-config-changed', configChanged)
   })
   async function send(question = input.value) {
+    question = question.trim()
     if (!historyReady.value) {
       error.value = '聊天持久化尚未就绪，请稍后重试或刷新页面。'
       return
     }
-    if (busy.value || !configured.value || !store.current || !question.trim()) return
-    if (question.length > 8000) {
+    const page = route.meta.assistantPage
+    if (
+      busy.value ||
+      configStatus.value !== 'ready' ||
+      !configured.value ||
+      !store.current ||
+      !page ||
+      !question
+    )
+      return
+    if (question.length > MAX_MESSAGE_CHARS) {
       error.value = '单条问题最多 8000 字符。'
       return
     }
@@ -195,11 +245,9 @@ export function useAssistant() {
     busy.value = true
     error.value = ''
     context.value = null
-    // Incomplete/stale answers are displayed but never reused as model history.
-    const history = messages.value
-      .filter((m) => !m.note && m.content)
-      .map(({ role, content }) => ({ role, content }))
-    messages.value.push({ role: 'user', content: question.trim() })
+    responseModel.value = ''
+    const outbound = chatMessages(messages.value, question)
+    messages.value.push({ role: 'user', content: question })
     const answer: Turn = { role: 'assistant', content: '' }
     messages.value.push(answer)
     const index = messages.value.length - 1
@@ -218,8 +266,8 @@ export function useAssistant() {
           'X-SCMM-Workspace': store.current.workspace_id,
         },
         body: JSON.stringify({
-          page: route.path.slice(1) || 'projects',
-          messages: [...history.slice(-22), { role: 'user', content: question.trim() }],
+          page,
+          messages: outbound,
         }),
       })
       if (!current()) return
@@ -255,7 +303,7 @@ export function useAssistant() {
             const data = JSON.parse(raw)
             if (name === 'context') {
               context.value = data.context
-              model.value = data.model
+              responseModel.value = data.model
             } else if (name === 'delta') messages.value[index]!.content += data.text
             else if (name === 'error') throw new Error(data.message)
             else if (name === 'done') ended = true
@@ -293,8 +341,11 @@ export function useAssistant() {
     error,
     context,
     model,
+    responseModel,
     configured,
+    configStatus,
     historyStatus,
+    historyIssue,
     historyReady,
     send,
     stop,

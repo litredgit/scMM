@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from scMM.application.ai_client import normalize_url
 from scMM.application.ai_config import AIError
+from scMM.application.ai_docs import lookup_guides
 from scMM.application.ai_summary import SYSTEM_PROMPT, encode_event
 
 from ..dependencies import workspace_id
@@ -19,9 +20,16 @@ from ..dependencies import workspace_id
 router = APIRouter(prefix="/api/v1/ai", tags=["AI assistant"])
 Page = Literal[
     "projects",
+    "cell-extraction",
+    "annotation",
+    "annotation-evidence",
+    "statistics",
     "samples",
     "raw",
     "extraction",
+    "ions",
+    "data-check",
+    "data-editor",
     "preprocess",
     "analysis",
     "results",
@@ -162,15 +170,6 @@ async def chat(body: Chat, request: Request, identity: str = Depends(workspace_i
     manager = request.app.state.workspaces
     snapshot = manager.ai_context(identity, user_id, body.page)
     history = [m.model_dump() for m in body.messages]
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        *history[:-1],
-        {
-            "role": "system",
-            "content": "本轮最新上下文：" + json.dumps(snapshot, ensure_ascii=False),
-        },
-        history[-1],
-    ]
 
     def check_current():
         session_check(request)
@@ -195,8 +194,19 @@ async def chat(body: Chat, request: Request, identity: str = Depends(workspace_i
             return
         request.app.state.ai_active.add(user_id)
         try:
+            documents = await asyncio.to_thread(lookup_guides, history[-1]["content"], body.page)
+            context = snapshot if documents is None else {**snapshot, "documents": documents}
+            messages = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                *history[:-1],
+                {
+                    "role": "system",
+                    "content": "本轮最新上下文：" + json.dumps(context, ensure_ascii=False),
+                },
+                history[-1],
+            ]
             await asyncio.to_thread(check_current)
-            yield encode_event("context", {"model": config["model"], "context": snapshot})
+            yield encode_event("context", {"model": config["model"], "context": context})
             upstream = request.app.state.ai_client.stream(config, messages)
             while True:
                 pending = asyncio.create_task(anext(upstream))

@@ -13,6 +13,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from scMM.application import ai_docs
 from scMM.application.ai_client import ChatClient, EndpointPolicy, normalize_url
 from scMM.application.ai_config import AIConfigStore, AIError
 from scMM.application.workbench import AnalysisWorkspace
@@ -52,13 +53,13 @@ def ai(workflow, tmp_path, monkeypatch):
     return workflow, app, sent, body
 
 
-def chat(ai, messages=None):
+def chat(ai, messages=None, *, page="analysis"):
     workflow = ai[0]
     return workflow[0].post(
         "/api/v1/ai/chat",
         headers=workflow[1],
         json={
-            "page": "analysis",
+            "page": page,
             "messages": messages or [{"role": "user", "content": "Explain current result"}],
         },
     )
@@ -205,6 +206,7 @@ def test_actual_outbound_is_whitelisted_and_test_has_no_context(ai):
     assert sent[-1].headers["authorization"] == "Bearer " + body["api_key"]
     context_message = payload["messages"][-2]["content"]
     outbound_context = json.loads(context_message[context_message.index("{") :])
+    assert "documents" not in outbound_context
     assert outbound_context["summary"]["applied_parameters"] == {
         "reduce": {"method": "pca", "random_state": 12, "n_components": 2}
     }
@@ -213,6 +215,100 @@ def test_actual_outbound_is_whitelisted_and_test_has_no_context(ai):
     test_payload = json.loads(sent[-1].content)
     assert test_payload["messages"] == [{"role": "user", "content": "Reply OK."}]
     assert "summary" not in json.dumps(test_payload)
+
+
+def test_pages_and_document_excerpts_delivered_to_model_and_browser(ai):
+    w, _, sent, _ = ai
+    pages = [
+        "cell-extraction",
+        "annotation",
+        "annotation-evidence",
+        "statistics",
+        "data-check",
+        "data-editor",
+        "ions",
+    ]
+    for page in pages:
+        response = w[0].get("/api/v1/ai/context", headers=w[1], params={"page": page})
+        assert response.status_code == 200
+        assert response.json()["page"] == page
+        assert "documents" not in response.json()
+    invalid = chat(ai, page="annotation/evidence")
+    assert invalid.status_code == 422
+    assert sent == []
+
+    response = chat(
+        ai, [{"role": "user", "content": "查阅本页使用指南"}], page="annotation-evidence"
+    )
+    assert "event: done" in response.text
+    assert len(sent) == 1
+    messages = json.loads(sent[-1].content)["messages"]
+    assert messages[0]["role"] == "system" and "documents" in messages[0]["content"]
+    assert messages[-2]["role"] == "system"
+    context_json = messages[-2]["content"]
+    outbound = json.loads(context_json[context_json.index("{") :])
+    assert outbound["page"] == "annotation-evidence"
+    assert len(outbound["documents"]) == 1
+    doc = outbound["documents"][0]
+    assert doc["guide"] == "特征注释" and doc["section"] == "证据与导入"
+    assert "CSV/TSV" in doc["excerpt"]
+    event = response.text.split("event: context\ndata: ", 1)[1].splitlines()[0]
+    assert json.loads(event)["context"] == outbound
+
+
+def test_document_selection_is_bounded_and_method_specific():
+    assert ai_docs.lookup_guides("当前结果说明什么?", "analysis") is None
+    assert ai_docs.lookup_guides("查文档 zzzunknownterm", "projects") == []
+    options = ai_docs.lookup_guides("网页零值插补的默认方法是什么?", "preprocess")
+    assert options[0]["section"] == "预处理参数"
+    assert "impute `method` | median" in options[0]["excerpt"]
+    umap = ai_docs.lookup_guides("UMAP 的 n_neighbors 默认值是什么?", "analysis")
+    assert 1 <= len(umap) <= ai_docs.MAX_EXCERPTS
+    assert all(len(source["excerpt"]) <= ai_docs.MAX_EXCERPT_CHARS for source in umap)
+    assert all(source["section"] != "预处理参数" for source in umap)
+
+
+def test_document_lookup_skips_non_guides_and_symlink_targets(tmp_path, monkeypatch):
+    root = tmp_path / "guides"
+    root.mkdir()
+    private = tmp_path / "secret.md"
+    private.write_text("# Secret\n\n## 证据与导入\n\nUNLISTED_CONTENT", encoding="utf-8")
+    (root / "annotation.md").symlink_to(private)
+    (root / "internal-reference.md").write_text(
+        private.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    monkeypatch.setattr(ai_docs, "_guide_root", lambda: root)
+    assert ai_docs.lookup_guides("查阅本页使用指南", "annotation-evidence") == []
+
+
+def test_summary_distinguishes_samples_from_cells_and_feature_only_inputs(ai):
+    w = ai[0]
+    post = w[-1]
+    post(
+        "/exchange/statistics/import",
+        {
+            "format": "matrix_csv",
+            "matrix_csv": "Sample,Class,100.5,200.5\na,A,0,2\nb,B,3,4\n",
+            "observation_kind": "sample",
+        },
+    ).raise_for_status()
+    operation(w, "filter", {"min_total": 0.0, "min_detected": 0, "min_feature_fraction": 0.0})
+    summary = context(ai)["summary"]
+    assert summary["observation_kind"] == "sample" and summary["quantitation_available"]
+    assert "cells" not in summary["counts"]
+    assert summary["counts"]["samples"] == 2
+    assert summary["counts"]["before_latest_filter"] == {"samples": 2, "features": 2}
+    assert summary["counts"]["at_data_import"] == {"samples": 2, "features": 2}
+
+    post(
+        "/exchange/annotation/import",
+        {"format": "feature_csv", "matrix_csv": "feature_id,mz\nx,150.25\ny,300.5\n"},
+    ).raise_for_status()
+    summary = context(ai)["summary"]
+    assert summary["data_available"] and not summary["quantitation_available"]
+    assert summary["observation_kind"] is None
+    assert summary["counts"].keys() <= {"features", "at_data_import"}
+    assert summary["counts"]["features"] == 2
 
 
 def test_result_invalidation_counts_and_no_new_analysis(ai):

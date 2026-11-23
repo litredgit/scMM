@@ -368,7 +368,7 @@ class AnalysisWorkflow:
             workspace.ai_completed = operation
             if operation in {"filter", "remove_outliers"}:
                 workspace.ai_before_filter = {
-                    "cells": int(project.workspace.data.n_obs),
+                    "observations": int(project.workspace.data.n_obs),
                     "features": int(project.workspace.data.n_vars),
                 }
             elif operation == "reset":

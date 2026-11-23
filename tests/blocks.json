@@ -498,14 +498,23 @@
     "ai": {
       "kind": "python",
       "tests": ["tests/api/test_ai_assistant.py"],
-      "sources": ["scMM/application/ai_*.py", "scMM/api/routers/ai.py"],
+      "sources": [
+        "scMM/application/ai_*.py",
+        "scMM/application/web_ai.py",
+        "scMM/application/web_analysis.py",
+        "scMM/api/routers/ai.py",
+        "docs/annotation.md",
+        "docs/extraction.md",
+        "docs/projects-and-data.md",
+        "docs/statistics.md"
+      ],
       "downstream": ["browser-ai"],
       "extras": ["web", "plot", "cluster", "supervised"]
     },
     "browser-ai": {
       "kind": "browser",
       "tests": ["frontend/tests/assistant.spec.ts"],
-      "sources": ["frontend/src/features/assistant/*"],
+      "sources": ["frontend/src/features/assistant/*", "frontend/src/router/index.ts"],
       "downstream": [],
       "extras": ["web"]
     },

@@ -277,19 +277,41 @@ def main():
                 )
 
         class SyntheticStream(httpx.AsyncByteStream):
-            def __init__(self, slow):
-                self.slow = slow
+            def __init__(self, chunks, delay):
+                self.chunks = chunks
+                self.delay = delay
 
             async def __aiter__(self):
-                yield b'data: {"choices":[{"delta":{"content":"synthetic answer"}}]}\n\n'
-                await asyncio.sleep(5 if self.slow else 0.1)
-                yield b'data: {"choices":[{"delta":{"content":" completed"}}]}\n\ndata: [DONE]\n\n'
+                for index, content in enumerate(self.chunks):
+                    if index:
+                        await asyncio.sleep(self.delay)
+                    event = json.dumps({"choices": [{"delta": {"content": content}}]})
+                    yield f"data: {event}\n\n".encode()
+                yield b"data: [DONE]\n\n"
 
         def upstream(request):
             payload = json.loads(request.content)
-            slow = "慢" in payload["messages"][-1]["content"]
+            question = payload["messages"][-1]["content"]
+            chunks = ("synthetic answer", " completed")
+            delay = 5 if "慢" in question else 0.1
+            if question == "长对话后继续提问":
+                delay = 1
+            if question == "查阅本页使用指南":
+                chunks = (
+                    "### 审阅步骤\n\n- **核",
+                    "对匹配**\n- 查看歧义\n\n3. 核对已选来源\n\n"
+                    "| 字段 | 含义 |\n| --- | --- |\n| mz | 质量电荷比 |\n\n"
+                    "```text\nsource_key=mz\n```\n\n"
+                    "> 《特征注释》· 证据与导入\n\n"
+                    "[指南链接](https://synthetic.example/guide)\n\n"
+                    "![外部图片](https://synthetic.example/illustration.png)\n\n"
+                    "<em>原始 HTML 作为文字</em>\n\n"
+                    "[普通 HTTP](http://synthetic.example/guide)",
+                )
             return httpx.Response(
-                200, headers={"content-type": "text/event-stream"}, stream=SyntheticStream(slow)
+                200,
+                headers={"content-type": "text/event-stream"},
+                stream=SyntheticStream(chunks, delay),
             )
 
         app.state.ai_client = ChatClient(SyntheticPolicy(), transport=httpx.MockTransport(upstream))

@@ -82,6 +82,14 @@ scmm-admin = "scMM.api.admin_cli:main"
 "scMM" = ["resources/lipid_rules/*.json", "resources/lipid_databases/*.json"]
 "scMM.api" = ["static/index.html", "static/assets/*"]
 
+[tool.setuptools.data-files]
+"share/scmm/guides" = [
+    "docs/projects-and-data.md",
+    "docs/extraction.md",
+    "docs/annotation.md",
+    "docs/statistics.md",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["scMM", "scMM.*"]

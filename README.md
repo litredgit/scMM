@@ -15,4 +15,6 @@ scMM 是 CyESI 单细胞质谱的服务器网页应用。从 Thermo profile RAW�
 [项目保存与数据交换](docs/projects-and-data.md) · [文档导航](docs/README.md) · [部署与运维](docs/deployment.md)
 · [插件接入](docs/method-plugins.md)
 
+工作台的 [AI 分析助手](docs/projects-and-data.md#ai-分析助手)可解释当前步骤和结果，并按需查阅使用指南。
+
 网页以普通 1920 × 1080 桌面为设计和验收目标，采用紧凑的分步操作。正式使用入口为 scMM 网页。开发、验证和当前支持范围见[文档导航](docs/README.md)。

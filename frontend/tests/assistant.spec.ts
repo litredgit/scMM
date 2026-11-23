@@ -1,4 +1,6 @@
-import { test, expect, type Page } from './fixtures'
+import { test, expect, navigate, type Page } from './fixtures'
+
+test.use({ viewport: { width: 1920, height: 1080 } })
 
 async function configure(page: Page, navigate = true) {
   if (navigate) await page.goto('/account')
@@ -11,7 +13,7 @@ async function configure(page: Page, navigate = true) {
   await expect(form.getByLabel('API Key')).toHaveValue('')
   return form
 }
-const projectName = () => `AI synthetic project ${test.info().repeatEachIndex}`
+const projectName = () => `AI synthetic project ${test.info().testId.slice(-8)}`
 async function create(page: Page) {
   await page
     .getByRole('link', { name: /项目首页/ })
@@ -53,9 +55,10 @@ test('stream, context, cross-page retention, stop, clear, refresh and project sw
   await assistant.getByRole('button', { name: '当前进行到哪一步了？' }).click()
   await expect(assistant.getByText('synthetic answer completed', { exact: true })).toBeVisible()
   await page.screenshot({ path: test.info().outputPath('assistant-desktop.png') })
-  await assistant.getByText('本次发送的上下文').click()
-  await expect(assistant.locator('pre')).toContainText('samples')
-  await expect(assistant.locator('pre')).not.toContainText('AI synthetic project')
+  await assistant.getByRole('button', { name: '说明与上下文' }).click()
+  await assistant.getByText('本轮工作区摘要').click()
+  await expect(assistant.locator('.ai-summary')).toContainText('samples')
+  await expect(assistant.locator('.ai-summary')).not.toContainText('AI synthetic project')
   await page.getByRole('link', { name: /参数参考/ }).click()
   await expect(assistant.getByText('synthetic answer completed', { exact: true })).toBeVisible()
   await assistant.getByLabel('问题', { exact: true }).fill('慢回答')
@@ -89,10 +92,121 @@ test('stream, context, cross-page retention, stop, clear, refresh and project sw
   await expect(assistant.getByText('synthetic answer', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '关闭项目', exact: true }).click()
   await expect(assistant.getByLabel('当前对话').locator('article')).toHaveCount(0)
-  await page.setViewportSize({ width: 390, height: 844 })
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-  await page.screenshot({ path: test.info().outputPath('assistant-390.png') })
   expect(errors).toEqual([])
+})
+
+test('guide excerpts and safe streamed Markdown in the desktop conversation', async ({ page }) => {
+  const media: string[] = []
+  page.on('request', (r) => {
+    if (r.url().includes('synthetic.example/illustration.png')) media.push(r.url())
+  })
+  await configure(page)
+  await create(page)
+  await navigate(page, '/annotation/evidence')
+  await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+  const assistant = page.getByRole('complementary', { name: 'AI 分析助手' })
+  const help = assistant.getByRole('button', { name: '说明与上下文' })
+  const dialog = assistant.getByRole('log', { name: '当前对话' })
+  await expect(help).toHaveAttribute('aria-expanded', 'false')
+  await expect(assistant.getByText('当前模型 synthetic-model')).toBeHidden()
+  const panelBox = (await assistant.locator('.ai-body').boundingBox())!
+  const chatBox = (await dialog.boundingBox())!
+  const mainBox = (await page.locator('#main-content').boundingBox())!
+  expect(chatBox.height / panelBox.height).toBeGreaterThanOrEqual(0.75)
+  expect(mainBox.x + mainBox.width).toBeLessThan(panelBox.x)
+
+  const sent = page.waitForRequest((r) => r.url().endsWith('/ai/chat'))
+  await assistant.getByRole('button', { name: '查阅本页使用指南' }).click()
+  expect((await sent).postDataJSON().page).toBe('annotation-evidence')
+  const reply = dialog.locator('article.assistant')
+  await expect(reply.getByRole('heading', { name: '审阅步骤' })).toBeVisible()
+  await expect(reply.locator('li strong')).toHaveText('核对匹配')
+  await expect(reply.locator('ol')).toHaveAttribute('start', '3')
+  await expect(reply.getByRole('table')).toBeVisible()
+  await expect(reply.locator('pre code')).toContainText('source_key=mz')
+  await expect(reply.locator('blockquote')).toContainText('证据与导入')
+  await expect(reply.getByText('<em>原始 HTML 作为文字</em>')).toBeVisible()
+  await expect(reply.locator('em, img')).toHaveCount(0)
+  await expect(reply.getByRole('link')).toHaveCount(1)
+  await expect(reply.getByRole('link', { name: '指南链接' })).toHaveAttribute('target', '_blank')
+  await expect(reply.getByRole('link', { name: '指南链接' })).toHaveAttribute(
+    'rel',
+    'noopener noreferrer',
+  )
+  expect(media).toEqual([])
+  await expect(assistant.getByRole('button', { name: '查阅本页使用指南' })).toHaveCount(0)
+
+  await help.click()
+  const sources = assistant.getByRole('region', { name: '本轮查阅的文档' })
+  await sources.getByText('《特征注释》· 证据与导入', { exact: true }).click()
+  await expect(sources.locator('pre')).toContainText('CSV/TSV')
+  await expect(assistant.getByText('聊天已加密保存', { exact: true })).toBeVisible()
+  await help.click()
+  await page.screenshot({ path: test.info().outputPath('assistant-markdown-desktop.png') })
+  await page.reload()
+  await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+  await expect(reply.getByRole('table')).toBeVisible()
+  await help.click()
+  await expect(sources.getByText('《特征注释》· 证据与导入', { exact: true })).toBeVisible()
+})
+
+test('long history stays readable while complete turns fit the chat limits', async ({ page }) => {
+  const history = Array.from({ length: 12 }, (_, i) => [
+    { role: 'user', content: `历史问题 ${i}` + '问'.repeat(500) },
+    {
+      role: 'assistant',
+      content: `历史回答 ${i}\n\n` + '普通历史内容的正文示例。\n\n'.repeat(385),
+    },
+  ]).flat()
+  await page.route('**/api/v1/ai/history?**', async (route) => {
+    const response = await route.fetch()
+    const saved = await response.json()
+    await route.fulfill({
+      response,
+      json: {
+        ...saved,
+        messages: [
+          ...history,
+          { role: 'user', content: '超长回答的问题' },
+          { role: 'assistant', content: '长'.repeat(8100) },
+          { role: 'user', content: '中止的问题' },
+          { role: 'assistant', content: '不完整', note: '已停止' },
+        ],
+      },
+    })
+  })
+  await configure(page)
+  await create(page)
+  await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+  const assistant = page.getByRole('complementary', { name: 'AI 分析助手' })
+  const dialog = assistant.getByRole('log', { name: '当前对话' })
+  const jump = assistant.getByRole('button', { name: '回到最新消息' })
+  await expect(dialog.locator('article')).toHaveCount(28)
+  await dialog.evaluate((view) => (view.scrollTop = 0))
+  await expect(jump).toBeVisible()
+  await jump.click()
+  await expect(jump).toBeHidden()
+
+  await assistant.getByLabel('问题', { exact: true }).fill('长对话后继续提问')
+  const sent = page.waitForRequest((r) => r.url().endsWith('/ai/chat'))
+  await assistant.getByRole('button', { name: '发送', exact: true }).click()
+  const messages = (await sent).postDataJSON().messages as { role: string; content: string }[]
+  expect(messages.length).toBeGreaterThan(1)
+  expect(messages.reduce((size, turn) => size + turn.content.length, 0)).toBeLessThanOrEqual(48000)
+  expect(messages.at(-1)).toEqual({ role: 'user', content: '长对话后继续提问' })
+  expect(
+    messages.some((turn) => turn.content === '超长回答的问题' || turn.content === '中止的问题'),
+  ).toBe(false)
+  expect(messages.every((turn, i) => turn.role === (i % 2 ? 'assistant' : 'user'))).toBe(true)
+  await expect(dialog.getByText('synthetic answer', { exact: true })).toBeInViewport()
+  await dialog.evaluate((view) => (view.scrollTop = 0))
+  await expect(jump).toBeVisible()
+  const latest = dialog.getByText('synthetic answer completed', { exact: true })
+  await expect(latest).toBeAttached()
+  expect(await dialog.evaluate((view) => view.scrollTop)).toBe(0)
+  await jump.click()
+  await expect(latest).toBeInViewport()
+  await expect(dialog.locator('article')).toHaveCount(30)
 })
 
 test('logout cancels pending answer and clears conversation', async ({ page }) => {
@@ -198,7 +312,8 @@ test('late initial assistant configuration cannot undo a newly saved configurati
     // The saved configuration has triggered a newer assistant read.
     await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
     const panel = page.getByRole('complementary', { name: 'AI 分析助手' })
-    await expect(panel.getByText('只读解释与建议 · 当前模型：synthetic-model')).toBeVisible()
+    await panel.getByRole('button', { name: '说明与上下文' }).click()
+    await expect(panel.getByText('当前模型 synthetic-model')).toBeVisible()
     const late = page.waitForResponse(
       async (response) =>
         response.url().endsWith('/ai/config') &&
@@ -207,7 +322,7 @@ test('late initial assistant configuration cannot undo a newly saved configurati
     )
     release()
     await (await late).finished()
-    await expect(panel.getByText('只读解释与建议 · 当前模型：synthetic-model')).toBeVisible()
+    await expect(panel.getByText('当前模型 synthetic-model')).toBeVisible()
     await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
     await panel.getByLabel('问题', { exact: true }).fill('配置读取顺序检查')
     await panel.getByRole('button', { name: '发送', exact: true }).click()
