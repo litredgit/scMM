@@ -10,6 +10,7 @@ import { serialPolling } from './api/polling'
 import { startPresence, updatePresence } from './api/presence'
 import LoginPanel from './components/LoginPanel.vue'
 import AssistantPanel from './features/assistant/AssistantPanel.vue'
+import DocumentationPanel from './features/documentation/DocumentationPanel.vue'
 import { modules, moduleForPath } from './features/modules/modules'
 import { workspaceBlob, saveBlob } from './api/workspaceDownload'
 import { clearPendingViews } from './api/viewState'
@@ -497,6 +498,7 @@ async function openDiskProject() {
             关闭项目
           </button>
           <div class="topbar-utilities">
+            <DocumentationPanel :page="route.path" />
             <AssistantPanel v-if="route.meta.assistantPage" @update:open="assistantOpen = $event" />
             <details class="account-menu" :key="route.path">
               <summary>{{ auth.user.username }} · 账号</summary>

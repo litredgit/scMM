@@ -448,12 +448,19 @@
       "tests": [
         "frontend/tests/navigation.spec.ts",
         "frontend/tests/compact-ui.spec.ts",
-        "frontend/tests/layout-editor.spec.ts"
+        "frontend/tests/layout-editor.spec.ts",
+        "frontend/tests/documentation.spec.ts"
       ],
       "sources": [
         "frontend/src/features/parameters/*",
         "frontend/src/features/modules/*",
-        "frontend/src/api/moduleExchange.ts"
+        "frontend/src/features/documentation/*",
+        "frontend/src/api/moduleExchange.ts",
+        "AGENTS.md",
+        "CHANGELOG.md",
+        "README.md",
+        "docs/*.md",
+        "docs/images/*.svg"
       ],
       "downstream": [],
       "extras": ["web"]

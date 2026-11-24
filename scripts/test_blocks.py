@@ -97,6 +97,9 @@ def select(files, config, *, explicit=(), all_blocks=False):
             continue
         if path.endswith(".md") or path.startswith("docs/"):
             add("docs", f"{path}: documentation/link target")
+            for name, block in blocks.items():
+                if block["kind"] == "browser" and matches(path, block["sources"]):
+                    add(name, f"{path}: rendered documentation source", propagate=True)
             continue
         if matches(path, config["format_sources"]):
             continue

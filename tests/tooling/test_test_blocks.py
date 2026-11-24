@@ -37,7 +37,10 @@ def test_shared_frontend_changes_include_assistant_browser_checks():
 @pytest.mark.parametrize(
     "file,expected",
     [
-        ("docs/extraction.md", {"docs"}),
+        ("docs/extraction.md", {"docs", "browser-navigation"}),
+        ("docs/appendix/lipid-rule-review.md", {"docs", "browser-navigation"}),
+        ("docs/images/web-workflow.svg", {"docs", "browser-navigation"}),
+        ("docs/validation/ion-engineering.json", {"docs"}),
         ("frontend/src/features/monitor/MonitorPage.vue", {"browser-monitor"}),
         ("tests/domain/test_normalize.py", {"data"}),
         ("frontend/tests/lipids.spec.ts", {"browser-lipids"}),
@@ -221,10 +224,19 @@ def test_commands_keep_warnings_as_errors_and_no_unselected_execution(tmp_path, 
 
 def test_related_documents_include_reverse_link_targets():
     related = set(document_inputs(["docs/development.md"]))
-    assert {"docs/development.md", "docs/README.md", "docs/validation/README.md"} <= related
-    assert "rules/lipids/README.md" in document_inputs(["docs/annotation.md"])
+    assert {
+        "docs/development.md",
+        "docs/appendix/README.md",
+        "docs/validation/README.md",
+    } <= related
+    assert "docs/appendix/lipid-rule-review.md" in document_inputs(["docs/annotation.md"])
     all_documents = document_inputs(["tests/tooling/test_documentation.py"])
-    assert {"docs/validation/README.md", "rules/lipids/README.md"} <= set(all_documents)
+    assert {
+        "docs/validation/README.md",
+        "docs/appendix/README.md",
+        "docs/appendix/lipid-rule-review.md",
+        "docs/appendix/statistical-method-notes.md",
+    } <= set(all_documents)
 
 
 def test_support_mapping_matches_actual_transitive_consumers():
