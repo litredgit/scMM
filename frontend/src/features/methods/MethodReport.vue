@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useReadScope } from '../../api/readScope'
-import { saveBlob, workspaceBlob } from '../../api/workspaceDownload'
+import { openWorkspaceCsv } from '../../api/csvExport'
 import { useWorkspace } from '../../stores/workspace'
 import DataTableView from '../../components/DataTable.vue'
 import PlotView from '../../components/PlotView.vue'
@@ -33,16 +33,13 @@ watch(
   { immediate: true },
 )
 
-async function download() {
+function download() {
   const workspace = store.current?.workspace_id
   if (!workspace) return
-  const accept = scope.begin()
-  try {
-    const blob = await workspaceBlob(`${path.value}?download=1`, { workspace, isCurrent: accept })
-    saveBlob(blob, `${props.reportId.replace(':', '-')}.csv`)
-  } catch (cause) {
-    if (accept()) store.error = cause instanceof Error ? cause.message : String(cause)
-  }
+  openWorkspaceCsv(`${props.reportId.replace(':', '-')}.csv`, `${path.value}?download=1`, {
+    workspace,
+    isCurrent: scope.begin(),
+  })
 }
 
 function changePage(delta: number) {

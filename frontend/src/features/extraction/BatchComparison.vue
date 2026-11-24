@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import { useReadScope } from '../../api/readScope'
 import { useViewState } from '../../api/viewState'
-import { saveBlob } from '../../components/plotExport'
+import { openCsvText } from '../../api/csvExport'
 import { displayName } from '../../help/labels'
 import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
@@ -189,9 +189,10 @@ function sync(viewport: Record<string, unknown>) {
     )
 }
 function download(name: string) {
-  const table = result.value?.export_tables[name]
+  const source = result.value
+  const table = source?.export_tables[name]
   if (table !== undefined)
-    saveBlob(new Blob([table], { type: 'text/csv;charset=utf-8' }), `batch-comparison-${name}.csv`)
+    openCsvText(`batch-comparison-${name}.csv`, table, () => result.value === source)
 }
 useViewState('batch-comparison', { a, b, differencesOnly, linked })
 </script>

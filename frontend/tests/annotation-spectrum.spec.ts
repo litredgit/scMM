@@ -99,7 +99,37 @@ test('complete feature spectrum is selectable before candidate search, including
   await exchange.getByRole('button', { name: /应用导入|导入并替换全部数据来源/ }).click()
   const spectrum = page.getByRole('region', { name: '谱图注释与关联峰' })
   const plot = spectrum.locator('.js-plotly-plot')
+  await expect(plot).toContainText('Local feature spectrum')
+  const workspace = await page.evaluate(() => sessionStorage.getItem('scmm-workspace')!)
+  const current = await page.request.get('/api/v1/workspace', {
+    headers: { 'X-SCMM-Workspace': workspace },
+  })
+  const { project } = await current.json()
+  let releaseDraft!: () => void
+  const draftGate = new Promise<void>((resolve) => (releaseDraft = resolve))
+  let draftRequested = false
+  await page.route('**/workspace/maintenance/draft', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    draftRequested = true
+    await draftGate
+    await route.fulfill({
+      json: {
+        project_path: project.path,
+        route: '/annotation',
+        forms: {},
+        views: { annotation_spectrum: { full: false } },
+      },
+    })
+  })
+  await page.reload()
+  await expect.poll(() => draftRequested).toBe(true)
+  await expect(plot).toContainText('Local feature spectrum')
   await spectrum.getByRole('button', { name: '查看完整谱图', exact: true }).click()
+  const hydrated = page.waitForResponse((response) =>
+    response.url().endsWith('/maintenance/status'),
+  )
+  releaseDraft()
+  await hydrated
   await expect(plot).toContainText('Full feature spectrum')
   await expect(plot).toBeInViewport({ ratio: 0.95 })
   const markers = plot.locator('.scatterlayer .trace .points path.point')

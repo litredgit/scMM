@@ -1772,16 +1772,6 @@ button.parameter-toggle {
   flex: 1 1 150px;
   max-width: 240px;
 }
-.plot-settings {
-  margin: 10px 0;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-}
-.plot-settings summary {
-  cursor: pointer;
-  color: #475569;
-}
 .table-sorting {
   max-width: 620px;
 }
@@ -2389,24 +2379,6 @@ progress {
   overflow-wrap: anywhere;
 }
 
-.export-settings-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-  gap: 20px;
-  border: 0;
-  padding: 0;
-  margin: 16px 0;
-  min-width: 0;
-}
-.export-settings-grid section {
-  min-width: 0;
-  padding: 12px;
-  background: #f7f9fc;
-  border-radius: 3px;
-}
-.export-settings-grid .field-grid {
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-}
 .comparison-signals {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2851,58 +2823,6 @@ progress {
 .matrix-download {
   position: relative;
 }
-.matrix-download .csv-label-settings {
-  margin: 0;
-}
-.csv-label-settings > summary {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  background: #f7fafb;
-  color: var(--teal);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.csv-label-settings[open] > summary {
-  background: #e5f1f5;
-}
-.csv-label-panel {
-  position: absolute;
-  left: 0;
-  top: 100%;
-  z-index: 30;
-  width: 440px;
-  max-width: 100%;
-  max-height: min(360px, 60vh);
-  overflow: auto;
-  padding: 14px;
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  box-shadow: 0 5px 18px #17394120;
-}
-.csv-label-panel > p {
-  margin: 0 0 12px;
-}
-.csv-label-grid {
-  display: grid;
-  gap: 8px;
-}
-.csv-label-grid > label {
-  display: grid;
-  grid-template-columns: minmax(80px, 0.8fr) minmax(100px, 1.2fr);
-  gap: 12px;
-  align-items: center;
-  margin: 0;
-}
-.csv-label-grid > label > span {
-  overflow-wrap: anywhere;
-}
-.csv-label-grid input {
-  min-width: 0;
-  width: 100%;
-  margin: 0;
-}
 
 .batch-toolbar .matrix-download {
   border-top: 0;
@@ -2912,7 +2832,4 @@ progress {
 }
 .batch-toolbar .matrix-download {
   position: static;
-}
-.batch-toolbar .csv-label-panel {
-  top: calc(100% + 6px);
 }

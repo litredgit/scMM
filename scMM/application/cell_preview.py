@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from scMM.plugins._extraction import extraction_kwargs, extraction_registry
 
+from . import mz_lists
 from .parameters import automatic_mz_range
 from .preview_cache import (
     file_identity,
@@ -22,7 +23,7 @@ from .preview_cache import (
     signature,
 )
 from .processing import ProcessingParameters
-from .project_batch import SHARED_FIELDS, preflight
+from .project_batch import FEATURE_RANGE_FIELDS, SHARED_FIELDS, preflight
 from .projects import Project, child_path, write_json
 from .raw_preview import RawPreviewService
 from .storage import StorageCatalog, StorageRoot
@@ -71,7 +72,9 @@ def run_preview(request, state_path):
         catalog.resolve_raw_file(sample["storage"], sample["path"])
         parameters = dict(request["parameters"])
         targets = None
-        if project.manifest["feature_strategy"] == "shared":
+        list_digest = None
+        strategy = project.manifest["feature_strategy"]
+        if strategy in {"shared", "list"}:
             initialize_ranges(project, service)
             batch = preflight(project, catalog)
             if (
@@ -80,16 +83,24 @@ def run_preview(request, state_path):
                 and sample["parameters"] is None
             ):
                 parameters.update({key: batch["parameters"][key] for key in ("mz_min", "mz_max")})
-            if any(parameters[key] != batch["parameters"][key] for key in SHARED_FIELDS):
+            fields = SHARED_FIELDS if strategy == "shared" else FEATURE_RANGE_FIELDS
+            if any(parameters[key] != batch["parameters"][key] for key in fields):
                 raise ValueError("共同特征参数已编辑，请先应用为项目默认再预览")
-            report("建立或复用全项目共同特征")
-            targets = prepare_shared_targets(project, batch)
+            if strategy == "shared":
+                report("建立或复用全项目共同特征")
+                targets = prepare_shared_targets(project, batch)
         params = ProcessingParameters(**parameters)
+        if strategy == "list":
+            target_list = request["mz_list"]
+            targets = mz_lists.effective_masses(target_list, params)
+            list_digest = target_list["sha256"]
         method_kwargs = extraction_kwargs(
             params.method_plugins, extraction_registry(request.get("extraction_plugins"))
         )
-        before = signature(sample["path"], params)
-        cached = reusable_preview(project.folder, {**sample, "parameters": parameters}, targets)
+        before = signature(sample["path"], params, list_digest)
+        cached = reusable_preview(
+            project.folder, {**sample, "parameters": parameters}, targets, mz_list=list_digest
+        )
         if cached:
             report("读取已验证的预览缓存")
             detection = load_detection(cached)
@@ -97,9 +108,14 @@ def run_preview(request, state_path):
         else:
             report("读取当前样本并完整提取细胞")
             preview = service.open(sample["storage"], sample["path"])
-            detection = preview.cell_detection(params, targets=targets, method_kwargs=method_kwargs)
+            detection = preview.cell_detection(
+                params,
+                targets=targets,
+                method_kwargs=method_kwargs,
+                targeted=list_digest is not None,
+            )
             report("写入预览缓存")
-            artifact = save_preview(project, sample, preview, params, before)
+            artifact = save_preview(project, sample, preview, params, before, mz_list=list_digest)
         check_inputs()
         result = {
             "detection": detection,

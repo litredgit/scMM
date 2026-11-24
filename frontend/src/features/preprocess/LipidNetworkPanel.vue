@@ -5,6 +5,8 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import { request } from '../../api/client'
 import { workspaceBlob, saveBlob } from '../../api/workspaceDownload'
+import { openWorkspaceCsv } from '../../api/csvExport'
+import ImageExportDialog from '../../components/ImageExportDialog.vue'
 import { useLipidImageExport } from './composables/useLipidImageExport'
 import DataTableView from '../../components/DataTable.vue'
 import type { LipidCharts, LipidChartView, LipidNode, LipidResults } from './lipids'
@@ -27,9 +29,6 @@ const view = reactive<LipidChartView>({
   category: '',
   focus: '',
 })
-const paperDpi = ref(300),
-  paperWidth = ref(89),
-  paperFont = ref(7)
 const graphSvg = ref<SVGSVGElement>()
 const pieSvg = ref<SVGSVGElement>()
 const node = ref<LipidNode>()
@@ -305,61 +304,118 @@ async function download(kind: string) {
   if (!store.current) return
   const workspace = store.current.workspace_id
   const revision = store.current.revision
+  const body = JSON.parse(
+    JSON.stringify({
+      revision,
+      source: props.source,
+      version: props.results.version,
+      filters: props.filters,
+      view,
+      kind,
+    }),
+  )
+  const isCurrent = () =>
+    store.current?.workspace_id === workspace &&
+    store.current?.revision === revision &&
+    props.results.version === body.version &&
+    props.source === body.source
+  const filename = `lipid-${kind}.${kind === 'charts' ? 'json' : 'csv'}`
+  if (kind !== 'charts') {
+    openWorkspaceCsv(filename, '/lipids/export', { workspace, method: 'POST', body, isCurrent })
+    return
+  }
   await store.run(
     async (scope) => {
       const blob = await workspaceBlob('/lipids/export', {
         workspace,
         method: 'POST',
-        body: {
-          revision,
-          source: props.source,
-          version: props.results.version,
-          filters: props.filters,
-          view,
-          kind,
-        },
-        isCurrent: () =>
-          scope.isCurrent() &&
-          store.current?.workspace_id === workspace &&
-          store.current?.revision === revision,
+        body,
+        isCurrent: () => scope.isCurrent() && isCurrent(),
       })
-      saveBlob(blob, `lipid-${kind}.${kind === 'charts' ? 'json' : 'csv'}`)
+      saveBlob(blob, filename)
     },
     '',
     { label: '导出脂质分析结果', phase: 'downloading' },
   )
 }
-const { image } = useLipidImageExport({
-  svg: (kind) => (kind === 'pie' ? pieSvg.value : graphSvg.value),
-  width: () => paperWidth.value,
-  dpi: () => paperDpi.value,
-  font: () => paperFont.value,
-  version: () => props.results.version,
-})
+const imageDialog = ref<InstanceType<typeof ImageExportDialog>>()
+const {
+  capture,
+  isCurrent: imageCurrent,
+  render: renderImage,
+  filename: imageName,
+  width: paperWidth,
+  height: paperHeight,
+  dpi: paperDpi,
+  font: paperFont,
+  family: paperFamily,
+  transparent: paperTransparent,
+} = useLipidImageExport(
+  (kind) => (kind === 'pie' ? pieSvg.value : graphSvg.value),
+  () => props.results.version,
+)
+const imageSettings = computed(() =>
+  JSON.stringify([
+    paperWidth.value,
+    paperHeight.value,
+    paperDpi.value,
+    paperFont.value,
+    paperFamily.value,
+    paperTransparent.value,
+  ]),
+)
+function openImage(kind: 'pie' | 'network') {
+  if (capture(kind)) imageDialog.value?.open()
+}
 </script>
 <template>
   <section class="card lipid-network-panel">
     <h3>注释分类与相关网络</h3>
-    <details class="plot-settings">
-      <summary>注释图论文导出设置</summary>
-      <div class="field-grid">
-        <label
-          >导出宽度（毫米）<input
-            v-model.number="paperWidth"
-            type="number"
-            min="20"
-            max="600" /></label
-        ><label
-          >导出字号（pt）<input
-            v-model.number="paperFont"
-            type="number"
-            min="4.5"
-            max="24" /></label
-        ><label
-          >导出分辨率（DPI）<input v-model.number="paperDpi" type="number" min="72" max="2400"
-        /></label>
-      </div>
-    </details>
+    <ImageExportDialog
+      ref="imageDialog"
+      v-model="imageName"
+      :settings="imageSettings"
+      :render="renderImage"
+      :is-current="imageCurrent"
+      :disabled="store.busy"
+    >
+      <template #default="{ format }">
+        <div class="field-grid">
+          <label
+            >宽度（mm）<input v-model.number="paperWidth" type="number" min="20" max="600"
+          /></label>
+          <label
+            >高度（mm）<input
+              v-model.number="paperHeight"
+              type="number"
+              min="20"
+              max="600"
+              placeholder="等比例"
+          /></label>
+          <label
+            >字号（pt）<input
+              v-model.number="paperFont"
+              type="number"
+              min="4.5"
+              max="24"
+              step="0.5"
+          /></label>
+          <label v-if="format === 'png'"
+            >位图 DPI<input v-model.number="paperDpi" type="number" min="72" max="2400"
+          /></label>
+          <label
+            >字体<select v-model="paperFamily">
+              <option value="Arial, Helvetica, sans-serif">无衬线</option>
+              <option value="Times New Roman, Noto Serif, serif">衬线</option>
+              <option value="DejaVu Sans Mono, monospace">等宽</option>
+            </select></label
+          >
+          <label v-if="format !== 'pdf'" class="inline-check"
+            ><input v-model="paperTransparent" type="checkbox" />透明背景</label
+          >
+        </div>
+      </template>
+    </ImageExportDialog>
     <p class="muted">
       仅作 MS1
       候选辅助与共变探索。无支持不扣分；同分子式异构体不能据此区分。跨样本一致性不等于生物重复统计推断。
@@ -517,11 +573,8 @@ const { image } = useLipidImageExport({
         </li>
       </ul>
       <div class="actions">
-        <button :disabled="store.busy" @click="image('pie', 'svg')" class="save">
-          下载饼图 SVG</button
-        ><button class="save" :disabled="store.busy" @click="image('pie', 'png')">
-          下载饼图 PNG</button
-        ><button class="save" :disabled="store.busy" @click="download('pie')">
+        <button class="save" :disabled="store.busy" @click="openImage('pie')">饼图图片导出</button>
+        <button class="save" :disabled="store.busy" @click="download('pie')">
           导出分类计数 CSV
         </button>
       </div>
@@ -624,11 +677,10 @@ const { image } = useLipidImageExport({
           </text>
         </svg>
         <div class="actions">
-          <button :disabled="store.busy" @click="image('network', 'svg')" class="save">
-            下载网络 SVG</button
-          ><button class="save" :disabled="store.busy" @click="image('network', 'png')">
-            下载网络 PNG</button
-          ><button class="save" :disabled="store.busy" @click="download(`${view.graph}_nodes`)">
+          <button class="save" :disabled="store.busy" @click="openImage('network')">
+            网络图片导出
+          </button>
+          <button class="save" :disabled="store.busy" @click="download(`${view.graph}_nodes`)">
             导出网络节点 CSV</button
           ><button class="save" :disabled="store.busy" @click="download(`${view.graph}_edges`)">
             导出网络边 CSV</button

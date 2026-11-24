@@ -20,9 +20,10 @@ def align_frame(
     out=None,
     rt_range=None,
     frame_range=None,
+    reference=None,
     **kwargs,
 ):
-    """Align each selected scan to target m/z values using nearest ppm matches."""
+    """Align scan peaks, optionally returning a separately matched reference frame."""
     _validate_alignment_options(ppm, aggregate)
     targets = np.asarray(mz_list, dtype=np.float64)
     if targets.ndim != 1 or targets.size == 0:
@@ -35,6 +36,10 @@ def align_frame(
         if out.ndim != 2 or out.shape[1] != len(targets) or not out.flags.writeable:
             raise ValueError("out must be writable with shape (selected scans, targets)")
     rows, frame_ids, retention_times = [], [], []
+    if reference is not None:
+        reference_targets, reference_ppm = reference
+        reference_targets = np.unique(reference_targets)
+        reference_rows = []
     peak_options = _peak_options(kwargs)
     from .selection import selected_frames
 
@@ -43,6 +48,8 @@ def align_frame(
     ) as spectra:
         for frame_id, spectrum in spectra:
             row = np.zeros(len(targets), dtype=np.float32)
+            if reference is not None:
+                reference_row = np.zeros(len(reference_targets), dtype=np.float32)
             mz, intensity = extract_peaks(spectrum, dtype=dtype, **peak_options)
             if mz.size:
                 mz, intensity = _sort_extracted_peaks(mz, intensity)
@@ -55,6 +62,13 @@ def align_frame(
                 _aggregate_target_intensity(
                     row, original_columns[target_indices], matched_intensity, aggregate
                 )
+                if reference is not None:
+                    indices, values = _match_target_peaks(
+                        reference_targets, mz, intensity, reference_ppm
+                    )
+                    _aggregate_target_intensity(reference_row, indices, values, aggregate)
+            if reference is not None:
+                reference_rows.append(reference_row)
             rows.append(row)
             frame_ids.append(frame_id)
             retention_times.append(spectrum.getRT())
@@ -71,6 +85,9 @@ def align_frame(
     frame = pd.DataFrame(values, index=frame_ids, columns=targets, copy=False)
     frame.index.name = "frame"
     metadata = pd.DataFrame({"rt": retention_times}, index=frame_ids)
+    if reference is not None:
+        reference_frame = pd.DataFrame(reference_rows, index=frame.index, columns=reference_targets)
+        return frame, metadata, reference_frame
     return frame, metadata
 
 

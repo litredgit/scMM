@@ -126,12 +126,18 @@ def _items(folder):
                 and path.is_dir()
                 and all((path / name).is_file() for name in (*PREVIEW_FILES, "identity.json")),
             )
-        elif re.fullmatch(r"shared-[a-f0-9]{64}\.(npy|json)", path.name):
+        elif re.fullmatch(r"shared-[a-f0-9]{64}\.(npy|npz|json)", path.name):
             shared.setdefault(path.stem, []).append(path)
         else:
             yield "任务、批次或未识别产物", [path], False
     for paths in shared.values():
-        yield "共同特征缓存", paths, len(paths) == 2 and all(p.is_file() for p in paths)
+        suffixes = {p.suffix for p in paths}
+        yield (
+            "共同特征缓存",
+            paths,
+            {".npy", ".json"} <= suffixes
+            and all(p.is_file() and not p.is_symlink() for p in paths),
+        )
 
 
 def _policy(rows, *, min_age_days, keep_latest, now_ns):

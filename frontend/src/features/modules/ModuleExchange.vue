@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useWorkspace } from '../../stores/workspace'
 import { useReadScope } from '../../api/readScope'
 import { workspaceBlob, saveBlob } from '../../api/workspaceDownload'
+import { openCsvText, openWorkspaceCsv } from '../../api/csvExport'
 import { base64File, type ModuleStatus } from '../../api/moduleExchange'
 import type { ModuleKey } from './modules'
 
@@ -115,7 +116,7 @@ function template(kind: 'matrix' | 'features' | 'observations') {
     observations:
       'observation_id,sample,group,subject,batch\ncell_1,Sample A,Group A,,Batch 1\ncell_2,Sample A,Group B,,Batch 1\n',
   }
-  saveBlob(new Blob([values[kind]], { type: 'text/csv;charset=utf-8' }), `${kind}-template.csv`)
+  openCsvText(`${kind}-template.csv`, values[kind])
 }
 async function inspectImport() {
   if (!canImport.value || !upload.value) return
@@ -174,27 +175,32 @@ async function download() {
   const current = store.current
   if (!current || !store.project || store.busy) return
   const identity = [current.workspace_id, current.revision, store.project.path]
+  const format = exportFormat.value
+  const path = `/exchange/${props.module}/export?format=${format}&revision=${current.revision}`
+  const suffix =
+    { package: 'scmm-exchange.zip', csv: 'tables.zip', h5ad: 'h5ad', features: 'features.csv' }[
+      format
+    ] ?? 'zip'
+  const filename = `${props.module}.${suffix}`
+  const isCurrent = () =>
+    JSON.stringify(identity) ===
+    JSON.stringify([store.current?.workspace_id, store.current?.revision, store.project?.path])
+  if (format === 'features' || format === 'csv') {
+    openWorkspaceCsv(
+      filename,
+      path,
+      { workspace: current.workspace_id, isCurrent },
+      format === 'csv',
+    )
+    return
+  }
   await store.run(
     async (scope) => {
-      const blob = await workspaceBlob(
-        `/exchange/${props.module}/export?format=${exportFormat.value}&revision=${current.revision}`,
-        {
-          workspace: current.workspace_id,
-          isCurrent: () =>
-            scope.isCurrent() &&
-            JSON.stringify(identity) ===
-              JSON.stringify([
-                store.current?.workspace_id,
-                store.current?.revision,
-                store.project?.path,
-              ]),
-        },
-      )
-      const suffix =
-        { package: 'scmm-exchange.zip', csv: 'tables.zip', h5ad: 'h5ad', features: 'features.csv' }[
-          exportFormat.value
-        ] ?? 'zip'
-      saveBlob(blob, `${props.module}.${suffix}`)
+      const blob = await workspaceBlob(path, {
+        workspace: current.workspace_id,
+        isCurrent: () => scope.isCurrent() && isCurrent(),
+      })
+      saveBlob(blob, filename)
     },
     '',
     { label: '导出板块数据', phase: 'reading' },

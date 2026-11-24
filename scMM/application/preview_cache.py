@@ -29,15 +29,22 @@ def digest_file(path):
         return hashlib.file_digest(handle, "sha256").hexdigest()
 
 
-def signature(path, parameters):
+def signature(path, parameters, mz_list=None):
     params = parameters.to_dict() if not isinstance(parameters, dict) else dict(parameters)
     if params.get("method_plugins") == {}:
         params.pop("method_plugins")
-    return {"version": 4, "file": file_identity(path), "parameters": json.loads(json.dumps(params))}
+    identity = {
+        "version": 4,
+        "file": file_identity(path),
+        "parameters": json.loads(json.dumps(params)),
+    }
+    if mz_list is not None:
+        identity["mz_list"] = mz_list
+    return identity
 
 
-def save_preview(project, sample, preview, parameters, before):
-    identity = signature(sample["path"], parameters)
+def save_preview(project, sample, preview, parameters, before, *, mz_list=None):
+    identity = signature(sample["path"], parameters, mz_list)
     if identity != before:
         raise ValueError("Input changed during preview; reopen the file")
     folder = child_path(project.folder, f"processing/preview-{uuid4().hex}")
@@ -54,13 +61,13 @@ def save_preview(project, sample, preview, parameters, before):
         },
     )
     artifacts = {name: digest_file(folder / name) for name in PREVIEW_FILES}
-    if signature(sample["path"], parameters) != before:
+    if signature(sample["path"], parameters, mz_list) != before:
         raise ValueError("Input changed during preview; reopen the file")
     write_json(folder / "identity.json", {**identity, "artifacts": artifacts})
     return str(folder.relative_to(project.folder))
 
 
-def reusable_preview(project_folder, sample, targets=None):
+def reusable_preview(project_folder, sample, targets=None, *, mz_list=None):
     record = sample.get("preview", {})
     if not record.get("artifact"):
         return None
@@ -69,8 +76,10 @@ def reusable_preview(project_folder, sample, targets=None):
         identity = json.loads((folder / "identity.json").read_text(encoding="utf-8"))
         if not isinstance(identity, dict):
             return None
-        expected = signature(sample["path"], sample["parameters"])
-        if any(identity.get(key) != value for key, value in expected.items()):
+        expected = signature(sample["path"], sample["parameters"], mz_list)
+        if identity.get("mz_list") != mz_list or any(
+            identity.get(key) != value for key, value in expected.items()
+        ):
             return None
         if any(
             digest_file(child_path(folder, name)) != identity["artifacts"][name]
@@ -82,7 +91,7 @@ def reusable_preview(project_folder, sample, targets=None):
         ):
             return None
         output = child_path(folder, "data.h5ad")
-        if signature(sample["path"], sample["parameters"]) != expected:
+        if signature(sample["path"], sample["parameters"], mz_list) != expected:
             return None
         return output
     except (OSError, ValueError, KeyError, TypeError):
@@ -134,6 +143,26 @@ def cached_shared_targets(project_folder, request):
         return None
 
 
+def cached_shared_profile(project_folder, request):
+    from .extraction_spectra import load_profile
+
+    try:
+        key = shared_cache_key(request)
+        path = child_path(project_folder, f"processing/shared-{key}.npz")
+        metadata = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
+        profile = load_profile(path, metadata.get("spectrum_sha256"))
+        targets = cached_shared_targets(project_folder, request)
+        if (
+            targets is not None
+            and np.array_equal(profile[2], targets)
+            and key == shared_cache_key(request)
+        ):
+            return profile
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return None
+
+
 def prepare_shared_targets(project, request):
     """Use the batch feature definition for previews, making reuse exact."""
     import pyopenms as oms
@@ -141,6 +170,7 @@ def prepare_shared_targets(project, request):
     from scMM.file.io import extract_peaks, load_single_file, sum_spec
     from scMM.util.peak import filter_spectrum
 
+    from .extraction_spectra import save_profile
     from .processing import ProcessingParameters
 
     cached = cached_shared_targets(project.folder, request)
@@ -178,7 +208,16 @@ def prepare_shared_targets(project, request):
     try:
         np.save(temporary, targets, allow_pickle=False)
         temporary.replace(path)
-        write_json(path.with_suffix(".json"), {"sha256": digest_file(path)})
+        checksum = save_profile(
+            path.with_suffix(".npz"),
+            grid,
+            total,
+            targets,
+            [sample["id"] for sample in request["samples"]],
+        )
+        write_json(
+            path.with_suffix(".json"), {"sha256": digest_file(path), "spectrum_sha256": checksum}
+        )
     finally:
         temporary.unlink(missing_ok=True)
     return targets

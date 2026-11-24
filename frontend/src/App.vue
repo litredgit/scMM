@@ -13,6 +13,7 @@ import AssistantPanel from './features/assistant/AssistantPanel.vue'
 import DocumentationPanel from './features/documentation/DocumentationPanel.vue'
 import { modules, moduleForPath } from './features/modules/modules'
 import { workspaceBlob, saveBlob } from './api/workspaceDownload'
+import CsvExportDialog from './components/CsvExportDialog.vue'
 import { clearPendingViews } from './api/viewState'
 import type { Job } from './api/types'
 import type { IonTask } from './api/ions'
@@ -594,6 +595,7 @@ async function openDiskProject() {
       </div>
     </div>
   </div>
+  <CsvExportDialog />
 </template>
 
 <style scoped>

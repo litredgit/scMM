@@ -4,10 +4,15 @@
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from scipy import sparse, stats
+
+from .plot_scope import group_display_names
 
 
 def matrix(data, layer=None):
+    if layer is not None and layer not in data.layers:
+        raise ValueError("所选数据层已失效，请重新选择。")
     value = data.X if layer is None else data.layers[layer]
     return value.toarray() if sparse.issparse(value) else np.asarray(value)
 
@@ -95,7 +100,10 @@ def association(
     confidence=0.95,
     seed=42,
     include_zeros=True,
+    method="pearson",
 ):
+    if x == y:
+        raise ValueError("请选择两个不同的变量。")
     a, dx = vector(data, x, layer)
     b, dy = vector(data, y, layer)
     keep = np.isfinite(a) & np.isfinite(b)
@@ -117,6 +125,9 @@ def association(
     if len(a) < 3 or np.ptp(a) == 0 or np.ptp(b) == 0:
         raise ValueError("至少需要三个有限且非恒定的分析单位。")
     fit = stats.linregress(a, b)
+    coefficient = (
+        float(fit.rvalue) if method == "pearson" else pd.Series(a).corr(pd.Series(b), method=method)
+    )
     grid = np.linspace(a.min(), a.max(), 200)
     predicted = fit.intercept + fit.slope * grid
     se = np.sqrt(np.sum((b - fit.intercept - fit.slope * a) ** 2) / (len(a) - 2))
@@ -156,6 +167,18 @@ def association(
     lines = pd.DataFrame(
         {"x": grid, "fit": predicted, "lower": predicted - margin, "upper": predicted + margin}
     )
+    summary = {
+        "n": len(a),
+        "method": method,
+        "correlation": coefficient,
+        "slope": float(fit.slope),
+        "intercept": float(fit.intercept),
+        "r2": float(fit.rvalue**2),
+        "confidence": confidence,
+        "permutation_p": p,
+        "unit": replicate_key or "cell",
+        "seed": seed,
+    }
     figure.update_layout(
         title="Numeric association",
         xaxis_title=x,
@@ -165,17 +188,12 @@ def association(
             "notes": [
                 "置信带为 OLS 均值响应区间。置换仅在用户声明的独立重复均值间进行，仍依赖重复可交换假设；细胞级拟合仅作描述。"
             ],
-            "association": {
-                "n": len(a),
-                "r2": float(fit.rvalue**2),
-                "permutation_p": p,
-                "unit": replicate_key or "cell",
-                "seed": seed,
-            },
+            "association": summary,
             "export_tables": {
                 "cells": points.to_csv(index=False),
                 "analysis_units": fit_points.to_csv(),
                 "regression": lines.to_csv(index=False),
+                "statistics": pd.DataFrame([summary]).to_csv(index=False),
             },
         },
     )
@@ -249,13 +267,20 @@ def memberships(
         names = data.var[annotation_key].reindex(result.index).fillna("").astype(str)
     else:
         names = pd.Series(result.index, index=result.index)
-    table = result.copy()
-    table.insert(0, "label", names)
-    patterns = result.value_counts(sort=True).rename("count").reset_index()
-    if patterns.empty:
+    if result.empty:
         raise ValueError("所选阈值下没有检出的集合成员，请调整阈值。")
+    display_names = group_display_names(data, group_key, groups)
+    keys = (
+        {g: f"group:{g}" for g in groups}
+        if set(groups) & {"label", "count", "intersection"}
+        else {g: g for g in groups}
+    )
+    table = result.rename(columns=keys)
+    table.insert(0, "label", names)
+    patterns = result.rename(columns=keys).value_counts(sort=True).rename("count").reset_index()
     patterns["intersection"] = [
-        " & ".join(group for group in groups if row[group]) for _, row in patterns.iterrows()
+        " & ".join(display_names[group] for group in groups if row[keys[group]])
+        for _, row in patterns.iterrows()
     ]
     figure = go.Figure()
     if kind == "venn":
@@ -275,39 +300,97 @@ def memberships(
                 opacity=0.25,
                 fillcolor=["#2563eb", "#ef4444", "#10b981"][groups.index(group)],
             )
-            figure.add_annotation(x=cx, y=cy + 1, text=group, showarrow=False)
+            figure.add_annotation(x=cx, y=cy + 1, text=display_names[group], showarrow=False)
         for _, row in patterns.iterrows():
-            members = [centers[i] for i, g in enumerate(groups) if row[g]]
-            non = [centers[i] for i, g in enumerate(groups) if not row[g]]
+            members = [centers[i] for i, g in enumerate(groups) if row[keys[g]]]
+            non = [centers[i] for i, g in enumerate(groups) if not row[keys[g]]]
             pos = np.mean(members, axis=0) - (0.5 * np.mean(non, axis=0) if non else 0)
             figure.add_annotation(x=pos[0], y=pos[1], text=str(row["count"]), showarrow=False)
         figure.update_xaxes(range=[-2, 2], visible=False)
         figure.update_yaxes(range=[-2, 2], visible=False, scaleanchor="x")
     else:
         shown = patterns.head(top)
-        figure.add_trace(
-            go.Bar(x=shown.intersection, y=shown["count"], name="Exclusive intersection")
+        columns = np.arange(len(shown))
+        figure = make_subplots(
+            rows=2,
+            cols=1,
+            shared_xaxes=True,
+            row_heights=[0.68, 0.32],
+            vertical_spacing=0.025,
+        )
+        figure.add_bar(
+            x=columns,
+            y=shown["count"],
+            name="Exclusive intersection",
+            customdata=shown.intersection,
+            marker_color="#2774a6",
+            showlegend=False,
+            hovertemplate="%{customdata}<br>Count: %{y}<extra></extra>",
+            row=1,
+            col=1,
+        )
+        line_x = []
+        line_y = []
+        for i, (_, pattern) in enumerate(shown.iterrows()):
+            enabled = [j for j, group in enumerate(groups) if pattern[keys[group]]]
+            line_x.extend((i, i, None))
+            line_y.extend((enabled[0], enabled[-1], None))
+        figure.add_scatter(
+            x=line_x,
+            y=line_y,
+            mode="lines",
+            line_color="#111827",
+            showlegend=False,
+            hoverinfo="skip",
+            row=2,
+            col=1,
         )
         for i, group in enumerate(groups):
             figure.add_trace(
                 go.Scatter(
-                    x=shown.intersection,
-                    y=[-(i + 1) * max(1, patterns["count"].max() / 8)] * len(shown),
+                    x=columns,
+                    y=[i] * len(shown),
                     mode="markers",
                     marker={
-                        "color": ["#111827" if v else "#d1d5db" for v in shown[group]],
-                        "size": 9,
+                        "color": ["#111827" if v else "#d1d5db" for v in shown[keys[group]]],
+                        "size": 7,
                     },
-                    name=group,
-                )
+                    name=display_names[group],
+                    showlegend=False,
+                    hoverinfo="name",
+                ),
+                row=2,
+                col=1,
             )
-        figure.update_yaxes(title="Feature count / membership rows")
+        figure.update_xaxes(showticklabels=False)
+        figure.update_yaxes(title_text="Count", row=1, col=1)
+        figure.update_yaxes(
+            tickvals=list(range(len(groups))),
+            ticktext=[display_names[g] for g in groups],
+            range=[len(groups) - 0.5, -0.5],
+            row=2,
+            col=1,
+        )
+    exclusive = result.sum(axis=1).eq(1)
     figure.update_layout(
         title="Candidate set intersections"
         if entity == "candidate"
         else "Feature set intersections",
         meta={
             "observation_dependencies": [group_key],
+            "set_counts": {
+                "union": len(result),
+                "intersection": int(result.all(axis=1).sum()),
+                "groups": [
+                    {
+                        "id": g,
+                        "name": display_names[g],
+                        "total": int(result[g].sum()),
+                        "unique": int((result[g] & exclusive).sum()),
+                    }
+                    for g in groups
+                ],
+            },
             "notes": [
                 "按稳定特征 ID 计数；注释仅作标签，不按同名合并候选物质。Venn 圆面积不代表数量。"
             ],

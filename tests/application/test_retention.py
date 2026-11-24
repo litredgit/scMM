@@ -67,6 +67,11 @@ def test_read_only_plan_groups_shared_pair_and_protects_current_snapshot(tmp_pat
     assert plan["candidate_bytes"] == sum(
         r["bytes"] for r in plan["items"] if r["status"] == "candidate"
     )
+    spectrum = shared.with_suffix(".npz")
+    np.savez(spectrum, mz=[150.0], intensity=[1.0])
+    combined = rows(retention_plan(manager, project.folder), "processing/shared-")[0]
+    assert combined["status"] == "candidate" and len(combined["paths"]) == 3
+    assert combined["bytes"] == shared_row["bytes"] + spectrum.stat().st_size
 
 
 def test_preview_manifest_and_other_project_provenance_retain_candidates(tmp_path):

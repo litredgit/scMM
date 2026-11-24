@@ -43,7 +43,9 @@ def heatmap_figure(
     if equal_samples and aggregate_method != "mean":
         raise ValueError("样本等权平均仅支持 mean 聚合。")
     data = plot_subset(data, scope, chronological=not cluster_columns)
-    if colorscale not in {"RdBu", "PuOr", "Viridis", "Cividis"}:
+    from scMM.plot.colors import CONTINUOUS_SCALES
+
+    if colorscale not in CONTINUOUS_SCALES:
         raise ValueError("请选择有效的热图色板。")
     if (color_min is None) != (color_max is None) or (
         color_min is not None

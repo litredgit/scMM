@@ -43,6 +43,8 @@ export function useAnalysis() {
     embedding,
     colorSource,
     color,
+    colorSettings,
+    colorLayer,
     search,
     sort,
     descending,
@@ -372,6 +374,8 @@ export function useAnalysis() {
       embedding.value,
       projection,
       colorSource.value === 'none' ? null : color.value || null,
+      colorSettings.value,
+      colorLayer.value,
     ]),
   )
   async function autoDrawEmbedding() {
@@ -507,6 +511,8 @@ export function useAnalysis() {
         ? {
             key: embedding.value,
             color: colorSource.value === 'none' ? null : color.value || null,
+            ...colorSettings.value,
+            color_layer: colorSource.value === 'feature' ? colorLayer.value || null : null,
             scope: plotScope.value,
             dimensions: projection.threeD
               ? [projection.x, projection.y, projection.z]
@@ -584,6 +590,8 @@ export function useAnalysis() {
     embedding,
     colorSource,
     color,
+    colorSettings,
+    colorLayer,
     search,
     sort,
     descending,
@@ -622,6 +630,8 @@ export function useAnalysis() {
     embedding,
     colorSource,
     color,
+    colorSettings,
+    colorLayer,
     search,
     sort,
     descending,

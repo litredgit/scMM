@@ -1,3 +1,4 @@
+import { openImageExport, finishExport } from './fixtures'
 import { navigate, test, expect, type Page } from './fixtures'
 import { createProject as create } from './support/project'
 
@@ -46,8 +47,8 @@ test('raw signal diagnostic stays independent and exports full numeric compariso
   await expect(panel.locator('.js-plotly-plot')).toBeVisible()
   await page.unroute('**/workspace/raw/diagnostic')
   await page.getByRole('button', { name: '清除错误', exact: true }).click()
-  const download = page.waitForEvent('download')
-  await panel.getByRole('button', { name: '下载作图数据', exact: true }).click()
+  await panel.getByRole('button', { name: '作图数据导出', exact: true }).click()
+  const download = finishExport(page, 'CSV 导出', '下载归档')
   expect((await download).suggestedFilename()).toMatch(/\.zip$/)
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
@@ -299,7 +300,6 @@ test('raw zoom, reset then zoom, and full-range SVG share one explicit export po
   await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
   const plot = page.locator('.plot-shell').first()
   await expect(plot.locator('.js-plotly-plot')).toBeVisible()
-  await expect(plot.getByLabel('导出范围', { exact: true })).toHaveValue('current')
   const drag = plot.locator('.nsewdrag').first()
   const box = (await drag.boundingBox())!
   await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.1)
@@ -318,9 +318,11 @@ test('raw zoom, reset then zoom, and full-range SVG share one explicit export po
     )
     .toBe(false)
   async function svgTicks() {
-    const pending = page.waitForEvent('download')
-    await plot.getByRole('button', { name: '下载 SVG', exact: true }).click()
-    const svg = await readFile((await (await pending).path())!, 'utf8')
+    await openImageExport(page, plot.getByRole('button', { name: '图片导出', exact: true }))
+    const svg = await readFile(
+      (await (await finishExport(page, '图片导出', '下载图片')).path())!,
+      'utf8',
+    )
     expect(svg).toContain('Intensity')
     expect(svg).toContain('RT (min)')
     expect(svg).not.toContain('总离子流')
@@ -350,7 +352,12 @@ test('raw zoom, reset then zoom, and full-range SVG share one explicit export po
   const again = await svgTicks()
   expect(Math.min(...again)).toBeGreaterThanOrEqual(10.8)
   expect(Math.max(...again)).toBeLessThanOrEqual(15.2)
+  await openImageExport(page, plot.getByRole('button', { name: '图片导出', exact: true }))
   await plot.getByLabel('导出范围', { exact: true }).selectOption('full')
+  await page
+    .getByRole('dialog', { name: '图片导出', exact: true })
+    .getByRole('button', { name: '关闭', exact: true })
+    .click()
   const full = await svgTicks()
   expect(Math.min(...full)).toBeLessThanOrEqual(0)
   expect(Math.max(...full)).toBeGreaterThanOrEqual(30)
@@ -380,11 +387,14 @@ test('legacy automatic labels become English while input legend and custom title
   const plot = page.locator('.plot-shell').first()
   await expect(plot.locator('.gtitle')).toHaveText('Total ion chromatogram (TIC)')
   await expect(plot.locator('.legendtext')).toHaveText('用户输入图例')
-  await plot.locator('.plot-settings > summary').click()
-  await plot.getByLabel('导出标题', { exact: true }).fill('强度')
-  const download = page.waitForEvent('download')
-  await plot.getByRole('button', { name: '下载 SVG', exact: true }).click()
-  const svg = await readFile((await (await download).path())!, 'utf8')
+  const dialog = await openImageExport(
+    page,
+    plot.getByRole('button', { name: '图片导出', exact: true }),
+  )
+  await dialog.getByText('图中文字', { exact: true }).click()
+  await dialog.getByLabel('导出标题', { exact: true }).fill('强度')
+  const download = await finishExport(page, '图片导出', '下载图片')
+  const svg = await readFile((await download.path())!, 'utf8')
   const text = await page.evaluate((content) => {
     const doc = new DOMParser().parseFromString(content, 'image/svg+xml')
     return {

@@ -13,6 +13,7 @@ def find_cell_peaks_snr(
     reference_mz,
     *,
     reference_mode: str = "union",
+    reference_frame=None,
     baseline_filter=median_filter,
     baseline_window: int = 51,
     cell_signal_threshold: float = 5.0,
@@ -72,19 +73,30 @@ def find_cell_peaks_snr(
         raise ValueError("reference_mz must contain at least one finite value")
 
     X = data.to_numpy(dtype=output_dtype, copy=False)
-    mz_values = np.asarray(data.columns, dtype=np.float64)
     if detector is None:
-        reference_indices = np.asarray(
+        reference_data = data if reference_frame is None else reference_frame
+        mz_values = np.asarray(reference_data.columns, dtype=np.float64)
+        requested_indices = np.asarray(
             [int(np.abs(mz_values - value).argmin()) for value in references],
             dtype=np.int64,
         )
-        errors = np.abs(mz_values[reference_indices] - references) / references * 1e6
+        errors = np.abs(mz_values[requested_indices] - references) / references * 1e6
         if np.any(errors > reference_ppm_tol):
             raise ValueError("reference m/z not detected within reference_ppm_tol")
-        reference_indices = np.unique(reference_indices)
+        reference_indices = np.unique(requested_indices)
         matched_reference_mz = mz_values[reference_indices]
 
-        reference_signal = X[:, reference_indices]
+        reference_signal = reference_data.to_numpy(dtype=output_dtype, copy=False)[
+            :, reference_indices
+        ]
+        if reference_frame is not None and (
+            not reference_frame.index.equals(data.index)
+            or not np.isfinite(reference_signal).all()
+            or (reference_signal < 0).any()
+        ):
+            raise ValueError(
+                "Reference signals must match the selected scans and be finite and nonnegative"
+            )
         reference_baseline = _filter(
             reference_signal,
             size=baseline_window,
@@ -123,10 +135,10 @@ def find_cell_peaks_snr(
         reference_matches = [
             {
                 "requested": float(requested),
-                "matched": float(mz_values[int(np.abs(mz_values - requested).argmin())]),
+                "matched": float(mz_values[index]),
                 "ppm_error": float(error),
             }
-            for requested, error in zip(references, errors, strict=True)
+            for requested, index, error in zip(references, requested_indices, errors, strict=True)
         ]
     else:
         events = detector(data)

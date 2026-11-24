@@ -4,6 +4,7 @@ type DownloadOptions = {
   workspace: string
   method?: string
   body?: Record<string, unknown>
+  signal?: AbortSignal
   isCurrent(): boolean
 }
 /** Binary response ownership is checked after both the network wait and body decoding. */
@@ -22,6 +23,7 @@ export async function workspaceBlob(path: string, options: DownloadOptions): Pro
       ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.signal,
   })
   check()
   if (!response.ok) {

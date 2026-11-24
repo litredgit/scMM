@@ -93,10 +93,12 @@ test('manual ion review, quantitative views, candidate overlay and complete expo
   await navigate(page, '/annotation')
   await expect(page.locator('.annotation-context')).toContainText(/统计输入\s*L2/)
   await expect(page.getByLabel('谱图来源')).toContainText('L0 测量根')
-  await page.getByRole('button', { name: '查看完整谱图', exact: true }).click()
   const spectrum = page.getByRole('region', { name: '谱图注释与关联峰' })
-  await expect(spectrum.locator('.js-plotly-plot')).toContainText('Full feature spectrum')
   const graph = spectrum.locator('.js-plotly-plot')
+  await expect(graph).toContainText('Local feature spectrum')
+  await spectrum.getByRole('button', { name: '查看完整谱图', exact: true }).click()
+  await expect(spectrum.getByRole('button', { name: '返回局部谱图', exact: true })).toBeVisible()
+  await expect(graph).toContainText('Full feature spectrum')
   const markerIndex = await graph.evaluate((element) => {
     const traces = (element as HTMLElement & { data: { customdata?: string[][] }[] }).data
     return traces

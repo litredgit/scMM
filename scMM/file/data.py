@@ -48,6 +48,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         raw_timezone=None,
         rt_range=None,
         frame_range=None,
+        spectrum_hook=None,
         **preprocess_kwds,
     ) -> Self:
         """Load, align, and preprocess one mzML/mzXML or profile Thermo RAW file."""
@@ -65,6 +66,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
             raw_timezone=raw_timezone,
             rt_range=rt_range,
             frame_range=frame_range,
+            spectrum_hook=spectrum_hook,
         )
         return cls._from_raw_state(state, preprocess_kwds)
 
@@ -140,7 +142,7 @@ class CyESIData(DatasetProcessingMixin, DatasetInteropMixin):
         obj = object.__new__(cls)
         obj._apply_state(state)
         obj.file_meta["intensity_state"] = "raw"
-        obj.preprocess(**preprocess_kwds)
+        obj.preprocess(reference_frame=state.reference_frame, **preprocess_kwds)
         obj.feature_meta = make_feature_metadata(obj.data)
         return obj
 

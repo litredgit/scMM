@@ -1,3 +1,4 @@
+import { openImageExport } from './fixtures'
 import { navigate, test, expect, pinAnalysisParameters, type Page } from './fixtures'
 async function openAnalysis(page: Page) {
   await page.goto('/')
@@ -28,10 +29,17 @@ test('legend reorder persists, selection is manual and three modules fit narrow 
         (t) => [t.name, t.marker?.color],
       ),
     )
-  if (!(await plot.locator('.plot-settings').evaluate((el) => (el as HTMLDetailsElement).open)))
-    await plot.locator('.plot-settings > summary').click()
-  await plot.locator('.legend-order > summary').click()
+  await openImageExport(page, plot.getByRole('button', { name: '图片导出', exact: true }))
+  const settings = plot.getByText('图例与点样式', { exact: true })
+  if (!(await settings.evaluate((el) => el.parentElement!.hasAttribute('open'))))
+    await settings.click()
+  const order = plot.locator('.legend-order > summary')
+  if (!(await order.evaluate((el) => el.parentElement!.hasAttribute('open')))) await order.click()
   await plot.getByRole('button', { name: '下移图例 a', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: '图片导出', exact: true })
+    .getByRole('button', { name: '关闭', exact: true })
+    .click()
   await expect(plot.locator('.legendtext')).toHaveText(['b', 'a'])
   expect(
     await plot
@@ -54,10 +62,15 @@ test('legend reorder persists, selection is manual and three modules fit narrow 
   await navigate(page, '/analysis')
   await page.getByRole('button', { name: '更新嵌入图', exact: true }).click()
   await expect(plot.locator('.legendtext')).toHaveText(['b', 'a'])
-  if (!(await plot.locator('.plot-settings').evaluate((el) => (el as HTMLDetailsElement).open)))
-    await plot.locator('.plot-settings > summary').click()
-  await plot.locator('.legend-order > summary').click()
+  await openImageExport(page, plot.getByRole('button', { name: '图片导出', exact: true }))
+  if (!(await settings.evaluate((el) => el.parentElement!.hasAttribute('open'))))
+    await settings.click()
+  if (!(await order.evaluate((el) => el.parentElement!.hasAttribute('open')))) await order.click()
   await plot.getByRole('button', { name: '恢复图例默认顺序', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: '图片导出', exact: true })
+    .getByRole('button', { name: '关闭', exact: true })
+    .click()
   await expect(plot.locator('.legendtext')).toHaveText(['a', 'b'])
   await page.getByRole('button', { name: '差异与 Marker', exact: true }).click()
   await expect(page.getByRole('heading', { name: '各组差异 Marker', exact: true })).toBeVisible()
@@ -196,9 +209,7 @@ test('desktop figures, direct exports, assistant space and compact mobile naviga
   expect(content!.x + content!.width).toBeLessThanOrEqual(assistant!.x)
   await page.getByRole('button', { name: '收起 AI 助手', exact: true }).click()
   await navigate(page, '/results')
-  const download = await page
-    .getByRole('button', { name: '下载完整结果', exact: true })
-    .boundingBox()
+  const download = await page.getByRole('button', { name: 'CSV 导出', exact: true }).boundingBox()
   expect(download!.y).toBeLessThan(1080)
   await page.screenshot({ path: test.info().outputPath('layout-results-1920.png'), fullPage: true })
   for (const width of [2560, 1440, 700, 390]) {
@@ -365,7 +376,7 @@ test('downloads explain missing snapshot and embeddings without changing project
   await expect(page.getByRole('button', { name: '下载完整结果', exact: true })).toBeDisabled()
   await expect(page.getByText(/尚无已保存的数据快照，请先保存项目/)).toBeVisible()
   await page.getByLabel('下载内容', { exact: true }).selectOption('embedding')
-  await expect(page.getByRole('button', { name: '下载完整结果', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'CSV 导出', exact: true })).toBeDisabled()
   await expect(page.getByText(/暂无可用嵌入坐标/)).toBeVisible()
   await page.getByText(/项分析下载尚不可用 · 查看原因/).click()
   await expect(page.getByText(/两组差异分析表：暂无有效结果/)).toBeVisible()

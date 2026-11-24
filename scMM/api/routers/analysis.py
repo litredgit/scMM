@@ -33,11 +33,21 @@ def _check_figure_identity(metadata, manager, identity):
             "lipid_version",
             "annotation_source_identity",
             "method_result",
+            "batch_spectrum",
         )
     ):
         return
     with manager.access(identity) as workspace:
         project = workspace.require_project()
+        if metadata.get("batch_spectrum"):
+            from scMM.application.extraction_spectra import batch_profile
+            from scMM.application.project_batch import read_batch
+
+            source = metadata["batch_spectrum"]
+            if not isinstance(source, dict) or not isinstance(source.get("sha256"), str):
+                raise ValueError("批次谱图的来源身份格式无效。")
+            path = manager.batch_path(project, source.get("path"))
+            batch_profile(path, read_batch(path), source.get("sample"), verify=source["sha256"])
         if metadata.get("method_result"):
             from scMM.application.method_reports import current_reports
 
@@ -187,6 +197,11 @@ def features(
 @router.get("/workspace/analysis/qc")
 def qc(manager: Service, identity: Identity):
     return manager.qc_view(identity)
+
+
+@router.post("/workspace/analysis/qc-plot")
+def qc_plot(body: s.QCPlot, manager: Service, identity: Identity):
+    return manager.qc_plot(identity, **body.model_dump())
 
 
 @router.get("/workspace/analysis/figures/{key}")
@@ -352,47 +367,29 @@ def link_evidence(
 
 @router.get("/workspace/analysis/selection-axes")
 def selection_axes(
-    manager: Service, identity: Identity, query: str = Query(default="", max_length=1000)
+    manager: Service,
+    identity: Identity,
+    query: str = Query(default="", max_length=1000),
+    pool: bool = True,
+    embeddings: bool = True,
 ):
     from scMM.application.selection_labels import axis_choices
 
     with manager.access(identity) as workspace:
-        return axis_choices(workspace.require_project().workspace, query)
+        return axis_choices(
+            workspace.require_project().workspace, query, pool=pool, embeddings=embeddings
+        )
 
 
 @router.post("/workspace/analysis/selection-plot")
 def selection_plot(body: s.SelectionPlot, manager: Service, identity: Identity):
-    import plotly.graph_objects as go
-
-    from scMM.analysis.exploration import vector
-    from scMM.application.selection_labels import source
+    from scMM.application.selection_labels import selection_figure
     from scMM.application.web_support import figure_view
 
     with manager.access(identity) as workspace:
         workspace.check(body.revision)
         state = workspace.require_project().workspace
-        data = source(state)
-        if data.n_obs > 100000:
-            raise ValueError("圈选图最多 10 万个细胞，请先使用分组或稳定编号选择。")
-        x, _ = vector(data, body.x)
-        y, _ = vector(data, body.y)
-        figure = go.Figure(
-            go.Scattergl(
-                x=x,
-                y=y,
-                mode="markers",
-                customdata=[[str(v)] for v in data.obs_names],
-                marker={"size": 5},
-                hovertemplate="Cell: %{customdata[0]}<br>x: %{x}<br>y: %{y}<extra></extra>",
-            )
-        )
-        figure.update_layout(
-            title="Cell selection",
-            xaxis_title=body.x,
-            yaxis_title=body.y,
-            dragmode="lasso",
-            meta={"dataset_token": list(state.token), "point_kind": "cell_selection"},
-        )
+        figure = selection_figure(state, **body.model_dump(exclude={"revision"}))
         return {"workspace": manager.view(workspace), "value": figure_view(figure)}
 
 

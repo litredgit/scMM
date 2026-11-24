@@ -5,6 +5,23 @@ import numpy as np
 import pandas as pd
 
 
+def group_display_names(data, key, groups):
+    """Use sample labels when unique while retaining stable sample identities."""
+    names = {group: group for group in groups}
+    if key != "sample_id" or key not in data.obs or "sample" not in data.obs:
+        return names
+    identifiers = data.obs[key].astype(str)
+    for group in groups:
+        labels = data.obs.loc[identifiers.eq(group), "sample"].dropna().astype(str).unique()
+        if len(labels) == 1 and labels[0].strip():
+            names[group] = labels[0]
+    counts = pd.Series(list(names.values())).value_counts()
+    return {
+        group: label if counts[label] == 1 else f"{label} ({group})"
+        for group, label in names.items()
+    }
+
+
 def plot_subset(data, scope=None, *, chronological=False):
     scope = scope or {}
     mask = np.ones(data.n_obs, dtype=bool)

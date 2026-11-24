@@ -10,7 +10,7 @@ const operations = [
   ['查看原始谱', '读取原始文件并生成工作区图表，不建立当前矩阵；原始谱只引用，不复制。'],
   [
     '预览细胞窗口',
-    '写 processing/preview-jobs/<ID>/request.json、state.json；缓存位于 processing/preview-<ID>/，含 data.h5ad、targets.npy、traces.csv、detection.json、identity.json；共同特征缓存为 shared-<摘要>.npy / .json。尚未审核纳入。',
+    '写 processing/preview-jobs/<ID>/request.json、state.json。预览数据和信号位于 processing/preview-<ID>/，共同特征缓存使用 shared-<摘要>.npy、.npz 和 .json。审核后才建立当前数据。',
   ],
   [
     '开始提取 / 重试',

@@ -14,14 +14,19 @@ import type { QC, AnalysisInfo, DataTable } from '../../api/types'
 import PlotView from '../../components/PlotView.vue'
 import DataTableView from '../../components/DataTable.vue'
 import QCComparison from './QCComparison.vue'
+import QualityPanel from './QualityPanel.vue'
 import DataViewSelector from '../ions/DataViewSelector.vue'
 const store = useWorkspace()
 const stages = [
   { key: 'remove_outliers', name: '异常值处理' },
   { key: 'filter', name: '筛选' },
   { key: 'impute', name: '零值插补' },
-  { key: 'normalize', name: '归一化 / 标准化' },
+  { key: 'normalize', name: '归一化' },
+  { key: 'standardize', name: '标准化' },
+  { key: 'transform', name: '数值变换' },
   { key: 'subset', name: '按稳定 ID 取子集' },
+  { key: 'gate', name: '细胞圈门' },
+  { key: 'qc', name: 'QC 检查' },
 ]
 const historyOpen = ref(false)
 const historyPanel = ref<HTMLElement>()
@@ -34,13 +39,44 @@ const qc = ref<QC>(),
   info = ref<AnalysisInfo>(),
   impact = ref<{ impact: { object: string; before: number; after: number }[]; qc: QC }>()
 const operation = ref('remove_outliers'),
-  method = ref('total'),
   imputation = ref('median'),
   minTotal = ref(0),
   minDetected = ref(0.2),
   fraction = ref(0.2),
   contamination = ref(0.05),
   layer = ref('')
+const normalizationMethods = ['total', 'max', 'pqn', 'quantile']
+const standardizationMethods = ['zscore', 'minmax']
+const normalizeMethod = ref('total')
+const standardizeMethod = ref('zscore')
+const matrixTransform = computed(() =>
+  ['normalize', 'standardize', 'transform'].includes(operation.value),
+)
+const method = computed({
+  get: () =>
+    operation.value === 'transform'
+      ? 'log'
+      : operation.value === 'standardize'
+        ? standardizeMethod.value
+        : normalizeMethod.value,
+  set: (value: string) => {
+    if (standardizationMethods.includes(value)) {
+      standardizeMethod.value = value
+      if (operation.value === 'normalize') operation.value = 'standardize'
+    } else if (normalizationMethods.includes(value)) {
+      normalizeMethod.value = value
+    } else if (value === 'log' && operation.value === 'normalize') {
+      operation.value = 'transform'
+    }
+  },
+})
+const availableMethods = computed(() =>
+  operation.value === 'transform'
+    ? ['log']
+    : operation.value === 'standardize'
+      ? standardizationMethods
+      : normalizationMethods,
+)
 const advanced = ref({
   scale: 1,
   axis: null as number | null,
@@ -135,7 +171,7 @@ function options() {
         min_detected: minDetected.value,
         min_feature_fraction: fraction.value,
       }
-    : operation.value === 'normalize'
+    : matrixTransform.value
       ? {
           method: method.value,
           scale: advanced.value.scale,
@@ -159,16 +195,17 @@ function options() {
           }
 }
 async function run(preview: boolean) {
+  const kind = matrixTransform.value ? 'normalize' : operation.value
   if (preview)
     impact.value = await store.command('/analysis/operation', {
-      operation: operation.value,
+      operation: kind,
       options: options(),
       preview: true,
     })
   else {
     const applied = await store.mutate(
       '/analysis/operation',
-      { operation: operation.value, options: options(), preview: false },
+      { operation: kind, options: options(), preview: false },
       'POST',
       '预处理已应用，下游分析结果已失效。',
     )
@@ -214,6 +251,8 @@ const countTables = computed(() => {
 useViewState('preprocess', {
   operation,
   method,
+  normalizeMethod,
+  standardizeMethod,
   imputation,
   minTotal,
   minDetected,
@@ -253,7 +292,8 @@ useViewState('preprocess', {
       </div>
       <MatrixDownload source="current" embedded compact />
     </section>
-    <div class="preprocess-workspace">
+    <QualityPanel v-show="operation === 'qc'" :info="info" />
+    <div v-if="operation !== 'gate' && operation !== 'qc'" class="preprocess-workspace">
       <div class="card preprocess-parameters">
         <h2>{{ stage.name }}</h2>
         <p v-if="operation === 'impute'" class="muted">默认跳过插补，可根据数据和分析需求选用。</p>
@@ -284,17 +324,15 @@ useViewState('preprocess', {
                 max="1"
                 step="any"
                 :disabled="store.busy" /></label></template
-          ><label v-if="operation === 'normalize'"
-            ><FieldLabel name="normalization" /><select
+          ><label v-if="matrixTransform && operation !== 'transform'"
+            >{{ operation === 'standardize' ? '标准化方法' : '归一化方法'
+            }}<select
+              :key="operation"
               aria-label="normalization"
               v-model="method"
               :disabled="store.busy"
             >
-              <option
-                :value="v"
-                v-for="v in ['total', 'max', 'pqn', 'zscore', 'log', 'minmax', 'quantile']"
-                :key="v"
-              >
+              <option :value="v" v-for="v in availableMethods" :key="v">
                 {{ displayName(v) }}
               </option>
             </select></label
@@ -354,7 +392,7 @@ useViewState('preprocess', {
             </p>
           </details>
           <div class="field-grid">
-            <template v-if="operation === 'normalize'">
+            <template v-if="matrixTransform">
               <label v-if="method === 'total'"
                 ><span title="scale：归一化后每个细胞的总量，须大于零">总量尺度</span
                 ><input
@@ -465,7 +503,7 @@ useViewState('preprocess', {
             </template>
           </div>
         </details>
-        <div v-if="operation === 'normalize'" class="method-help">
+        <div v-if="matrixTransform" class="method-help">
           <p>
             <strong>{{ method }}</strong>
             <HelpTip :text="normalizationHelp[method]!" :label="method" />：{{
@@ -473,11 +511,11 @@ useViewState('preprocess', {
             }}
           </p>
           <details>
-            <summary>查看全部 normalization 方法</summary>
+            <summary>查看本步骤方法</summary>
             <dl class="method-list">
-              <div v-for="(text, key) in normalizationHelp" :key="key">
-                <dt>{{ key }} <HelpTip :text="text" :label="String(key)" /></dt>
-                <dd>{{ text }}</dd>
+              <div v-for="key in availableMethods" :key="key">
+                <dt>{{ key }} <HelpTip :text="normalizationHelp[key]!" :label="key" /></dt>
+                <dd>{{ normalizationHelp[key] }}</dd>
               </div>
             </dl>
           </details>
@@ -539,7 +577,7 @@ useViewState('preprocess', {
         ></template>
       </div>
     </div>
-    <SelectionLabels />
+    <SelectionLabels v-show="operation !== 'qc'" :promoted="operation === 'gate'" />
     <details
       ref="historyPanel"
       class="card history-panel"

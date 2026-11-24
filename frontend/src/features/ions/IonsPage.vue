@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ionPath, type IonView } from '../../api/ions'
-import { saveBlob, workspaceBlob } from '../../api/workspaceDownload'
+import { openWorkspaceCsv } from '../../api/csvExport'
 import DataTableView from '../../components/DataTable.vue'
 import DataViewSelector from './DataViewSelector.vue'
 import AnnotationHeader from '../annotation/AnnotationHeader.vue'
@@ -100,26 +100,18 @@ async function compare() {
 async function replicates() {
   const snapshot = store.current
   if (!snapshot) return
-  await store.run(
-    async (scope) => {
-      const blob = await workspaceBlob(ionPath('replicates'), {
-        workspace: snapshot.workspace_id,
-        method: 'POST',
-        body: {
-          revision: snapshot.revision,
-          replicate_key: replicateKey.value,
-          group_key: replicateGroup.value || null,
-        },
-        isCurrent: () =>
-          scope.isCurrent() &&
-          store.current?.workspace_id === snapshot.workspace_id &&
-          store.current?.revision === snapshot.revision,
-      })
-      saveBlob(blob, 'replicate-summary.csv')
+  openWorkspaceCsv('replicate-summary.csv', ionPath('replicates'), {
+    workspace: snapshot.workspace_id,
+    method: 'POST',
+    body: {
+      revision: snapshot.revision,
+      replicate_key: replicateKey.value,
+      group_key: replicateGroup.value || null,
     },
-    '',
-    { label: '下载重复汇总', phase: 'downloading' },
-  )
+    isCurrent: () =>
+      store.current?.workspace_id === snapshot.workspace_id &&
+      store.current?.revision === snapshot.revision,
+  })
 }
 function label(view: IonView) {
   return `${view.level} · ${view.cell_ids.length} × ${(view.variable_ids ?? view.feature_ids).length} · ${view.id.slice(0, 8)}`

@@ -193,7 +193,7 @@ def sample_parameters(project, sample):
             selected["method_plugins"] = values["method_plugins"]
         return selected
     if project.manifest.get("auto_ranges", True) and not project.manifest.get("manual_parameters"):
-        if project.manifest["feature_strategy"] == "shared":
+        if project.manifest["feature_strategy"] in {"shared", "list"}:
             ranges = [s["auto_mz_range"] for s in project.samples if s.get("auto_mz_range")]
             if ranges:
                 values.update(mz_min=min(r[0] for r in ranges), mz_max=max(r[1] for r in ranges))

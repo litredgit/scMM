@@ -250,7 +250,7 @@ def restore_cleanup(manager, entry, record, *, locked=False):
             if parts[1] in {".", "..", ".project.lock"} or relative.is_absolute():
                 raise PermissionError("恢复成员路径越界")
             if parts[0] == "processing" and not re.fullmatch(
-                r"preview-[a-f0-9]{32}|shared-[a-f0-9]{64}\.(npy|json)", parts[1]
+                r"preview-[a-f0-9]{32}|shared-[a-f0-9]{64}\.(npy|npz|json)", parts[1]
             ):
                 raise PermissionError("恢复成员不是已识别缓存")
             target = _safe(folder / relative)

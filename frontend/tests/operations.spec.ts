@@ -1,3 +1,4 @@
+import { openImageExport, finishExport } from './fixtures'
 import { navigate, test, expect, type Page, preprocessingStep } from './fixtures'
 import { readFile } from 'node:fs/promises'
 import { createProject as create } from './support/project'
@@ -37,11 +38,11 @@ test('explicit result selection, detailed help, stable QC and readable narrow la
   await helper.press('Escape')
   await expect(page.getByRole('tooltip')).toHaveCount(0)
   await preprocessingStep(page, 'normalize').click()
-  await page.getByText('查看全部 normalization 方法', { exact: true }).click()
-  await expect(page.locator('.method-list .help-trigger')).toHaveCount(7)
-  await page.getByLabel('normalization', { exact: true }).selectOption('log')
+  await page.getByText('查看本步骤方法', { exact: true }).click()
+  await expect(page.locator('.method-list .help-trigger')).toHaveCount(4)
+  await preprocessingStep(page, 'transform').click()
   await expect(page.locator('.method-help > p')).toContainText('零值变为')
-  await page.getByLabel('normalization', { exact: true }).selectOption('total')
+  await preprocessingStep(page, 'normalize').click()
   await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
   await expect(page.getByText(/横轴采用稳定范围/)).toBeVisible()
   await expect
@@ -62,9 +63,12 @@ test('explicit result selection, detailed help, stable QC and readable narrow la
     .first()
     .evaluate((el) => ({ width: el.clientWidth, height: el.clientHeight }))
   for (const format of ['SVG', 'PNG']) {
-    const wait = page.waitForEvent('download')
-    await page.getByRole('button', { name: `下载 ${format}`, exact: true }).click()
-    const download = await wait
+    await openImageExport(
+      page,
+      page.getByRole('button', { name: '图片导出', exact: true }),
+      format.toLowerCase(),
+    )
+    const download = await finishExport(page, '图片导出', '下载图片')
     const bytes = await readFile((await download.path())!)
     if (format === 'PNG') {
       expect(bytes.readUInt32BE(16)).toBe(Math.floor((89 / 25.4) * 300))
@@ -426,7 +430,7 @@ for (const waitAt of ['response', 'blob'] as const) {
         body: 'feature,value\nf0,1.123456789012345\n',
       })
     })
-    const result = page.evaluate(async () => {
+    await page.evaluate(async () => {
       const root = document.getElementById('app') as HTMLElement & {
         __vue_app__: {
           config: {
@@ -438,6 +442,8 @@ for (const waitAt of ['response', 'blob'] as const) {
         .get('workspace')!
         .download('matrix', 'late.csv')
     })
+    const dialog = page.getByRole('dialog', { name: 'CSV 导出', exact: true })
+    await dialog.getByRole('button', { name: '下载 CSV', exact: true }).click()
     try {
       await pending
       await page.evaluate(() => {
@@ -452,7 +458,8 @@ for (const waitAt of ['response', 'blob'] as const) {
         window.dispatchEvent(new Event('scmm-test-continue-blob'))
       })
       release()
-      expect((await result)?.status).toBe('stale')
+      await expect(dialog.getByRole('status')).toContainText('导出来源已改变')
+      await expect(dialog.getByRole('button', { name: '下载 CSV', exact: true })).toBeDisabled()
       expect(downloads).toBe(0)
       await expect(page.getByRole('alert')).toHaveCount(0)
     } finally {

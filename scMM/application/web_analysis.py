@@ -201,6 +201,8 @@ def analysis_settings(project):
 
 class AnalysisWorkflow:
     def analysis_info(self, identity):
+        from scMM.analysis.plot_scope import group_display_names
+
         from .method_reports import report_summaries
 
         with self.access(identity) as workspace:
@@ -215,6 +217,16 @@ class AnalysisWorkflow:
             return {
                 "token": list(state.token),
                 "layers": list(data.layers),
+                "original_layer": data.uns.get("scmm_workbench", {}).get("original_layer"),
+                "numeric_observations": [
+                    str(key)
+                    for key in data.obs
+                    if pd.api.types.is_numeric_dtype(data.obs[key])
+                    and not pd.api.types.is_bool_dtype(data.obs[key])
+                ],
+                "sample_labels": group_display_names(
+                    data, "sample_id", values.get("sample_id", [])
+                ),
                 "embeddings": list(data.obsm),
                 "embedding_dimensions": {
                     key: int(value.shape[1]) for key, value in data.obsm.items()
@@ -293,6 +305,38 @@ class AnalysisWorkflow:
     def qc_view(self, identity):
         with self.access(identity) as workspace:
             return quality_view(workspace.require_project().workspace)
+
+    def qc_plot(self, identity, revision, kind, group_key, layer, **options):
+        from scMM.analysis.qc_plots import distribution_figure, sample_correlation_figure
+
+        with self.access(identity) as workspace:
+            workspace.check(revision)
+            state = workspace.require_project().workspace
+            data = state.require_data()
+            if layer is not None and layer not in data.layers:
+                raise ValueError("所选 QC 数据层已失效，请重新选择。")
+            if kind == "distribution":
+                figure = distribution_figure(
+                    data,
+                    group_key=group_key,
+                    layer=layer,
+                    **{key: options[key] for key in ("metric", "bins", "relative", "palette")},
+                )
+            else:
+                figure = sample_correlation_figure(
+                    data,
+                    sample_key=group_key,
+                    layer=layer,
+                    **{key: options[key] for key in ("aggregate", "colorscale", "square")},
+                )
+            figure.update_layout(
+                meta={
+                    **figure.layout.meta,
+                    "dataset_token": list(state.token),
+                    "parameters": {"kind": kind, "group_key": group_key, "layer": layer, **options},
+                }
+            )
+            return {"workspace": self.view(workspace), "value": figure_view(figure)}
 
     def run_operation(self, identity, revision, operation, options, *, preview=False):
         from .web_projects import project_candidate

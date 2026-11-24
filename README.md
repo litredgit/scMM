@@ -8,7 +8,7 @@ scMM 是 CyESI 单细胞质谱的服务器网页应用。从 Thermo profile RAW�
 
 | 手上的数据 | 操作指南 |
 |---|---|
-| 原始谱 | [细胞提取](docs/extraction.md) |
+| 原始谱，可选 m/z 清单 | [细胞提取](docs/extraction.md) |
 | m/z 特征表或待注释矩阵 | [特征注释](docs/annotation.md) |
 | 细胞或样本定量矩阵 | [统计分析](docs/statistics.md) |
 

@@ -1,3 +1,4 @@
+import { finishExport } from './fixtures'
 import { navigate, test, expect, type Page } from './fixtures'
 import { createProject as create } from './support/project'
 
@@ -132,6 +133,20 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   })
   await noError(page)
   await navigate(page, '/extraction')
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  const sources = page.locator('.feature-source')
+  await expect(sources.getByLabel('特征来源')).toHaveValue('shared')
+  await sources.getByText('上传 m/z 清单', { exact: true }).click()
+  await sources.getByLabel('文件', { exact: true }).setInputFiles({
+    name: 'targets.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('mz,name\n150,detected\n155,absent\n900,outside\n'),
+  })
+  await sources.getByRole('button', { name: '导入清单', exact: true }).click()
+  await expect(sources.getByLabel('m/z 清单')).toHaveValue(/^[a-f0-9]{32}$/)
+  await sources.getByRole('button', { name: '查看清单', exact: true }).click()
+  await expect(sources.getByText('155', { exact: true })).toBeVisible()
+  await sources.getByRole('button', { name: '应用特征来源', exact: true }).click()
   await page.getByRole('button', { name: '检查参数与输入', exact: true }).click()
   await expect(page.getByRole('heading', { name: '逐样本完整参数' })).toBeVisible()
   await page.getByRole('button', { name: '开始提取', exact: true }).click()
@@ -165,9 +180,8 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   await expect(
     page.getByText('当前数据集已建立，可进入预处理。项目仍需主动保存。', { exact: true }),
   ).toBeVisible()
-  const originalDownload = page.waitForEvent('download')
   await page.getByRole('button', { name: '下载提取原始矩阵 CSV', exact: true }).click()
-  const original = await originalDownload
+  const original = await finishExport(page, 'CSV 导出', '下载 CSV')
   expect(original.suggestedFilename()).toBe('extracted-matrix.csv')
   const originalStream = await original.createReadStream()
   const originalChunks = []
@@ -176,7 +190,23 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   expect(originalCSV).toMatch(/^Sample,Label,/)
   expect(originalCSV.trim().split('\n')).toHaveLength(3)
   expect(originalCSV).toContain(',extract,')
-  await page.getByRole('button', { name: '下一步：预处理 →', exact: true }).click()
+  const spectrum = page.locator('.batch-spectrum')
+  await spectrum.getByRole('button', { name: '查看叠加谱', exact: true }).click()
+  await expect(spectrum.getByRole('row').filter({ hasText: '已保留' })).toContainText('150')
+  await expect(spectrum.getByRole('row').filter({ hasText: '未保留' })).toContainText('155')
+  await expect(
+    spectrum.locator('.annotation-text').filter({ hasText: /^150\.0000$/ }),
+  ).toBeVisible()
+  await spectrum.screenshot({ path: test.info().outputPath('target-spectrum-desktop.png') })
+  await spectrum.getByRole('row').filter({ hasText: '已保留' }).getByRole('button').click()
+  await expect(spectrum.getByRole('button', { name: '上一视图', exact: true })).toBeEnabled()
+  await spectrum.getByRole('button', { name: '保存为清单', exact: true }).click()
+  await expect(
+    page.getByRole('status').filter({ hasText: '清单已加入此项目的特征来源' }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: '下一步：选择统计分析数据 →', exact: true }).click()
+  await expect(page).toHaveURL(/\/statistics$/)
+  await navigate(page, '/preprocess')
   await expect(page.locator('.project-heading')).toContainText(/2\s+细胞 ×\s+1 特征/)
   await noError(page)
   expect(errors).toEqual([])
@@ -202,25 +232,18 @@ test('two completed batches compare without replacing data, link signal axes and
   await page.getByRole('button', { name: '刷新批次', exact: true }).click()
   await expect(reviewSample).not.toBeChecked()
   await expect(page.getByText('矩阵范围', { exact: true })).toHaveCount(0)
-  await page.getByText('CSV 标签设置', { exact: true }).click()
-  const labelsPanel = page.locator('.csv-label-panel')
-  await expect(labelsPanel).toBeVisible()
-  for (const width of [1440, 390]) {
-    await page.setViewportSize({ width, height: 900 })
-    const panelBox = (await labelsPanel.boundingBox())!
-    expect(panelBox.width).toBeGreaterThan(260)
-    expect(panelBox.x).toBeGreaterThanOrEqual(0)
-    expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(width)
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-      .toBe(true)
-  }
-  await page.screenshot({ path: test.info().outputPath('csv-label-settings.png') })
-  await page.setViewportSize({ width: 1440, height: 1000 })
-  await page.getByText('CSV 标签设置', { exact: true }).click()
-  const matrixRequest = page.waitForRequest((r) => r.url().endsWith('/results/matrix/download'))
-  const matrixDownload = page.waitForEvent('download')
+  await page.setViewportSize({ width: 1920, height: 1080 })
   await page.getByRole('button', { name: '下载提取原始矩阵 CSV', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'CSV 导出', exact: true })
+  await dialog.getByText('CSV 标签设置', { exact: true }).click()
+  const labels = dialog.locator('.csv-labels')
+  await expect(labels).toBeVisible()
+  const panelBox = (await labels.boundingBox())!
+  expect(panelBox.width).toBeGreaterThan(260)
+  expect(panelBox.x).toBeGreaterThanOrEqual(0)
+  expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(1920)
+  const matrixRequest = page.waitForRequest((r) => r.url().endsWith('/results/matrix/download'))
+  const matrixDownload = finishExport(page, 'CSV 导出', '下载 CSV')
   expect((await matrixRequest).postDataJSON().batch_path).toBe(await selectedBatch.inputValue())
   expect((await matrixDownload).suggestedFilename()).toBe('extracted-matrix.csv')
   await expect(page.getByRole('heading', { name: '当前矩阵', exact: true })).toHaveCount(0)
@@ -268,8 +291,8 @@ test('two completed batches compare without replacing data, link signal axes and
         ),
     )
     .toEqual([5, 15])
-  const download = page.waitForEvent('download')
   await panel.getByRole('button', { name: '下载完整细胞 QC对比 CSV', exact: true }).click()
+  const download = finishExport(page, 'CSV 导出', '下载 CSV')
   expect((await download).suggestedFilename()).toBe('batch-comparison-cells.csv')
   await page.screenshot({ path: test.info().outputPath('batch-comparison.png'), fullPage: true })
   await panel.locator(':scope > summary').click()

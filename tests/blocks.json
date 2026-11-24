@@ -186,6 +186,8 @@
         "scMM/application/tasks.py",
         "scMM/application/worker.py",
         "scMM/application/project_batch.py",
+        "scMM/application/extraction_spectra.py",
+        "scMM/application/mz_lists.py",
         "scMM/application/batch_comparison.py",
         "scMM/application/cell_preview.py",
         "scMM/application/parameters.py",
@@ -558,6 +560,7 @@
       ],
       "sources": [
         "frontend/src/features/preprocess/PreprocessPage.vue",
+        "frontend/src/features/preprocess/QualityPanel.vue",
         "frontend/src/features/preprocess/SelectionLabels.vue",
         "frontend/src/features/preprocess/DataInspection.vue"
       ],
@@ -929,6 +932,17 @@
       "browser-monitor",
       "browser-lipids",
       "browser-ai",
+      "browser-preprocessing",
+      "browser-storage",
+      "browser-raw",
+      "browser-operations",
+      "browser-analysis-journey"
+    ],
+    "frontend/src/api/csv*.ts": [
+      "browser-projects",
+      "browser-workflow",
+      "browser-navigation",
+      "browser-lipids",
       "browser-preprocessing",
       "browser-storage",
       "browser-raw",

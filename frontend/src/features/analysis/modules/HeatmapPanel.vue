@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { colorScales } from '../../../components/plotColors'
 import CalculationPanel from '../components/CalculationPanel.vue'
 import { displayName } from '../../../help/labels'
 import { useViewState } from '../../../api/viewState'
@@ -286,8 +287,12 @@ useViewState('heatmap', {
           >热图色板<select v-model="colorscale" aria-label="热图色板">
             <option value="RdBu">蓝白红</option>
             <option value="PuOr">紫白橙</option>
-            <option value="Viridis">Viridis</option>
-            <option value="Cividis">Cividis</option>
+            <option
+              v-for="scale in colorScales.filter((scale) => !['RdBu', 'PuOr'].includes(scale))"
+              :key="scale"
+            >
+              {{ scale }}
+            </option>
           </select></label
         >
         <label

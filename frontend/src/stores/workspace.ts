@@ -2,6 +2,8 @@ import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { serialPolling } from '../api/polling'
 import { workspaceBlob, saveBlob } from '../api/workspaceDownload'
+import { openWorkspaceCsv } from '../api/csvExport'
+import { resultDownloads } from '../features/analysis/results'
 import { operationDetails, operationValue, phaseLabels } from '../api/operation'
 import type {
   OperationDetails,
@@ -493,15 +495,25 @@ export const useWorkspace = defineStore('workspace', () => {
   async function download(kind: string, filename: string, key = '') {
     if (!current.value) return
     const snapshot = current.value
+    const isCurrent = () =>
+      current.value?.workspace_id === snapshot.workspace_id &&
+      current.value?.revision === snapshot.revision
+    const query = new URLSearchParams({ kind, filename, key, revision: String(snapshot.revision) })
+    const url = `/results/download?${query}`
+    const archive = ['merge_preview', 'merge_audit', 'time_result', 'report_zip'].includes(kind)
+    if (
+      archive ||
+      ['matrix', 'embedding', 'qc', 'history', 'raw'].includes(kind) ||
+      resultDownloads[kind as keyof typeof resultDownloads]?.endsWith('.csv')
+    ) {
+      openWorkspaceCsv(filename, url, { workspace: snapshot.workspace_id, isCurrent }, archive)
+      return
+    }
     return run(
       async (scope) => {
-        const query = new URLSearchParams({ kind, filename, key })
-        const blob = await workspaceBlob(`/results/download?${query}`, {
+        const blob = await workspaceBlob(url, {
           workspace: snapshot.workspace_id,
-          isCurrent: () =>
-            scope.isCurrent() &&
-            current.value?.workspace_id === snapshot.workspace_id &&
-            current.value?.revision === snapshot.revision,
+          isCurrent: () => scope.isCurrent() && isCurrent(),
         })
         saveBlob(blob, filename)
       },

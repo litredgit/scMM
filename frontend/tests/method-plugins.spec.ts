@@ -1,3 +1,4 @@
+import { finishExport } from './fixtures'
 import { test, expect, navigate } from './fixtures'
 import { createProject, importDataset } from './support/project'
 
@@ -41,8 +42,8 @@ test('desktop analysis keeps core methods visible and follows server plugin sele
     await expect(extension.getByRole('button', { name: '运行插件方法' })).toBeInViewport()
     await extension.getByRole('button', { name: '运行插件方法' }).click()
     await expect(extension.getByRole('button', { name: '下载完整 CSV' })).toBeVisible()
-    const download = page.waitForEvent('download')
     await extension.getByRole('button', { name: '下载完整 CSV' }).click()
+    const download = finishExport(page, 'CSV 导出', '下载 CSV')
     expect((await download).suggestedFilename()).toBe('fixture-methods-report.csv')
     await navigate(page, '/results')
     await page.locator('summary').filter({ hasText: '插件方法报告' }).click()

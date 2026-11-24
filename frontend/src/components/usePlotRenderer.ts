@@ -25,9 +25,7 @@ type RenderOptions = {
   chartWidth: Ref<number>
   chartHeight: ComputedRef<number>
   chartKind: ComputedRef<string>
-  exporting: Ref<boolean>
   fresh: ComputedRef<boolean>
-  image: (format: string) => Promise<void>
   emit: {
     (event: 'selection', value: string[]): void
     (event: 'select', value: string): void
@@ -66,9 +64,7 @@ export function usePlotRenderer({
   chartWidth,
   chartHeight,
   chartKind,
-  exporting,
   fresh,
-  image,
   emit,
   legendItems,
   pointOpacity,
@@ -207,29 +203,8 @@ export function usePlotRenderer({
                 ? ['select2d', 'lasso2d', 'toggleSpikelines', 'hoverCompareCartesian']
                 : []),
             ],
-            modeBarButtonsToAdd: props.compact
-              ? []
-              : [
-                  {
-                    name: '下载论文 SVG',
-                    icon: {
-                      width: 24,
-                      height: 24,
-                      path: 'M3 3H21V21H3ZM7 7V17H17V7ZM11 8H13V13H15L12 16L9 13H11Z',
-                    },
-                    click: () => {
-                      if (!exporting.value && !store.busy && fresh.value) void image('svg')
-                    },
-                  },
-                ],
             locale: 'zh-CN',
             scrollZoom: true,
-            toImageButtonOptions: {
-              format: 'svg',
-              filename: props.name,
-              width: chartWidth.value,
-              height: chartHeight.value,
-            },
           })
           const graph = element.value as HTMLElement & {
             on?: (

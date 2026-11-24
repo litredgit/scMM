@@ -241,8 +241,12 @@ watch(
                 >
                   <option>shared</option>
                   <option>independent</option>
+                  <option v-if="store.project?.manifest.feature_list_id" value="list">
+                    固定 m/z 清单
+                  </option>
                 </select></label
               >
+              <RouterLink to="/extraction">在提取页管理 m/z 清单</RouterLink>
               <label v-if="strategy === 'independent'" class="parameter-field"
                 ><FieldLabel name="feature_merge_ppm" /><input
                   aria-label="feature_merge_ppm"

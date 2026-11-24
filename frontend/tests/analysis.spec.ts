@@ -1,3 +1,4 @@
+import { openImageExport, finishExport } from './fixtures'
 import { navigate, test, expect, type Page } from './fixtures'
 import { readFile } from 'node:fs/promises'
 
@@ -62,27 +63,59 @@ test('heatmap selected sample order, pending settings and Cell SVG use one expor
   await expect(panel.getByRole('status').filter({ hasText: '设置已编辑' })).toBeVisible()
   await panel.getByRole('button', { name: '生成热图', exact: true }).click()
   const plot = panel.locator('.plot-shell')
-  await plot.locator('.plot-settings summary').click()
+  const dialog = await openImageExport(
+    page,
+    plot.getByRole('button', { name: '图片导出', exact: true }),
+  )
+  await dialog.getByText('图中文字', { exact: true }).click()
   await plot.getByLabel('论文规格', { exact: true }).selectOption('cell-single')
   await expect(plot.getByLabel('宽度（mm）', { exact: true })).toHaveValue('85')
   await expect(plot.getByLabel('图内显示标题', { exact: true })).not.toBeChecked()
   await expect(plot.getByRole('option', { name: /Analytical Chemistry/ })).toHaveCount(0)
-  await plot.getByRole('button', { name: '预览导出效果', exact: true }).click()
-  await expect(plot.getByAltText('按论文设置生成的导出预览')).toBeVisible()
-  const direct = page.waitForEvent('download')
-  await plot.getByRole('button', { name: '下载 SVG', exact: true }).click()
-  const directSvg = await readFile((await (await direct).path())!, 'utf8')
+  await dialog.getByRole('button', { name: '预览图片', exact: true }).click()
+  await expect(dialog.getByAltText('按导出设置生成的图片预览')).toBeVisible()
+  const preview = await dialog
+    .getByAltText('按导出设置生成的图片预览')
+    .evaluate(async (img) => (await fetch((img as HTMLImageElement).src)).text())
+  const direct = await finishExport(page, '图片导出', '下载图片')
+  const directSvg = await readFile((await direct.path())!, 'utf8')
   expect(directSvg).toContain('Arial')
   expect(directSvg).not.toContain('Feature heatmap')
-  const toolbar = page.waitForEvent('download')
-  await plot.locator('.plot').hover()
-  await plot.locator('[data-title="下载论文 SVG"]').click()
-  const toolbarSvg = await readFile((await (await toolbar).path())!, 'utf8')
-  expect(toolbarSvg).toContain('Arial')
-  const images = (svg: string) => svg.match(/data:image\/png;base64,[^"]+/g) ?? []
-  expect(images(directSvg).length).toBeGreaterThan(0)
-  expect(images(toolbarSvg)).toEqual(images(directSvg))
+  expect(directSvg).toContain('data:image/png;base64')
+  expect(directSvg).toEqual(preview)
   await page.screenshot({ path: test.info().outputPath('heatmap-cell-export.png'), fullPage: true })
+})
+
+test('embedding colors use the selected intensity layer and display transform', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await importAnalysis(page, '嵌入强度色标')
+  await page.getByRole('button', { name: '运行降维', exact: true }).click()
+  await expect(page.locator('.embedding-view .js-plotly-plot')).toBeVisible()
+  await page.getByLabel('Color source', { exact: true }).selectOption('feature')
+  await page.getByLabel('Color', { exact: true }).selectOption('feature:f0')
+  await page.getByText('配色与强度变换', { exact: true }).click()
+  await page.getByLabel('着色强度层').selectOption('scmm_input_0')
+  await page.getByLabel('连续色标').selectOption('Cividis')
+  const result = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/analysis/plot') &&
+      response.request().postDataJSON()?.options?.transform === 'log1p',
+  )
+  await page.getByLabel('颜色数值变换').selectOption('log1p')
+  await page.getByRole('button', { name: '更新嵌入图', exact: true }).click()
+  const response = await result
+  expect(response.ok()).toBe(true)
+  const { meta, coloraxis } = (await response.json()).value.layout
+  expect(meta.parameters).toMatchObject({
+    color: 'feature:f0',
+    colorscale: 'Cividis',
+    transform: 'log1p',
+    color_layer: 'scmm_input_0',
+  })
+  expect(coloraxis.colorbar.title.text).toBe('Intensity (log1p)')
+  expect(meta.export_tables.color_values).toContain('raw_color,display_color')
 })
 
 test('legacy settings, independent parameters, draft and project reset, narrow panels', async ({
@@ -317,9 +350,11 @@ test('PCA axes, stable cell clicks, paper exports and complete heatmap data', as
   await expect(page.getByRole('cell', { name: 'PC4', exact: true })).toBeVisible()
   const embeddingPlot = page.locator('.plot-shell').first()
   async function embeddingSvg() {
-    const pending = page.waitForEvent('download')
-    await embeddingPlot.getByRole('button', { name: '下载 SVG', exact: true }).click()
-    return readFile((await (await pending).path())!, 'utf8')
+    await openImageExport(
+      page,
+      embeddingPlot.getByRole('button', { name: '图片导出', exact: true }),
+    )
+    return readFile((await (await finishExport(page, '图片导出', '下载图片')).path())!, 'utf8')
   }
   const originalView = await embeddingSvg()
   await embeddingPlot.locator('.js-plotly-plot').evaluate((el) => {
@@ -335,13 +370,18 @@ test('PCA axes, stable cell clicks, paper exports and complete heatmap data', as
   expect(raster(originalView).length).toBeGreaterThan(0)
   expect(raster(rotatedView)).not.toEqual(raster(originalView))
   const plotDataRequest = page.waitForRequest((request) => request.url().endsWith('/figures/data'))
-  const plotDataDownload = page.waitForEvent('download')
-  await embeddingPlot.getByRole('button', { name: '下载作图数据', exact: true }).click()
+  await embeddingPlot.getByRole('button', { name: '作图数据导出', exact: true }).click()
+  const plotDataDownload = finishExport(page, 'CSV 导出', '下载归档')
   const publication = (await plotDataRequest).postDataJSON().figure.layout.meta.publication
   expect(publication.range).toBe('current')
   expect(publication.viewport['scene.camera'].eye).toEqual({ x: 2, y: 0.4, z: 0.2 })
   await plotDataDownload
-  await embeddingPlot.getByLabel('导出范围', { exact: true }).selectOption('full')
+  const full = await openImageExport(
+    page,
+    embeddingPlot.getByRole('button', { name: '图片导出', exact: true }),
+  )
+  await full.getByLabel('导出范围', { exact: true }).selectOption('full')
+  await full.getByRole('button', { name: '关闭', exact: true }).click()
   expect(raster(await embeddingSvg())).not.toEqual(raster(rotatedView))
   await page
     .locator('.js-plotly-plot')
@@ -357,8 +397,8 @@ test('PCA axes, stable cell clicks, paper exports and complete heatmap data', as
     .locator('.plot-shell')
     .filter({ has: page.getByLabel('图文件名：cell-spectra', { exact: true }) })
   await expect(spectra.locator('.js-plotly-plot')).toBeVisible()
-  const pdf = page.waitForEvent('download')
-  await spectra.getByRole('button', { name: '下载 PDF', exact: true }).click()
+  await openImageExport(page, spectra.getByRole('button', { name: '图片导出', exact: true }), 'pdf')
+  const pdf = finishExport(page, '图片导出', '下载图片')
   expect((await pdf).suggestedFilename()).toBe('cell-spectra.pdf')
   await module(page, '热图')
   await page.getByLabel('特征编号（换行或逗号分隔）', { exact: true }).fill('f0\nf1\nf2')
@@ -372,8 +412,8 @@ test('PCA axes, stable cell clicks, paper exports and complete heatmap data', as
     .locator('.plot-shell')
     .filter({ has: page.getByLabel('图文件名：heatmap', { exact: true }) })
   await expect(heatmap.locator('.js-plotly-plot')).toBeVisible()
-  const download = page.waitForEvent('download')
-  await heatmap.getByRole('button', { name: '下载作图数据', exact: true }).click()
+  await heatmap.getByRole('button', { name: '作图数据导出', exact: true }).click()
+  const download = finishExport(page, 'CSV 导出', '下载归档')
   expect((await download).suggestedFilename()).toBe('heatmap-data.zip')
   await module(page, '差异与 Marker')
   await page.getByRole('button', { name: '计算分类权重 Marker', exact: true }).click()
@@ -528,8 +568,8 @@ test('exact feature scatter plots manually and reloads a saved exportable figure
   await page.getByLabel('散点特征搜索', { exact: true }).fill('f3')
   await expect(x).toHaveValue('f0')
   await expect(y).toHaveValue('f1')
-  const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: '下载作图数据', exact: true }).click()
+  await page.getByRole('button', { name: '作图数据导出', exact: true }).click()
+  const download = finishExport(page, 'CSV 导出', '下载归档')
   expect((await download).suggestedFilename()).toMatch(/\.zip$/)
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
@@ -547,7 +587,7 @@ test('exact feature scatter plots manually and reloads a saved exportable figure
   await expect(y).toHaveValue('f1')
   await page.getByRole('button', { name: '读取已保存散点', exact: true }).click()
   await expect(page.locator('.js-plotly-plot')).toBeVisible()
-  await expect(page.getByRole('button', { name: '下载作图数据', exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: '作图数据导出', exact: true })).toBeEnabled()
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
@@ -561,9 +601,9 @@ test('feature-distance embedding exports distances and reloads a read-only figur
   await page.getByLabel('特征嵌入距离', { exact: true }).selectOption('euclidean')
   await page.getByRole('button', { name: '生成特征距离嵌入', exact: true }).click()
   await expect(page.locator('.js-plotly-plot')).toBeVisible({ timeout: 60000 })
-  await expect(page.getByRole('button', { name: '下载作图数据', exact: true })).toBeEnabled()
-  const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: '下载作图数据', exact: true }).click()
+  await expect(page.getByRole('button', { name: '作图数据导出', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: '作图数据导出', exact: true }).click()
+  const download = finishExport(page, 'CSV 导出', '下载归档')
   expect((await download).suggestedFilename()).toMatch(/\.zip$/)
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
@@ -597,8 +637,8 @@ test('acquisition stability requires explicit choices and persists full tables',
   await generate.click()
   await expect(page.locator('.js-plotly-plot')).toBeVisible()
   await expect(page.getByText(/坐标含义：当前存储顺序/)).toBeVisible()
-  const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: '下载作图数据', exact: true }).click()
+  await page.getByRole('button', { name: '作图数据导出', exact: true }).click()
+  const download = finishExport(page, 'CSV 导出', '下载归档')
   expect((await download).suggestedFilename()).toMatch(/\.zip$/)
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
@@ -672,7 +712,11 @@ test('image exports show backend stale-source rejection without a download', asy
       json: { error: { message: '图形已过期，请基于当前数据重新绘图。' } },
     })
   })
-  await page.getByRole('button', { name: '下载 SVG', exact: true }).click()
+  await openImageExport(page, page.getByRole('button', { name: '图片导出', exact: true }))
+  await page
+    .getByRole('dialog', { name: '图片导出' })
+    .getByRole('button', { name: '下载图片', exact: true })
+    .click()
   await expect(page.getByRole('alert')).toContainText('图形已过期，请基于当前数据重新绘图。')
   expect(downloads).toBe(0)
 })
@@ -720,8 +764,8 @@ test('named Palantir and window results retain exact sources through save and re
   ).toBeVisible()
   await page.getByRole('button', { name: '绘制时间结果', exact: true }).click()
   await expect(page.getByText('图来源结果：path_browser', { exact: true })).toBeVisible()
-  const download = page.waitForEvent('download')
   await page.getByRole('button', { name: '下载完整时间结果 ZIP', exact: true }).click()
+  const download = finishExport(page, 'CSV 导出', '下载归档')
   expect((await download).suggestedFilename()).toBe('scmm-time-result.zip')
   expect(calculations).toBe(2)
   for (const width of [700, 390]) {
@@ -772,8 +816,8 @@ test('window velocity uses explicit time and retains stored results after reload
   ).toBeVisible()
   await page.getByRole('button', { name: '绘制时间结果', exact: true }).click()
   await expect(page.getByText('图来源结果：speed_browser', { exact: true })).toBeVisible()
-  const download = page.waitForEvent('download')
   await page.getByRole('button', { name: '下载完整时间结果 ZIP', exact: true }).click()
+  const download = finishExport(page, 'CSV 导出', '下载归档')
   expect((await download).suggestedFilename()).toBe('scmm-time-result.zip')
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
@@ -822,8 +866,8 @@ test('named trends keep exact features and display scaling independent through r
   expect(body.layout.meta.export_tables['statistics']).toContain('f5')
   expect(body.layout.meta.export_tables['trends']).toContain('f0')
   await expect(page.getByText('图来源结果：trend_browser', { exact: true })).toBeVisible()
-  const download = page.waitForEvent('download')
   await page.getByRole('button', { name: '下载完整时间结果 ZIP', exact: true }).click()
+  const download = finishExport(page, 'CSV 导出', '下载归档')
   expect((await download).suggestedFilename()).toBe('scmm-time-result.zip')
   for (const width of [700, 390]) {
     await page.setViewportSize({ width, height: 900 })
@@ -883,8 +927,8 @@ test('trend clusters bind their source and retain full curves and groups after r
   expect(body.layout.meta.export_tables['curves']).toContain('normalized')
   expect(body.layout.meta.export_tables['distances']).toContain('source_id')
   await expect(page.getByText('图来源结果：groups_browser', { exact: true })).toBeVisible()
-  const download = page.waitForEvent('download')
   await page.getByRole('button', { name: '下载完整时间结果 ZIP', exact: true }).click()
+  const download = finishExport(page, 'CSV 导出', '下载归档')
   expect((await download).suggestedFilename()).toBe('scmm-time-result.zip')
   for (const width of [700, 390]) {
     await page.setViewportSize({ width, height: 900 })

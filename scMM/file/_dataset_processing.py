@@ -52,6 +52,8 @@ class DatasetProcessingMixin:
         cell_quantifier=None,
         method_plugins=None,
         plugin_intensity_definition="",
+        *,
+        reference_frame=None,
         **kwargs,
     ) -> Self:
         input_state = dataset_intensity_state(self)
@@ -65,6 +67,7 @@ class DatasetProcessingMixin:
             signal,
             self.ref_mz if reference_mz is None else reference_mz,
             reference_mode=reference_mode,
+            reference_frame=reference_frame,
             reference_ppm_tol=reference_ppm_tol,
             baseline_filter=baseline_filter,
             baseline_window=baseline_filter_size,
@@ -106,6 +109,7 @@ class DatasetProcessingMixin:
                         ),
                         "window_ranges": result["window_ranges"],
                         "reference_baseline": result.get("reference_baseline"),
+                        "reference_signal": result["reference_signal"],
                         "cell_snr": cell_snr,
                         "cell_min_signal": cell_min_signal,
                     }

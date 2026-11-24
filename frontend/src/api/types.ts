@@ -165,6 +165,9 @@ export interface QC {
 export interface AnalysisInfo {
   token: [string, number]
   layers: string[]
+  original_layer?: string
+  numeric_observations?: string[]
+  sample_labels?: Record<string, string>
   embeddings: string[]
   embedding_dimensions: Record<string, number>
   embedding_variance: Record<string, number[]>
@@ -180,6 +183,8 @@ export interface AnalysisInfo {
   figures: string[]
 }
 export interface Batch {
+  feature_strategy?: string
+  spectrum_sha256?: string
   stop_requested?: boolean
   stage?: string
   stage_progress?: number | null
@@ -201,6 +206,7 @@ export interface Batch {
     stage?: string
     progress?: number | null
     reused_preview?: boolean
+    spectrum_sha256?: string
   }[]
 }
 export interface Job {

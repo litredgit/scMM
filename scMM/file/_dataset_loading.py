@@ -35,6 +35,7 @@ class DatasetState:
     ref_mz: float | None
     feature_meta: pd.DataFrame | None = None
     feature_snr: pd.DataFrame | None = None
+    reference_frame: pd.DataFrame | None = None
 
 
 @dataclass(frozen=True)
@@ -123,6 +124,7 @@ def load_raw_file(
     raw_timezone=None,
     rt_range=None,
     frame_range=None,
+    spectrum_hook=None,
 ) -> DatasetState:
     """Load and align one raw file without performing cell preprocessing."""
     config = _raw_config(
@@ -142,14 +144,28 @@ def load_raw_file(
     if raw_timezone is not None:
         load_options["raw_timezone"] = raw_timezone
     experiment, file_meta = load_single_file(str(file_path), format="auto", **load_options)
-    return align_raw_experiment(experiment, file_meta, file_path, config)
+    return align_raw_experiment(
+        experiment, file_meta, file_path, config, spectrum_hook=spectrum_hook
+    )
 
 
-def align_raw_experiment(experiment, file_meta, file_path, config: _RawLoadConfig) -> DatasetState:
+def align_raw_experiment(
+    experiment,
+    file_meta,
+    file_path,
+    config: _RawLoadConfig,
+    *,
+    targets=None,
+    reference=None,
+    spectrum_hook=None,
+) -> DatasetState:
     """Share production feature selection/alignment with already-loaded previews."""
     file_meta = dict(file_meta)
-    targets = _pick_common_targets(experiment, config, dtype=config.dtype)
-    data, peak_meta = align_frame(
+    if targets is None:
+        targets = _pick_common_targets(
+            experiment, config, dtype=config.dtype, spectrum_hook=spectrum_hook
+        )
+    data, peak_meta, *reference_frames = align_frame(
         experiment,
         targets,
         config.ppm_tol,
@@ -157,6 +173,7 @@ def align_raw_experiment(experiment, file_meta, file_path, config: _RawLoadConfi
         resolution_200=config.resolution,
         rt_range=config.rt_range,
         frame_range=config.frame_range,
+        reference=reference,
     )
     _annotate_single_file_frames(peak_meta, file_meta)
     peak_meta["source_file"] = Path(file_path).name
@@ -169,7 +186,13 @@ def align_raw_experiment(experiment, file_meta, file_path, config: _RawLoadConfi
         "original_frames": config.frame_range,
     }
     file_meta["peak_algorithm"] = "valley_centroid_v1"
-    return DatasetState(data, peak_meta, file_meta, config.ref_mz)
+    return DatasetState(
+        data,
+        peak_meta,
+        file_meta,
+        config.ref_mz,
+        reference_frame=reference_frames[0] if reference_frames else None,
+    )
 
 
 def load_raw_directory(
@@ -303,7 +326,9 @@ def discover_ms_files(directory: Path) -> list[str]:
     return files
 
 
-def _pick_common_targets(experiment, config: _RawLoadConfig, *, dtype=None) -> np.ndarray:
+def _pick_common_targets(
+    experiment, config: _RawLoadConfig, *, dtype=None, spectrum_hook=None
+) -> np.ndarray:
     summed = sum_spec(
         experiment,
         resolution_200=config.resolution,
@@ -321,7 +346,10 @@ def _pick_common_targets(experiment, config: _RawLoadConfig, *, dtype=None) -> n
     if dtype is not None:
         peak_options["dtype"] = dtype
     targets, _ = extract_peaks(denoised, **peak_options)
-    return targets[(targets >= config.mz_range[0]) & (targets <= config.mz_range[1])]
+    targets = targets[(targets >= config.mz_range[0]) & (targets <= config.mz_range[1])]
+    if spectrum_hook is not None:
+        spectrum_hook(*summed.get_peaks(), targets)
+    return targets
 
 
 def _directory_targets(

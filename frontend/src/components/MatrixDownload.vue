@@ -2,7 +2,8 @@
 import { ref, watch } from 'vue'
 import { useWorkspace } from '../stores/workspace'
 import { request } from '../api/client'
-import { workspaceBlob, saveBlob } from '../api/workspaceDownload'
+import { workspaceBlob } from '../api/workspaceDownload'
+import { openCsvExport } from '../api/csvExport'
 const props = defineProps<{
   source: 'extracted' | 'current'
   batchPath?: string
@@ -62,30 +63,38 @@ watch(
     immediate: true,
   },
 )
-async function download() {
+function download() {
   const snapshot = store.current
   const metadata = info.value
   if (!snapshot || !metadata?.available) return
-  await store.run(async (scope) => {
-    const ids = new Set(metadata.samples.map((s) => s.id))
-    const blob = await workspaceBlob('/results/matrix/download', {
-      workspace: snapshot.workspace_id,
-      method: 'POST',
-      body: {
-        revision: snapshot.revision,
-        source: props.source,
-        batch_path: props.batchPath ?? null,
-        labels: Object.fromEntries(Object.entries(labels.value).filter(([id]) => ids.has(id))),
-      },
-      isCurrent: () =>
-        scope.isCurrent() &&
-        store.current?.workspace_id === snapshot.workspace_id &&
-        store.current?.revision === snapshot.revision,
-    })
-    saveBlob(
-      blob,
-      props.source === 'extracted' ? 'extracted-matrix.csv' : 'preprocessed-matrix.csv',
-    )
+  const ids = new Set(metadata.samples.map((s) => s.id))
+  const { source, batchPath } = props
+  const isCurrent = () =>
+    store.current?.workspace_id === snapshot.workspace_id &&
+    store.current?.revision === snapshot.revision &&
+    props.source === source &&
+    props.batchPath === batchPath
+  openCsvExport({
+    filename: source === 'extracted' ? 'extracted-matrix.csv' : 'preprocessed-matrix.csv',
+    isCurrent,
+    samples: metadata.samples,
+    labels: Object.fromEntries(Object.entries(labels.value).filter(([id]) => ids.has(id))),
+    onLabels: (value) => {
+      labels.value = value
+    },
+    load: (selectedLabels, signal) =>
+      workspaceBlob('/results/matrix/download', {
+        workspace: snapshot.workspace_id,
+        method: 'POST',
+        body: {
+          revision: snapshot.revision,
+          source,
+          batch_path: batchPath ?? null,
+          labels: selectedLabels,
+        },
+        signal,
+        isCurrent,
+      }),
   })
 }
 </script>
@@ -114,22 +123,5 @@ async function download() {
     </div>
     <p v-else class="muted">{{ info?.reason || '当前矩阵不可下载。' }}</p>
     <p v-if="store.busy && info?.available" class="muted" role="status">请等待当前操作完成。</p>
-    <details v-if="info?.available" class="csv-label-settings">
-      <summary>CSV 标签设置</summary>
-      <div class="csv-label-panel">
-        <p class="muted">设置本次 CSV 的 Label 列，可让多个样本共用标签。</p>
-        <div class="csv-label-grid">
-          <label v-for="sample in info.samples" :key="sample.id">
-            <span :title="sample.name">{{ sample.name }}</span>
-            <input
-              :aria-label="`CSV 标签 ${sample.name}`"
-              :disabled="store.busy"
-              :value="labels[sample.id] ?? sample.label"
-              @input="labels[sample.id] = ($event.target as HTMLInputElement).value"
-            />
-          </label>
-        </div>
-      </div>
-    </details>
   </section>
 </template>

@@ -1,3 +1,4 @@
+import { finishExport } from './fixtures'
 import { navigate, test, expect, pinAnalysisParameters, type Page } from './fixtures'
 import { importDataset as importData } from './support/project'
 
@@ -111,8 +112,8 @@ test('analysis panels, precision export and snapshot restore', async ({ page }) 
   await page.getByRole('button', { name: '导出当前 H5AD（不覆盖）', exact: true }).click()
   await expect(page.getByText(/已写入服务器：.*vue-export.h5ad/)).toBeVisible()
   await page.getByRole('combobox', { name: '下载内容', exact: true }).selectOption('differential')
-  const downloaded = page.waitForEvent('download')
-  await page.getByRole('button', { name: '下载完整结果', exact: true }).click()
+  await page.getByRole('button', { name: 'CSV 导出', exact: true }).click()
+  const downloaded = finishExport(page, 'CSV 导出', '下载 CSV')
   expect((await downloaded).suggestedFilename()).toBe('differential.csv')
   await page.getByRole('button', { name: '保存项目', exact: true }).last().click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()

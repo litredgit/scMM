@@ -1,4 +1,10 @@
-import { test as base, expect, type Page, type APIRequestContext } from '@playwright/test'
+import {
+  test as base,
+  expect,
+  type Page,
+  type APIRequestContext,
+  type Locator,
+} from '@playwright/test'
 export type { Page } from '@playwright/test'
 export { expect }
 
@@ -7,12 +13,32 @@ export function preprocessingStep(page: Page, key: string) {
     remove_outliers: '异常值处理',
     filter: '筛选',
     impute: '零值插补',
-    normalize: '归一化 / 标准化',
+    normalize: '归一化',
+    standardize: '标准化',
+    transform: '数值变换',
+    gate: '细胞圈门',
+    qc: 'QC 检查',
     subset: '按稳定 ID 取子集',
   }
   return page
     .getByRole('group', { name: '预处理操作', exact: true })
     .getByRole('button', { name: labels[key] ?? key, exact: true })
+}
+
+export async function openImageExport(page: Page, button: Locator, format = 'svg') {
+  await button.click()
+  const dialog = page.getByRole('dialog', { name: '图片导出', exact: true })
+  await dialog.getByLabel('图片格式').selectOption(format)
+  return dialog
+}
+
+export async function finishExport(page: Page, title: string, button: string) {
+  const dialog = page.getByRole('dialog', { name: title, exact: true })
+  const pending = page.waitForEvent('download')
+  await dialog.getByRole('button', { name: button, exact: true }).click()
+  const download = await pending
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+  return download
 }
 
 export async function pinAnalysisParameters(page: Page) {

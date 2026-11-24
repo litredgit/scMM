@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { displayName } from '../../../../help/labels'
 import { useAnalysisContext } from '../../composables/useAnalysisContext'
 import PlotView from '../../../../components/PlotView.vue'
+import PlotColorOptions from '../../../../components/PlotColorOptions.vue'
 import PlotScope from '../../components/PlotScope.vue'
 defineProps<{ panel: string }>()
 const {
@@ -10,6 +11,8 @@ const {
   embedding,
   colorSource,
   color,
+  colorSettings,
+  colorLayer,
   search,
   sort,
   descending,
@@ -25,6 +28,12 @@ const {
   plotScope,
   pageFeatures,
 } = useAnalysisContext()
+const continuous = computed(
+  () =>
+    colorSource.value === 'feature' ||
+    (color.value.startsWith('obs:') &&
+      !!info.value?.numeric_observations?.includes(color.value.slice(4))),
+)
 const scopeEdited = computed(() => {
   const meta = figures.value.embedding?.layout.meta as
     { parameters?: { scope?: unknown } } | undefined
@@ -121,6 +130,22 @@ const scopeEdited = computed(() => {
             :max="info?.embedding_dimensions?.[embedding] || 2"
         /></label>
       </div>
+    </details>
+    <details v-if="colorSource !== 'none' && color" class="display-settings">
+      <summary>配色与强度变换</summary>
+      <div class="field-grid">
+        <label v-if="colorSource === 'feature'"
+          >着色强度层
+          <select v-model="colorLayer" :disabled="store.busy">
+            <option value="">当前矩阵</option>
+            <option v-for="layer in info?.layers ?? []" :key="layer" :value="layer">
+              {{ displayName(layer) }}
+            </option>
+          </select>
+        </label>
+        <PlotColorOptions v-model="colorSettings" :continuous="continuous" />
+      </div>
+      <p v-if="continuous" class="muted">数值变换作用于点颜色，悬停可查看原值。</p>
     </details>
     <p v-if="scopeEdited" role="status">
       作图范围已编辑，点击“更新嵌入图”生效；当前图与下载仍使用上次成功的范围。

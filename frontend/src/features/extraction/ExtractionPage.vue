@@ -12,7 +12,10 @@ import { useWorkspace } from '../../stores/workspace'
 import PlotView from '../../components/PlotView.vue'
 import TrashAction from '../../components/TrashAction.vue'
 import BatchComparison from './BatchComparison.vue'
+import BatchSpectrum from './BatchSpectrum.vue'
+import FeatureSource from './FeatureSource.vue'
 const store = useWorkspace()
+const featureSourcePending = ref(false)
 const reviewPhase = ref('')
 const counts = computed(() => {
   const samples = selected.value?.samples ?? []
@@ -498,6 +501,11 @@ useViewState('extraction', {
               建立当前数据集
             </button>
           </div>
+          <BatchSpectrum
+            v-if="!['queued', 'running'].includes(selected.status)"
+            :key="selected.path"
+            :batch="selected"
+          />
           <PlotView
             v-for="(figure, i) in figures"
             :key="i"
@@ -512,16 +520,12 @@ useViewState('extraction', {
     <BatchComparison :batches="batchList" :selected="path" />
     <details class="card extraction-preparation" :open="!selected">
       <summary>处理准备 · 新建或重试批次</summary>
-      <p>
-        {{ store.project.manifest.samples.length }} 个样本 ·
-        {{
-          store.project.manifest.feature_strategy === 'shared' ? '全项目共同特征' : '独立特征合并'
-        }}
-      </p>
+      <p>{{ store.project.manifest.samples.length }} 个样本</p>
+      <FeatureSource v-model:pending="featureSourcePending" :active="active" />
       <div class="actions">
         <button
           class="preview"
-          :disabled="store.busy || !store.project.manifest.samples.length"
+          :disabled="store.busy || featureSourcePending || !store.project.manifest.samples.length"
           @click="preflight"
         >
           检查参数与输入</button
@@ -530,6 +534,7 @@ useViewState('extraction', {
           :disabled="
             store.busy ||
             active ||
+            featureSourcePending ||
             !!pendingCount ||
             !store.project.manifest.samples.some((sample) => sample.path)
           "
@@ -538,14 +543,18 @@ useViewState('extraction', {
           开始提取</button
         ><button
           class="primary"
-          :disabled="store.busy || active || !!pendingCount || !path"
+          :disabled="store.busy || active || featureSourcePending || !!pendingCount || !path"
           @click="start(true)"
         >
           重试失败批次
         </button>
         <template v-if="pendingCount">
           <span role="status">{{ pendingCount }} 个样本的参数待应用</span>
-          <button class="primary" :disabled="store.busy || active" @click="applyAndStart">
+          <button
+            class="primary"
+            :disabled="store.busy || active || featureSourcePending"
+            @click="applyAndStart"
+          >
             应用并开始提取
           </button>
         </template>

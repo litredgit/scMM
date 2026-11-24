@@ -44,7 +44,11 @@ def detection_from_payload(payload):
     if not references:
         traces["aligned_intensity"] = signal.sum(axis=1).to_numpy()
     for i, mz in enumerate(references):
-        values = signal[mz].to_numpy(copy=True)
+        values = (
+            signal[mz].to_numpy(copy=True)
+            if "reference_signal" not in payload
+            else np.asarray(payload["reference_signal"])[:, i]
+        )
         traces[f"reference_{i}"] = values
         if baseline is not None:
             background = np.asarray(baseline)[:, i]
@@ -114,6 +118,7 @@ class RawFilePreview:
         feature_block_size=None,
         progress_callback=None,
         targets=None,
+        targeted=False,
         method_kwargs=None,
     ) -> CellDetectionPreview:
         """Preview production cell windows (RAW sources reopen for each pass).
@@ -150,20 +155,31 @@ class RawFilePreview:
             from scMM.file._dataset_loading import DatasetState, _annotate_single_file_frames
             from scMM.file.io import align_frame
 
-            frame, obs = align_frame(
+            from .mz_lists import reference_alignment
+
+            frame, obs, *reference_frames = align_frame(
                 self.experiment,
                 targets,
                 ppm=parameters.ppm_tol,
                 resolution_200=parameters.resolution,
                 rt_range=parameters.rt_range,
                 frame_range=parameters.frame_range,
+                reference=reference_alignment(parameters, reference_mz, reference_ppm_tol)
+                if targeted
+                else None,
             )
             metadata = dict(self.metadata)
             _annotate_single_file_frames(obs, metadata)
             metadata.update(
                 ref_mz=parameters.ref_mz, mz_range=[parameters.mz_min, parameters.mz_max]
             )
-            state = DatasetState(frame, obs, metadata, parameters.ref_mz)
+            state = DatasetState(
+                frame,
+                obs,
+                metadata,
+                parameters.ref_mz,
+                reference_frame=reference_frames[0] if reference_frames else None,
+            )
         captured = {}
 
         def capture(event, payload):

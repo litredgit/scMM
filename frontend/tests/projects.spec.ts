@@ -1,3 +1,4 @@
+import { finishExport } from './fixtures'
 import { navigate, test, expect, type Page } from './fixtures'
 
 async function create(page: Page, name: string) {
@@ -166,8 +167,8 @@ test('processed merge explicitly maps sources, previews ref and restores the ful
   expect(review.workspace.project.dataset).toBeNull()
   expect(review.value.summaries.data.features).toBe(2)
   expect(review.value.summaries.baseline.features).toBe(3)
-  const previewDownload = page.waitForEvent('download')
   await panel.getByRole('button', { name: '下载完整合并预览', exact: true }).click()
+  const previewDownload = finishExport(page, 'CSV 导出', '下载归档')
   expect((await previewDownload).suggestedFilename()).toBe('scmm-merge-preview.zip')
   const applying = page.waitForResponse((r) => r.url().endsWith('/dataset/merge/apply'))
   await panel.getByRole('button', { name: '合并并替换当前数据和起点', exact: true }).click()
@@ -175,8 +176,8 @@ test('processed merge explicitly maps sources, previews ref and restores the ful
   expect(applied.project.dataset.cells).toBe(3)
   expect(applied.project.dataset.features).toBe(2)
   await expect(panel.getByRole('heading', { name: '历史合并溯源', exact: true })).toBeVisible()
-  const auditDownload = page.waitForEvent('download')
   await panel.getByRole('button', { name: '下载历史合并溯源', exact: true }).click()
+  const auditDownload = finishExport(page, 'CSV 导出', '下载归档')
   expect((await auditDownload).suggestedFilename()).toBe('scmm-merge-audit.zip')
   for (const width of [700, 390]) {
     await page.setViewportSize({ width, height: 900 })

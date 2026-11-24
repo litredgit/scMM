@@ -177,8 +177,10 @@ class ResultWorkflow:
             )
             return {"workspace": self.view(workspace), "value": {"path": str(path)}}
 
-    def download_content(self, identity, kind, key=""):
+    def download_content(self, identity, kind, key="", *, revision=None):
         with self.access(identity) as workspace:
+            if revision is not None:
+                workspace.check(revision)
             project = workspace.require_project()
             state = project.workspace
             if kind == "merge_preview":

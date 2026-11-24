@@ -1,12 +1,3 @@
-export function saveBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-
 /** Insert PNG pHYs using the requested physical DPI; preserve all image samples. */
 export async function pngWithDpi(blob: Blob, dpi: number) {
   const source = new Uint8Array(await blob.arrayBuffer())
@@ -33,3 +24,5 @@ export async function pngWithDpi(blob: Blob, dpi: number) {
   }
   return new Blob(parts, { type: 'image/png' })
 }
+export type ImageFormat = 'svg' | 'png' | 'pdf'
+export type ExportImage = { file: Blob; preview?: Blob; verify?: () => Promise<unknown> }

@@ -6,6 +6,7 @@ import { computed, onActivated, reactive, ref, watch, type Ref } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import { useAuth } from '../../stores/auth'
 import { workspaceBlob, saveBlob } from '../../api/workspaceDownload'
+import { openWorkspaceCsv } from '../../api/csvExport'
 import type { LipidInfo, LipidResults, LipidRules } from './lipids'
 
 export function useLipidPanel(
@@ -397,28 +398,38 @@ export function useLipidPanel(
     if (!store.current || !version.value) return
     const workspace = store.current.workspace_id
     const revision = store.current.revision
+    const body = JSON.parse(
+      JSON.stringify({
+        revision,
+        source: source.value,
+        version: version.value,
+        filters: {
+          ...filters,
+          adducts: filters.adduct_mode === 'specified' ? filters.adducts : [],
+        },
+        kind,
+        sorting: sorting.value,
+      }),
+    )
+    const isCurrent = () =>
+      store.current?.workspace_id === workspace &&
+      store.current?.revision === revision &&
+      version.value === body.version &&
+      source.value === body.source
+    const filename = `lipid-${kind}.${kind === 'rules' ? 'json' : 'csv'}`
+    if (kind !== 'rules') {
+      openWorkspaceCsv(filename, '/lipids/export', { workspace, method: 'POST', body, isCurrent })
+      return
+    }
     await store.run(
       async (scope) => {
         const blob = await workspaceBlob('/lipids/export', {
           workspace,
           method: 'POST',
-          body: {
-            revision,
-            source: source.value,
-            version: version.value,
-            filters: {
-              ...filters,
-              adducts: filters.adduct_mode === 'specified' ? filters.adducts : [],
-            },
-            kind,
-            sorting: sorting.value,
-          },
-          isCurrent: () =>
-            scope.isCurrent() &&
-            store.current?.workspace_id === workspace &&
-            store.current?.revision === revision,
+          body,
+          isCurrent: () => scope.isCurrent() && isCurrent(),
         })
-        saveBlob(blob, `lipid-${kind}.${kind === 'rules' ? 'json' : 'csv'}`)
+        saveBlob(blob, filename)
       },
       '',
       { label: '导出脂质分析结果', phase: 'downloading' },

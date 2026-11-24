@@ -96,6 +96,63 @@ def test_memberships_keep_stable_ids_not_names():
     assert "Feature set" in figure.layout.title.text
 
 
+def test_qc_histograms_and_sample_heatmap_preserve_layer_and_metadata():
+    from io import StringIO
+
+    from scMM.analysis.qc_plots import distribution_figure, sample_correlation_figure
+
+    data = dataset()
+    data.obs["sample_id"] = ["id1"] * 3 + ["id2"] * 3
+    data.obs["sample"] = ["First"] * 3 + ["Second"] * 3
+    data.obs["batch"] = ["Day 1"] * 3 + ["Day 2"] * 3
+    inputs = data.X.copy()
+    data.layers["scaled"] = data.X * 2
+    figure = distribution_figure(
+        data,
+        metric="feature:a",
+        group_key="batch",
+        layer="scaled",
+        relative=True,
+    )
+    tables = figure.layout.meta["export_tables"]
+    bins = pd.read_csv(StringIO(tables["histograms"]))
+    np.testing.assert_allclose(bins.groupby("group_id").fraction.sum(), [1, 1])
+    np.testing.assert_array_equal(
+        bins[bins.group_id == "Day 1"].left, bins[bins.group_id == "Day 2"].left
+    )
+    table = pd.read_csv(StringIO(tables["observations"]))
+    np.testing.assert_allclose(table.value, inputs[:, 0] * 2)
+    heatmap = sample_correlation_figure(data, sample_key="sample_id", square=True)
+    np.testing.assert_allclose(np.diag(heatmap.data[0].z), [1, 1])
+    assert list(heatmap.layout.xaxis.ticktext) == ["First", "Second"]
+    assert "Day 1" in str(heatmap.data[0].customdata[0])
+    np.testing.assert_array_equal(data.X, inputs)
+
+
+def test_embedding_color_transform_preserves_coordinates_and_source_values():
+    from io import StringIO
+
+    from scMM.plot.workbench import embedding_figure
+
+    data = dataset()
+    data.obsm["X_test"] = np.arange(12.0).reshape(6, 2)
+    data.layers["signed"] = data.X - 3.0
+    figure = embedding_figure(
+        data,
+        "X_test",
+        "feature:a",
+        transform="log1p",
+        colorscale="Cividis",
+        color_layer="signed",
+    )
+    coloring = pd.read_csv(StringIO(figure.layout.meta["export_tables"]["color_values"]))
+    np.testing.assert_array_equal(coloring.raw_color, [-2, -1, 0, 1, 2, 3])
+    assert coloring.display_color.isna().sum() == 2
+    np.testing.assert_allclose(coloring.display_color.iloc[2:], np.log1p([0, 1, 2, 3]))
+    assert figure.data[-1].name == "Color unavailable"
+    np.testing.assert_array_equal(data.obsm["X_test"], np.arange(12.0).reshape(6, 2))
+
+
 def test_selection_rollback_toggle_and_origin_independence():
     state = AnalysisWorkspace()
     state.replace(dataset())

@@ -1,3 +1,4 @@
+import { finishExport } from './fixtures'
 import { navigate, test, expect, type Page } from './fixtures'
 import { readFile } from 'node:fs/promises'
 import { createProject as create, importDataset as importData } from './support/project'
@@ -152,8 +153,8 @@ test('current report downloads contain a PDF and portable numeric attachments', 
   expect(pdf.suggestedFilename()).toBe('current_qc.pdf')
   expect((await readFile((await pdf.path())!)).subarray(0, 5).toString()).toBe('%PDF-')
   await page.getByLabel('下载内容', { exact: true }).selectOption('report_zip')
-  const zipDownload = page.waitForEvent('download')
-  await page.getByRole('button', { name: '下载完整结果', exact: true }).click()
+  await page.getByRole('button', { name: 'CSV 导出', exact: true }).click()
+  const zipDownload = finishExport(page, 'CSV 导出', '下载归档')
   const zip = await zipDownload
   expect(zip.suggestedFilename()).toBe('current_analysis_report.zip')
   expect((await readFile((await zip.path())!)).subarray(0, 2).toString()).toBe('PK')

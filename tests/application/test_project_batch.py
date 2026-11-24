@@ -310,3 +310,89 @@ def test_batch_export_without_current_dataset_is_scoped_and_readonly(tmp_path):
     write_json(folder / "state.json", state)
     with pytest.raises(ValueError, match="停止"):
         export_matrix(project, "extracted", batch_path=str(folder / "state.json"))
+
+
+def test_target_list_quantifies_off_reference_and_preserves_full_spectrum(tmp_path):
+    import numpy as np
+    import pyopenms as oms
+
+    from scMM.application import mz_lists
+    from scMM.application.extraction_spectra import describe_profile
+    from scMM.application.preview_cache import save_preview, signature
+    from scMM.application.processing import ProcessingParameters
+    from scMM.application.projects import ProjectStore
+    from scMM.application.raw_preview import RawPreviewService
+    from scMM.file.io import save_spectra
+
+    project, catalog = setup_project(tmp_path)
+    spectra = []
+    for frame in range(31):
+        scan = oms.MSSpectrum()
+        scan.setMSLevel(1)
+        scan.setRT(frame)
+        peak = frame in {8, 22}
+        scan.set_peaks(
+            (
+                np.array([149.9, 150, 150.1, 154.9, 155, 155.1]),
+                np.array([0, 20 if peak else 1, 0, 0, 40 if peak else 2, 0], dtype=float),
+            )
+        )
+        spectra.append(scan)
+    for sample in project.samples:
+        save_spectra(spectra, sample["path"])
+    wet_list = mz_lists.imported(
+        project,
+        "target.csv",
+        "targets",
+        'mz,note\n155,"a,b"\n157,absent\n165,outside\n155,duplicate\n',
+    )
+    assert wet_list["count"] == 3
+    assert [item["id"] for item in mz_lists.catalog(project)][:2] == [
+        "preset:mammalian_cells",
+        "preset:algae",
+    ]
+    with pytest.raises(ValueError, match="第 2 行"):
+        mz_lists.parse("m/z\tnote\nnan\tinvalid\n")
+    project.manifest.update(feature_strategy="list", feature_list_id=wet_list["id"])
+    store = ProjectStore(tmp_path)
+    store.save(project)
+    project = store.open(project.folder)
+    request = preflight(project, catalog)
+    assert request["effective_targets"] == 2
+    sample = project.samples[0]
+    params = ProcessingParameters(**request["parameters"])
+    preview = RawPreviewService(catalog).open(sample["storage"], sample["path"])
+    detection = preview.cell_detection(params, targets=[155.0, 157.0], targeted=True)
+    assert detection.reference_mz == (150.0,)
+    assert detection.cell_count == 2
+    assert list(preview.last_dataset.data.columns) == [155.0]
+    digest = wet_list["sha256"]
+    sample["preview"] = {
+        "artifact": save_preview(
+            project,
+            sample,
+            preview,
+            params,
+            signature(sample["path"], params, digest),
+            mz_list=digest,
+        ),
+    }
+
+    request = preflight(project, catalog)
+    request["created_at"] = "test"
+    folder = project.folder / "processing" / "targeted"
+    folder.mkdir()
+    write_json(folder / "request.json", request)
+    path = folder / "state.json"
+    run_batch(path)
+    state = read_batch(path)
+    assert [row["status"] for row in state["samples"]] == ["succeeded", "succeeded"], state
+    assert state["samples"][0]["reused_preview"]
+    result = reviewed_dataset(path, [row["id"] for row in state["samples"]])
+    assert result.var.mz.tolist() == [155.0]
+    view = describe_profile(path, state, request, None)
+    assert view["source"]["sha256"] == digest
+    assert [item["status"] for item in view["features"]] == ["retained", "unretained", "outside"]
+    assert view["features"][0]["detected_cells"] == 4
+    assert view["contributors"] == ["a", "b"]
+    assert view["figure"]["layout"]["meta"]["batch_spectrum"]["sha256"] == state["spectrum_sha256"]

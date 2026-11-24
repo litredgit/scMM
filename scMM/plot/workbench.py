@@ -11,6 +11,7 @@ from plotly.subplots import make_subplots
 
 from scMM.application.workbench import dense
 
+from .colors import PALETTES, color_title, color_values
 from .presentation import PLOT_COLORS, feature_label, mass_label, probability_number, style_figure
 
 
@@ -110,7 +111,18 @@ def violin_figure(data, result, features, *, hide_zero=False, columns=3):
     return style_figure(figure)
 
 
-def embedding_figure(data, key, color=None, dimensions=None):
+def embedding_figure(
+    data,
+    key,
+    color=None,
+    dimensions=None,
+    *,
+    colorscale="Viridis",
+    palette="scMM",
+    transform="linear",
+    linthresh=1.0,
+    color_layer=None,
+):
     if key not in data.obsm:
         raise ValueError("所选坐标不存在，请先运行降维。")
     coordinates = np.asarray(data.obsm[key])
@@ -135,12 +147,30 @@ def embedding_figure(data, key, color=None, dimensions=None):
     if len(dimensions) == 3:
         frame["z"] = coordinates[:, dimensions[2] - 1]
     color_key = None
+    numeric = False
+    color_label = ""
     if color and color.startswith("obs:"):
-        frame["color"] = data.obs[color[4:]].to_numpy()
+        color_label = color[4:]
+        observation = data.obs[color_label]
+        numeric = pd.api.types.is_numeric_dtype(observation) and not pd.api.types.is_bool_dtype(
+            observation
+        )
+        frame["color"] = (
+            observation.to_numpy(dtype=float, na_value=np.nan)
+            if numeric
+            else observation.to_numpy()
+        )
         color_key = "color"
     elif color and color.startswith("feature:"):
-        frame["color"] = dense(data[:, [color[8:]]].X)[:, 0]
+        block = data[:, [color[8:]]]
+        frame["color"] = dense(block.layers[color_layer] if color_layer else block.X)[:, 0]
         color_key = "color"
+        numeric = True
+        color_label = "Intensity"
+    if numeric:
+        frame["raw_color"] = frame["color"]
+        frame["color"] = color_values(frame["raw_color"], transform, linthresh)
+    valid_color = frame["color"].notna() if numeric else np.full(len(frame), True)
     variance = list(data.uns.get(f"{key}_params", {}).get("explained_variance_ratio", []))
     labels = {}
     for axis, dimension in zip(("x", "y", "z"), dimensions, strict=False):
@@ -152,20 +182,45 @@ def embedding_figure(data, key, color=None, dimensions=None):
             else f"Dimension {dimension}"
         )
     kwargs = {
-        "color_discrete_sequence": PLOT_COLORS,
+        "color_discrete_sequence": PALETTES[palette],
+        "color_continuous_scale": colorscale,
         "x": "x",
         "y": "y",
         "color": color_key,
         "hover_name": "cell",
-        "custom_data": ["cell"],
+        "custom_data": ["cell", "raw_color", "color"] if numeric else ["cell"],
         "title": key,
         "labels": labels,
     }
     figure = (
-        px.scatter_3d(frame, z="z", **kwargs)
+        px.scatter_3d(frame.loc[valid_color], z="z", **kwargs)
         if len(dimensions) == 3
-        else px.scatter(frame, render_mode="webgl", **kwargs)
+        else px.scatter(frame.loc[valid_color], render_mode="webgl", **kwargs)
     )
+    if numeric:
+        title = color_title(color_label, transform)
+        hover = (
+            "Cell: %{customdata[0]}<br>x: %{x}<br>y: %{y}<br>"
+            f"{color_label}: %{{customdata[1]:.2e}}<br>{title}: %{{customdata[2]:.2e}}<extra></extra>"
+        )
+        figure.update_traces(hovertemplate=hover)
+        if (~valid_color).any():
+            missing = frame.loc[~valid_color]
+            trace = {
+                "x": missing.x,
+                "y": missing.y,
+                "mode": "markers",
+                "marker": {"color": "#a7b0b9"},
+                "name": "Color unavailable",
+                "showlegend": True,
+                "customdata": missing[["cell", "raw_color"]].to_numpy(),
+                "hovertemplate": f"Cell: %{{customdata[0]}}<br>{color_label}: %{{customdata[1]:.2e}}<extra></extra>",
+            }
+            if len(dimensions) == 3:
+                figure.add_scatter3d(z=missing.z, **trace)
+            else:
+                figure.add_scattergl(**trace)
+        figure.update_coloraxes(colorbar_title=title, colorbar_tickformat=".2~g")
     table = pd.DataFrame(
         coordinates,
         index=data.obs_names,
@@ -173,23 +228,24 @@ def embedding_figure(data, key, color=None, dimensions=None):
     )
     table.index.name = "cell_id"
     table = table.join(data.obs, rsuffix="_metadata")
+    tables = {"coordinates": table.to_csv()}
+    if numeric:
+        tables["color_values"] = (
+            frame[["cell", "raw_color", "color"]]
+            .rename(columns={"cell": "cell_id", "color": "display_color"})
+            .to_csv(index=False)
+        )
     figure.update_layout(
         meta={
             "point_kind": "cell",
             "embedding": key,
             "dimensions": dimensions,
             "explained_variance_ratio": variance,
-            "export_tables": {"coordinates": table.to_csv()},
+            "export_tables": tables,
         }
     )
-    if color and color.startswith("feature:"):
-        figure.update_coloraxes(colorbar_tickformat=".1e", colorbar_title="Intensity")
-        figure.update_traces(
-            hovertemplate="Cell %{hovertext}<br>x=%{x}<br>y=%{y}<br>Intensity %{marker.color:.1e}<extra></extra>"
-        )
-    elif color:
-        scientific = any(word in color.lower() for word in ("intensity", "abundance", "强度"))
-        figure.update_coloraxes(colorbar_tickformat=".1e" if scientific else ".3~f")
+    if numeric and transform == "linear" and color_label == "Intensity":
+        figure.update_coloraxes(colorbar_tickformat=".1e")
     return style_figure(figure)
 
 

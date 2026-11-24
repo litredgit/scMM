@@ -54,6 +54,9 @@ const defaults: Record<string, string> = {
   ...resultDownloads,
   snapshot: 'snapshot.h5ad',
 }
+const tableExport = computed(
+  () => defaults[kind.value]?.endsWith('.csv') || kind.value === 'report_zip',
+)
 const available = computed(() => [
   { value: 'matrix', label: '当前矩阵 CSV' },
   { value: 'embedding', label: '嵌入坐标 CSV' },
@@ -205,7 +208,7 @@ async function exportH5ad() {
                   {{ displayName(v) }}
                 </option>
               </select></label
-            ><label
+            ><label v-if="!tableExport"
               ><FieldLabel name="下载文件名" /><input
                 aria-label="下载文件名"
                 v-model="downloadName"
@@ -227,7 +230,7 @@ async function exportH5ad() {
               )
             "
           >
-            下载完整结果
+            {{ tableExport ? 'CSV 导出' : '下载完整结果' }}
           </button>
           <p v-if="downloadReason" class="state-note" role="status">{{ downloadReason }}</p>
           <details v-if="unavailable.length" class="download-reasons">

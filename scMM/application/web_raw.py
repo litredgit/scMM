@@ -14,6 +14,7 @@ from scMM.plot.presentation import style_figure
 from scMM.plot.raw import _peak_preserving_downsample, cell_detection_figure
 from scMM.plugins._extraction import normalize_selection, selected_packages
 
+from . import mz_lists
 from .cell_preview import initialize_ranges, submit_preview
 from .parameters import automatic_mz_range
 from .preview_cache import file_identity
@@ -57,6 +58,8 @@ class RawWorkflow:
         def action(workspace):
             project = workspace.require_project()
             values = validated_parameters(parameters, self.plugins)
+            if strategy == "list":
+                mz_lists.snapshot(project)
             if sample_id:
                 if values.pop("method_plugins", {}) != project.manifest["parameters"].get(
                     "method_plugins", {}
@@ -330,7 +333,9 @@ class RawWorkflow:
                 raise ValueError("请先打开当前样本。")
             values = validated_parameters(parameters, self.plugins)
             selected = (
-                project.samples if project.manifest["feature_strategy"] == "shared" else [sample]
+                project.samples
+                if project.manifest["feature_strategy"] in {"shared", "list"}
+                else [sample]
             )
             inputs = {
                 s["path"]: file_identity(self.storage.resolve_raw_file(s["storage"], s["path"]))
@@ -347,6 +352,8 @@ class RawWorkflow:
                 "roots": [(r.label, str(r.path)) for r in self.storage.roots],
                 "inputs": inputs,
             }
+            if project.manifest["feature_strategy"] == "list":
+                request["mz_list"] = deepcopy(mz_lists.snapshot(project))
             if values.get("method_plugins"):
                 request["extraction_plugins"] = selected_packages(values["method_plugins"])
             future, state_path = submit_preview(request)
@@ -465,6 +472,64 @@ class RawWorkflow:
             with workspace.ai_lock:
                 workspace.ai_batches = paths
             return [{"path": str(p), **read_batch(p)} for p in paths]
+
+    def extraction_lists(self, identity, list_id=None):
+        with self.access(identity) as workspace:
+            project = workspace.require_project()
+            if list_id is None:
+                return mz_lists.catalog(project)
+            record = mz_lists.resolve(project, list_id)
+            return {**mz_lists.summary(record), "mz": record["mz"]}
+
+    def upload_extraction_list(self, identity, revision, filename, name, content):
+        with self.access(identity, operation="update") as workspace:
+            workspace.check(revision)
+            value = mz_lists.imported(workspace.require_project(), filename, name, content)
+            workspace.revision += 1
+            return {"workspace": self.view(workspace), "value": value}
+
+    def set_feature_source(self, identity, revision, strategy, list_id):
+        def action(workspace):
+            project = workspace.require_project()
+            if strategy == "list":
+                mz_lists.resolve(project, list_id)
+                project.manifest["feature_list_id"] = list_id
+            project.manifest["feature_strategy"] = strategy
+            project.dirty = True
+
+        return self.mutate(identity, revision, action)
+
+    def extraction_spectrum(self, identity, revision, path, sample_id):
+        from .extraction_spectra import describe_profile
+
+        with self.access(identity) as workspace:
+            workspace.check(revision)
+            path = self.batch_path(workspace.require_project(), path)
+            request = json.loads(path.with_name("request.json").read_text(encoding="utf-8"))
+            value = describe_profile(path, read_batch(path), request, sample_id)
+            return {"workspace": self.view(workspace), "value": value}
+
+    def save_extraction_list(self, identity, revision, path, sample_id, name):
+        from .extraction_spectra import batch_profile
+
+        with self.access(identity, operation="update") as workspace:
+            workspace.check(revision)
+            project = workspace.require_project()
+            path = self.batch_path(project, path)
+            _, _, targets, _, checksum = batch_profile(path, read_batch(path), sample_id)
+            value = mz_lists.add(
+                project,
+                name,
+                targets.tolist(),
+                {
+                    "type": "batch",
+                    "batch": path.parent.name,
+                    "sample": sample_id,
+                    "spectrum_sha256": checksum,
+                },
+            )
+            workspace.revision += 1
+            return {"workspace": self.view(workspace), "value": value}
 
     @staticmethod
     def batch_path(project, path):

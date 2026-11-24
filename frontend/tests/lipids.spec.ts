@@ -1,3 +1,4 @@
+import { openImageExport, finishExport } from './fixtures'
 import { test, expect, navigate } from './fixtures'
 import { readFile } from 'node:fs/promises'
 
@@ -98,36 +99,47 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await network.getByRole('button', { name: '展开邻居', exact: true }).click()
   await expect(network.getByRole('button', { name: '网络节点 f_h', exact: true })).toBeVisible()
   await network.getByRole('button', { name: '应用图表显示', exact: true }).click()
-  let graphDownload = page.waitForEvent('download')
-  await network.getByRole('button', { name: '下载网络 SVG', exact: true }).click()
-  const svgDownload = await graphDownload
+  await openImageExport(page, network.getByRole('button', { name: '网络图片导出', exact: true }))
+  const svgDownload = await finishExport(page, '图片导出', '下载图片')
   const svg = await readFile((await svgDownload.path())!, 'utf8')
   expect(svg).toContain('layer=scmm_input_0')
   expect(svg).toContain('annotation_version=')
   expect(svg).toContain('isotopes=all')
   expect(svg).toContain('candidates=all')
-  graphDownload = page.waitForEvent('download')
-  await network.getByRole('button', { name: '下载饼图 PNG', exact: true }).click()
-  expect((await graphDownload).suggestedFilename()).toMatch(/\.png$/)
-  await network.getByText('注释图论文导出设置', { exact: true }).click()
-  const widthBefore = await network.getByLabel('导出宽度（毫米）', { exact: true }).inputValue()
-  const dpiBefore = await network.getByLabel('导出分辨率（DPI）', { exact: true }).inputValue()
-  await network.getByLabel('导出宽度（毫米）', { exact: true }).fill('600')
-  await network.getByLabel('导出分辨率（DPI）', { exact: true }).fill('2400')
-  await network.getByRole('button', { name: '下载饼图 PNG', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('请减小成图尺寸或 DPI。')
-  await network.getByLabel('导出宽度（毫米）', { exact: true }).fill(widthBefore)
-  await network.getByLabel('导出分辨率（DPI）', { exact: true }).fill(dpiBefore)
-  await page.getByRole('button', { name: '清除错误', exact: true }).click()
+  await openImageExport(
+    page,
+    network.getByRole('button', { name: '饼图图片导出', exact: true }),
+    'png',
+  )
+  expect((await finishExport(page, '图片导出', '下载图片')).suggestedFilename()).toMatch(/\.png$/)
+  const dialog = await openImageExport(
+    page,
+    network.getByRole('button', { name: '饼图图片导出', exact: true }),
+    'png',
+  )
+  const width = dialog.getByLabel('宽度（mm）', { exact: true })
+  const height = dialog.getByLabel('高度（mm）', { exact: true })
+  const dpi = dialog.getByLabel('位图 DPI', { exact: true })
+  const widthBefore = await width.inputValue()
+  const heightBefore = await height.inputValue()
+  const dpiBefore = await dpi.inputValue()
+  await width.fill('600')
+  await height.fill('600')
+  await dpi.fill('2400')
+  await dialog.getByRole('button', { name: '下载图片', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('请减小成图尺寸或 DPI。')
+  await width.fill(widthBefore)
+  await height.fill(heightBefore)
+  await dpi.fill(dpiBefore)
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click()
   await network.getByText('图表高级显示参数', { exact: true }).click()
   await network.getByLabel('node_limit', { exact: true }).fill('1')
   await network.getByRole('button', { name: '应用图表显示', exact: true }).click()
   await expect(
     network.getByText('节点上限只限制显示；搜索或展开邻居可查看其他节点。'),
   ).toBeVisible()
-  graphDownload = page.waitForEvent('download')
   await network.getByRole('button', { name: '导出网络节点 CSV', exact: true }).click()
-  const nodeDownload = await graphDownload
+  const nodeDownload = await finishExport(page, 'CSV 导出', '下载 CSV')
   const nodeCsv = await readFile((await nodeDownload.path())!, 'utf8')
   expect(nodeCsv.trim().split('\n')).toHaveLength(5)
   await network.getByLabel('node_limit', { exact: true }).fill('100')
@@ -142,18 +154,16 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await page.getByLabel('加合物保留方式', { exact: true }).selectOption('strongest')
   await page.getByRole('button', { name: '应用显示筛选', exact: true }).click()
   await expect(panel.getByText('2 / 4 特征 · 2 条候选 · 4 条关系证据')).toBeVisible()
-  let downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: '导出筛选矩阵 CSV', exact: true }).click()
-  let download = await downloadPromise
+  let download = await finishExport(page, 'CSV 导出', '下载 CSV')
   let csv = await readFile((await download.path())!, 'utf8')
   expect(csv.split('\n')[0]).toBe('Sample,Label,f_h,f_unknown')
   expect(csv.trim().split('\n')).toHaveLength(41)
   await page.getByLabel('加合物保留方式', { exact: true }).selectOption('specified')
   await panel.getByLabel('[M+Na]+', { exact: true }).last().check()
   await page.getByRole('button', { name: '应用显示筛选', exact: true }).click()
-  downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: '导出筛选矩阵 CSV', exact: true }).click()
-  download = await downloadPromise
+  download = await finishExport(page, 'CSV 导出', '下载 CSV')
   csv = await readFile((await download.path())!, 'utf8')
   expect(csv.split('\n')[0]).toBe('Sample,Label,f_na,f_unknown')
 
@@ -182,6 +192,11 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   )
   await page.getByRole('button', { name: '保存项目', exact: true }).first().click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
+  const presentationWrites: unknown[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && request.url().endsWith('/workspace/presentation'))
+      presentationWrites.push(request.postDataJSON())
+  })
   await page.reload()
   await page.getByRole('link', { name: 'scMM 项目首页' }).click()
   await page
@@ -205,6 +220,7 @@ test('lipid rules, isotope review, filtered adduct CSV and saved versions', asyn
   await expect(panel.getByLabel('指定 LMGP01010002 [M+H]+', { exact: true })).not.toBeChecked()
   await panel.getByText('完整天然同位素关系', { exact: true }).click()
   await expect(panel.getByRole('cell', { name: '接受', exact: true }).first()).toBeVisible()
+  expect(presentationWrites).toEqual([])
   await expect(page.getByRole('alert')).toHaveCount(0)
   expect(errors).toEqual([])
 })

@@ -51,6 +51,18 @@ const sample = ref('')
 const labelMode = ref<'both' | 'name' | 'mz'>('both')
 const showMS2 = ref(true)
 const full = ref(false)
+const viewScope = computed(() => `${store.current?.workspace_id}:${store.project?.path}`)
+let userViewScope: string | undefined
+const savedFull = computed({
+  get: () => full.value,
+  set: (value: boolean) => {
+    if (userViewScope !== viewScope.value) full.value = value
+  },
+})
+function toggleFull() {
+  userViewScope = viewScope.value
+  full.value = !full.value
+}
 const query = ref('')
 const reviewFilter = ref('')
 const tabs = [
@@ -414,14 +426,22 @@ const figure = computed<Figure | undefined>(() => {
 })
 const reviewName = (value: string) =>
   ({ accepted: '已确认', rejected: '已否定' })[value] ?? '待审核'
-useViewState('annotation_spectrum', { sample, labelMode, showMS2, full, query, reviewFilter, tab })
+useViewState('annotation_spectrum', {
+  sample,
+  labelMode,
+  showMS2,
+  full: savedFull,
+  query,
+  reviewFilter,
+  tab,
+})
 </script>
 
 <template>
   <section id="annotation-spectrum" class="annotation-spectrum" aria-label="谱图注释与关联峰">
     <div class="actions spectrum-toolbar">
       <slot name="actions" />
-      <button class="preview" @click="full = !full">
+      <button class="preview" @click="toggleFull">
         {{ full ? '返回局部谱图' : '查看完整谱图' }}
       </button>
       <label

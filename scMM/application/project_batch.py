@@ -21,7 +21,7 @@ import pyopenms as oms
 from scMM.file._dataset_loading import DatasetState, _annotate_single_file_frames
 from scMM.file._sequential import merge_objects
 from scMM.file.data import CyESIData
-from scMM.file.io import align_frame, extract_peaks, load_single_file, sum_spec, validate_ms_file
+from scMM.file.io import align_frame, extract_peaks, load_single_file, validate_ms_file
 from scMM.plugins._extraction import (
     extraction_kwargs,
     extraction_registry,
@@ -30,8 +30,10 @@ from scMM.plugins._extraction import (
 )
 from scMM.util.peak import filter_spectrum
 
+from . import mz_lists
+from .extraction_spectra import load_profile, save_profile, summed_profile
 from .naming import beijing_time
-from .preview_cache import cached_shared_targets, digest_file, file_identity, reusable_preview
+from .preview_cache import digest_file, file_identity, reusable_preview
 from .processing import ProcessingParameters
 from .projects import child_path, project_lock, sample_parameters, write_json
 from .tasks import background_tasks_supported, utc_now
@@ -45,13 +47,17 @@ SHARED_FIELDS = (
     "ms_peak_snr_threshold",
 )
 
+FEATURE_RANGE_FIELDS = ("mz_min", "mz_max")
+
 
 def preflight(project, storage, *, plugin_registry=None):
     project.validate_samples()
     if not project.samples:
         raise ValueError("Add at least one raw sample")
-    if project.manifest["feature_strategy"] not in {"shared", "independent"}:
+    strategy = project.manifest["feature_strategy"]
+    if strategy not in {"shared", "independent", "list"}:
         raise ValueError("Unknown feature strategy")
+    fields = {"shared": SHARED_FIELDS, "list": FEATURE_RANGE_FIELDS}.get(strategy, ())
     base = ProcessingParameters(**sample_parameters(project, None))
     samples = []
     if plugin_registry is not None:
@@ -67,9 +73,7 @@ def preflight(project, storage, *, plugin_registry=None):
         params = ProcessingParameters(**values)
         if plugin_registry is not None:
             params = replace(params, method_plugins=base.method_plugins)
-        if project.manifest["feature_strategy"] == "shared" and any(
-            getattr(base, key) != getattr(params, key) for key in SHARED_FIELDS
-        ):
+        if any(getattr(base, key) != getattr(params, key) for key in fields):
             raise ValueError(f"Shared feature parameters differ for {sample['name']}")
         samples.append(
             {
@@ -79,14 +83,19 @@ def preflight(project, storage, *, plugin_registry=None):
                 "parameter_source": "sample" if sample.get("parameters") else "project",
             }
         )
-    return {
+    result = {
         "peak_algorithm": "valley_centroid_v1",
         "project_folder": str(project.folder),
         "samples": samples,
         "parameters": base.to_dict(),
-        "feature_strategy": project.manifest["feature_strategy"],
+        "feature_strategy": strategy,
         "feature_merge_ppm": project.manifest.get("feature_merge_ppm", 10.0),
     }
+    if strategy == "list":
+        target_list = mz_lists.snapshot(project)
+        result["mz_list"] = target_list
+        result["effective_targets"] = len(mz_lists.effective_masses(target_list, base))
+    return result
 
 
 def read_batch(path):
@@ -151,6 +160,7 @@ def submit(project, storage, *, retry_path=None, plugin_registry=None):
             return {
                 "peak_algorithm": value.get("peak_algorithm"),
                 "feature_strategy": value["feature_strategy"],
+                "mz_list": value.get("mz_list"),
                 "parameters": value["parameters"],
                 "feature_merge_ppm": value["feature_merge_ppm"],
                 "samples": [
@@ -181,6 +191,20 @@ def submit(project, storage, *, retry_path=None, plugin_registry=None):
                     if not row.get("sha256") or digest_file(output) != row["sha256"]:
                         raise ValueError("Successful batch artifact changed; start a new batch")
                     shutil.copy2(output, folder / output.name)
+                    if row.get("spectrum_sha256"):
+                        name = f"{row['id']}-spectrum.npz"
+                        profile = child_path(retry_path.parent, name)
+                        if digest_file(profile) != row["spectrum_sha256"]:
+                            raise ValueError("Sample spectrum artifact changed; start a new batch")
+                        shutil.copy2(profile, folder / name)
+                    if row.get("detection_directory"):
+                        directory = Path(row["detection_directory"])
+                        target = child_path(folder, directory)
+                        target.mkdir()
+                        for name in ("traces.csv", "detection.json"):
+                            source = child_path(retry_path.parent, directory / name)
+                            if source.is_file():
+                                shutil.copy2(source, target / name)
                     request["initial_results"].append(row)
             targets = retry_path.with_name("shared_features.npy")
             if targets.exists():
@@ -191,6 +215,12 @@ def submit(project, storage, *, retry_path=None, plugin_registry=None):
                     raise ValueError("Shared feature artifact changed; start a new batch")
                 shutil.copy2(targets, folder / "shared_features.npy")
                 request["reuse_shared_features"] = True
+            if prior.get("spectrum_sha256"):
+                profile = child_path(retry_path.parent, "spectrum.npz")
+                if digest_file(profile) != prior["spectrum_sha256"]:
+                    raise ValueError("Batch spectrum artifact changed; start a new batch")
+                shutil.copy2(profile, folder / profile.name)
+                request["reused_spectrum_sha256"] = prior["spectrum_sha256"]
         request["created_at"] = utc_now()
         write_json(folder / "request.json", request)
         write_json(
@@ -245,6 +275,7 @@ def run_batch(path):
         "pid": os.getpid(),
         "created_at": request["created_at"],
         "message": "准备特征",
+        "feature_strategy": request["feature_strategy"],
         "started_at": utc_now(),
         "stage": "preparing",
         "samples": [
@@ -282,64 +313,78 @@ def run_batch(path):
         base = ProcessingParameters(**request["parameters"])
         registry = extraction_registry(request.get("extraction_plugins"))
         method_kwargs = extraction_kwargs(base.method_plugins, registry)
+        strategy = request["feature_strategy"]
+        target_list = request["mz_list"] if strategy == "list" else None
+        if target_list is not None:
+            targets = mz_lists.effective_masses(target_list, base)
         if request.get("reuse_shared_features"):
-            report("复用已验证共同特征", stage="shared")
             targets = np.load(path.parent / "shared_features.npy", allow_pickle=False)
-        elif (
-            request["feature_strategy"] == "shared"
-            and (
-                cached := cached_shared_targets(
+        if request.get("reused_spectrum_sha256"):
+            _, _, profile_targets, _ = load_profile(
+                path.parent / "spectrum.npz", request["reused_spectrum_sha256"]
+            )
+            if not np.array_equal(profile_targets, targets):
+                raise ValueError("Reused spectrum does not match shared targets")
+            state["spectrum_sha256"] = request["reused_spectrum_sha256"]
+            report("复用已验证共同特征与叠加谱", stage="shared")
+        elif strategy != "independent":
+            from .preview_cache import cached_shared_profile
+
+            cached = (
+                cached_shared_profile(
                     request.get("project_folder", path.parent.parent.parent), request
                 )
+                if strategy == "shared" and targets is None
+                else None
             )
-            is not None
-        ):
-            targets = cached
-            np.save(path.parent / "shared_features.npy", targets)
-        elif request["feature_strategy"] == "shared":
-            grid, total = None, None
-            for i, sample in enumerate(request["samples"]):
-                if (path.parent / "stop.requested").exists():
-                    state["status"] = "stopped"
-                    report("Stopped before extraction")
-                    return
-                try:
-                    state["current_sample"] = sample["name"]
-                    report(f"读取并合谱：{sample['name']}", stage="shared")
-                    exp, _ = load_single_file(sample["path"])
-                    summed = sum_spec(
-                        exp,
-                        resolution_200=base.resolution,
-                        points_per_fwhm=base.resample_points_per_fwhm,
-                        mz_range=(base.mz_min, base.mz_max),
-                        rt_range=sample["parameters"].get("rt_range"),
-                        frame_range=sample["parameters"].get("frame_range"),
+            if cached is not None:
+                grid, total, targets, contributors = cached
+                report("复用已验证共同特征与叠加谱", stage="shared")
+            else:
+                contributors = []
+                grid, total = None, None
+                for i, sample in enumerate(request["samples"]):
+                    if (path.parent / "stop.requested").exists():
+                        state["status"] = "stopped"
+                        report("Stopped before extraction")
+                        return
+                    try:
+                        state["current_sample"] = sample["name"]
+                        report(f"读取并合谱：{sample['name']}", stage="shared")
+                        exp, _ = load_single_file(sample["path"])
+                        mz, intensity = summed_profile(exp, base, sample["parameters"])
+                        if grid is None:
+                            grid, total = mz.copy(), intensity.astype(float)
+                        else:
+                            total += np.interp(grid, mz, intensity, left=0.0, right=0.0)
+                        contributors.append(sample["id"])
+                        del exp
+                    except Exception as exc:
+                        if state["samples"][i]["status"] != "succeeded":
+                            state["samples"][i].update(status="failed", error=str(exc))
+                    report(
+                        f"已合谱 {i + 1}/{len(request['samples'])} 个样本",
+                        stage="shared",
+                        progress=(i + 1) / len(request["samples"]),
                     )
-                    mz, intensity = summed.get_peaks()
-                    if grid is None:
-                        grid, total = mz.copy(), intensity.astype(float)
-                    else:
-                        total += np.interp(grid, mz, intensity, left=0.0, right=0.0)
-                    del exp, summed
-                except Exception as exc:
-                    state["samples"][i].update(status="failed", error=str(exc))
-                report(
-                    f"共同特征合谱 {i + 1}/{len(request['samples'])} 个样本",
-                    stage="shared",
-                    progress=(i + 1) / len(request["samples"]),
-                )
-            if grid is None:
-                raise ValueError("No valid samples for shared features")
-            spectrum = oms.MSSpectrum()
-            spectrum.set_peaks((grid, total))
-            filtered = filter_spectrum(spectrum, snr_threshold=base.ms_peak_snr_threshold)
-            targets, _ = extract_peaks(filtered, resolution_200=base.resolution)
-            targets = targets[(targets >= base.mz_min) & (targets <= base.mz_max)]
-            if not len(targets):
-                raise ValueError("No shared features detected")
-            np.save(path.parent / "shared_features.npy", targets)
+                if grid is None:
+                    raise ValueError("No valid samples for shared features")
+                if targets is None:
+                    spectrum = oms.MSSpectrum()
+                    spectrum.set_peaks((grid, total))
+                    filtered = filter_spectrum(spectrum, snr_threshold=base.ms_peak_snr_threshold)
+                    targets, _ = extract_peaks(filtered, resolution_200=base.resolution)
+                    targets = targets[(targets >= base.mz_min) & (targets <= base.mz_max)]
+                    if not len(targets):
+                        raise ValueError("No shared features detected")
+            check_inputs()
+            state["spectrum_sha256"] = save_profile(
+                path.parent / "spectrum.npz", grid, total, targets, contributors
+            )
         check_inputs()
         if targets is not None:
+            if not request.get("reuse_shared_features"):
+                np.save(path.parent / "shared_features.npy", targets, allow_pickle=False)
             state["shared_features_sha256"] = digest_file(path.parent / "shared_features.npy")
         for i, sample in enumerate(request["samples"]):
             row = state["samples"][i]
@@ -357,6 +402,15 @@ def run_batch(path):
                 params = ProcessingParameters(**sample["parameters"])
                 detection_holder = {}
 
+                def store_spectrum(mz, intensity, candidate_mz, sample_id=sample["id"], row=row):
+                    row["spectrum_sha256"] = save_profile(
+                        path.parent / f"{sample_id}-spectrum.npz",
+                        mz,
+                        intensity,
+                        candidate_mz,
+                        [sample_id],
+                    )
+
                 def capture(event, payload, holder=detection_holder):
                     if event == "find_cells":
                         from .raw_preview import detection_from_payload
@@ -372,7 +426,10 @@ def run_batch(path):
                     )
 
                 cached = reusable_preview(
-                    request.get("project_folder", path.parent.parent.parent), sample, targets
+                    request.get("project_folder", path.parent.parent.parent),
+                    sample,
+                    targets,
+                    mz_list=target_list["sha256"] if target_list else None,
                 )
                 if cached is not None:
                     report(f"复用已验证预览：{sample['name']}", stage="reading")
@@ -381,6 +438,15 @@ def run_batch(path):
 
                     detection_holder["value"] = load_detection(cached)
                     row["reused_preview"] = True
+                    if strategy == "independent":
+                        exp, _ = load_single_file(sample["path"])
+                        mz, intensity = summed_profile(exp, params, sample["parameters"])
+                        store_spectrum(
+                            mz,
+                            intensity,
+                            np.load(cached.with_name("targets.npy"), allow_pickle=False),
+                        )
+                        del exp
                 elif targets is None:
                     obj = CyESIData.load_from_file(
                         sample["path"],
@@ -388,19 +454,21 @@ def run_batch(path):
                         progress_callback=progress,
                         debug_hook=capture,
                         debug_full_baseline=False,
+                        spectrum_hook=store_spectrum,
                         **params.load_kwargs(method_kwargs=method_kwargs),
                     )
                 else:
                     exp, meta = load_single_file(sample["path"])
                     row.update(stage="aligning", progress=None)
                     report(f"扫描峰对齐：{sample['name']}", stage="aligning")
-                    frame, obs = align_frame(
+                    frame, obs, *reference_frames = align_frame(
                         exp,
                         targets,
                         ppm=params.ppm_tol,
                         resolution_200=params.resolution,
                         rt_range=params.rt_range,
                         frame_range=params.frame_range,
+                        reference=mz_lists.reference_alignment(params) if target_list else None,
                     )
                     _annotate_single_file_frames(obs, meta)
                     meta.update(ref_mz=params.ref_mz, mz_range=[params.mz_min, params.mz_max])
@@ -416,7 +484,13 @@ def run_batch(path):
                     ):
                         kwargs.pop(key)
                     obj = CyESIData._from_raw_state(
-                        DatasetState(frame, obs, meta, params.ref_mz),
+                        DatasetState(
+                            frame,
+                            obs,
+                            meta,
+                            params.ref_mz,
+                            reference_frame=reference_frames[0] if reference_frames else None,
+                        ),
                         {
                             **kwargs,
                             "progress_callback": progress,
@@ -438,6 +512,7 @@ def run_batch(path):
                 identity = sample.get("input_identity") or file_identity(sample["path"])
                 obj.file_meta["input_identity"] = identity
                 obj.peak_meta["source_identity_json"] = json.dumps(identity, sort_keys=True)
+                obj.feature_meta["extraction_detected_cells"] = (obj.data > 0).sum(axis=0)
                 for key, value in {
                     "sample_id": sample["id"],
                     "sample": sample["name"],
@@ -506,7 +581,7 @@ def reviewed_dataset(path, selected_ids):
         CyESIData.read_h5ad(child_path(path.parent, rows[key]["output"])) for key in selected_ids
     ]
     request = json.loads((path.parent / "request.json").read_text(encoding="utf-8"))
-    ppm = 0.0 if request["feature_strategy"] == "shared" else request["feature_merge_ppm"]
+    ppm = request["feature_merge_ppm"] if request["feature_strategy"] == "independent" else 0.0
     result = merge_objects(CyESIData, objects, ppm).to_anndata()
     result.uns["project_batch"] = {
         "source": str(path),

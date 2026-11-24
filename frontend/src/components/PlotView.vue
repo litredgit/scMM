@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount, computed } from 'vue'
+import { ref, shallowRef, watch, computed } from 'vue'
 import { usePlotRenderer } from './usePlotRenderer'
 import LegendOrder from './LegendOrder.vue'
+import ImageExportDialog from './ImageExportDialog.vue'
 import resultContract from '../features/analysis/results.contract.json'
 import { useLegendOrder } from './useLegendOrder'
 import { useViewState, restoringViews } from '../api/viewState'
@@ -11,8 +12,9 @@ import { isMassSpectrum, spectrumPresentation, type SpectrumSettings } from './s
 import { systemPlotText } from './systemPlotText'
 import { useWorkspace } from '../stores/workspace'
 import type { Figure } from '../api/types'
-import { authenticatedFetch } from '../api/client'
-import { saveBlob, pngWithDpi } from './plotExport'
+import { openCsvExport } from '../api/csvExport'
+import { workspaceBlob } from '../api/workspaceDownload'
+import { pngWithDpi, type ImageFormat } from './plotExport'
 const props = withDefaults(
   defineProps<{
     figure: Figure
@@ -173,15 +175,13 @@ const position = computed(() =>
     : (store.project.presentation[chartKey.value] ?? props.legend),
 )
 function changeLegend(event: Event) {
+  const next = (event.target as HTMLSelectElement).value
+  if (next === position.value) return
   if (props.readonly || !store.project) {
-    localPosition.value = (event.target as HTMLSelectElement).value
+    localPosition.value = next
     return
   }
-  void store.mutate(
-    '/presentation',
-    { key: chartKey.value, position: (event.target as HTMLSelectElement).value },
-    'PUT',
-  )
+  void store.mutate('/presentation', { key: chartKey.value, position: next }, 'PUT')
 }
 const emit = defineEmits<{
   selection: [cells: string[]]
@@ -230,12 +230,14 @@ const fresh = computed(() => {
       JSON.stringify([store.project?.dataset?.id, store.project?.dataset?.revision])
   )
 })
-const exporting = ref(false)
+const imageDialog = ref<InstanceType<typeof ImageExportDialog>>()
 const preset = ref('nature-single')
 const pointOpacity = ref(1)
 const artwork = ref('color')
 const includeTitle = ref(true)
-const previewImage = ref('')
+const fontFamily = ref('Arial, Helvetica, Microsoft YaHei, sans-serif')
+const lineWidth = ref(0.7)
+const transparent = ref(false)
 const exportRange = ref('current')
 const exportTitle = ref(''),
   exportX = ref(''),
@@ -257,6 +259,9 @@ useViewState(`plot:${chartKey.value}`, {
   pointOpacity,
   artwork,
   includeTitle,
+  fontFamily,
+  lineWidth,
+  transparent,
   spectrumSettings,
 })
 function changeSpectrum() {
@@ -268,6 +273,18 @@ function changeSpectrum() {
   }
   void renderer.retry()
 }
+function focusMz(mz: number) {
+  const width = Math.max(mz * 0.001, 0.05)
+  spectrumHistory.value.push({ ...viewport.value })
+  viewport.value = {
+    'xaxis.range': [mz - width, mz + width],
+    'xaxis.autorange': false,
+    'yaxis.autorange': true,
+  }
+  void renderer.retry()
+}
+defineExpose({ focusMz })
+
 function spectrumView(action: 'reset' | 'back' | 'y-in' | 'y-out') {
   if (action === 'back') {
     const previous = spectrumHistory.value.pop()
@@ -370,9 +387,7 @@ const renderer = usePlotRenderer({
   chartWidth,
   chartHeight,
   chartKind,
-  exporting,
   fresh,
-  image,
   emit,
   legendItems,
   pointOpacity,
@@ -391,78 +406,139 @@ watch(
     }
   },
 )
-onBeforeUnmount(() => {
-  if (previewImage.value) URL.revokeObjectURL(previewImage.value)
-})
-async function exportRequest(path: string, body: unknown) {
-  const response = await authenticatedFetch(`/api/v1/workspace/figures/${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-SCMM-Workspace': store.current?.workspace_id ?? '',
+function captureSource() {
+  const workspace = store.current?.workspace_id ?? ''
+  const path = store.project?.path
+  const figure = props.figure
+  return {
+    workspace,
+    isCurrent: () =>
+      workspace === (store.current?.workspace_id ?? '') &&
+      path === store.project?.path &&
+      figure === props.figure &&
+      fresh.value,
+  }
+}
+const imageSource = shallowRef<ReturnType<typeof captureSource>>()
+const exportViewport = shallowRef<Record<string, unknown>>({})
+const exportVisibility = shallowRef<(boolean | string)[]>([])
+const imageSettings = computed(() =>
+  JSON.stringify([
+    preset.value,
+    widthMm.value,
+    heightMm.value,
+    dpi.value,
+    fontPt.value,
+    fontFamily.value,
+    lineWidth.value,
+    transparent.value,
+    pointOpacity.value,
+    exportRange.value,
+    includeTitle.value,
+    exportTitle.value,
+    exportX.value,
+    exportY.value,
+    position.value,
+    legendItems.value,
+  ]),
+)
+function figureIdentity(figure: Figure) {
+  const metadata = (figure.layout.meta ?? {}) as Record<string, unknown>
+  const keys = [
+    'dataset_token',
+    'result_name',
+    'result_identity',
+    'result_identity_valid',
+    'sample_id',
+    'input_identity',
+    'annotation_source',
+    'annotation_source_identity',
+    'annotation_catalog_revision',
+    'annotation_grouping_version',
+    'lipid_version',
+    'lipid_review_revision',
+    'time_result_key',
+    'time_result_identity',
+    'time_plot_inputs',
+    'method_result',
+    'method_result_identity',
+    'batch_spectrum',
+  ]
+  return Object.fromEntries(
+    keys.filter((key) => Object.hasOwn(metadata, key)).map((key) => [key, metadata[key]]),
+  )
+}
+function exportRequest(
+  path: string,
+  body: Record<string, unknown>,
+  source: ReturnType<typeof captureSource>,
+  signal?: AbortSignal,
+) {
+  return workspaceBlob('/figures/' + path, { ...source, method: 'POST', body, signal })
+}
+function plotData() {
+  const source = captureSource()
+  const figure = orderedFigure()
+  const identity = figureIdentity(figure)
+  figure.layout.meta = {
+    ...(figure.layout.meta as object),
+    publication: {
+      width_mm: widthMm.value,
+      height_mm: heightMm.value,
+      dpi: dpi.value,
+      font_pt: fontPt.value,
+      font_family: fontFamily.value,
+      line_width_pt: lineWidth.value,
+      transparent_background: transparent.value,
+      language: 'en',
+      range: exportRange.value,
+      title: exportTitle.value,
+      x_label: exportX.value,
+      y_label: exportY.value,
+      legend: position.value,
+      legend_order: [...legendItems.value],
+      viewport: renderer.currentViewport(),
+      preset: preset.value,
+      point_opacity: pointOpacity.value,
+      include_title: includeTitle.value,
     },
-    body: JSON.stringify(body),
+  }
+  openCsvExport({
+    filename: (filename.value || props.name) + '-data.zip',
+    archive: true,
+    isCurrent: source.isCurrent,
+    load: (_, signal) => exportRequest('data', { figure }, source, signal),
+    verify: () => exportRequest('check', { metadata: identity }, source),
   })
-  if (!response.ok) {
-    const value = await response.json().catch(() => ({}))
-    throw new Error(value.error?.message ?? '导出失败，请重试。')
-  }
-  return response.blob()
 }
-async function plotData() {
-  exporting.value = true
-  failure.value = ''
-  try {
-    saveBlob(
-      await exportRequest('data', {
-        figure: {
-          ...orderedFigure(),
-          layout: {
-            ...orderedFigure().layout,
-            meta: {
-              ...(props.figure.layout.meta as object),
-              publication: {
-                width_mm: widthMm.value,
-                height_mm: heightMm.value,
-                dpi: dpi.value,
-                font_pt: fontPt.value,
-                language: 'en',
-                range: exportRange.value,
-                title: exportTitle.value,
-                x_label: exportX.value,
-                y_label: exportY.value,
-                legend: position.value,
-                legend_order: legendItems.value,
-                viewport: viewport.value,
-                preset: preset.value,
-                point_opacity: pointOpacity.value,
-                include_title: includeTitle.value,
-              },
-            },
-          },
-        },
-      }),
-      `${filename.value || props.name}-data.zip`,
-    )
-  } catch (cause) {
-    failure.value = String(cause)
-  } finally {
-    exporting.value = false
-  }
+function openImage() {
+  imageSource.value = captureSource()
+  exportViewport.value = renderer.currentViewport()
+  exportVisibility.value = renderer.visibility()
+  imageDialog.value?.open()
 }
-async function image(format: string, preview = false) {
+function currentImage() {
+  return imageSource.value?.isCurrent() === true
+}
+async function image(format: ImageFormat, signal: AbortSignal) {
   const plotly = renderer.plotly()
-  if (!plotly) return
-  failure.value = ''
-  exporting.value = true
+  const requestSource = imageSource.value
+  if (!plotly || !requestSource) throw new Error('图形尚未渲染完成。')
   const temporary = document.createElement('div')
   temporary.style.cssText = 'position:absolute;left:-100000px;top:0'
   document.body.appendChild(temporary)
   try {
     if (
-      ![widthMm.value, heightMm.value, dpi.value, fontPt.value, pointOpacity.value].every(
-        Number.isFinite,
-      ) ||
+      ![
+        widthMm.value,
+        heightMm.value,
+        dpi.value,
+        fontPt.value,
+        pointOpacity.value,
+        lineWidth.value,
+      ].every(Number.isFinite) ||
+      lineWidth.value < 0.2 ||
+      lineWidth.value > 5 ||
       pointOpacity.value < 0.1 ||
       pointOpacity.value > 1 ||
       widthMm.value < 20 ||
@@ -480,45 +556,25 @@ async function image(format: string, preview = false) {
     if (format === 'png' && width * height * (dpi.value / 96) ** 2 > 60_000_000)
       throw new Error('成图像素过多，请减小尺寸或 DPI。')
     const copy = orderedFigure({}, exportRange.value === 'full')
-    const source = (copy.layout.meta ?? {}) as Record<string, unknown>
-    const identity = Object.fromEntries(
-      [
-        'dataset_token',
-        'result_name',
-        'result_identity',
-        'result_identity_valid',
-        'sample_id',
-        'input_identity',
-        'annotation_source',
-        'annotation_source_identity',
-        'annotation_catalog_revision',
-        'annotation_grouping_version',
-        'lipid_version',
-        'lipid_review_revision',
-      ]
-        .filter((key) => Object.hasOwn(source, key))
-        .map((key) => [key, source[key]]),
-    )
-    if (exportRange.value === 'current') applyViewport(copy, renderer.currentViewport(), true)
-    const visibility = renderer.visibility()
+    const identity = figureIdentity(copy)
+    if (exportRange.value === 'current') applyViewport(copy, exportViewport.value, true)
     for (const [i, trace] of (copy.data as Record<string, unknown>[]).entries())
-      if (visibility[i] !== undefined) trace.visible = visibility[i]
+      if (exportVisibility.value[i] !== undefined) trace.visible = exportVisibility.value[i]
     for (const trace of copy.data as Record<string, unknown>[])
       if (trace.type === 'scattergl') trace.type = 'scatter'
     const font = {
-      family: preset.value.startsWith('cell-')
-        ? 'Arial'
-        : 'Arial, Helvetica, Microsoft YaHei, sans-serif',
+      family: preset.value.startsWith('cell-') ? 'Arial' : fontFamily.value,
       size: (fontPt.value * 96) / 72,
       color: '#111111',
     }
+    const background = transparent.value && format !== 'pdf' ? 'rgba(0,0,0,0)' : 'white'
     copy.layout = {
       ...copy.layout,
       width,
       height,
       autosize: false,
-      paper_bgcolor: 'white',
-      plot_bgcolor: 'white',
+      paper_bgcolor: background,
+      plot_bgcolor: background,
       font,
       margin: { l: 50, r: 25, t: 30, b: 45 },
       legend: { font },
@@ -545,9 +601,9 @@ async function image(format: string, preview = false) {
           zeroline: false,
           showline: true,
           linecolor: '#111111',
-          linewidth: (0.7 * 96) / 72,
+          linewidth: (lineWidth.value * 96) / 72,
           ticks: 'outside',
-          tickwidth: (0.7 * 96) / 72,
+          tickwidth: (lineWidth.value * 96) / 72,
         })
         axis.automargin = true
       }
@@ -596,10 +652,12 @@ async function image(format: string, preview = false) {
         marker.colorbar = { ...bar, tickfont: font, title: { ...(bar.title as object), font } }
       }
     }
+    signal.throwIfAborted()
     await plotly.newPlot(temporary, copy.data as never, copy.layout as never, {
       staticPlot: true,
       displayModeBar: false,
     })
+    signal.throwIfAborted()
     const url = await plotly.toImage(temporary, {
       format: format === 'png' ? 'png' : 'svg',
       width,
@@ -609,29 +667,29 @@ async function image(format: string, preview = false) {
     const rendered = await (await fetch(url)).blob()
     const blob =
       format === 'pdf'
-        ? await exportRequest('pdf', {
-            svg: await rendered.text(),
-            width_mm: widthMm.value,
-            height_mm: heightMm.value,
-            identity,
-            font_family: preset.value.startsWith('cell-') ? 'Arial' : null,
-          })
+        ? await exportRequest(
+            'pdf',
+            {
+              svg: await rendered.text(),
+              width_mm: widthMm.value,
+              height_mm: heightMm.value,
+              identity,
+              font_family: preset.value.startsWith('cell-') ? 'Arial' : null,
+            },
+            requestSource,
+            signal,
+          )
         : format === 'png'
           ? await pngWithDpi(rendered, dpi.value)
           : rendered
-    if (format !== 'pdf') await exportRequest('check', { metadata: identity })
+    const verify = () => exportRequest('check', { metadata: identity }, requestSource, signal)
+    if (format !== 'pdf') await verify()
     if (preset.value.startsWith('cell-') && blob.size > 20 * 1024 * 1024)
       throw new Error('Cell 单图文件应不超过 20 MB，请调整尺寸或分辨率。')
-    if (preview) {
-      if (previewImage.value) URL.revokeObjectURL(previewImage.value)
-      previewImage.value = URL.createObjectURL(blob)
-    } else saveBlob(blob, `${filename.value || props.name}.${format}`)
-  } catch (cause) {
-    failure.value = String(cause)
+    return { file: blob, preview: format === 'pdf' ? rendered : blob, verify }
   } finally {
     plotly.purge(temporary)
     temporary.remove()
-    exporting.value = false
   }
 }
 </script>
@@ -705,137 +763,99 @@ async function image(format: string, preview = false) {
       aria-label="交互图表"
     ></div>
     <div v-if="!compact" class="plot-actions">
-      <label
-        >导出范围<select
-          v-model="exportRange"
-          aria-label="导出范围"
-          :disabled="exporting || store.busy"
-        >
-          <option value="current">当前视图</option>
-          <option value="full">完整范围</option>
-        </select></label
-      >
-      <button
-        class="preview"
-        :disabled="exporting || store.busy || !fresh"
-        @click="image('svg', true)"
-      >
-        预览导出效果
-      </button>
-      <button class="save" :disabled="exporting || store.busy || !fresh" @click="image('svg')">
-        下载 SVG
-      </button>
-      <button class="save" :disabled="exporting || store.busy || !fresh" @click="image('pdf')">
-        下载 PDF
-      </button>
-      <button class="save" :disabled="exporting || store.busy || !fresh" @click="image('png')">
-        下载 PNG
-      </button>
-      <button class="save" :disabled="exporting || store.busy || !fresh" @click="plotData">
-        下载作图数据
-      </button>
+      <button class="save" :disabled="store.busy || !fresh" @click="openImage">图片导出</button>
+      <button class="save" :disabled="store.busy || !fresh" @click="plotData">作图数据导出</button>
     </div>
-    <details v-if="!compact" class="plot-settings">
-      <summary>导出设置 · 论文版式、图例与标题</summary>
-      <fieldset class="export-settings-grid" :disabled="exporting || store.busy">
-        <section aria-label="论文导出设置">
-          <h3>论文版式</h3>
-          <div class="field-grid">
-            <label
-              >论文规格<select v-model="preset" aria-label="论文规格" @change="paperPreset">
-                <option value="nature-single">Nature 单栏</option>
-                <option value="nature-double">Nature 双栏</option>
-                <option value="cell-single">Cell 单栏（85 mm）</option>
-                <option value="cell-onehalf">Cell 一栏半（114 mm）</option>
-                <option value="cell-double">Cell 双栏（174 mm）</option>
-                <option value="custom">自定义</option>
-              </select></label
-            >
-            <label
-              >宽度（mm）<input
-                aria-label="宽度（mm）"
-                v-model.number="widthMm"
-                type="number"
-                min="20"
-                max="600"
-            /></label>
-            <label
-              >高度（mm）<input
-                aria-label="高度（mm）"
-                v-model.number="heightMm"
-                type="number"
-                min="20"
-                max="600"
-            /></label>
-            <label
-              >字号（pt）<input
-                aria-label="字号（pt）"
-                v-model.number="fontPt"
-                type="number"
-                min="4.5"
-                max="24"
-                step="0.5"
-            /></label>
-            <label
-              >位图 DPI<input
-                v-model.number="dpi"
-                type="number"
-                min="72"
-                max="2400"
-                step="1"
-                :list="`${name}-dpi`"
-            /></label>
-            <datalist :id="`${name}-dpi`">
-              <option value="300" />
-              <option value="500" />
-              <option value="600" />
-              <option value="1000" />
-              <option value="1200" />
-            </datalist>
-          </div>
-          <label class="inline-check"
-            ><input v-model="includeTitle" type="checkbox" />图内显示标题</label
-          >
+    <ImageExportDialog
+      v-if="!compact"
+      ref="imageDialog"
+      v-model="filename"
+      :settings="imageSettings"
+      :render="image"
+      :is-current="currentImage"
+      :filename-label="'图文件名：' + name"
+      :disabled="store.busy"
+    >
+      <template #default="{ format }">
+        <div class="field-grid">
           <label
-            >图形内容（设置 DPI）<select v-model="artwork">
-              <option value="color">彩色或灰度（至少 300 DPI）</option>
-              <option value="bw">黑白（至少 500 DPI）</option>
-              <option value="line">线图（至少 1000 DPI）</option>
-            </select></label
+            >导出范围
+            <select v-model="exportRange" aria-label="导出范围">
+              <option value="current">当前视图</option>
+              <option value="full">完整范围</option>
+            </select>
+          </label>
+          <label
+            >论文规格
+            <select v-model="preset" aria-label="论文规格" @change="paperPreset">
+              <option value="nature-single">Nature 单栏</option>
+              <option value="nature-double">Nature 双栏</option>
+              <option value="cell-single">Cell 单栏（85 mm）</option>
+              <option value="cell-onehalf">Cell 一栏半（114 mm）</option>
+              <option value="cell-double">Cell 双栏（174 mm）</option>
+              <option value="custom">自定义</option>
+            </select>
+          </label>
+          <label
+            >宽度（mm）<input v-model.number="widthMm" type="number" min="20" max="600"
+          /></label>
+          <label
+            >高度（mm）<input v-model.number="heightMm" type="number" min="20" max="600"
+          /></label>
+          <label
+            >字号（pt）<input v-model.number="fontPt" type="number" min="4.5" max="24" step="0.5"
+          /></label>
+          <label
+            >轴线宽（pt）<input
+              v-model.number="lineWidth"
+              type="number"
+              min="0.2"
+              max="5"
+              step="0.1"
+          /></label>
+          <label v-if="format === 'png'"
+            >位图 DPI<input v-model.number="dpi" type="number" min="72" max="2400" step="1"
+          /></label>
+          <label v-if="format === 'png'"
+            >图形内容（设置 DPI）
+            <select v-model="artwork">
+              <option value="color">彩色或灰度</option>
+              <option value="bw">黑白</option>
+              <option value="line">线图</option>
+            </select>
+          </label>
+          <label v-if="!preset.startsWith('cell-')"
+            >字体
+            <select v-model="fontFamily">
+              <option value="Arial, Helvetica, Microsoft YaHei, sans-serif">无衬线</option>
+              <option value="Times New Roman, Noto Serif, serif">衬线</option>
+              <option value="DejaVu Sans Mono, monospace">等宽</option>
+            </select>
+          </label>
+          <label class="inline-check" v-if="format !== 'pdf'"
+            ><input v-model="transparent" type="checkbox" />透明背景</label
           >
-          <p v-if="preset.startsWith('cell-')" class="muted">
-            Cell：Arial，正文约 6–8 pt，线宽 0.5–1.5 pt；推荐高度不超过 200
-            mm。主标题与图注另附，PDF 优先用于生产。PDF 检查服务器真实 Arial 字体；SVG 和 PNG
-            需在装有 Arial 的环境核对。此预设不代替最终投稿检查。
-          </p>
-        </section>
-        <section aria-label="图例与样式">
-          <h3>图例与样式</h3>
+        </div>
+        <p v-if="preset.startsWith('cell-')" class="muted">
+          Cell 使用 Arial，PDF 需要服务器安装该字体。
+        </p>
+        <details>
+          <summary>图例与点样式</summary>
           <div class="field-grid">
-            <label class="field"
-              ><FieldLabel name="图例位置" /><select
-                :value="position"
-                :disabled="store.busy"
-                :aria-label="`图例位置：${name}`"
-                @change="changeLegend"
-              >
+            <label
+              >图例位置
+              <select :value="position" :aria-label="'图例位置：' + name" @change="changeLegend">
                 <option value="right">图右侧</option>
                 <option value="top_left">图内左上</option>
                 <option value="top_right">图内右上</option>
                 <option value="bottom_left">图内左下</option>
                 <option value="bottom_right">图内右下</option>
                 <option value="hidden">隐藏</option>
-              </select></label
-            >
-            <label
-              ><FieldLabel name="图文件名" /><input
-                v-model="filename"
-                :aria-label="`图文件名：${name}`"
-            /></label>
+              </select>
+            </label>
             <label
               >点不透明度<input
                 v-model.number="pointOpacity"
-                aria-label="点不透明度"
                 type="number"
                 min="0.1"
                 max="1"
@@ -843,32 +863,27 @@ async function image(format: string, preview = false) {
             /></label>
           </div>
           <LegendOrder
-            v-if="!compact"
             :items="legendItems"
             :disabled="store.busy"
             @move="moveLegend"
             @reset="resetLegend"
           />
-        </section>
-        <section aria-label="导出标题与标签">
-          <h3>图中文字</h3>
-          <p class="muted">系统自动图文为英文；样本名、分组名和自定义输入保留原文。</p>
-          <div class="field-grid">
-            <label>导出标题<input v-model="exportTitle" placeholder="留空沿用图标题" /></label>
-            <label>导出横轴标签<input v-model="exportX" placeholder="留空沿用图标签" /></label>
-            <label>导出纵轴标签<input v-model="exportY" placeholder="留空沿用图标签" /></label>
-          </div>
-        </section>
-      </fieldset>
-    </details>
-    <div v-if="previewImage" class="export-preview">
-      <button @click="previewImage = ''">关闭导出预览</button
-      ><img :src="previewImage" alt="按论文设置生成的导出预览" style="max-width: 100%" />
-    </div>
+        </details>
+        <details>
+          <summary>图中文字</summary>
+          <label class="inline-check"
+            ><input v-model="includeTitle" type="checkbox" />图内显示标题</label
+          >
+          <label>导出标题<input v-model="exportTitle" placeholder="沿用图标题" /></label>
+          <label>导出横轴标签<input v-model="exportX" placeholder="沿用图标签" /></label>
+          <label>导出纵轴标签<input v-model="exportY" placeholder="沿用图标签" /></label>
+        </details>
+      </template>
+    </ImageExportDialog>
     <p v-if="!fresh" role="status">该图对应的数据已改变，请重新绘图后下载或选择细胞。</p>
     <div v-if="failure" role="alert" class="state-note">
       {{ failure
-      }}<button class="preview" :disabled="store.busy || exporting" @click="renderer.retry()">
+      }}<button class="preview" :disabled="store.busy" @click="renderer.retry()">
         仅重试图形渲染
       </button>
     </div>
@@ -945,8 +960,7 @@ async function image(format: string, preview = false) {
   box-shadow: 0 3px 12px #0002;
   z-index: 10;
 }
-.mass-spectrum-shell > .plot-actions,
-.mass-spectrum-shell > .plot-settings {
+.mass-spectrum-shell > .plot-actions {
   margin: 0.75rem;
 }
 </style>

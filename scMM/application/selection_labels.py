@@ -160,15 +160,15 @@ def validate_pool(state):
         raise ValueError("筛选恢复矩阵与当前数值不一致。")
 
 
-def axis_choices(state, query=""):
-    data = source(state)
+def axis_choices(state, query="", *, pool=True, embeddings=True):
+    data = source(state) if pool else state.require_data()
     term = query.casefold().strip()
     options = [
         {"value": f"obs:{key}", "label": f"细胞指标 · {key}"}
         for key in data.obs
         if pd.api.types.is_numeric_dtype(data.obs[key])
     ]
-    for key, values in data.obsm.items():
+    for key, values in data.obsm.items() if embeddings else ():
         if getattr(values, "ndim", 0) == 2:
             for component in range(values.shape[1]):
                 options.append(
@@ -181,11 +181,126 @@ def axis_choices(state, query=""):
         row for row in options if term in row["label"].casefold() or term in row["value"].casefold()
     ]
     count = 0
-    for key in data.var_names:
-        if term and term not in str(key).casefold():
+    names = data.var.get("display_name", pd.Series("", index=data.var_names)).fillna("").astype(str)
+    masses = data.var.get("mz", pd.Series("", index=data.var_names))
+    for key, name, mz in zip(data.var_names, names, masses, strict=True):
+        label = " · ".join(dict.fromkeys(str(value) for value in (key, name, mz) if value != ""))
+        if term and term not in label.casefold():
             continue
-        options.append({"value": f"feature:{key}", "label": f"特征 · {key}"})
+        options.append({"value": f"feature:{key}", "label": f"特征 · {label}"})
         count += 1
         if count >= 100:
             break
     return {"options": options}
+
+
+def selection_figure(
+    state,
+    *,
+    x,
+    y,
+    color_mode,
+    color,
+    colorscale,
+    palette,
+    transform,
+    linthresh,
+):
+    import plotly.graph_objects as go
+    from scipy.ndimage import gaussian_filter
+
+    from scMM.plot.colors import PALETTES, color_title, color_values
+    from scMM.plot.presentation import style_figure
+
+    data = source(state)
+    if data.n_obs > 100000:
+        raise ValueError("圈选图最多 10 万个细胞，请先使用分组或稳定编号选择。")
+    a, _ = vector(data, x)
+    b, _ = vector(data, y)
+    include = np.isfinite(a) & np.isfinite(b)
+    if not include.any():
+        raise ValueError("两个坐标变量没有共同的有限值。")
+    active = data.obs_names.isin(state.require_data().obs_names)
+    table = pd.DataFrame(
+        {
+            "cell_id": data.obs_names[include],
+            "x": a[include],
+            "y": b[include],
+            "status": np.where(active[include], "Active", "Excluded"),
+        }
+    )
+    figure = go.Figure()
+
+    def trace(selected, name, marker, extra=""):
+        columns = ["cell_id"] + (["raw_color", "display_color"] if extra else [])
+        figure.add_scattergl(
+            x=selected.x,
+            y=selected.y,
+            mode="markers",
+            name=name,
+            customdata=selected[columns].to_numpy(),
+            marker={"size": 6, **marker},
+            hovertemplate="Cell: %{customdata[0]}<br>x: %{x}<br>y: %{y}"
+            + extra
+            + "<extra>%{fullData.name}</extra>",
+        )
+
+    if color_mode == "status":
+        colors = PALETTES[palette]
+        for i, label in enumerate(("Active", "Excluded")):
+            group = table[table.status.eq(label)]
+            if not group.empty:
+                trace(group, label, {"color": colors[i]})
+    else:
+        if color_mode == "density":
+            count, x_edges, y_edges = np.histogram2d(table.x, table.y, bins=128)
+            density = gaussian_filter(count, 2.0)
+            ix = np.searchsorted(x_edges, table.x, side="right") - 1
+            iy = np.searchsorted(y_edges, table.y, side="right") - 1
+            values = density[np.clip(ix, 0, 127), np.clip(iy, 0, 127)]
+            label = "Point density"
+        else:
+            if not color or color.startswith("embedding:"):
+                raise ValueError("请选择用于上色的数值指标或特征。")
+            values, _ = vector(data, color)
+            values = values[include]
+            label = color
+        table["raw_color"] = values
+        table["display_color"] = color_values(values, transform, linthresh)
+        usable = table.display_color.notna()
+        if usable.any():
+            trace(
+                table[usable],
+                "Cells",
+                {
+                    "color": table.loc[usable, "display_color"],
+                    "colorscale": colorscale,
+                    "showscale": True,
+                    "colorbar": {"title": color_title(label, transform)},
+                },
+                "<br>Raw: %{customdata[1]:.2e}<br>Color value: %{customdata[2]:.2e}",
+            )
+        if not usable.all():
+            trace(table[~usable], "Color unavailable", {"color": "#a7b0b9"})
+    figure.update_layout(
+        title="Cell gating",
+        xaxis_title=x,
+        yaxis_title=y,
+        dragmode="lasso",
+        meta={
+            "dataset_token": list(state.token),
+            "point_kind": "cell_selection",
+            "plotted_cells": len(table),
+            "pool_cells": data.n_obs,
+            "parameters": {
+                "color_mode": color_mode,
+                "color": color,
+                "transform": transform,
+                "linthresh": linthresh,
+                "colorscale": colorscale,
+                "palette": palette,
+            },
+            "export_tables": {"cells": table.to_csv(index=False)},
+        },
+    )
+    return style_figure(figure)

@@ -20,7 +20,12 @@ def export(body: s.Export, manager: Service, identity: Identity):
 
 @router.get("/workspace/results/download")
 def download(
-    manager: Service, identity: Identity, kind: str, key: str = "", filename: str = "scmm.csv"
+    manager: Service,
+    identity: Identity,
+    kind: str,
+    key: str = "",
+    filename: str = "scmm.csv",
+    revision: int | None = None,
 ):
     if (
         Path(filename).name != filename
@@ -28,7 +33,7 @@ def download(
         or not filename
     ):
         raise ValueError("Use a simple filename")
-    content, media = manager.download_content(identity, kind, key)
+    content, media = manager.download_content(identity, kind, key, revision=revision)
     if isinstance(content, Path):
         return FileResponse(content, media_type=media, filename=filename)
     from urllib.parse import quote

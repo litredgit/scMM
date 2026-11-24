@@ -159,7 +159,9 @@ class WebWorkspaceService(
             data = project.workspace.data
             payload = {
                 "path": str(project.folder),
-                "manifest": deepcopy(project.manifest),
+                "manifest": deepcopy(
+                    {key: value for key, value in project.manifest.items() if key != "mz_lists"}
+                ),
                 "unsaved": project.unsaved,
                 "annotation": review_sources(project),
                 "presentation": deepcopy(project.views.get("legend_positions", {})),

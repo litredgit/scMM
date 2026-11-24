@@ -6,6 +6,10 @@ from pydantic import ConfigDict, Field, ValidationError, field_validator, model_
 
 from .schemas import RequestModel, RevisionRequest
 
+ColorScale = Literal["Viridis", "Cividis", "Plasma", "Inferno", "Turbo", "RdBu", "PuOr"]
+Palette = Literal["scMM", "Plotly", "Safe", "Dark24"]
+ColorTransform = Literal["linear", "log1p", "symlog"]
+
 
 class Controls(RequestModel):
     model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
@@ -25,7 +29,7 @@ class ScopedPlot(Controls):
 class Parameters(RevisionRequest):
     parameters: dict[str, Any]
     sample_id: str | None = None
-    strategy: Literal["shared", "independent"] | None = None
+    strategy: Literal["shared", "independent", "list"] | None = None
     merge_ppm: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     auto_ranges: bool | None = None
     cell_type: str | None = None
@@ -81,6 +85,25 @@ class RawDiagnostic(Controls):
 
 class BatchRequest(RevisionRequest):
     path: str
+
+
+class MzListUpload(RevisionRequest):
+    filename: str = Field(min_length=1, max_length=255)
+    name: str = Field(default="", max_length=100)
+    content: str = Field(min_length=1, max_length=2_000_000)
+
+
+class FeatureSource(RevisionRequest):
+    strategy: Literal["shared", "independent", "list"]
+    list_id: str | None = Field(default=None, max_length=100)
+
+
+class BatchSpectrum(BatchRequest):
+    sample_id: str | None = None
+
+
+class SaveBatchMzList(BatchSpectrum):
+    name: str = Field(min_length=1, max_length=100)
 
 
 class CompareBatches(RevisionRequest):
@@ -274,6 +297,7 @@ class Association(Controls):
     confidence: float = Field(default=0.95, gt=0, lt=1)
     seed: int = Field(default=42, ge=0)
     include_zeros: bool = True
+    method: Literal["pearson", "spearman", "kendall"] = "pearson"
 
 
 class SetComparison(Controls):
@@ -434,7 +458,7 @@ class HeatmapPlot(ScopedPlot):
     zscore: bool = True
     cluster_rows: bool = True
     cluster_columns: bool = True
-    colorscale: Literal["RdBu", "PuOr", "Viridis", "Cividis"] = "RdBu"
+    colorscale: ColorScale = "RdBu"
     color_min: float | None = None
     color_max: float | None = None
 
@@ -450,6 +474,24 @@ class EmbeddingPlot(ScopedPlot):
     key: str
     color: str | None = None
     dimensions: list[int] = Field(default_factory=lambda: [1, 2], min_length=2, max_length=3)
+    colorscale: ColorScale = "Viridis"
+    palette: Palette = "scMM"
+    transform: ColorTransform = "linear"
+    linthresh: float = Field(default=1.0, gt=0, allow_inf_nan=False)
+    color_layer: str | None = None
+
+
+class QCPlot(RevisionRequest):
+    kind: Literal["distribution", "sample_correlation"]
+    group_key: str = Field(min_length=1)
+    layer: str | None = None
+    metric: str = "detected_features"
+    bins: int = Field(default=40, ge=5, le=200)
+    relative: bool = True
+    palette: Palette = "scMM"
+    aggregate: Literal["mean", "median"] = "mean"
+    colorscale: ColorScale = "RdBu"
+    square: bool = False
 
 
 class CellSpectra(RevisionRequest):
@@ -675,3 +717,9 @@ class AnnotationEvidenceImport(RevisionRequest):
 class SelectionPlot(RevisionRequest):
     x: str
     y: str
+    color_mode: Literal["status", "numeric", "density"] = "status"
+    color: str | None = None
+    colorscale: ColorScale = "Viridis"
+    palette: Palette = "scMM"
+    transform: ColorTransform = "linear"
+    linthresh: float = Field(default=1.0, gt=0, allow_inf_nan=False)

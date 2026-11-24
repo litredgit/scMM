@@ -1,3 +1,4 @@
+import { defaultPlotColors } from '../../../components/plotColors'
 import { ref, reactive, computed } from 'vue'
 import type { Scope } from '../components/PlotScope.vue'
 
@@ -171,6 +172,8 @@ export function useAnalysisSettings() {
   const embedding = ref(''),
     colorSource = ref('annotation'),
     color = ref(''),
+    colorSettings = ref({ ...defaultPlotColors }),
+    colorLayer = ref(''),
     search = ref(''),
     sort = ref('mean'),
     descending = ref(true),
@@ -233,6 +236,8 @@ export function useAnalysisSettings() {
     embedding.value = ''
     colorSource.value = 'annotation'
     color.value = ''
+    colorSettings.value = { ...defaultPlotColors }
+    colorLayer.value = ''
     search.value = ''
     sort.value = 'mean'
     descending.value = true
@@ -268,6 +273,8 @@ export function useAnalysisSettings() {
     embedding: embedding.value,
     colorSource: colorSource.value,
     color: color.value,
+    colorSettings: { ...colorSettings.value },
+    colorLayer: colorLayer.value,
     volcano: { ...volcano },
     selectedFeatures: [...selectedFeatures.value],
     hideZero: hideZero.value,
@@ -344,6 +351,10 @@ export function useAnalysisSettings() {
     }
     if (typeof saved.embedding === 'string') embedding.value = saved.embedding
     if (typeof saved.color === 'string') color.value = saved.color
+    if (saved.colorSettings && typeof saved.colorSettings === 'object') {
+      colorSettings.value = { ...defaultPlotColors, ...saved.colorSettings }
+    }
+    if (typeof saved.colorLayer === 'string') colorLayer.value = saved.colorLayer
     if (typeof saved.colorSource === 'string') colorSource.value = saved.colorSource
     if (typeof saved.usePca === 'boolean') usePca.value = saved.usePca
     if (typeof saved.ldaSolver === 'string') ldaSolver.value = saved.ldaSolver
@@ -391,6 +402,8 @@ export function useAnalysisSettings() {
     embedding,
     colorSource,
     color,
+    colorSettings,
+    colorLayer,
     search,
     sort,
     descending,
