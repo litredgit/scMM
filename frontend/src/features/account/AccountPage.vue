@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import SectionNav from '../../components/SectionNav.vue'
 import { formatTime } from '../../help/time'
-import { onMounted, ref } from 'vue'
+import { onActivated, ref } from 'vue'
 import MaintenancePanel from './MaintenancePanel.vue'
 import AISettings from '../assistant/AISettings.vue'
 import { request } from '../../api/client'
+import { useReadScope } from '../../api/readScope'
 import { useAuth } from '../../stores/auth'
 import { useWorkspace } from '../../stores/workspace'
 const auth = useAuth()
@@ -19,6 +20,10 @@ type Audit = {
 }
 const users = ref<Account[]>([])
 const audit = ref<Audit[]>([])
+const loading = ref(false)
+const usersError = ref('')
+const auditError = ref('')
+const accountReads = useReadScope(() => auth.user?.id)
 const name = ref('')
 const role = ref('member')
 const credential = ref('')
@@ -26,8 +31,22 @@ const current = ref('')
 const next = ref('')
 async function refresh() {
   if (!auth.admin) return
-  users.value = await request<Account[]>('/admin/users')
-  audit.value = await request<Audit[]>('/admin/audit')
+  const accept = accountReads.begin()
+  loading.value = true
+  usersError.value = ''
+  auditError.value = ''
+  const [team, records] = await Promise.allSettled([
+    request<Account[]>('/admin/users'),
+    request<Audit[]>('/admin/audit'),
+  ])
+  if (!accept()) return
+  loading.value = false
+  if (team.status === 'fulfilled') users.value = team.value
+  else usersError.value = team.reason instanceof Error ? team.reason.message : String(team.reason)
+  if (records.status === 'fulfilled') audit.value = records.value
+  else
+    auditError.value =
+      records.reason instanceof Error ? records.reason.message : String(records.reason)
 }
 async function create() {
   await store.run(
@@ -69,7 +88,7 @@ async function change() {
     next.value = ''
   }
 }
-onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 'reading' }))
+onActivated(refresh)
 </script>
 <template>
   <section>
@@ -136,7 +155,7 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
             <option value="admin">管理员</option>
           </select></label
         >
-        <button class="primary" :disabled="store.busy">创建账号</button>
+        <button class="primary" :disabled="store.busy || loading">创建账号</button>
       </form>
       <div v-if="credential" class="card">
         <h3>一次性登录凭据</h3>
@@ -146,6 +165,11 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
       </div>
       <div class="card table-scroll">
         <h2>团队账号</h2>
+        <p v-if="loading" role="status">正在读取团队账号…</p>
+        <div v-if="usersError">
+          <p role="alert">团队账号读取失败。{{ usersError }}</p>
+          <button class="preview" @click="refresh">重新读取团队账号</button>
+        </div>
         <table>
           <thead>
             <tr>
@@ -162,13 +186,13 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
               <td>{{ !user.active ? '已停用' : user.must_change ? '待设置密码' : '正常' }}</td>
               <td>
                 <button
-                  :disabled="store.busy || user.id === auth.user?.id"
+                  :disabled="store.busy || loading || user.id === auth.user?.id"
                   @click="update(user, true)"
                   class="restore"
                 >
                   重置密码
                 </button>
-                <button :disabled="store.busy" @click="update(user, false)">
+                <button :disabled="store.busy || loading" @click="update(user, false)">
                   {{ user.active ? '停用' : '启用' }}
                 </button>
               </td>
@@ -178,6 +202,10 @@ onMounted(() => store.run(refresh, '', { label: '读取账号信息', phase: 're
       </div>
       <div class="card table-scroll">
         <h2>最近安全记录</h2>
+        <div v-if="auditError">
+          <p role="alert">安全记录读取失败。{{ auditError }}</p>
+          <button class="preview" @click="refresh">重新读取安全记录</button>
+        </div>
         <table>
           <thead>
             <tr>
