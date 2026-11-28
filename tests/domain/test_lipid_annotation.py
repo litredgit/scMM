@@ -34,6 +34,16 @@ def lipid_database(tmp_path, monkeypatch):
     return db.load_database()
 
 
+def test_local_database_does_not_expose_cached_mutable_values(lipid_database):
+    frame, metadata = lipid_database
+    original_frame, original_metadata = frame.copy(), deepcopy(metadata)
+    frame.iloc[0, 0] = "changed"
+    metadata["records"] = 0
+    second_frame, second_metadata = db.load_database()
+    pd.testing.assert_frame_equal(second_frame, original_frame)
+    assert second_metadata == original_metadata
+
+
 def test_ppm_bands_precede_scores_and_ties_remain_separate():
     rules = validate_rules(
         {"rules": [{"kind": "class", "level": "MAIN_CLASS", "value": "GP02", "score": 1000}]},
@@ -608,3 +618,16 @@ def test_network_same_formula_support_is_shared_without_recursive_propagation(li
         "other-isomer" in link["equivalent_candidate_ids"]
         for link in version["network"]["chemical_links"]
     )
+
+
+def test_cached_nested_object_columns_are_isolated(monkeypatch):
+    cached = pd.DataFrame({"aliases": [{"labels": ["original"]}]})
+    metadata = {"source": {"tags": ["original"]}}
+    key = next(iter(db.BUILTIN_DATABASES))
+    monkeypatch.setattr(db, "_load_preset", lambda _: (cached, metadata))
+    first, draft = db.load_database(key)
+    first.iloc[0, 0]["labels"].append("changed")
+    draft["source"]["tags"].append("changed")
+    second, restored = db.load_database(key)
+    assert second.iloc[0, 0] == {"labels": ["original"]}
+    assert restored["source"]["tags"] == ["original"]

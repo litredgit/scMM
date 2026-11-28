@@ -9,6 +9,9 @@ const props = defineProps<{ name: ResultName; heading?: boolean }>()
 const { tables, has, loadResult, store } = useAnalysisContext()
 const router = useRouter()
 const table = computed(() => tables.value[props.name])
+const rowFilter = computed(
+  () => (table.value as { row_filter?: string } | undefined)?.row_filter ?? 'all',
+)
 const offset = computed(() => table.value?.offset ?? 0)
 const canReview = computed(
   () =>
@@ -34,6 +37,21 @@ const shown = computed(() => {
 <template>
   <template v-if="has(name) && tables[name]"
     ><h3 v-if="heading">{{ resultTitles[name] }}</h3>
+    <label v-if="name === 'differential'">
+      结果范围
+      <select
+        aria-label="筛选差异结果"
+        :value="rowFilter"
+        :disabled="store.busy"
+        @change="loadResult(name, 0, undefined, ($event.target as HTMLSelectElement).value)"
+      >
+        <option value="all">全部</option>
+        <option value="finite_effect">有限 log₂FC</option>
+        <option value="single_zero">单侧零</option>
+        <option value="both_zero">双侧零</option>
+        <option value="not_estimable">检验不可估计</option>
+      </select>
+    </label>
     <label v-if="name === 'markers' && table?.columns.includes('weight')"
       ><input type="checkbox" v-model="negative" />同时显示负权重</label
     >
@@ -41,7 +59,7 @@ const shown = computed(() => {
       <button
         class="preview"
         :disabled="store.busy || offset === 0"
-        @click="loadResult(name, offset - 200)"
+        @click="loadResult(name, offset - 200, undefined, rowFilter)"
       >
         上一页
       </button>
@@ -49,7 +67,7 @@ const shown = computed(() => {
       <button
         class="preview"
         :disabled="store.busy || offset + 200 >= table.total"
-        @click="loadResult(name, offset + 200)"
+        @click="loadResult(name, offset + 200, undefined, rowFilter)"
       >
         下一页
       </button>

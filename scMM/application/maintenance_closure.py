@@ -28,7 +28,7 @@ def _evidence(service):
 
 
 def _ready(service):
-    if not service.request or service.completed:
+    if not service.request or service.completed or service._strict_snapshotting:
         raise ValueError("请先收集维护会话；冻结后的状态不能另行确认关闭。")
 
 

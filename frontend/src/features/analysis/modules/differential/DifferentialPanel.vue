@@ -26,6 +26,22 @@ const {
   plotScope,
   toggleFeature,
 } = useAnalysisContext()
+const volcanoExcluded = computed(
+  () =>
+    (
+      figures.value.volcano?.layout.meta as
+        | {
+            volcano_excluded?: { total: number; missing_effect: number; missing_fdr: number }
+          }
+        | undefined
+    )?.volcano_excluded,
+)
+const methodLabel = computed(
+  () =>
+    ({ mannwhitney: 'Mann–Whitney U 检验', welch: 'Welch t 检验', ttest: 'Student t 检验' })[
+      diff.method
+    ],
+)
 const violinStale = computed(() => {
   const meta = figures.value.violin?.layout.meta as { selection_signature?: string } | undefined
   return (
@@ -83,6 +99,7 @@ const violinStale = computed(() => {
             >
               <option>mannwhitney</option>
               <option>welch</option>
+              <option value="ttest">Student t（等方差）</option>
             </select></label
           >
         </div>
@@ -136,8 +153,8 @@ const violinStale = computed(() => {
         </p>
         <p class="muted">
           当前数据层：{{ diff.layer ? displayName(diff.layer) : '当前矩阵' }}；检验：{{
-            diff.method === 'welch' ? 'Welch t 检验' : 'Mann–Whitney U 检验'
-          }}；对全部特征进行 BH-FDR 校正。
+            methodLabel
+          }}；对检验可估计的全部特征进行 BH-FDR 校正。
         </p>
       </details>
       <div class="actions">
@@ -154,7 +171,7 @@ const violinStale = computed(() => {
         运行两组比较后生成火山图；若仅绘图失败，可单独重试。
       </p>
       <template v-if="has('differential')">
-        <p class="muted">细胞级探索；正 log₂FC 表示前者更高；BH-FDR 针对全部特征。</p>
+        <p class="muted">细胞级探索；正 log₂FC 表示前者更高。</p>
         <details>
           <summary>火山图显示 · 阈值与标签</summary>
           <div class="field-grid">
@@ -203,6 +220,11 @@ const violinStale = computed(() => {
           name="volcano"
           @select="toggleFeature"
         />
+        <p v-if="volcanoExcluded?.total" role="status">
+          火山图未显示 {{ volcanoExcluded.total }} 个特征。缺少有限 log₂FC 的有
+          {{ volcanoExcluded.missing_effect }} 个，缺少有效 FDR 的有
+          {{ volcanoExcluded.missing_fdr }} 个。可在结果表查看这些特征。
+        </p>
         <p class="muted">调整阈值或标签后点击“更新火山图”；仅更新显示，不重新进行检验。</p>
         <FeaturePicker v-model="selectedFeatures" />
         <PlotScope

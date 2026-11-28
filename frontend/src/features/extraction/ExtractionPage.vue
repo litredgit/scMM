@@ -6,7 +6,16 @@ import { displayName } from '../../help/labels'
 import { useViewState } from '../../api/viewState'
 import { serialPolling } from '../../api/polling'
 import { useReadScope } from '../../api/readScope'
-import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
+import {
+  ref,
+  shallowRef,
+  computed,
+  watch,
+  onMounted,
+  onUnmounted,
+  onActivated,
+  onDeactivated,
+} from 'vue'
 import type { Batch, Figure } from '../../api/types'
 import { useWorkspace } from '../../stores/workspace'
 import PlotView from '../../components/PlotView.vue'
@@ -14,6 +23,7 @@ import TrashAction from '../../components/TrashAction.vue'
 import BatchComparison from './BatchComparison.vue'
 import BatchSpectrum from './BatchSpectrum.vue'
 import FeatureSource from './FeatureSource.vue'
+import PreflightSamples from './PreflightSamples.vue'
 const store = useWorkspace()
 const featureSourcePending = ref(false)
 const reviewPhase = ref('')
@@ -27,7 +37,7 @@ const counts = computed(() => {
   }
 })
 const signalSample = ref(''),
-  signalFigure = ref<Figure>()
+  signalFigure = shallowRef<Figure>()
 async function loadSignal() {
   const accept = signalScope.begin()
   const result = await store.inspect<{ value: { figure: Figure } }>(
@@ -45,13 +55,22 @@ const batchList = ref<Batch[]>([]),
   path = ref(''),
   included = ref<string[]>([]),
   checked = ref<Record<string, unknown>>(),
-  figures = ref<Figure[]>([])
+  figures = shallowRef<Figure[]>([])
 const signalScope = useReadScope(() => [
   store.current?.workspace_id,
   store.project?.path,
   path.value,
   signalSample.value,
 ])
+const checkedSamples = computed(
+  () =>
+    (checked.value?.samples ?? []) as {
+      id: string
+      name: string
+      parameter_source: string
+      parameters: { mz_min: number; mz_max: number; ref_mz: number }
+    }[],
+)
 watch(
   signalSample,
   () => {
@@ -338,11 +357,11 @@ useViewState('extraction', {
   appliedParameters,
   parameterSample,
   comparisonSection,
+  comparisonPage,
+  copyField,
   compareParameters,
   preflightStale,
-  figures,
   signalSample,
-  signalFigure,
   selections,
 })
 </script>
@@ -590,7 +609,7 @@ useViewState('extraction', {
               }}</small>
             </button>
           </aside>
-          <div class="sample-parameter-fields">
+          <div class="sample-parameter-fields" data-scmm-view-state>
             <ProcessingFields
               :key="parameterSample"
               v-model="parameterDrafts[parameterSample]!"
@@ -641,7 +660,7 @@ useViewState('extraction', {
           </div>
         </div>
         <template v-else-if="compareParameters">
-          <label
+          <label data-scmm-view-state
             >对照参数组<select v-model="comparisonSection" @change="comparisonPage = 0">
               <option v-for="section in parameterSections" :key="section.title">
                 {{ section.title }}
@@ -685,11 +704,8 @@ useViewState('extraction', {
         <button class="save" :disabled="preflightStale" @click="downloadPreflight">
           下载预检 JSON
         </button>
-        <details>
-          <summary>预检 JSON</summary>
-          <pre class="code-block">{{ JSON.stringify(checked, null, 2) }}</pre>
-        </details></template
-      >
+        <PreflightSamples :samples="checkedSamples"
+      /></template>
     </details>
   </section>
   <div v-else class="card empty-state">

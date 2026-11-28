@@ -60,7 +60,28 @@ DLL 需要 .NET 8，优先 `SCMM_DOTNET`，其次 PATH，再到 `~/.local/share/
 
 已验收环境的厂商包与许可位于 `~/.local/share/scmm/thermo-packages`，SDK/NuGet 缓存位于
 `~/.local/share/scmm/dotnet` / `nuget`。重新构建先配置厂商本地包源和官方 NuGet 源，
-在 `tools/thermo_raw_reader/` 使用 `dotnet restore --locked-mode`，随后 Release publish。
+从仓库根目录构建到临时目录并验证一个已授权的 profile RAW 文件。将 `dotnet` 替换为部署使用的 SDK 可执行文件。
+
+```sh
+cd tools/thermo_raw_reader
+reader_stage="$(mktemp -d)"
+dotnet restore --locked-mode
+dotnet publish -c Release --no-restore --output "$reader_stage"
+dotnet "$reader_stage/scmm-thermo-reader.dll" --header /path/to/sample.RAW
+```
+
+确认输出符合[头预检协议](internal-reference.md#采集信息读取)。在本环境的维护窗口内部署完整 Release 输出，
+将 `reader_dir` 设为配置中 helper 所在的目录，再对部署后的 DLL 复验。
+
+```sh
+reader_dir=/path/to/configured-reader-directory
+install -d "$reader_dir"
+cp -a "$reader_stage/." "$reader_dir/"
+dotnet "$reader_dir/scmm-thermo-reader.dll" --header /path/to/sample.RAW
+```
+
+旧 reader 返回退出码 2 且 Usage 未列出 `--header` 时，网页会提示按本节重建和升级。
+任何 MS 级别的 centroid 扫描均报出扫描号和级别。
 这些本机路径是部署记录，不保证其他机器已存在。
 
 ## 依赖分组
@@ -97,8 +118,8 @@ uv sync --locked --extra web
 
 ```bash
 uv run --locked python -c "import scMM, pyopenms, anndata; print('scMM environment ready')"
-uv run --locked scmm-process --help
 uv run --locked scmm-web --help
+uv run --locked scmm-admin --help
 uv run --no-sync python scripts/test_blocks.py --block data --phase python --run
 ```
 
@@ -135,6 +156,8 @@ uv run --locked scmm-web --server-config ~/.config/scmm/dev.json --port 5007
 ### 服务器初始化与账号
 
 真实配置、认证数据库、监控数据库、一次性凭据和运维令牌均放在 Git 工作区之外，认证和监控数据库还必须位于网页可浏览目录之外。
+认证数据库须为 `0600`，其直属目录须为 `0700`，同目录保存 SQLite 的 WAL 和 SHM 文件。已有部署更新前检查目录权限。
+可用 `audit_retention_days` 或 `SCMM_AUDIT_RETENTION_DAYS` 指定审计保留天数。默认保留审计历史，过期会话和登录限速记录按设计清理。
 仓库的 [服务器模板](../config/server.example.json) 只展示通用字段，不含真实路径或凭据。
 管理员在服务器终端执行一次初始化，原始数据目录必须已经存在；初始化显式创建输出及运行目录，不覆盖已有配置或数据库：
 
@@ -536,7 +559,14 @@ Linux worker 绑定父进程死亡信号；取消/维护按进程组限时终止
 
 ## 管理员网页操作
 
-### 管理员监控
+#### 网页维护更新与待应用配置
+
+网页发起的开发或生产更新由环境脚本统一完成维护准备和切换。本次待应用资源配置在维护开始时选定，通过健康检查后清除对应记录。期间新暂存的配置留给下一次操作。候选启动失败时，先恢复旧配置和本轮可用恢复指针，再启动并检查旧版本。
+
+部署维护单独暂存没有工作区的已登记页面，按用户和会话标签页恢复。每位用户可暂存 16 个独立标签页，已有标签页可继续更新。
+宽限期允许页面完成已登录的 AI 会话草稿写入，进入快照阶段后冻结相关写入。
+
+## 管理员监控
 
 管理员从侧栏进入“管理员监控”（`/admin/monitor`）。页面独立于实验工作区，计算繁忙或工作区容量已满时仍可打开；
 每 5 秒刷新当前状态，展示主机 CPU/内存/Swap、API 与计算进程资源、存储、最近 24 小时分钟均值/峰值趋势，

@@ -8,32 +8,16 @@ from functools import lru_cache
 
 import numpy as np
 
-ELECTRON = 0.000548579909065
-ADDUCTS = {
-    "[M+H-H2O]+": {"polarity": "pos", "add": "H", "remove": "H2O", "charge": 1},
-    "[M+H]+": {"polarity": "pos", "add": "H", "remove": "", "charge": 1},
-    "[M+Na]+": {"polarity": "pos", "add": "Na", "remove": "", "charge": 1},
-    "[M+K]+": {"polarity": "pos", "add": "K", "remove": "", "charge": 1},
-    "[M+NH4]+": {"polarity": "pos", "add": "NH4", "remove": "", "charge": 1},
-    "[M+2Na-H]+": {"polarity": "pos", "add": "Na2", "remove": "H", "charge": 1},
-    "[M]+": {"polarity": "pos", "add": "", "remove": "", "charge": 1},
-    "[M-H]-": {"polarity": "neg", "add": "", "remove": "H", "charge": -1},
-    "[M+Cl]-": {"polarity": "neg", "add": "Cl", "remove": "", "charge": -1},
-    "[M+HCOO]-": {"polarity": "neg", "add": "CHO2", "remove": "", "charge": -1},
-    "[M+OAc]-": {"polarity": "neg", "add": "C2H3O2", "remove": "", "charge": -1},
-}
+from ._adducts import ELECTRON_MASS, fine_isotope_ratios, formula_mass_shift, resolve_isotope_ratios
+from ._adducts import FORMULA_ADDUCTS as ADDUCTS
+
+ELECTRON = ELECTRON_MASS
 
 
 @lru_cache(maxsize=16)
 def adduct_shift(name):
-    from pyopenms import EmpiricalFormula
-
     spec = ADDUCTS[name]
-    return (
-        EmpiricalFormula(spec["add"]).getMonoWeight()
-        - EmpiricalFormula(spec["remove"]).getMonoWeight()
-        - spec["charge"] * ELECTRON
-    )
+    return formula_mass_shift(spec["add"], spec["remove"], spec["charge"])
 
 
 def ion_composition(formula, adduct):
@@ -61,45 +45,17 @@ def ion_composition(formula, adduct):
 
 @lru_cache(maxsize=4096)
 def fine_distribution(formula, adduct, max_order):
-    from pyopenms import FineIsotopePatternGenerator
-
     ion = ion_composition(formula, adduct)
     try:
-        mass = ion.getMonoWeight()
-        values = ion.getIsotopeDistribution(FineIsotopePatternGenerator(1e-6)).getContainer()
-        peaks = [(float(v.getMZ()) - mass, float(v.getIntensity())) for v in values]
-        p0 = sum(p for delta, p in peaks if abs(delta) < 1e-5)
-        if p0 <= 0:
-            raise ValueError("无法获得有效单同位素概率。")
-        return [
-            (delta, p / p0, round(delta)) for delta, p in peaks if 1 <= round(delta) <= max_order
-        ]
+        return fine_isotope_ratios(ion, max_order)
     except (RuntimeError, OverflowError) as exc:
         raise ValueError(f"无法计算天然同位素分布：{formula}") from exc
 
 
 def resolved_distribution(formula, adduct, max_order, parent_mz, resolution):
-    """Merge fine isotope components only within one nominal order and one FWHM.
-
-    Resolution is R at m/z 200 for the extraction's Orbitrap-style scaling.
-    The probability-weighted centroid is an approximation, not signal deconvolution.
-    """
-    from scMM.file._spectrum import orbitrap_fwhm_at_mz
-
-    clusters = []
-    for delta, ratio, order in sorted(fine_distribution(formula, adduct, max_order)):
-        mz = parent_mz + delta
-        width = orbitrap_fwhm_at_mz(mz, resolution)
-        if clusters and clusters[-1]["order"] == order and mz - clusters[-1]["first_mz"] <= width:
-            group = clusters[-1]
-            group["mz"] = (group["mz"] * group["ratio"] + mz * ratio) / (group["ratio"] + ratio)
-            group["ratio"] += ratio
-            group["components"] += 1
-        else:
-            clusters.append(
-                {"mz": mz, "ratio": ratio, "order": order, "first_mz": mz, "components": 1}
-            )
-    return clusters
+    """Merge fine isotope components only within one nominal order and one FWHM."""
+    fine = fine_distribution(formula, adduct, max_order)
+    return resolve_isotope_ratios(fine, parent_mz, ADDUCTS[adduct]["charge"], resolution)
 
 
 def isotope_evidence(rows, mz, feature_ids, values, samples, parameters):

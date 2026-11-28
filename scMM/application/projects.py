@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from anndata import read_h5ad
 
+from scMM.util.artifacts import write_json as write_json
 from scMM.util.intensity import intensity_states, write_intensity_states
 
 from .naming import beijing_time, project_dataset_filename, safe_name
@@ -87,19 +88,6 @@ def project_lock(folder):
                 msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
             else:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-
-def write_json(path, value):
-    path = Path(path)
-    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        with temporary.open("x", encoding="utf-8") as handle:
-            json.dump(value, handle, ensure_ascii=False, indent=2)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def child_path(folder, relative):
@@ -338,6 +326,7 @@ class ProjectStore:
                 child_path(folder, artifacts["views"]).read_text(encoding="utf-8")
             )
         project.saved_token = project.workspace.token
+        project.report_token = project.workspace.token
         return project
 
     def save(self, project):
@@ -386,35 +375,31 @@ class ProjectStore:
                 snapshot.mkdir()
             if project.workspace.data is not None:
                 catalog = StorageCatalog((StorageRoot("snapshot", snapshot),))
+                token = project.report_token or project.saved_token
+                previous_reports = project.saved_reports if token == project.workspace.token else {}
+                saved_reports = project.workspace.snapshot_reports(previous_reports)
                 current = project.workspace.save_h5ad(
                     catalog,
                     "snapshot",
                     ".",
                     project_dataset_filename(project, timestamp=saved_at, revision=revision),
+                    reports=saved_reports,
                 )
-                project.workspace._original.write_h5ad(snapshot / "baseline.h5ad")
-                # Loaded reports are read-only artifacts. Preserve only while data is unchanged.
-                if (
-                    project.saved_reports
-                    and (project.report_token or project.saved_token) == project.workspace.token
-                ):
-                    data = read_h5ad(current)
-                    fresh = json.loads(data.uns["scmm_workbench"]["reports_json"])
-                    data.uns["scmm_workbench"]["reports_json"] = json.dumps(
-                        {**project.saved_reports, **fresh}
-                    )
-                    data.write_h5ad(current)
+                from .data_view_storage import verify_h5ad_snapshot
+
+                baseline = snapshot / "baseline.h5ad"
+                project.workspace._original.copy().write_h5ad(baseline)
+                verify_h5ad_snapshot(baseline, project.workspace._original)
                 candidate["artifacts"] = {
                     "current": str(current.relative_to(folder)),
-                    "baseline": str((snapshot / "baseline.h5ad").relative_to(folder)),
+                    "baseline": str(baseline.relative_to(folder)),
                     "views": str((snapshot / "views.json").relative_to(folder)),
                 }
                 if project.workspace._selection_source is not None:
                     selection = snapshot / "selection.h5ad"
-                    project.workspace._selection_source.write_h5ad(selection)
+                    project.workspace._selection_source.copy().write_h5ad(selection)
+                    verify_h5ad_snapshot(selection, project.workspace._selection_source)
                     candidate["artifacts"]["selection"] = str(selection.relative_to(folder))
-                saved = read_h5ad(current)
-                saved_reports = json.loads(saved.uns["scmm_workbench"]["reports_json"])
             if snapshot is not None:
                 write_json(snapshot / "views.json", views)
                 candidate["artifacts"]["views"] = str((snapshot / "views.json").relative_to(folder))

@@ -54,6 +54,51 @@ def test_all_branches_roundtrip_and_old_format_stays_one(tmp_path):
     assert store.open(old.folder).manifest["schema_version"] == 1
 
 
+def test_catalogue_save_updates_live_reports_and_views(tmp_path, monkeypatch):
+    from scMM.application import data_view_storage
+
+    store, project, active = project_with_branches(tmp_path)
+    ws = project.workspace
+    ws.put_result(
+        "differential",
+        {"table": pd.DataFrame({"fdr": [0.01]}), "parameters": {"method": "mannwhitney"}},
+        ws.token,
+    )
+    project.views = {"figures": {"volcano": {"layout": {"meta": {}}}}}
+
+    def rebind(figure, _state, **_kwargs):
+        figure["layout"]["meta"]["verified"] = True
+        return True
+
+    monkeypatch.setattr(data_view_storage, "rebind_figure_identity", rebind)
+    store.save(project)
+    reopened = store.open(project.folder)
+    assert project.saved_reports == reopened.saved_reports
+    assert project.saved_reports["differential"]["table"] == [{"fdr": 0.01}]
+    assert project.views == reopened.views
+    assert project.views["figures"]["volcano"]["layout"]["meta"]["verified"] is True
+    assert project.ion_state["branches"][active]["presentation"]["views"] == project.views
+
+
+@pytest.mark.parametrize("malformed", ["missing", "wrong-kind"])
+def test_h5ad_structural_errors_raise_value_error(tmp_path, malformed):
+    import h5py
+
+    from scMM.application.data_view_storage import verify_h5ad_snapshot
+
+    data = AnnData(np.ones((2, 2)))
+    path = tmp_path / "snapshot.h5ad"
+    data.write_h5ad(path)
+    with h5py.File(path, "a") as snapshot:
+        if malformed == "missing":
+            del snapshot["uns"]
+        else:
+            del snapshot["obs"]
+            snapshot.create_dataset("obs", data=[1, 2])
+    with pytest.raises(ValueError, match=r"Snapshot.*invalid"):
+        verify_h5ad_snapshot(path, data)
+
+
 def test_candidate_failure_and_inactive_corruption_are_not_partial_success(tmp_path, monkeypatch):
     from scMM.application import data_view_storage
 
@@ -232,3 +277,74 @@ def test_reversible_selection_pool_roundtrip_preserves_measurement_root(tmp_path
     np.testing.assert_array_equal(
         next(iter(reopened.ion_state["roots"].values()))["data"].X, root_before
     )
+
+
+@pytest.mark.parametrize("sparse", [False, True])
+def test_catalogue_candidate_shares_only_readonly_buffers(tmp_path, sparse):
+    from scipy.sparse import csr_matrix
+
+    from scMM.application.data_views import copy_catalogue_state
+
+    _store, project, _branch = project_with_branches(tmp_path)
+    root = next(iter(project.ion_state["roots"].values()))["data"]
+    if sparse:
+        root.X = csr_matrix(root.X)
+    copy_state = copy_catalogue_state(project.ion_state)
+    candidate = next(iter(copy_state["roots"].values()))["data"]
+    assert candidate is not root and candidate.X is not root.X
+    original, shared = (root.X.data, candidate.X.data) if sparse else (root.X, candidate.X)
+    assert np.shares_memory(original, shared) and not shared.flags.writeable
+    candidate.obs["sample_id"] = ["edited", "third"]
+    candidate.uns["scmm_measurement_root_id"] = "edited"
+    assert root.obs["sample_id"].tolist() == ["s", "s"]
+    assert root.uns["scmm_measurement_root_id"] != "edited"
+
+
+@pytest.mark.parametrize("field", ["reports", "root", "embedding", "labels", "sparse_metadata"])
+def test_snapshot_validates_metadata_and_embeddings(tmp_path, field):
+    from scipy.sparse import csr_matrix
+
+    from scMM.application.data_view_storage import verify_h5ad_snapshot
+
+    data = AnnData(np.ones((2, 1)))
+    data.uns["scmm_measurement_root_id"] = "original"
+    data.uns["scmm_workbench"] = {"reports_json": '{"original":{}}'}
+    data.obsm["X_pca"] = np.array([[1.0, 2.0], [3.0, 4.0]])
+    data.obsm["labels"] = np.array([["中文"], [b"b"]], dtype=object)
+    data.uns["sparse_metadata"] = csr_matrix([[0.0, 2.0], [np.nan, 3.0]])
+    path = tmp_path / "snapshot.h5ad"
+    data.copy().write_h5ad(path)
+    verify_h5ad_snapshot(path, data)
+    changed = data.copy()
+    if field == "reports":
+        changed.uns["scmm_workbench"]["reports_json"] = "{}"
+    elif field == "root":
+        changed.uns["scmm_measurement_root_id"] = "other"
+    elif field == "embedding":
+        changed.obsm["X_pca"][0, 0] += 1
+    elif field == "labels":
+        changed.obsm["labels"][0, 0] = "c"
+    else:
+        changed.uns["sparse_metadata"].data[0] += 1
+    changed.write_h5ad(path)
+    with pytest.raises(ValueError, match="Snapshot"):
+        verify_h5ad_snapshot(path, data)
+
+
+def test_h5ad_writes_preserve_live_metadata_and_reopened_pqn_history(tmp_path):
+    from scMM.application.state_codec import StateCodec
+
+    store, project, _ = project_with_branches(tmp_path)
+    original = project.workspace._original
+    original.obs["sample_name"] = ["raw", "raw"]
+    codec = StateCodec(tmp_path)
+    codec.encode(original)
+    assert original.obs["sample_name"].dtype == object
+    project.workspace.normalize("pqn")
+    first = project.workspace.history()[-1]["parameters"]["pqn_diagnostic"]
+    store.save(project)
+    reopened = store.open(project.folder).workspace
+    reopened.normalize("pqn")
+    second = reopened.history()[-1]["parameters"]["pqn_diagnostic"]
+    assert first != second
+    assert {first, second} <= reopened.data.uns["scmm_workbench"]["pqn_diagnostics"].keys()

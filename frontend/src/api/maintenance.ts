@@ -6,58 +6,57 @@ import { useWorkspace } from '../stores/workspace'
 import { useAuth } from '../stores/auth'
 import type { Router } from 'vue-router'
 
-type Control = { key: string; value: string; checked: boolean }
-function controls(): Control[] {
-  const counts = new Map<string, number>()
-  return Array.from(
-    document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
-      'main input,main select,main textarea',
-    ),
-  )
-    .filter((el) => !['password', 'file'].includes(el.type))
-    .map((el) => {
-      const name =
-        el.getAttribute('aria-label') ||
-        el.id ||
-        el.closest('label')?.textContent?.trim() ||
-        el.tagName
-      const count = counts.get(name) || 0
-      counts.set(name, count + 1)
-      return {
-        key: name + '#' + count,
-        value: el.value,
-        checked: el instanceof HTMLInputElement && el.checked,
-      }
-    })
+export const BEFORE_MAINTENANCE = 'scmm-before-maintenance'
+export interface BeforeMaintenanceDetail {
+  promises: Promise<unknown>[]
 }
-function restoreControls(saved: Control[]) {
-  const values = new Map(saved.map((v) => [v.key, v])),
-    counts = new Map<string, number>()
-  for (const el of document.querySelectorAll<
-    HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-  >('main input,main select,main textarea')) {
-    if (['password', 'file'].includes(el.type)) continue
-    const name =
-        el.getAttribute('aria-label') ||
-        el.id ||
-        el.closest('label')?.textContent?.trim() ||
-        el.tagName,
-      count = counts.get(name) || 0
-    counts.set(name, count + 1)
-    const value = values.get(name + '#' + count)
-    if (!value) continue
-    el.value = value.value
-    if (el instanceof HTMLInputElement) el.checked = value.checked
-    el.dispatchEvent(new Event('input', { bubbles: true }))
-    el.dispatchEvent(new Event('change', { bubbles: true }))
+declare global {
+  interface WindowEventMap {
+    [BEFORE_MAINTENANCE]: CustomEvent<BeforeMaintenanceDetail>
   }
 }
+
+type Control = { key: string; value: string; checked: boolean }
+type Field = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+const controlsSelector = 'main input,main select,main textarea'
+const draftOwner = '[data-scmm-draft-owner]'
+const draftControl = 'input,select,textarea,option'
+
+function namedControls() {
+  const counts = new Map<string, number>()
+  return Array.from(document.querySelectorAll<Field>(controlsSelector))
+    .filter(
+      (field) =>
+        !['password', 'file'].includes(field.type) && !field.closest('[data-scmm-view-state]'),
+    )
+    .map((field) => {
+      const owner = field.closest(draftOwner)?.getAttribute('data-scmm-draft-owner')
+      const name =
+        field.getAttribute('aria-label') ||
+        field.id ||
+        field.closest('label')?.textContent?.trim() ||
+        field.tagName
+      const prefix = owner ? [owner, name].join('::') : name
+      const count = counts.get(prefix) || 0
+      counts.set(prefix, count + 1)
+      // The legacy first occurrence of these controls belonged to the embedding panel.
+      const legacy =
+        owner === 'analysis/embedding' &&
+        count === 0 &&
+        ['random_state', 'store_key'].includes(name)
+          ? name + '#0'
+          : undefined
+      return { field, owner, key: prefix + '#' + count, legacy }
+    })
+}
+
 export function startMaintenance(router: Router) {
   const tabId = sessionStorage.getItem('scmm-tab-id') || pageId
   sessionStorage.setItem('scmm-tab-id', tabId)
   const store = useWorkspace(),
     auth = useAuth()
   let stopped = false,
+    polling = false,
     timer: ReturnType<typeof setTimeout> | undefined,
     nonce = '',
     restored = '',
@@ -69,18 +68,98 @@ export function startMaintenance(router: Router) {
   let savedRevision = -1,
     formRevision = 0
   const forms: Record<string, Control[]> = {}
-  const capture = () => {
-    if (auth.user && store.current && router.currentRoute.value.path !== '/account') {
-      forms[router.currentRoute.value.path] = controls()
-      formRevision++
+  let applied = new WeakSet<Field>()
+  let applyingControls = false
+  let mayRestoreScoped = false
+  let standaloneRestored = ''
+  function restoreControls(saved: Control[], scopeOnly = false) {
+    const values = new Map(saved.map((v) => [v.key, v]))
+    applyingControls = true
+    try {
+      for (const { field, owner, key, legacy } of namedControls()) {
+        if ((scopeOnly && !owner) || (owner && applied.has(field))) continue
+        const value = values.get(key) ?? (legacy ? values.get(legacy) : undefined)
+        if (!value) continue
+        if (
+          field instanceof HTMLSelectElement &&
+          !Array.from(field.options).some((option) => option.value === value.value)
+        )
+          continue
+        if (owner) applied.add(field)
+        const previousValue = field.value
+        const previousChecked = field instanceof HTMLInputElement && field.checked
+        field.value = value.value
+        if (field instanceof HTMLInputElement) field.checked = value.checked
+        if (
+          field.value === previousValue &&
+          (!(field instanceof HTMLInputElement) || field.checked === previousChecked)
+        )
+          continue
+        field.dispatchEvent(new Event('input', { bubbles: true }))
+        field.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+    } finally {
+      applyingControls = false
     }
   }
+  const capture = (event?: Event) => {
+    const route = router.currentRoute.value.path
+    if (!auth.user || route === '/account' || applyingControls) return
+    const fields = namedControls()
+    const scoped = new Map(
+      (forms[route] ?? [])
+        .filter((value) => value.key.includes('::'))
+        .map((value) => [value.key, value]),
+    )
+    for (const { field, owner, key } of fields) {
+      if (owner && field === event?.target) applied.add(field)
+      if (owner && !applied.has(field) && mayRestoreScoped && scoped.has(key)) continue
+      if (owner)
+        scoped.set(key, {
+          key,
+          value: field.value,
+          checked: field instanceof HTMLInputElement && field.checked,
+        })
+    }
+    forms[route] = [
+      ...scoped.values(),
+      ...fields
+        .filter((entry) => !entry.owner)
+        .map(({ field, key }) => ({
+          key,
+          value: field.value,
+          checked: field instanceof HTMLInputElement && field.checked,
+        })),
+    ]
+    formRevision++
+  }
+  const observer = new MutationObserver((records) => {
+    const saved = forms[router.currentRoute.value.path]
+    if (!mayRestoreScoped || !saved?.length) return
+    if (
+      records.some((record) =>
+        [...record.addedNodes].some(
+          (node) =>
+            node instanceof Element &&
+            (node.matches(draftOwner) ||
+              node.querySelector(draftOwner) ||
+              (node.closest(draftOwner) &&
+                (node.matches(draftControl) || node.querySelector(draftControl)))),
+        ),
+      )
+    )
+      restoreControls(saved, true)
+  })
+  observer.observe(document.body, { childList: true, subtree: true })
   const stopOwner = watch(
     () => JSON.stringify([auth.user?.id, store.current?.workspace_id, store.project?.path]),
     (value, previous) => {
       const scope = JSON.parse(value),
         before = previous ? JSON.parse(previous) : []
       if (scope[0] !== before[0] || scope[1] !== before[1]) restored = ''
+      if (scope[0] !== before[0]) standaloneRestored = ''
+      applied = new WeakSet<Field>()
+      mayRestoreScoped = false
       clearPendingViews()
       for (const key of Object.keys(forms)) delete forms[key]
       restoredForms = false
@@ -104,6 +183,7 @@ export function startMaintenance(router: Router) {
     async () => {
       await nextTick()
       const saved = forms[router.currentRoute.value.path]
+      if (saved && mayRestoreScoped) restoreControls(saved, true)
       if (restoredForms && saved && !appliedRoutes.has(router.currentRoute.value.path)) {
         appliedRoutes.add(router.currentRoute.value.path)
         const target = identity(),
@@ -121,13 +201,42 @@ export function startMaintenance(router: Router) {
     },
   )
   async function poll() {
+    if (polling || stopped) return
+    polling = true
     try {
       if (!auth.user || auth.user.must_change) return
+      if (!store.current && standaloneRestored !== auth.user.id) {
+        standaloneRestored = auth.user.id
+        const target = identity(),
+          route = router.currentRoute.value.path,
+          edits = formRevision
+        const value = await request<{ forms?: Record<string, Control[]>; route?: string }>(
+          '/maintenance/draft?' + new URLSearchParams({ tab_id: tabId }),
+        )
+        if (
+          identity() === target &&
+          formRevision === edits &&
+          route === router.currentRoute.value.path &&
+          value.route === route &&
+          value.forms?.[route]
+        ) {
+          Object.assign(forms, value.forms)
+          mayRestoreScoped = true
+          await nextTick()
+          if (
+            identity() === target &&
+            formRevision === edits &&
+            route === router.currentRoute.value.path
+          )
+            restoreControls(value.forms[route])
+        }
+      }
       if (store.current && restored !== store.current.workspace_id) {
         restored = store.current.workspace_id
         const target = identity(),
           edits = formRevision,
-          workspaceRevision = store.current.revision
+          workspaceRevision = store.current.revision,
+          viewsAtRequest = viewRevision()
         const current = () =>
           identity() === target &&
           formRevision === edits &&
@@ -145,9 +254,11 @@ export function startMaintenance(router: Router) {
         if (value.raw_unavailable) store.notice = value.raw_unavailable
         if (value.forms && value.project_path === (store.project?.path || '')) {
           restoredForms = true
-          if (value.views) await restoreViews(value.views, current)
+          if (value.views && viewRevision() === viewsAtRequest)
+            await restoreViews(value.views, current)
           if (!current()) return
           Object.assign(forms, value.forms)
+          mayRestoreScoped = true
           store.analysisDraft = value.analysisDraft || null
           store.selectedCells = value.selectedCells || []
           // Replay the saved page only during initial hydration. Later drafts can still restore form values.
@@ -197,8 +308,8 @@ export function startMaintenance(router: Router) {
       if (status.request?.id && nonce !== status.request.id && !store.busy && !working) {
         working = true
         try {
-          const detail = { promises: [] as Promise<unknown>[] }
-          window.dispatchEvent(new CustomEvent('scmm-before-maintenance', { detail }))
+          const detail: BeforeMaintenanceDetail = { promises: [] }
+          window.dispatchEvent(new CustomEvent(BEFORE_MAINTENANCE, { detail }))
           await Promise.all(detail.promises)
           capture()
           await request(store.current ? '/workspace/maintenance/draft' : '/maintenance/draft', {
@@ -252,7 +363,8 @@ export function startMaintenance(router: Router) {
     } catch (cause) {
       if (working) store.error = String(cause)
     } finally {
-      if (!stopped) timer = setTimeout(poll, 2000)
+      polling = false
+      if (!stopped) timer = setTimeout(poll, document.hidden && !observedMaintenance ? 8000 : 2000)
     }
   }
   const suspend = () => {
@@ -265,6 +377,7 @@ export function startMaintenance(router: Router) {
         project_path: store.project?.path || '',
         route: router.currentRoute.value.path,
         forms,
+        views: captureViews(),
         analysisDraft: store.analysisDraft,
         selectedCells: store.selectedCells,
       },
@@ -282,10 +395,17 @@ export function startMaintenance(router: Router) {
     }).catch(() => {})
   }
   window.addEventListener('pagehide', suspend)
+  const visibility = () => {
+    clearTimeout(timer)
+    void poll()
+  }
+  document.addEventListener('visibilitychange', visibility)
   void poll()
   return () => {
     window.removeEventListener('pagehide', suspend)
+    document.removeEventListener('visibilitychange', visibility)
     stopped = true
+    observer.disconnect()
     clearTimeout(timer)
     unwatch()
     stopOwner()

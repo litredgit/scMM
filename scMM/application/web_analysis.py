@@ -449,13 +449,24 @@ class AnalysisWorkflow:
             return restore_report(name, project.saved_reports[name])
         raise ValueError("结果不存在或已失效，请重新计算。")
 
-    def result_view(self, identity, name, offset=0, limit=200):
+    def result_view(self, identity, name, offset=0, limit=200, *, row_filter="all"):
         with self.access(identity) as workspace:
             result = self.result_value(workspace.require_project(), name)
             if "table" in result:
                 table = result["table"]
+                if name == "differential" and row_filter != "all":
+                    if row_filter == "finite_effect":
+                        table = table[
+                            np.isfinite(pd.to_numeric(table.log2_fold_change, errors="coerce"))
+                        ]
+                    elif row_filter == "not_estimable":
+                        table = table[pd.to_numeric(table.p_value, errors="coerce").isna()]
+                    elif row_filter == "both_zero":
+                        table = table[(table.mean_a == 0) & (table.mean_b == 0)]
+                    elif row_filter == "single_zero":
+                        table = table[(table.mean_a == 0) ^ (table.mean_b == 0)]
                 payload = table_view(table.iloc[offset : offset + limit], limit=limit)
-                payload.update(total=len(table), offset=offset)
+                payload.update(total=len(table), offset=offset, row_filter=row_filter)
                 return {
                     "table": payload,
                     "parameters": json_view(

@@ -2,7 +2,7 @@
 import DataViewSelector from '../ions/DataViewSelector.vue'
 import CellSpectraPanel from './components/CellSpectraPanel.vue'
 import MethodPanel from '../methods/MethodPanel.vue'
-import { computed, provide, watch } from 'vue'
+import { computed, provide, ref, watch } from 'vue'
 import { useAnalysis } from './composables/useAnalysis'
 import { analysisKey } from './types'
 import { analysisModules } from './registry'
@@ -25,6 +25,10 @@ const enabledModules = computed(() =>
   ),
 )
 const moduleGroups = computed(() => [...new Set(enabledModules.value.map((entry) => entry.group))])
+const visited = ref(new Set<string>())
+const mountedModules = computed(() =>
+  enabledModules.value.filter((entry) => visited.value.has(entry.id)),
+)
 const methodKind = computed(() => {
   if (tab.value === 'embedding') return 'reduction'
   if (tab.value === 'clustering') return 'clustering'
@@ -35,6 +39,7 @@ watch(
   [tab, enabledModules],
   ([value, entries]) => {
     if (!entries.some((entry) => entry.id === value)) tab.value = 'embedding'
+    visited.value.add(tab.value)
   },
   { immediate: true },
 )
@@ -147,16 +152,19 @@ const resultStates = computed(() => {
         :key="methodKind"
         :kind="methodKind"
         :info="info"
+        :data-scmm-draft-owner="'analysis/method/' + methodKind"
         @completed="reloadAnalysis"
       />
-      <component
-        v-for="entry in enabledModules"
-        :key="entry.id"
-        :is="entry.component"
+      <div
+        v-for="entry in mountedModules"
         v-show="tab === entry.id"
-      />
+        :key="entry.id"
+        :data-scmm-draft-owner="'analysis/' + entry.id"
+      >
+        <component :is="entry.component" />
+      </div>
     </div>
-    <CellSpectraPanel />
+    <div data-scmm-draft-owner="analysis/cell-spectra"><CellSpectraPanel /></div>
   </section>
   <div v-else class="card empty-state">
     <h1>{{ store.project?.dataset ? '当前仅有特征表' : '尚未建立当前数据集' }}</h1>

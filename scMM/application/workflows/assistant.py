@@ -6,9 +6,10 @@ from copy import deepcopy
 from datetime import UTC, datetime
 
 
-class AISummaryWorkflow:
-    def publish_ai(self, workspace):
-        from .ai_summary import build_summary
+class AISummaryService:
+    @staticmethod
+    def publish(workspace):
+        from ..ai_summary import build_summary
 
         project = workspace.project
         state = project.workspace if project else None
@@ -24,7 +25,7 @@ class AISummaryWorkflow:
             workspace.ai_parameters = {}
             workspace.ai_completed = None
             workspace.ai_before_filter = {}
-        from .project_batch import batches
+        from ..project_batch import batches
 
         tasks_unknown = False
         try:
@@ -61,18 +62,17 @@ class AISummaryWorkflow:
                 workspace.preview_job["future"] if workspace.preview_job else None
             )
 
-    def ai_context(self, identity, user_id, page):
-        from .ai_config import AIError
+    @staticmethod
+    def context(workspace, user_id, page, idle_seconds):
+        from ..ai_config import AIError
 
-        with self._lock:
-            workspace = self._workspaces.get(identity)
         if workspace is None:
             raise AIError("工作区已关闭或过期，请重新打开项目。", 404, "workspace_missing")
         with workspace.ai_lock:
             if (
                 workspace.owner_id != user_id
                 or workspace.closed
-                or time.monotonic() - workspace.touched > self.idle_seconds
+                or time.monotonic() - workspace.touched > idle_seconds
             ):
                 raise AIError("工作区不存在、已过期或不属于当前账号。", 404, "workspace_missing")
             summary = deepcopy(workspace.ai_snapshot)
@@ -88,7 +88,7 @@ class AISummaryWorkflow:
             running = running or "preview"
         for path in batch_paths:
             try:
-                from .project_batch import read_batch
+                from ..project_batch import read_batch
 
                 status = read_batch(path)["status"]
                 if status in {"queued", "running"}:

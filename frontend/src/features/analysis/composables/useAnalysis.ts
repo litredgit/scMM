@@ -1,6 +1,15 @@
 import { useReadScope } from '../../../api/readScope'
 import { useViewState, restoringViews } from '../../../api/viewState'
-import { ref, computed, watch, nextTick, onActivated, onDeactivated } from 'vue'
+import {
+  ref,
+  shallowRef,
+  triggerRef,
+  computed,
+  watch,
+  nextTick,
+  onActivated,
+  onDeactivated,
+} from 'vue'
 import { useWorkspace } from '../../../stores/workspace'
 import type { AnalysisInfo, Figure, DataTable } from '../../../api/types'
 import { useAnalysisSettings } from './useAnalysisSettings'
@@ -59,9 +68,25 @@ export function useAnalysis() {
     resetSettings,
     restoreSettings,
   } = useAnalysisSettings()
-  const figures = ref<Record<string, Figure>>({}),
-    tables = ref<Record<string, DataTable>>({}),
-    modelReport = ref<Record<string, unknown>>()
+  const initializeAnalysisView = useViewState('analysis', {
+    plotScope,
+    tab,
+    parametersPinned,
+    embedding,
+    colorSource,
+    color,
+    colorSettings,
+    colorLayer,
+    search,
+    sort,
+    descending,
+    selectedFeatures,
+    hideZero,
+    legend,
+  })
+  const figures = shallowRef<Record<string, Figure>>({}),
+    tables = shallowRef<Record<string, DataTable>>({}),
+    modelReport = shallowRef<Record<string, unknown>>()
   let generation = 0,
     featureGeneration = 0,
     initializedPath = '',
@@ -161,20 +186,17 @@ export function useAnalysis() {
     info.value = value
     for (const name of value.results) delete invalidated.value[name]
     if (initializedPath !== store.project.path) {
-      resetSettings()
       initializedPath = store.project!.path
       const defaults = Object.fromEntries(
         (store.configuration?.analysis ?? []).map((p) => [p.name, p.default]),
       )
-      const saved =
-        store.analysisDraft?.path === store.project?.path
-          ? store.analysisDraft.analysis
-          : value.settings
-      restoreSettings(saved, defaults)
-      legend.value =
-        store.analysisDraft?.path === store.project?.path
-          ? store.analysisDraft.legend
-          : value.legend
+      const currentDraft = store.analysisDraft
+      const draft = currentDraft?.path === store.project.path ? currentDraft : undefined
+      initializeAnalysisView(() => {
+        resetSettings()
+        restoreSettings(draft?.analysis ?? value.settings, defaults)
+        legend.value = draft?.legend ?? value.legend
+      })
     }
     if (!observed.value.includes(diff.group_key))
       diff.group_key =
@@ -200,6 +222,8 @@ export function useAnalysis() {
     }
     if (!has('supervised')) modelReport.value = undefined
     if (!value.embeddings.length) delete figures.value.embedding
+    triggerRef(tables)
+    triggerRef(figures)
     await Promise.resolve()
     hydrating = false
     if (!settingsBaseline.value) settingsBaseline.value = settingsSignature()
@@ -212,8 +236,11 @@ export function useAnalysis() {
       ++generation
       ++featureGeneration
       requestedEmbedding = ''
-      delete figures.value.embedding
-      if (identity !== previous?.[0]) {
+      if (figures.value.embedding) {
+        delete figures.value.embedding
+        triggerRef(figures)
+      }
+      if (previous?.[0] !== undefined && identity !== previous[0]) {
         plotScope.value = { group_key: 'group', groups: null, sample_key: 'sample', samples: null }
         initializedPath = ''
         tab.value = 'embedding'
@@ -418,6 +445,8 @@ export function useAnalysis() {
         delete figures.value.shap_plot
       }
       if (operation === 'reduce' || operation === 'cluster') delete figures.value.embedding
+      triggerRef(tables)
+      triggerRef(figures)
       try {
         await refresh(api)
         if (operation === 'reduce') embedding.value = String(options.store_key)
@@ -493,14 +522,20 @@ export function useAnalysis() {
     name: ResultName,
     offset = 0,
     api?: AnalysisTransport,
+    rowFilter = 'all',
   ): Promise<unknown> {
-    if (!api) return store.analysisTransaction((transport) => loadResult(name, offset, transport))
+    if (!api)
+      return store.analysisTransaction((transport) =>
+        loadResult(name, offset, transport, rowFilter),
+      )
     const identity = dataContext()
+    const params = new URLSearchParams({ offset: String(offset) })
+    if (rowFilter !== 'all') params.set('row_filter', rowFilter)
     const result = await api.read<{ table?: DataTable; diagnostics?: Record<string, unknown> }>(
-      `/analysis/results/${name}?offset=${offset}`,
+      `/analysis/results/${name}?${params}`,
     )
     if (identity !== dataContext() || !has(name)) return
-    if (result?.table) tables.value[name] = result.table
+    if (result?.table) tables.value = { ...tables.value, [name]: result.table }
     if (result?.diagnostics) modelReport.value = result.diagnostics
   }
   async function draw(kind: PlotKind, api?: AnalysisTransport): Promise<unknown> {
@@ -545,7 +580,7 @@ export function useAnalysis() {
             plotScope.value,
           ]),
         }
-      figures.value[kind] = value
+      figures.value = { ...figures.value, [kind]: value }
     }
   }
   function toggleFeature(id: string) {
@@ -580,25 +615,6 @@ export function useAnalysis() {
     }
   }
 
-  useViewState('analysis', {
-    plotScope,
-    tab,
-    parametersPinned,
-    figures,
-    tables,
-    modelReport,
-    embedding,
-    colorSource,
-    color,
-    colorSettings,
-    colorLayer,
-    search,
-    sort,
-    descending,
-    selectedFeatures,
-    hideZero,
-    legend,
-  })
   return {
     parametersPinned,
     invalidated,

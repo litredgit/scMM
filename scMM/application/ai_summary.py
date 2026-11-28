@@ -54,6 +54,7 @@ NUMERIC_PARAMETERS = frozenset(
         "baseline_filter_size",
         "max_zero_frac",
         "feature_snr_threshold",
+        "method_version",
         "noise_window",
         "feature_block_size",
         "cell_min_signal",
@@ -135,6 +136,7 @@ ENUM_PARAMETERS = {
     "metric": frozenset({"euclidean", "manhattan", "cosine"}),
     "learning_rate": frozenset({"auto"}),
     "reference_mode": frozenset({"union", "intersection"}),
+    "reference": frozenset({"median", "mean"}),
     "extraction_method": frozenset({"snr_v1"}),
 }
 METRICS = frozenset({"accuracy", "balanced_accuracy", "f1_macro", "roc_auc"})
@@ -259,7 +261,11 @@ def build_summary(workspace):
         latest[operation] = entry
         summary["recent_step"] = operation
     for operation, entry in latest.items():
-        summary["applied_parameters"][operation] = parameters(entry.get("parameters"))
+        committed = entry.get("parameters")
+        clean = parameters(committed)
+        if isinstance(committed, dict):
+            clean.update(parameters(committed.get("effective_parameters")))
+        summary["applied_parameters"][operation] = clean
     if state._original is not None:
         summary["counts"]["at_data_import"] = _counts(state._original)
     if workspace.ai_before_filter and unit is not None:
@@ -270,7 +276,13 @@ def build_summary(workspace):
     if workspace.ai_completed:
         summary["recent_step"] = workspace.ai_completed
     for operation, values in workspace.ai_parameters.items():
-        summary["applied_parameters"][operation] = parameters(values)
+        committed = latest.get(operation, {}).get("parameters")
+        if isinstance(committed, dict) and isinstance(committed.get("effective_parameters"), dict):
+            continue  # The committed effective parameters already describe what ran.
+        summary["applied_parameters"][operation] = {
+            **parameters(values),
+            **summary["applied_parameters"].get(operation, {}),
+        }
     # Only known clustering output recorded by a committed cluster operation.
     cluster = latest.get("cluster", {}).get("parameters", {}).get("key")
     if isinstance(cluster, str) and cluster in data.obs:
@@ -300,7 +312,9 @@ def build_summary(workspace):
                 if k in diagnostics.get("cv_metrics", {})
             }
         elif isinstance(value, dict):
-            summary["applied_parameters"][name] = parameters(value.get("parameters", value))
+            summary["applied_parameters"].setdefault(name, {}).update(
+                parameters(value.get("parameters", value))
+            )
             table = value.get("table")
             if isinstance(table, list):
                 table = pd.DataFrame(table)

@@ -13,7 +13,7 @@ from scMM.application.storage import StorageRoot
 def closure_app(tmp_path):
     """Full private configuration, so the real signed recovery protocol is used."""
     for name in ("raw", "projects", "cache", "temp", "recycle", "private"):
-        (tmp_path / name).mkdir()
+        (tmp_path / name).mkdir(mode=0o700)
     auth, credential = AuthStore.initialize(tmp_path / "private/auth.sqlite3", "tester")
     MonitorStore.initialize(tmp_path / "private/monitor.sqlite3")
     values = {

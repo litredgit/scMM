@@ -1,14 +1,10 @@
 import DOMPurify from 'dompurify'
 import MarkdownIt from 'markdown-it'
+import { authenticatedFetch } from '../../api/client'
 
 const inputRoot = '../../../../'
 const documents = import.meta.glob<string>(
-  [
-    '../../../../{README,AGENTS,CHANGELOG}.md',
-    '../../../../docs/*.md',
-    '../../../../docs/appendix/*.md',
-    '../../../../docs/validation/README.md',
-  ],
+  ['../../../../docs/{projects-and-data,extraction,annotation,statistics}.md'],
   { eager: true, import: 'default', query: '?url&no-inline' },
 )
 const diagrams = import.meta.glob<string>('../../../../docs/images/*.svg', {
@@ -22,6 +18,20 @@ const extractionGuide = 'docs/extraction.md'
 const annotationGuide = 'docs/annotation.md'
 const statisticsGuide = 'docs/statistics.md'
 export const appendix = 'docs/appendix/README.md'
+const referenceDocuments = new Set([
+  'README.md',
+  'AGENTS.md',
+  'CHANGELOG.md',
+  documentIndex,
+  'docs/deployment.md',
+  'docs/development.md',
+  'docs/internal-reference.md',
+  'docs/method-plugins.md',
+  appendix,
+  'docs/appendix/lipid-rule-review.md',
+  'docs/appendix/statistical-method-notes.md',
+  'docs/validation/README.md',
+])
 export const guides = [
   { file: projectGuide, title: '项目与数据' },
   { file: extractionGuide, title: '细胞提取' },
@@ -87,7 +97,7 @@ markdown.renderer.rules.link_open = (tokens, index, options, env, renderer) => {
 
   if (path !== undefined) {
     const file = path.endsWith('/') || !path ? `${path}README.md` : path
-    if (documents[inputRoot + file]) {
+    if (documents[inputRoot + file] || referenceDocuments.has(file)) {
       token.attrSet('data-document', file)
       if (anchor) token.attrSet('data-section', anchor)
       token.attrSet('href', anchor ? `#${sectionId(anchor)}` : '#project-docs-content')
@@ -113,8 +123,10 @@ markdown.renderer.rules.image = (tokens, index, options, env, renderer) => {
 
 export async function loadDocument(file: string, signal: AbortSignal): Promise<RenderedDocument> {
   const asset = documents[inputRoot + file]
-  if (!asset) throw new Error('Unknown project document')
-  const response = await fetch(asset, { signal })
+  if (!asset && !referenceDocuments.has(file)) throw new Error('Unknown project document')
+  const response = asset
+    ? await fetch(asset, { signal })
+    : await authenticatedFetch(`/api/v1/documentation/${file}`, { signal })
   if (!response.ok) throw new Error('Project document unavailable')
 
   const env = { file }

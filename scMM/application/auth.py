@@ -8,12 +8,15 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
+
+from .sqlite_store import configure_connection, enable_wal
 
 _HASHER = PasswordHasher()
 _DUMMY = _HASHER.hash(secrets.token_urlsafe(32))
@@ -37,24 +40,40 @@ def username(value):
 
 
 class AuthStore:
-    def __init__(self, path, *, idle_seconds=3600, absolute_seconds=43200, clock=time.time):
+    def __init__(
+        self,
+        path,
+        *,
+        idle_seconds=3600,
+        absolute_seconds=43200,
+        audit_retention_days=None,
+        clock=time.time,
+    ):
         self.path = Path(path).expanduser().absolute()
         self.idle_seconds, self.absolute_seconds, self.clock = idle_seconds, absolute_seconds, clock
+        self.audit_retention_days = audit_retention_days
+        self._cleanup_lock = threading.Lock()
+        self._next_cleanup = 0
         if self.path.is_symlink() or not self.path.is_file():
             raise RuntimeError("认证数据库缺失或路径无效，请先执行 scmm-admin init。")
         if self.path.stat().st_mode & 0o077:
             raise RuntimeError("认证数据库权限过宽，请将权限设为 600。")
+        if self.path.parent.stat().st_mode & 0o077:
+            raise RuntimeError("认证数据库的父目录权限过宽，请将权限设为 700。")
         with self.connect() as db:
             if db.execute("PRAGMA user_version").fetchone()[0] != 1:
                 raise RuntimeError("认证数据库版本不受支持。")
             if not db.execute("SELECT 1 FROM users WHERE role='admin' AND active=1").fetchone():
                 raise RuntimeError("认证数据库没有可用管理员。")
+            enable_wal(db)
+            db.execute("CREATE INDEX IF NOT EXISTS idx_audit_at ON audit(at)")
 
     @contextmanager
     def connect(self):
         db = sqlite3.connect(self.path.as_uri() + "?mode=rw", uri=True, timeout=10)
         db.row_factory = sqlite3.Row
         try:
+            configure_connection(db)
             with db:
                 yield db
         finally:
@@ -65,6 +84,8 @@ class AuthStore:
         path = Path(path).expanduser().absolute()
         admin = username(admin)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if path.parent.stat().st_mode & 0o077:
+            raise RuntimeError("认证数据库的父目录权限过宽，请将权限设为 700。")
         descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         os.close(descriptor)
         credential = secrets.token_urlsafe(32)
@@ -116,8 +137,25 @@ class AuthStore:
                 (self.clock(), user_id, action, resource, status),
             )
 
+    def _cleanup(self, now):
+        with self._cleanup_lock:
+            if now < self._next_cleanup:
+                return
+            with self.connect() as db:
+                db.execute(
+                    "DELETE FROM sessions WHERE created<=? OR touched<=?",
+                    (now - self.absolute_seconds, now - self.idle_seconds),
+                )
+                db.execute("DELETE FROM attempts WHERE started<=?", (now - 900,))
+                if self.audit_retention_days is not None:
+                    db.execute(
+                        "DELETE FROM audit WHERE at<?", (now - self.audit_retention_days * 86400,)
+                    )
+            self._next_cleanup = now + 3600
+
     def login(self, name, password, source):
         now = self.clock()
+        self._cleanup(now)
         # Account and address budgets are persistent; callers cannot supply forwarding headers.
         keys = ["account:" + digest(name.strip().lower()), "address:" + digest(source)]
         with self.connect() as db:
@@ -150,19 +188,28 @@ class AuthStore:
         if not valid:
             self.audit(None, "login_failed", status=401)
             raise AuthError("账号或密码不正确。", code="invalid_credentials")
+        rehash = (
+            _HASHER.hash(password)
+            if not row["must_change"] and _HASHER.check_needs_rehash(row["password_hash"])
+            else None
+        )
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             current = db.execute("SELECT * FROM users WHERE id=?", (row["id"],)).fetchone()
-            if not current["active"] or current["password_hash"] != row["password_hash"]:
+            if (
+                not current
+                or not current["active"]
+                or current["password_hash"] != row["password_hash"]
+            ):
                 raise AuthError("账号或密码不正确。", code="invalid_credentials")
             if row["must_change"]:
                 # Initialization credentials are consumed by the first successful login.
                 db.execute("UPDATE users SET password_hash=NULL WHERE id=?", (row["id"],))
-            elif _HASHER.check_needs_rehash(row["password_hash"]):
+            elif rehash is not None:
                 db.execute(
                     "UPDATE users SET password_hash=? WHERE id=?",
-                    (_HASHER.hash(password), row["id"]),
+                    (rehash, row["id"]),
                 )
             db.execute(
                 "INSERT INTO sessions VALUES(?,?,?,?,?)", (digest(token), row["id"], csrf, now, now)
@@ -202,22 +249,37 @@ class AuthStore:
         if not 15 <= len(new) <= 128:
             raise AuthError("新密码须为 15–128 个字符。", 422, "invalid_password")
         with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            if not db.execute(
-                "SELECT 1 FROM sessions WHERE id=? AND user_id=?",
+            row = db.execute(
+                """SELECT u.password_hash, u.must_change FROM users u JOIN sessions s
+                ON s.user_id=u.id WHERE s.id=? AND u.id=? AND u.active=1""",
                 (principal["session_id"], principal["id"]),
-            ).fetchone():
+            ).fetchone()
+        if row is None:
+            raise AuthError("登录已失效，请重新登录。")
+        if not row["must_change"]:
+            try:
+                _HASHER.verify(row["password_hash"], current)
+            except (VerificationError, InvalidHashError):
+                raise AuthError("当前密码不正确。", 400, "invalid_password") from None
+        replacement = _HASHER.hash(new)
+        with self.connect() as db:
+            now = self.clock()
+            changed = db.execute(
+                """UPDATE users SET password_hash=?, must_change=0, credential_expires=NULL
+                WHERE id=? AND active=1 AND password_hash IS ? AND must_change=? AND EXISTS (
+                    SELECT 1 FROM sessions WHERE id=? AND user_id=users.id AND created>? AND touched>?)""",
+                (
+                    replacement,
+                    principal["id"],
+                    row["password_hash"],
+                    row["must_change"],
+                    principal["session_id"],
+                    now - self.absolute_seconds,
+                    now - self.idle_seconds,
+                ),
+            ).rowcount
+            if changed != 1:
                 raise AuthError("登录已失效，请重新登录。")
-            row = db.execute("SELECT * FROM users WHERE id=?", (principal["id"],)).fetchone()
-            if not row["must_change"]:
-                try:
-                    _HASHER.verify(row["password_hash"], current)
-                except (VerificationError, InvalidHashError):
-                    raise AuthError("当前密码不正确。", 400, "invalid_password") from None
-            db.execute(
-                "UPDATE users SET password_hash=?, must_change=0, credential_expires=NULL WHERE id=?",
-                (_HASHER.hash(new), principal["id"]),
-            )
             db.execute("DELETE FROM sessions WHERE user_id=?", (principal["id"],))
         self.audit(principal["id"], "password_changed")
 
@@ -252,6 +314,7 @@ class AuthStore:
                 "请使用修改密码功能；无法登录时由服务器管理员离线重置。", 409, "self_reset"
             )
         credential = secrets.token_urlsafe(32) if reset else None
+        replacement = _HASHER.hash(credential) if reset else None
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT * FROM users WHERE id=?", (identity,)).fetchone()
@@ -274,7 +337,7 @@ class AuthStore:
             if reset:
                 db.execute(
                     "UPDATE users SET password_hash=?,must_change=1,credential_expires=? WHERE id=?",
-                    (_HASHER.hash(credential), self.clock() + 86400, identity),
+                    (replacement, self.clock() + 86400, identity),
                 )
             db.execute("DELETE FROM sessions WHERE user_id=?", (identity,))
         self.audit(by, "account_reset" if reset else "account_updated", identity)

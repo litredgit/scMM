@@ -16,7 +16,11 @@ from .presentation import PLOT_COLORS, feature_label, mass_label, probability_nu
 
 
 def volcano_figure(table, *, fdr=0.05, fold_change=1.0, labels=10, order="fdr"):
-    frame = table.copy()
+    effect_ok = np.isfinite(pd.to_numeric(table.log2_fold_change, errors="coerce"))
+    fdr_ok = np.isfinite(pd.to_numeric(table.fdr, errors="coerce"))
+    included = effect_ok & fdr_ok
+    excluded = int((~included).sum())
+    frame = table.loc[included].copy()
     frame["minus_log10_fdr"] = -np.log10(np.clip(frame.fdr.to_numpy(), 1e-300, 1))
     frame["effect"] = frame.log2_fold_change.abs()
     frame["intensity"] = (frame.mean_a + frame.mean_b) / 2
@@ -45,7 +49,16 @@ def volcano_figure(table, *, fdr=0.05, fold_change=1.0, labels=10, order="fdr"):
             "display_fdr": True,
         },
         labels={"display_p_value": "p_value", "display_fdr": "fdr"},
-        title="Volcano plot: global BH-FDR across all features",
+        title="Volcano plot: global BH-FDR across estimable tests",
+    )
+    figure.update_layout(
+        meta={
+            "volcano_excluded": {
+                "total": excluded,
+                "missing_effect": int((~effect_ok).sum()),
+                "missing_fdr": int((~fdr_ok).sum()),
+            }
+        }
     )
     figure.update_traces(textposition="top center")
     figure.add_vline(x=fold_change, line_dash="dot")
@@ -277,7 +290,17 @@ def supervised_figures(analyzer):
     pr.update_layout(
         title="Held-out precision-recall", xaxis_title="Recall", yaxis_title="Precision"
     )
-    calibration.add_scatter(x=[0, 1], y=[0, 1], mode="lines", name="Ideal calibration")
+    if calibration.data:
+        calibration.add_scatter(x=[0, 1], y=[0, 1], mode="lines", name="Ideal calibration")
+    else:
+        calibration.add_annotation(
+            text="Calibration unavailable for uncalibrated scores",
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+        )
     calibration.update_layout(
         title="Held-out calibration (without refitting)",
         xaxis_title="Predicted probability",

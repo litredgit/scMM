@@ -10,6 +10,7 @@ from anndata import AnnData, read_h5ad
 
 TRUSTED = {
     "scMM.analysis.supervised.PLSDAClassifier",
+    "scMM.analysis.supervised.PLSProbabilityCalibration",
     "imblearn.pipeline.Pipeline",
     "imblearn.over_sampling._smote.base.SMOTE",
     "sklearn.tree._tree.Tree",
@@ -50,7 +51,10 @@ class StateCodec:
             return {"@": "path", "value": str(value)}
         if isinstance(value, AnnData):
             path = self.artifact(".h5ad")
-            value.write_h5ad(path)
+            from .data_view_storage import verify_h5ad_snapshot
+
+            value.copy().write_h5ad(path)
+            verify_h5ad_snapshot(path, value)
             return {"@": "anndata", "file": path.name}
         if isinstance(value, np.ndarray):
             if value.dtype.hasobject:

@@ -110,8 +110,8 @@ async def save(body: Settings, request: Request):
         raise AIError("Model 不能含控制字符。")
     # Validate the endpoint without sending a key. Saving is atomic for all fields.
     await request.app.state.ai_client.policy.target(base)
-    return value.save(
-        request.state.principal["id"], base, body.model, body.api_key.get_secret_value()
+    return await asyncio.to_thread(
+        value.save, request.state.principal["id"], base, body.model, body.api_key.get_secret_value()
     )
 
 
@@ -141,7 +141,7 @@ def session_check(request):
 
 @router.post("/test")
 async def test_connection(request: Request):
-    config = configured(request)
+    config = await asyncio.to_thread(configured, request)
     if request.state.principal["id"] in request.app.state.ai_active:
         raise AIError("已有 AI 请求进行中，请先停止。", 409)
     request.app.state.ai_active.add(request.state.principal["id"])
@@ -150,7 +150,7 @@ async def test_connection(request: Request):
         # Minimum test, no workspace or experimental context. Close after first text.
         async with asyncio.timeout(40):
             await anext(stream)
-        session_check(request)
+        await asyncio.to_thread(session_check, request)
         return {"ok": True, "model": config["model"]}
     except TimeoutError:
         raise AIError("AI 连接测试超时，请手动重试。", 504) from None
@@ -163,12 +163,12 @@ async def test_connection(request: Request):
 async def chat(body: Chat, request: Request, identity: str = Depends(workspace_id)):
     if body.messages[-1].role != "user" or sum(len(m.content) for m in body.messages) > 48000:
         raise AIError("请以用户问题结束对话；对话过长时请清空后重试。")
-    config = configured(request)
+    config = await asyncio.to_thread(configured, request)
     user_id = request.state.principal["id"]
     if user_id in request.app.state.ai_active:
         raise AIError("已有 AI 请求进行中，请先停止。", 409)
     manager = request.app.state.workspaces
-    snapshot = manager.ai_context(identity, user_id, body.page)
+    snapshot = await asyncio.to_thread(manager.ai_context, identity, user_id, body.page)
     history = [m.model_dump() for m in body.messages]
 
     def check_current():
@@ -206,19 +206,26 @@ async def chat(body: Chat, request: Request, identity: str = Depends(workspace_i
                 history[-1],
             ]
             await asyncio.to_thread(check_current)
+            next_check = asyncio.get_running_loop().time() + 0.5
             yield encode_event("context", {"model": config["model"], "context": context})
             upstream = request.app.state.ai_client.stream(config, messages)
             while True:
                 pending = asyncio.create_task(anext(upstream))
                 while True:
-                    ready, _ = await asyncio.wait({pending}, timeout=0.5)
-                    await asyncio.to_thread(check_current)
+                    loop = asyncio.get_running_loop()
+                    ready, _ = await asyncio.wait(
+                        {pending}, timeout=max(0, next_check - loop.time())
+                    )
+                    if loop.time() >= next_check:
+                        await asyncio.to_thread(check_current)
+                        next_check = loop.time() + 0.5
                     if ready:
                         break
                     yield ": keepalive\n\n"
                 try:
                     delta = pending.result()
                 except StopAsyncIteration:
+                    await asyncio.to_thread(check_current)
                     yield encode_event("done", {"ok": True})
                     return
                 yield encode_event("delta", {"text": delta})

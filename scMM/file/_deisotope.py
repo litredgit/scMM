@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
+from scipy.sparse import coo_matrix
 
 MissingValueDetector = Callable[[np.ndarray], np.ndarray]
 
@@ -66,7 +67,8 @@ class CandidatePairs:
     mz: np.ndarray
     isotope_order: np.ndarray
     ppm_error: np.ndarray
-    mask: np.ndarray
+    parent_indices: np.ndarray
+    isotope_indices: np.ndarray
     table: pd.DataFrame
     feature_map: dict[str, list[str]]
 
@@ -77,6 +79,7 @@ class RegressionMatrices:
 
     slope: np.ndarray
     r_square: np.ndarray
+    joint_detections: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -99,7 +102,11 @@ def analyze_isotopes(
     """Run deisotoping without mutating the source data or metadata."""
     params.validate(data)
     candidates = _find_mass_candidates(data, params)
-    regression = _fit_pairwise_regressions(data, missing_func, params.intensity_threshold)
+    regression = _fit_pairwise_regressions(
+        data, candidates, missing_func, params.intensity_threshold
+    )
+    candidates.table["joint_detections"] = regression.joint_detections
+    candidates.table["r_square_through_origin"] = regression.r_square
     ratio_limit = _calculate_ratio_limits(candidates, params)
     assignments = _select_assignments(data, candidates, regression, ratio_limit, params)
     metadata = _build_feature_metadata(
@@ -111,12 +118,20 @@ def analyze_isotopes(
     processed_data, metadata = _process_feature_data(data, metadata, assignments, params)
 
     columns = data.columns
+
+    def sparse_diagnostics(values):
+        matrix = coo_matrix(
+            (values, (candidates.parent_indices, candidates.isotope_indices)),
+            shape=(len(columns), len(columns)),
+        )
+        return pd.DataFrame.sparse.from_spmatrix(matrix, index=columns, columns=columns)
+
     return {
         "candidate_map": candidates.feature_map,
         "candidate_table": candidates.table,
-        "A": pd.DataFrame(regression.slope, index=columns, columns=columns),
-        "R": pd.DataFrame(regression.r_square, index=columns, columns=columns),
-        "ratio_limit": pd.DataFrame(ratio_limit, index=columns, columns=columns),
+        "A": sparse_diagnostics(regression.slope),
+        "R": sparse_diagnostics(regression.r_square),
+        "ratio_limit": sparse_diagnostics(ratio_limit),
         "final_table": assignments.table,
         "isotope_features": assignments.isotope_features,
         "parent_features": assignments.parent_features,
@@ -128,17 +143,33 @@ def analyze_isotopes(
 
 def _find_mass_candidates(data: pd.DataFrame, params: DeisotopeParams) -> CandidatePairs:
     mz = data.columns.astype(float).to_numpy()
-    mass_delta = mz[None, :] - mz[:, None]
-    isotope_order = np.rint(mass_delta / params.isotope_diff).astype(int)
-    expected_delta = isotope_order * params.isotope_diff
-    ppm_error = np.abs(mass_delta - expected_delta) / mz[:, None] * 1e6
-    mask = (
-        (isotope_order >= 1)
-        & (isotope_order <= params.max_isotope_order)
-        & (mass_delta > 0)
-        & (ppm_error <= params.ppm_tol)
+    mass_order = np.argsort(mz, kind="stable")
+    sorted_mz = mz[mass_order]
+    pairs = []
+    for order in range(1, params.max_isotope_order + 1):
+        expected = mz + order * params.isotope_diff
+        tolerance = np.minimum(expected * params.ppm_tol / 1e6, params.isotope_diff / 2)
+        starts = np.searchsorted(sorted_mz, np.nextafter(expected - tolerance, -np.inf))
+        stops = np.searchsorted(sorted_mz, np.nextafter(expected + tolerance, np.inf), side="right")
+        counts = stops - starts
+        parents = np.repeat(np.arange(len(mz)), counts)
+        offsets = np.repeat(starts - np.cumsum(counts) + counts, counts)
+        isotopes = mass_order[offsets + np.arange(len(parents))]
+        delta = mz[isotopes] - mz[parents]
+        error = np.abs(delta - order * params.isotope_diff) / expected[parents] * 1e6
+        valid = (
+            (np.rint(delta / params.isotope_diff) == order)
+            & (delta > 0)
+            & (error <= params.ppm_tol)
+        )
+        pairs.append((parents[valid], isotopes[valid], np.full(valid.sum(), order), error[valid]))
+    parent_indices, isotope_indices, isotope_order, ppm_error = (
+        np.concatenate(items) for items in zip(*pairs, strict=True)
     )
-    parent_indices, isotope_indices = np.where(mask)
+    pair_order = np.lexsort((isotope_indices, parent_indices))
+    parent_indices, isotope_indices, isotope_order, ppm_error = (
+        item[pair_order] for item in (parent_indices, isotope_indices, isotope_order, ppm_error)
+    )
     table = pd.DataFrame(
         {
             "parent_index": parent_indices,
@@ -147,20 +178,21 @@ def _find_mass_candidates(data: pd.DataFrame, params: DeisotopeParams) -> Candid
             "isotope_feature": data.columns[isotope_indices],
             "parent_mz": mz[parent_indices],
             "isotope_mz": mz[isotope_indices],
-            "isotope_order": isotope_order[parent_indices, isotope_indices],
-            "ppm_error": ppm_error[parent_indices, isotope_indices],
+            "isotope_order": isotope_order,
+            "ppm_error": ppm_error,
         }
     )
-    feature_map = {
-        str(data.columns[index]): [str(feature) for feature in data.columns[mask[index]]]
-        for index in range(len(mz))
-        if np.any(mask[index])
-    }
-    return CandidatePairs(mz, isotope_order, ppm_error, mask, table, feature_map)
+    feature_map = {}
+    for parent, isotope in zip(parent_indices, isotope_indices, strict=True):
+        feature_map.setdefault(str(data.columns[parent]), []).append(str(data.columns[isotope]))
+    return CandidatePairs(
+        mz, isotope_order, ppm_error, parent_indices, isotope_indices, table, feature_map
+    )
 
 
 def _fit_pairwise_regressions(
     data: pd.DataFrame,
+    candidates: CandidatePairs,
     missing_func: MissingValueDetector,
     intensity_threshold: float,
 ) -> RegressionMatrices:
@@ -175,44 +207,42 @@ def _fit_pairwise_regressions(
     if intensity_threshold > 0:
         missing |= raw_values <= intensity_threshold
 
-    values = raw_values.copy()
-    values[missing] = 0.0
-    valid = (~missing).astype(float)
-    cross_products = values.T @ values
-    squared = values**2
-    parent_sums = squared.T @ valid
-    isotope_sums = valid.T @ squared
-
-    with np.errstate(divide="ignore", invalid="ignore"):
-        slope = cross_products / parent_sums
-        r_square = cross_products**2 / (parent_sums * isotope_sums)
+    pairs = len(candidates.parent_indices)
+    slope, r_square = np.full(pairs, np.nan), np.full(pairs, np.nan)
+    detections = np.zeros(pairs, dtype=np.int64)
+    block = max(1, 1_000_000 // max(1, len(raw_values)))
+    for start in range(0, pairs, block):
+        slc = slice(start, start + block)
+        left, right = candidates.parent_indices[slc], candidates.isotope_indices[slc]
+        jointly_valid = ~(missing[:, left] | missing[:, right])
+        parents = np.where(jointly_valid, raw_values[:, left], 0)
+        isotopes = np.where(jointly_valid, raw_values[:, right], 0)
+        cross = np.einsum("ij,ij->j", parents, isotopes)
+        parent_squares = np.einsum("ij,ij->j", parents, parents)
+        isotope_squares = np.einsum("ij,ij->j", isotopes, isotopes)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            slope[slc] = cross / parent_squares
+            r_square[slc] = cross**2 / (parent_squares * isotope_squares)
+        detections[slc] = jointly_valid.sum(axis=0)
     slope[~np.isfinite(slope)] = np.nan
     r_square[~np.isfinite(r_square)] = np.nan
-    return RegressionMatrices(slope, r_square)
+    return RegressionMatrices(slope, r_square, detections)
 
 
-def _calculate_ratio_limits(
-    candidates: CandidatePairs,
-    params: DeisotopeParams,
-) -> np.ndarray:
-    max_carbon_atoms = np.floor(candidates.mz / 12.0).astype(int)
+def _calculate_ratio_limits(candidates, params):
+    max_carbon_atoms = np.floor(candidates.mz[candidates.parent_indices] / 12.0).astype(int)
     abundance_ratio = params.carbon13_abundance / (1.0 - params.carbon13_abundance)
-    ratio_limit = np.full(candidates.mask.shape, np.nan, dtype=float)
-
-    for order in range(1, params.max_isotope_order + 1):
-        limits = np.array(
+    return (
+        np.asarray(
             [
-                math.comb(int(atom_count), order) * abundance_ratio**order
-                if atom_count >= order
+                math.comb(int(atoms), int(order)) * abundance_ratio**order
+                if atoms >= order
                 else 0.0
-                for atom_count in max_carbon_atoms
+                for atoms, order in zip(max_carbon_atoms, candidates.isotope_order, strict=True)
             ]
         )
-        order_mask = candidates.isotope_order == order
-        expanded_limits = np.broadcast_to(limits[:, None], ratio_limit.shape)
-        ratio_limit[order_mask] = expanded_limits[order_mask]
-
-    return ratio_limit * params.safety_factor
+        * params.safety_factor
+    )
 
 
 def _select_assignments(
@@ -222,70 +252,40 @@ def _select_assignments(
     ratio_limit: np.ndarray,
     params: DeisotopeParams,
 ) -> IsotopeAssignments:
-    accepted = (
-        candidates.mask
+    accepted = np.flatnonzero(
+        (regression.joint_detections >= 3)
         & (params.r_square_threshold <= regression.r_square)
+        & (regression.slope > 0)
         & (ratio_limit >= regression.slope)
     )
-    selected = np.zeros_like(accepted, dtype=bool)
-    assigned_isotopes: set[int] = set()
-
-    for parent_index in np.argsort(candidates.mz):
-        if parent_index in assigned_isotopes:
-            continue
-        isotope_indices = sorted(
-            np.where(accepted[parent_index])[0],
-            key=lambda index: (
-                candidates.isotope_order[parent_index, index],
-                candidates.mz[index],
-            ),
+    parents, isotopes = candidates.parent_indices, candidates.isotope_indices
+    order = np.lexsort(
+        (
+            candidates.mz[isotopes[accepted]],
+            candidates.isotope_order[accepted],
+            parents[accepted],
+            candidates.mz[parents[accepted]],
         )
-        for isotope_index in isotope_indices:
-            if isotope_index not in assigned_isotopes:
-                selected[parent_index, isotope_index] = True
-                assigned_isotopes.add(isotope_index)
-
-    parent_indices, isotope_indices = np.where(selected)
-    table = _build_assignment_table(
-        data,
-        candidates,
-        regression,
-        ratio_limit,
-        parent_indices,
-        isotope_indices,
     )
+    assigned = set()
+    selected = []
+    for position in accepted[order]:
+        parent, isotope = parents[position], isotopes[position]
+        if parent not in assigned and isotope not in assigned:
+            selected.append(position)
+            assigned.add(isotope)
+    selected = np.asarray(sorted(selected), dtype=int)
+    parent_indices, isotope_indices = parents[selected], isotopes[selected]
+    table = candidates.table.iloc[selected].reset_index(drop=True).copy()
+    table["slope_A"] = regression.slope[selected]
+    table["r_square"] = regression.r_square[selected]
+    table["max_allowed_ratio"] = ratio_limit[selected]
     return IsotopeAssignments(
         parent_indices=parent_indices,
         isotope_indices=isotope_indices,
         table=table,
-        isotope_features=data.columns[sorted(assigned_isotopes)].tolist(),
+        isotope_features=data.columns[sorted(assigned)].tolist(),
         parent_features=data.columns[sorted(set(parent_indices))].tolist(),
-    )
-
-
-def _build_assignment_table(
-    data: pd.DataFrame,
-    candidates: CandidatePairs,
-    regression: RegressionMatrices,
-    ratio_limit: np.ndarray,
-    parent_indices: np.ndarray,
-    isotope_indices: np.ndarray,
-) -> pd.DataFrame:
-    pair = (parent_indices, isotope_indices)
-    return pd.DataFrame(
-        {
-            "parent_index": parent_indices,
-            "isotope_index": isotope_indices,
-            "parent_feature": data.columns[parent_indices],
-            "isotope_feature": data.columns[isotope_indices],
-            "parent_mz": candidates.mz[parent_indices],
-            "isotope_mz": candidates.mz[isotope_indices],
-            "isotope_order": candidates.isotope_order[pair],
-            "ppm_error": candidates.ppm_error[pair],
-            "slope_A": regression.slope[pair],
-            "r_square": regression.r_square[pair],
-            "max_allowed_ratio": ratio_limit[pair],
-        }
     )
 
 

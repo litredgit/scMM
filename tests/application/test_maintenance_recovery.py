@@ -45,6 +45,27 @@ def test_fitted_pipeline_exact_roundtrip(tmp_path, method, smote):
         codec.decode(state)
 
 
+def test_grouped_multiclass_pls_calibration_recovers_exactly(tmp_path):
+    target = data()
+    target.obs["label"] = np.tile(["a", "b", "c", "a"], 20)
+    target.obs["source"] = np.repeat(np.arange(20).astype(str), 4)
+    model = SupervisedAnalyzer(target, "label", group_key="source")
+    report = model.evaluate("plsda", cv=2)
+    assert report["probability_diagnostics"]["probability_status"] == "grouped_oof_sigmoid"
+    assert np.isfinite(report["probability_diagnostics"]["log_loss"])
+    np.testing.assert_allclose(model.probabilities_.sum(axis=1), 1)
+    np.testing.assert_array_equal(
+        model.prediction_, model.classes_[model.probabilities_.argmax(axis=1)]
+    )
+    codec = StateCodec(tmp_path)
+    restored = codec.decode(codec.encode(model))
+    np.testing.assert_array_equal(restored.model_.predict(model.X_test_), model.prediction_)
+    np.testing.assert_array_equal(
+        restored.model_.predict_proba(model.X_test_), model.probabilities_
+    )
+    pd.testing.assert_frame_equal(restored.latent_scores(), model.latent_scores())
+
+
 def test_unsaved_full_state_isolated_and_tamper_rejected(tmp_path):
     folder = tmp_path / "private"
     folder.mkdir()
@@ -131,6 +152,31 @@ def test_failed_restart_restores_configuration_and_checkpoint(tmp_path, monkeypa
     assert commands == [["systemctl", "--user", "restart", "scmm-dev.service"]] * 2
 
 
+def test_deleted_raw_sample_does_not_discard_recovered_matrix(tmp_path):
+    folder = tmp_path / "private"
+    folder.mkdir()
+    recovery = RecoveryStore(SimpleNamespace(path=folder / "dev.json"))
+    project = Project(tmp_path / "project", {"samples": [], "name": "unsaved"})
+    original = data()
+    project.workspace.replace(original)
+    workspace = BrowserWorkspace(owner_id="alice", project=project)
+    workspace.raw = {
+        "sample_id": "deleted",
+        "preview": SimpleNamespace(open_identity={}),
+        "frames": [],
+    }
+    manager = SimpleNamespace(
+        _lock=threading.RLock(), _workspaces={workspace.id: workspace}, publish_ai=lambda _: None
+    )
+    recovery.snapshot(manager)
+    manager._workspaces = {}
+    assert recovery.restore(manager) == 1
+    restored = manager._workspaces[workspace.id]
+    assert restored.client_state["raw_unavailable"]
+    assert not restored.raw
+    np.testing.assert_array_equal(restored.project.workspace.data.X, original.X)
+
+
 def test_catalogue_inactive_model_formal_report_and_maintenance_model(tmp_path):
     from scMM.application.data_views import (
         DataViewCatalog,
@@ -188,3 +234,31 @@ def test_catalogue_inactive_model_formal_report_and_maintenance_model(tmp_path):
         "supervised"
     ][1]
     np.testing.assert_array_equal(fitted.probabilities_, model.probabilities_)
+
+
+def test_update_runner_delegates_preparation_and_resources_to_the_environment(
+    tmp_path, monkeypatch
+):
+    from scMM.application import deployment_client, maintenance_runner
+
+    config_path = tmp_path / "dev.json"
+    configuration = SimpleNamespace(path=config_path, values={"port": 5007, "environment": "dev"})
+    configuration.validate = lambda: configuration
+    monkeypatch.setattr(maintenance_runner, "load_server_config", lambda *_a, **_k: configuration)
+    monkeypatch.setattr(
+        deployment_client, "prepare_service", lambda *_: pytest.fail("duplicate prepare")
+    )
+    commands = []
+    monkeypatch.setattr(
+        maintenance_runner.subprocess, "run", lambda args, **_: commands.append(args)
+    )
+    maintenance_runner.run(config_path, "update", "approved", deployment_first=True)
+    assert commands[0][2:] == [
+        "update",
+        "dev",
+        "--approved-version",
+        "approved",
+        "--maintenance-config",
+        str(config_path),
+        "--deployment-first",
+    ]

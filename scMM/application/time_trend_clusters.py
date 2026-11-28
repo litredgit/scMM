@@ -2,9 +2,7 @@
 # ruff: noqa: RUF001
 
 import json
-import os
 import subprocess
-import sys
 from importlib.metadata import version
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -15,6 +13,7 @@ import pandas as pd
 
 from scMM.util.time_results import binding, registry, require_run
 
+from .job_runner import JobRunner
 from .time_inputs import _new_key, _publish, check_size
 
 _CLUSTER_SLOT = BoundedSemaphore(1)
@@ -29,35 +28,28 @@ def _cluster_labels(values, options):
             root = Path(directory)
             np.save(root / "input.npy", values, allow_pickle=False)
             (root / "options.json").write_text(json.dumps(options), encoding="utf-8")
-            env = {
-                **os.environ,
-                "OMP_NUM_THREADS": "1",
-                "OPENBLAS_NUM_THREADS": "1",
-                "MKL_NUM_THREADS": "1",
-            }
-            try:
-                result = subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "scMM.plot._trend_worker",
-                        str(root / "input.npy"),
-                        str(root / "labels.npy"),
-                        str(root / "options.json"),
-                    ],
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    timeout=_CLUSTER_TIMEOUT_SECONDS,
-                    check=False,
-                )
-            except subprocess.TimeoutExpired as error:
-                raise ValueError(
-                    "趋势聚类超过 90 秒工程限时，子进程已停止并回收；未应用候选"
-                ) from error
-            if result.returncode:
-                raise ValueError("趋势聚类子进程失败：" + result.stderr[-2000:])
+            with JobRunner.start(
+                "scMM.plot._trend_worker",
+                root / "input.npy",
+                root / "labels.npy",
+                root / "options.json",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+            ) as process:
+                try:
+                    _, diagnostics = process.communicate(timeout=_CLUSTER_TIMEOUT_SECONDS)
+                except subprocess.TimeoutExpired as error:
+                    JobRunner.stop(process)
+                    raise ValueError(
+                        "趋势聚类超过 90 秒工程限时，子进程已停止并回收；未应用候选"
+                    ) from error
+                except BaseException:
+                    JobRunner.stop(process)
+                    raise
+                if process.returncode:
+                    raise ValueError("趋势聚类子进程失败：" + diagnostics[-2000:])
             return (
                 np.load(root / "labels.npy", allow_pickle=False),
                 json.loads((root / "labels.json").read_text(encoding="utf-8")),

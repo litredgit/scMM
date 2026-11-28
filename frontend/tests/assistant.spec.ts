@@ -43,6 +43,25 @@ test('personal API configuration, test, persistence and delete', async ({ page }
   expect(errors).toEqual([])
 })
 
+test('maintenance collects the assistant history save promise', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await configure(page)
+  await create(page)
+  await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+  const assistant = page.getByRole('complementary', { name: 'AI 分析助手' })
+  await assistant.getByRole('button', { name: '当前进行到哪一步了？' }).click()
+  await expect(assistant.getByText('synthetic answer completed', { exact: true })).toBeVisible()
+  const collected = await page.evaluate(async () => {
+    const detail = { promises: [] as Promise<unknown>[] }
+    window.dispatchEvent(new CustomEvent('scmm-before-maintenance', { detail }))
+    await Promise.all(detail.promises)
+    return detail.promises.length
+  })
+  expect(collected).toBe(1)
+  expect(errors).toEqual([])
+})
+
 test('stream, context, cross-page retention, stop, clear, refresh and project switch', async ({
   page,
 }) => {

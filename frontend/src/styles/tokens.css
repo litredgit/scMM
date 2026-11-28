@@ -1,0 +1,32 @@
+/* Shared workspace surfaces, typography and action colors. */
+:root {
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', system-ui, sans-serif;
+  color: #172b39;
+  background: #eff3f6;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  font-size: 16px;
+  line-height: 1.5;
+  --text: #172b39;
+  --muted: #53697a;
+  --text-body: 13px;
+  --text-small: 12px;
+  --text-title: 22px;
+  --text-section: 16px;
+  --surface: #fff;
+  --canvas: #eff3f6;
+  --panel-soft: #f5f8fa;
+  --border: #d5e0e7;
+  --control-border: #bcccd6;
+  --blue: #126db3;
+  --teal: #15716d;
+  --module-extraction: #72d4ec;
+  --module-annotation: #a9dfa8;
+  --module-statistics: #a1c3ff;
+  --module-accent: #70d9c8;
+  --radius: 8px;
+  --control-radius: 5px;
+  --shadow-card: 0 1px 2px #162d3c0a;
+  --shadow-raised: 0 6px 22px #162d3c24;
+  --topbar-height: 64px;
+}

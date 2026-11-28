@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import CalculationPanel from '../components/CalculationPanel.vue'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, shallowRef } from 'vue'
 import { useAnalysisContext } from '../composables/useAnalysisContext'
-import { useViewState } from '../../../api/viewState'
 import { displayName } from '../../../help/labels'
 import PlotView from '../../../components/PlotView.vue'
 import type { Figure } from '../../../api/types'
@@ -20,7 +19,7 @@ const {
   refreshAnalysis,
   plotScope,
 } = useAnalysisContext()
-const figure = ref<Figure>()
+const figure = shallowRef<Figure>()
 let generation = 0
 const identity = () =>
   JSON.stringify([store.current?.workspace_id, store.project?.path, store.project?.dataset?.id])
@@ -78,7 +77,6 @@ async function draw(saved = false) {
     }
   })
 }
-useViewState('feature_scatter', { figure })
 </script>
 <template>
   <div class="card analysis-module-split">

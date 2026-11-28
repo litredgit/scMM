@@ -1,9 +1,12 @@
 """Immutable measurement sources, derived views and isolated analysis branches."""
 
-from copy import deepcopy
+from copy import copy, deepcopy
 from uuid import uuid4
 
-from scMM.ion.contracts import MeasurementRoot, validate_schema
+import numpy as np
+from scipy.sparse import issparse
+
+from scMM.ion.contracts import MeasurementRoot, lock_measurement_arrays, validate_schema
 from scMM.ion.identity import axis_identity, dataset_identity, json_identity
 from scMM.ion.semantics import value_states, write_value_states
 
@@ -230,10 +233,7 @@ class DataViewCatalog:
                 raise ValueError("missing complete compound source")
             if key != view["id"] or (root is not None and view["root_identity"] != root.identity):
                 raise ValueError("view identity mismatch")
-            if root is not None and (
-                not set(view["cell_ids"]).issubset(set(root.data.obs_names))
-                or not set(view["feature_ids"]).issubset(set(root.data.var_names))
-            ):
+            if root is not None and not root.includes_axes(view["cell_ids"], view["feature_ids"]):
                 raise ValueError("view axis outside measurement root")
             if (
                 key in candidate.source_matrices
@@ -338,11 +338,32 @@ def initialize_catalog(project, data, *, source, origin_kind, linearity, preserv
     return view, branch_id
 
 
+def copy_catalogue_state(state):
+    """Copy editable catalogue records while sharing owned measurement matrices."""
+    if state is None:
+        return None
+    memo = {}
+    for entry in state["roots"].values():
+        data = lock_measurement_arrays(entry["data"])
+        buffers = {}
+        for matrix in (data.X, *data.layers.values()):
+            if isinstance(matrix, np.ndarray):
+                buffers[id(matrix)] = matrix.view()
+            elif issparse(matrix) and hasattr(matrix, "indptr"):
+                shell = copy(matrix)
+                shell.data = matrix.data.view()
+                shell.indices = matrix.indices.view()
+                shell.indptr = matrix.indptr.view()
+                buffers[id(matrix)] = shell
+        memo[id(data)] = deepcopy(data, buffers)
+    return deepcopy(state, memo)
+
+
 def freeze_active_branch(project):
     """Freeze live active fields before reconstructing a transactional catalogue."""
     if project.ion_state is None:
         raise ValueError("measurement catalogue is not initialized")
-    state = deepcopy(project.ion_state)
+    state = copy_catalogue_state(project.ion_state)
     if state["active_branch_id"] is None:
         state["project_presentation"] = {"views": deepcopy(project.views)}
         return state

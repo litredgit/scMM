@@ -4,7 +4,7 @@ import CalculationPanel from '../components/CalculationPanel.vue'
 import { displayName } from '../../../help/labels'
 import { useViewState } from '../../../api/viewState'
 import { useReadScope } from '../../../api/readScope'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, shallowRef } from 'vue'
 import PlotScope, { type Scope } from '../components/PlotScope.vue'
 import { useAnalysisContext } from '../composables/useAnalysisContext'
 import PlotView from '../../../components/PlotView.vue'
@@ -45,7 +45,7 @@ const features = ref(''),
   rows = ref(true),
   columns = ref(false),
   layer = ref<string | null>(null),
-  figure = ref<Figure>()
+  figure = shallowRef<Figure>()
 const featureReads = useReadScope(() => [
   store.current?.workspace_id,
   store.project?.dataset?.id,
@@ -175,7 +175,6 @@ useViewState('heatmap', {
   rows,
   columns,
   layer,
-  figure,
   scope,
   colorscale,
   colorMin,

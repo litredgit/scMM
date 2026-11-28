@@ -14,9 +14,12 @@ from .trash import SavedItems, _references
 
 class ResultWorkflow:
     def active_paths(self):
+        self._prune()
+        return self._active_paths()
+
+    def _active_paths(self):
         # Take a stable reference snapshot without acquiring workspace locks under the manager lock.
         with self._lock:
-            self._prune()
             workspaces = list(self._workspaces.values())
             openings = list(self._project_openings)
         from .project_references import memory_project_references
@@ -33,8 +36,9 @@ class ResultWorkflow:
     @contextmanager
     def retention_operation(self, path):
         folder = Path(path).resolve()
+        self._prune()
         with self._lock:
-            if folder in self._retention_operations or folder in self.active_paths():
+            if folder in self._retention_operations or folder in self._active_paths():
                 from .workspace_state import WorkspaceError
 
                 raise WorkspaceError(
@@ -248,8 +252,8 @@ class ResultWorkflow:
             return frame.to_csv(index=True).encode("utf-8"), "text/csv; charset=utf-8"
 
     def runtime(self):
+        self._prune()
         with self._lock:
-            self._prune()
             workspaces = list(self._workspaces.values())
         unsaved = 0
         busy = 0

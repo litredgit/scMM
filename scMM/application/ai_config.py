@@ -11,6 +11,8 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .sqlite_store import configure_connection, enable_wal
+
 
 class AIError(Exception):
     def __init__(self, message, status=400, code="ai_error"):
@@ -63,6 +65,7 @@ class AIConfigStore:
         self.cipher = Fernet(self.key_file.read_bytes().strip())
         with self.connect() as db:
             db.execute("SELECT user_id FROM configurations LIMIT 1")
+            enable_wal(db)
             db.execute(
                 "CREATE TABLE IF NOT EXISTS conversations (user_id TEXT NOT NULL, context_key TEXT NOT NULL, revision INTEGER NOT NULL, secret BLOB NOT NULL, PRIMARY KEY(user_id,context_key))"
             )
@@ -72,6 +75,7 @@ class AIConfigStore:
         # mode=rw never recreates a deleted database at request time.
         db = sqlite3.connect(self.database.resolve().as_uri() + "?mode=rw", uri=True, timeout=5)
         try:
+            configure_connection(db)
             with db:
                 yield db
         finally:

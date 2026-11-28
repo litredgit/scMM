@@ -1,10 +1,12 @@
 """Read-only monitoring, document evidence, conservative release gates and bounded history."""
 
 import json
+import re
 import secrets
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -12,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from scMM.api.app import create_app
+from scMM.api.page_routes import SPA_ROUTES
 from scMM.application.auth import AuthError, AuthStore
 from scMM.application.monitor_peer import validate_decision
 from scMM.application.monitor_presence import update_readiness
@@ -52,6 +55,22 @@ def page(client, route="/projects", visibility="visible"):
     lease = client.post("/api/v1/presence/register", json=body)
     assert lease.status_code == 200, lease.text
     return {**body, "token": lease.json()["token"]}
+
+
+def test_spa_routes_match_frontend_and_presence(monitor):
+    _, client, service = monitor
+    router_path = Path(__file__).resolve().parents[2] / "frontend/src/router/index.ts"
+    assert set(re.findall(r"\bpath:\s*'([^']+)'", router_path.read_text())) == set(SPA_ROUTES)
+    for route in SPA_ROUTES[1:]:
+        page(client, route=route)
+    assert {record["route"] for record in service.store.pages()} == set(SPA_ROUTES[1:])
+
+
+def test_registration_capacity_reclaims_expired_sources(monitor):
+    _, client, service = monitor
+    service.registration_budget.update({str(i): (1, time.monotonic() - 61) for i in range(4096)})
+    page(client)
+    assert len(service.registration_budget) == 1
 
 
 def test_hidden_pages_close_evidence_and_no_credential_exposure(monitor):
@@ -249,6 +268,54 @@ def test_task_metadata_scanning_never_reads_matrices_and_keeps_orphans_blocking(
     terminal = task_scan([str(tmp_path)])
     assert terminal["tasks"][0]["status"] == "completed"
     assert not terminal["incomplete"]
+
+
+def test_ion_task_uses_bound_project_and_appears_once(monitor, tmp_path):
+    from scMM.application.ion_jobs import IonJobs
+
+    app, client, service = monitor
+    root = tmp_path / "projects"
+    project, external = root / "project", tmp_path / "external"
+    invalid = root / "invalid"
+    invalid.mkdir()
+    (invalid / "project.json").write_text("[]")
+    root_jobs = root / ".ion-jobs"
+    for directory, title in [(project, "Synthetic ion workspace"), (external, "Private title")]:
+        directory.mkdir()
+        (directory / "project.json").write_text(json.dumps({"name": title}))
+    for identity, binding in [
+        ("owned", project),
+        ("missing", root / "missing"),
+        ("external", external),
+        ("invalid", invalid),
+    ]:
+        job = root_jobs / identity
+        job.mkdir(parents=True, exist_ok=True)
+        (job / "job.json").write_text(
+            json.dumps(
+                {"id": identity, "status": "succeeded", "binding": {"project": str(binding)}}
+            )
+        )
+    app.state.workspaces.ion_jobs = IonJobs(root_jobs)
+    app.state.workspaces.ion_jobs.jobs["owned"] = {
+        "id": "owned",
+        "status": "succeeded",
+        "owner": "u",
+        "workspace": "w",
+        "submitted_at": 1,
+    }
+    service._snapshot["tasks"] = task_scan([root])["tasks"]
+    value = client.get("/api/v1/admin/monitor")
+    value.raise_for_status()
+    tasks = value.json()["tasks"]
+    assert len(tasks) == 4
+    assert {row["id"]: row["project"] for row in tasks} == {
+        "owned": "Synthetic ion workspace",
+        "missing": "旧任务",
+        "external": "旧任务",
+        "invalid": "旧任务",
+    }
+    assert "Private title" not in value.text
 
 
 def test_monitor_works_at_workspace_capacity_and_filters_security_events(monitor):

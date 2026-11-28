@@ -2,6 +2,7 @@
 # ruff: noqa: RUF001
 
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -11,6 +12,7 @@ from uuid import uuid4
 
 from .retention import _safe, retention_plan
 from .retention_cleanup import cleanup_plan, execute_cleanup
+from .sqlite_store import configure_connection, enable_wal
 
 
 class RetentionCancelled(RuntimeError):
@@ -24,12 +26,22 @@ class RetentionScheduler:
             Path(path) if path is not None else manager.store.root / ".scmm-retention.sqlite3"
         )
         _safe(self.path)
+        try:
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            pass
+        except FileNotFoundError as exc:
+            raise sqlite3.OperationalError("自动保留数据库目录不存在") from exc
+        else:
+            os.close(descriptor)
+        self.path.chmod(0o600)
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._thread = None
         self._active = None
         self.error = None
         with self._db() as db:
+            enable_wal(db)
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS policies (
                     project TEXT PRIMARY KEY, revision TEXT NOT NULL,
@@ -78,7 +90,6 @@ class RetentionScheduler:
                 WHERE status='running'""",
                 (clock(),),
             )
-        self.path.chmod(0o600)
 
     @contextmanager
     def _db(self):
@@ -86,6 +97,7 @@ class RetentionScheduler:
         db = sqlite3.connect(self.path, timeout=5)
         db.row_factory = sqlite3.Row
         try:
+            configure_connection(db)
             with db:
                 if db.execute("PRAGMA user_version").fetchone()[0] not in {0, 1}:
                     raise ValueError("自动保留数据库版本不受支持，拒绝降级或覆盖")

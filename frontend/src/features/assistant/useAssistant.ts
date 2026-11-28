@@ -1,6 +1,7 @@
 import { nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { authenticatedFetch, request, sessionVersion, ensureSession } from '../../api/client'
+import { BEFORE_MAINTENANCE, type BeforeMaintenanceDetail } from '../../api/maintenance'
 import { useWorkspace } from '../../stores/workspace'
 import { useAuth } from '../../stores/auth'
 
@@ -34,7 +35,8 @@ export function useAssistant() {
   const store = useWorkspace()
   const auth = useAuth()
   const route = useRoute()
-  const messages = ref<Turn[]>([])
+  const messages = ref<(Turn & { id: number })[]>([])
+  let nextTurnId = 0
   const input = ref('')
   const busy = ref(false)
   const error = ref('')
@@ -58,7 +60,7 @@ export function useAssistant() {
   function snapshot() {
     return JSON.parse(
       JSON.stringify({
-        messages: messages.value,
+        messages: messages.value.map(({ role, content, note }) => ({ role, content, note })),
         draft: input.value,
         streaming: busy.value,
         summary: context.value && typeof context.value === 'object' ? context.value : null,
@@ -125,7 +127,7 @@ export function useAssistant() {
       }>(`/ai/history?${new URLSearchParams({ context: key })}`)
       if (!currentSession()) return
       revisions.set(key, value.revision)
-      messages.value = value.messages
+      messages.value = value.messages.map((turn) => ({ ...turn, id: ++nextTurnId }))
       input.value = value.draft
       context.value = value.summary
       responseModel.value = value.model ?? ''
@@ -247,9 +249,8 @@ export function useAssistant() {
     context.value = null
     responseModel.value = ''
     const outbound = chatMessages(messages.value, question)
-    messages.value.push({ role: 'user', content: question })
-    const answer: Turn = { role: 'assistant', content: '' }
-    messages.value.push(answer)
+    messages.value.push({ role: 'user', content: question, id: ++nextTurnId })
+    messages.value.push({ role: 'assistant', content: '', id: ++nextTurnId })
     const index = messages.value.length - 1
     input.value = ''
     let ended = false
@@ -328,12 +329,12 @@ export function useAssistant() {
       }
     }
   }
-  const maintenance = (event: Event) => {
+  const maintenance = (event: CustomEvent<BeforeMaintenanceDetail>) => {
     stop('服务维护前停止生成；已接收内容已保存。')
-    ;(event as CustomEvent<{ waits: Promise<unknown>[] }>).detail.waits.push(persist())
+    event.detail.promises.push(persist().catch(() => {}))
   }
-  window.addEventListener('scmm-before-maintenance', maintenance)
-  onUnmounted(() => window.removeEventListener('scmm-before-maintenance', maintenance))
+  window.addEventListener(BEFORE_MAINTENANCE, maintenance)
+  onUnmounted(() => window.removeEventListener(BEFORE_MAINTENANCE, maintenance))
   return {
     messages,
     input,

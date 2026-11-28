@@ -536,6 +536,10 @@ reader 是单次上下文；数组为只读 bytes 视图，退出后仍有效，
 
 ### 采集信息读取
 
+helper 的 `--header file.raw` 逐扫描检查 profile 状态，输出含 `schema_version=1`、
+`scan_count`、`creation_time` 和 `instrument` 的 JSON。它不读取完整 profile 点数组。
+Python 校验协议版本后按输入和 reader 文件身份缓存采集元数据，完整谱流仍校验实际扫描数及结束标志。
+
 helper 的 `--acquisition file.raw` 模式只读取前 32 个 MS1 扫描的采集质量窗和分辨率附加记录，输出版本 1 JSON，不传输 profile 数组。质量窗来自扫描设置，分辨率仅接受明确的 FT Resolution / Orbitrap Resolution / Resolution 字段，排除带 ppm 的分辨率补偿值。缺失字段保留缺失，参考质量未知时不自动应用到 m/z 200 参数；超时、退出失败和无效 JSON 明确报错，不回退为固定提示。
 
 Python 与 helper 必须同步更新。开发服务使用独立 reader 发布目录，验证后发布时再同步生产所配置的 reader；不要用开发构建覆盖运行中的生产依赖。
@@ -1448,10 +1452,9 @@ OUTLIER_OPTIONS = dict(contamination="auto", random_state=42)
 
 ### 数值回归依据
 
-quantile 的并列值处理必须与细胞排列无关。反例输入 `[[0, 1], [0, 4], [0, 9]]`
-曾因两次 argsort 给相同零值分配不同排名，得到 `[0.5, 2, 4.5]`；当前按并列排名区间平均，
-零值仍参与分位数，不能据此推导保零或改变按特征列计算的方向。
-PQN 的同值列表与 NumPy 参考向量须一致，检查形状、有限值、零分母和调用方数组不变。
+Quantile 按观测行计算，并列值处理与输入行排列无关。全零行保零，其他行的零值参与排名。
+PQN 的同值列表与 NumPy 参考向量须一致，检查形状、有限非负值和调用方数组不变。
+逐观测共同检出数存放在 `uns["scmm_workbench"]["pqn_diagnostics"]`，对应的处理历史携带独立于工作区修订号的诊断键，保存重开后继续归一化会追加记录。
 KNN 等插补须保留全空特征轴，不借修复轴长度统一不同入口默认方法。
 这些性质由[归一化测试](../tests/domain/test_normalize.py)和[数据测试](../tests/domain/test_data.py)维护。
 

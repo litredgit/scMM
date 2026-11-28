@@ -13,6 +13,16 @@ VALUE_SEMANTICS = frozenset(
 ORIGIN_KINDS = frozenset({"extraction", "imported_feature", "composite"})
 
 
+def lock_measurement_arrays(data):
+    for value in (data.X, *data.layers.values()):
+        if isinstance(value, np.ndarray):
+            value.flags.writeable = False
+        elif hasattr(value, "indptr"):
+            for buffer in (value.data, value.indices, value.indptr):
+                buffer.flags.writeable = False
+    return data
+
+
 def validate_schema(record):
     if type(record.get("schema_version")) is not int or record["schema_version"] != 1:
         raise ValueError("unsupported ion schema version")
@@ -57,14 +67,18 @@ class MeasurementRoot:
             origin_kind,
             value_semantics,
             dataset_identity(candidate),
-            candidate,
+            lock_measurement_arrays(candidate),
             deepcopy(source),
         )
 
     @property
     def data(self):
-        self.validate()
         return self._data.copy()
+
+    def includes_axes(self, observations, features):
+        return set(observations).issubset(self._data.obs_names) and set(features).issubset(
+            self._data.var_names
+        )
 
     @property
     def source(self):

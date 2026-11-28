@@ -3,16 +3,22 @@
 
 from __future__ import annotations
 
-import multiprocessing
+import json
 import os
-from concurrent.futures import ProcessPoolExecutor
+import threading
+import time
+from concurrent.futures import Future
+from contextlib import suppress
 from copy import deepcopy
 from pathlib import Path
 from uuid import uuid4
 
+import psutil
+
 from scMM.plugins._extraction import extraction_kwargs, extraction_registry
 
 from . import mz_lists
+from .job_runner import JobRunner
 from .parameters import automatic_mz_range
 from .preview_cache import (
     file_identity,
@@ -48,9 +54,13 @@ def initialize_ranges(project, service):
             project.dirty = True
 
 
-def run_preview(request, state_path):
+def run_preview(request, state_path, *, worker=False):
     """Read, extract and persist a frozen request in a fresh interpreter."""
-    state = {"created_at": request["created_at"], "pid": os.getpid()}
+    state = {
+        "created_at": request["created_at"],
+        "pid": os.getpid(),
+        "process_created_at": psutil.Process().create_time(),
+    }
     stop = state_path.with_name("stop.requested")
 
     def report(message, status="running"):
@@ -127,10 +137,13 @@ def run_preview(request, state_path):
                 for s in project.samples
             },
         }
-        report("预览计算完成，等待页面接收", "succeeded")
+        if not worker:
+            report("预览计算完成，等待页面接收", "succeeded")
         return result
     except Exception as exc:
-        if stop.is_file():
+        if worker:
+            write_json(state_path.with_name("error.json"), {"message": str(exc)})
+        elif stop.is_file():
             write_json(state_path, {**state, "status": "stopped", "message": "预览已停止"})
         else:
             report(str(exc), "failed")
@@ -154,25 +167,92 @@ def submit_preview(request):
     write_json(folder / "request.json", request)
     state = {"created_at": request["created_at"], "status": "queued", "message": "等待启动"}
     write_json(state_path, state)
-    pool = None
-
-    def finished(future):
-        try:
-            if future.cancelled() or state_path.with_name("stop.requested").is_file():
-                write_json(state_path, {**state, "status": "stopped", "message": "预览已停止"})
-            elif (error := future.exception()) is not None:
-                write_json(state_path, {**state, "status": "failed", "message": str(error)})
-        finally:
-            if pool is not None:
-                pool.shutdown(wait=False)
-
+    future = Future()
+    process = None
     try:
-        pool = ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn"))
-        future = pool.submit(run_preview, request, state_path)
+        with (folder / "worker.log").open("wb") as log:
+            process = JobRunner.start(
+                "scMM.application.cell_preview", folder / "request.json", stdout=log
+            )
+        state.update(pid=process.pid, status="running")
+        with suppress(psutil.NoSuchProcess):
+            state["process_created_at"] = psutil.Process(process.pid).create_time()
+        write_json(state_path, state)
+        (folder / "start.ready").touch()
     except Exception as exc:
-        if pool is not None:
-            pool.shutdown(wait=False)
+        if process is not None:
+            JobRunner.stop(process)
         write_json(state_path, {**state, "status": "failed", "message": str(exc)})
         raise
-    future.add_done_callback(finished)
+    future.set_running_or_notify_cancel()
+    future.preview_process = process
+    future.preview_guard = threading.RLock()
+
+    def finished():
+        result, error = None, None
+        stopped = folder / "stop.requested"
+        try:
+            code = process.wait()
+            if code:
+                diagnostics = folder / "error.json"
+                message = (
+                    json.loads(diagnostics.read_text(encoding="utf-8")).get("message")
+                    if diagnostics.is_file()
+                    else None
+                )
+                raise ValueError(message or "预览子进程未完成。")
+            result = json.loads((folder / "result.json").read_text(encoding="utf-8"))
+            output = child_path(request["project_folder"], result["artifact"]) / "data.h5ad"
+            result["detection"] = load_detection(output)
+        except Exception as exc:
+            error = exc
+        with future.preview_guard:
+            if stopped.is_file():
+                error = InterruptedError("预览已停止")
+                status, message = "stopped", str(error)
+            elif error is not None:
+                status, message = "failed", str(error)
+            else:
+                status, message = "succeeded", "预览计算完成，等待页面接收"
+            try:
+                write_json(state_path, {**state, "status": status, "message": message})
+            except OSError as exc:
+                error = exc
+            if error is not None:
+                future.set_exception(error)
+            else:
+                future.set_result(result)
+
+    threading.Thread(target=finished, daemon=True, name="scmm-preview-wait").start()
     return future, state_path
+
+
+def stop_preview_job(job):
+    future = job["future"]
+    guard = getattr(future, "preview_guard", None)
+    if guard is None:  # Unstarted jobs have no subprocess or persisted state to protect.
+        future.cancel()
+        return
+    with guard:
+        process = future.preview_process
+        if future.done() or process.poll() is not None:
+            return
+        job["state_path"].with_name("stop.requested").touch()
+    JobRunner.stop(process)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("request", type=Path)
+    args = parser.parse_args()
+    request = json.loads(args.request.read_text(encoding="utf-8"))
+    deadline = time.monotonic() + 15
+    while not args.request.with_name("start.ready").is_file():
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Preview worker was not released by its parent")
+        time.sleep(0.02)
+    result = run_preview(request, args.request.with_name("state.json"), worker=True)
+    result.pop("detection")
+    write_json(args.request.with_name("result.json"), result)

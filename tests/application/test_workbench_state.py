@@ -103,7 +103,7 @@ def test_h5ad_history_safe_save_and_read(tmp_path):
     with pytest.raises(ValueError):
         state.save_h5ad(catalog, "云盘", ".", "../escape.h5ad")
     if os.name != "nt":
-        with pytest.raises(ValueError, match="Windows"):
+        with pytest.raises(PermissionError, match="所选路径不可用"):
             catalog.resolve("云盘", "C:\\data\\result.h5ad")
 
 
@@ -335,8 +335,16 @@ def test_advanced_preprocessing_values_history_and_failure_atomicity(tmp_path):
     from scMM.util.normalize import normalize
 
     np.testing.assert_allclose(state.data.X, normalize(before, "pqn", {"reference": "mean"}))
+    diagnostics = state.data.uns["scmm_workbench"]["pqn_diagnostics"]
+    assert len(diagnostics) == 1
+    key = next(iter(diagnostics))
+    saved = state.save_h5ad(StorageCatalog([StorageRoot("out", tmp_path)]), "out", ".", "pqn.h5ad")
+    reopened = read_h5ad(saved)
+    actual = reopened.uns["scmm_workbench"]["pqn_diagnostics"][key]
+    assert actual["observation_ids"].tolist() == list(state.data.obs_names)
+    np.testing.assert_array_equal(actual["joint_detection_counts"], (before > 0).sum(axis=1))
     state.reset()
-    state.normalize("log", pseudo=0)
+    state.normalize("log")
     np.testing.assert_allclose(state.data.X, np.log1p(before))
     snapshot, token = state.data.copy(), state.token
     for invoke in (
@@ -357,7 +365,7 @@ def test_advanced_preprocessing_values_history_and_failure_atomicity(tmp_path):
         assert state.token == token
         np.testing.assert_array_equal(state.data.X, snapshot.X)
     state.data.X[:] = -2
-    with pytest.raises(ValueError, match="undefined"):
+    with pytest.raises(ValueError, match="非负"):
         state.normalize("log")
     assert state.token == token
 

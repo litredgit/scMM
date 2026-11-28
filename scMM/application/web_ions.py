@@ -222,16 +222,21 @@ class IonWorkflow:
                 "workspace": identity,
             }
             jobs = self._ion_jobs()
-            record = jobs.cancel(job_id, **options) if cancel else jobs.get(job_id, **options)
-            if record["status"] == "succeeded" and record["collectible"]:
-                try:
-                    valid = binding(workspace, record["binding"]["root_id"]) == record["binding"]
-                except (KeyError, TypeError, ValueError):
-                    valid = False
-                if not valid:
-                    jobs.mark(job_id, reason="workspace/input changed; explicitly run a new task")
-                    record = jobs.get(job_id, **options)
-            return record
+            with jobs.pin(job_id):
+                record = jobs.cancel(job_id, **options) if cancel else jobs.get(job_id, **options)
+                if record["status"] == "succeeded" and record["collectible"]:
+                    try:
+                        valid = (
+                            binding(workspace, record["binding"]["root_id"]) == record["binding"]
+                        )
+                    except (KeyError, TypeError, ValueError):
+                        valid = False
+                    if not valid:
+                        jobs.mark(
+                            job_id, reason="workspace/input changed; explicitly run a new task"
+                        )
+                        record = jobs.get(job_id, **options)
+                return record
 
     def ion_collect(self, identity, revision, job_id):
         jobs = self._ion_jobs()
@@ -243,7 +248,7 @@ class IonWorkflow:
             record = self.ion_job(identity, job_id)
             result = jobs.result(
                 job_id,
-                owner=principal["id"] if principal else jobs.jobs[job_id]["owner"],
+                owner=principal["id"] if principal else record["owner"],
                 workspace=identity,
             )
             data = measurement(project, record["binding"]["root_id"])
@@ -262,9 +267,10 @@ class IonWorkflow:
             project.ion_state["revision"] += 1
             return {"version": version}
 
-        response = self._ion_mutate(identity, revision, apply)
-        jobs.mark(job_id, collected=True)
-        return response
+        with jobs.pin(job_id):
+            response = self._ion_mutate(identity, revision, apply)
+            jobs.mark(job_id, collected=True)
+            return response
 
     def ion_review(self, identity, revision, **options):
         from scMM.ion.evidence import record_review

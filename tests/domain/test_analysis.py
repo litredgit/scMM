@@ -171,3 +171,39 @@ def test_three_source_groups_per_class_can_support_holdout_and_two_cv_folds():
         assert audit["all_source_support"][label]["source_groups"] == 3
         assert audit["train_source_support"][label]["source_groups"] == 2
         assert audit["test_source_support"][label]["source_groups"] == 1
+
+
+def test_mixed_group_holdout_prefers_supported_folds_and_checks_smote_before_fit():
+    data = example()[:36].copy()
+    data.obs["sample"] = np.repeat(["source-a", "source-b", "source-c"], 12)
+    analyzer = SupervisedAnalyzer(data, "label", group_key="sample")
+    analyzer.X = None
+    train, test, folds = analyzer._grouped_holdout(np.arange(data.n_obs), 1 / 3, 5, True)
+    assert len(folds) == 2
+    assert set(analyzer.groups[train]).isdisjoint(analyzer.groups[test])
+    for fit, validation in folds:
+        assert set(analyzer.groups[train[fit]]).isdisjoint(analyzer.groups[train[validation]])
+        assert dict(pd.Series(analyzer.y[train[fit]]).value_counts()) == {"a": 6, "b": 6}
+    insufficient = SupervisedAnalyzer(
+        data[np.tile([True] * 10 + [False] * 2, 3)].copy(), "label", group_key="sample"
+    )
+    with pytest.raises(ValueError, match=r"至少两折.*SMOTE"):
+        insufficient._grouped_holdout(np.arange(len(insufficient.y)), 1 / 3, 5, True)
+
+
+@pytest.mark.parametrize("method", ["ttest", "welch", "mannwhitney"])
+def test_differential_handles_extreme_float32_abundances(method):
+    data = example()
+    data.X[:, 0] = 1e37 * data.X[:, 0]
+    data.X[:, 1] = 0
+    data.X[data.obs["label"] == "b", 1] = 1e37
+    data.X = data.X.astype(np.float32)
+    expected = differential_features(
+        AnnData(data.X.astype(np.float64), obs=data.obs.copy(), var=data.var.copy()),
+        "label",
+        "a",
+        "b",
+        method=method,
+    )
+    observed = differential_features(data, "label", "a", "b", method=method)
+    pd.testing.assert_frame_equal(observed, expected)

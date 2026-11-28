@@ -18,6 +18,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 
 CONFIG = Path.home() / ".config/scmm/environments.json"
@@ -341,6 +342,7 @@ def validate_auth_migration(values, target):
         "-c",
         """
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from scMM.application.server_config import load_server_config
 prod = load_server_config(sys.argv[1]).validate()
@@ -533,7 +535,67 @@ def write_deployed_plugins(path, wheels):
             temporary.unlink(missing_ok=True)
 
 
-def deploy(values, target, *, rollback=False, migrate_auth=False, config=CONFIG):
+def verify_strict_update(values, name, checkpoint):
+    from scMM.application.deployment_client import verify_strict_checkpoint
+    from scMM.application.server_config import load_server_config
+
+    config = load_server_config(values[f"{name}_server_config"], environ={}).validate()
+    verify_strict_checkpoint(config, checkpoint)
+
+
+@contextmanager
+def server_operation(path):
+    if path is None:
+        yield
+        return
+    with Path(path).with_suffix(".operation.lock").open("a") as lock:
+        os.fchmod(lock.fileno(), 0o600)
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+
+
+def recovery_checkpoint(server_path):
+    if not server_path:
+        return None, None
+    config = Path(server_path)
+    pointer = config.parent / (config.stem + ".recovery") / "current.json"
+    try:
+        return pointer, pointer.read_bytes()
+    except FileNotFoundError:
+        return pointer, None
+
+
+def restore_checkpoint(pointer, content):
+    if pointer is None:
+        return
+    if content is None:
+        pointer.unlink(missing_ok=True)
+        return
+    with tempfile.NamedTemporaryFile(dir=pointer.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+        try:
+            handle.write(content)
+            handle.flush()
+            temporary.replace(pointer)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def deploy(values, target, **options):
+    with server_operation(values.get("prod_server_config")):
+        return _deploy(values, target, **options)
+
+
+def _deploy(
+    values,
+    target,
+    *,
+    rollback=False,
+    migrate_auth=False,
+    config=CONFIG,
+    strict_checkpoint=None,
+    resource_config=None,
+):
     root = values["prod"]
     clean(root, "main")
     previous = git(root, "rev-parse", "HEAD")
@@ -547,18 +609,34 @@ def deploy(values, target, *, rollback=False, migrate_auth=False, config=CONFIG)
         values, "prod", target_record if rollback and target_record.exists() else None
     )
     launchers = None
+    report = None
+    change = None
+    if resource_config is not None:
+        from scMM.application.maintenance_runner import ResourceChange
+
+        change = ResourceChange(resource_config)
     if migrate_auth:
         if rollback:
             raise RuntimeError("Authentication migration cannot be combined with rollback")
         validate_auth_migration(values, target)
         idle(values, migrate_auth=True)
         launchers = backup_launchers(values)
+    elif strict_checkpoint:
+        verify_strict_update(values, "prod", strict_checkpoint)
     else:
         report = prepare_deployment(values)
+    # Keep the checkpoint across candidate startup, which may consume or quarantine it.
+    recovery, checkpoint = recovery_checkpoint(values.get("prod_server_config"))
+    if report and report.get("discard_pointer"):
+        checkpoint = None
     # The old revision remains recoverable even when local main moves backwards.
     git(root, "update-ref", "refs/scmm/recovery", previous)
-    run("systemctl", "--user", "stop", SERVICE)
+    stopped = False
     try:
+        run("systemctl", "--user", "stop", SERVICE)
+        stopped = True
+        if change:
+            change.apply()
         if not migrate_auth and report and report.get("discard_pointer"):
             config_path = Path(values["prod_server_config"])
             directory = config_path.parent / (config_path.stem + ".recovery")
@@ -578,18 +656,76 @@ def deploy(values, target, *, rollback=False, migrate_auth=False, config=CONFIG)
         write_deployed_plugins(target_record, target_wheels)
     except Exception:
         print("Deployment failed; restoring previous code and locked environment", file=sys.stderr)
-        run("systemctl", "--user", "stop", SERVICE)
-        git(root, "reset", "--hard", previous)
-        if launchers:
-            restore_launchers(launchers)
-        sync(values, "prod", previous_wheels)
-        compatible_recovery(values)
-        run("systemctl", "--user", "start", SERVICE)
-        health()
+        if stopped:
+            run("systemctl", "--user", "stop", SERVICE)
+            if change:
+                change.rollback()
+            restore_checkpoint(recovery, checkpoint)
+            git(root, "reset", "--hard", previous)
+            try:
+                if launchers:
+                    restore_launchers(launchers)
+                sync(values, "prod", previous_wheels)
+                compatible_recovery(values)
+            finally:
+                run("systemctl", "--user", "start", SERVICE)
+                health()
+        else:
+            run("systemctl", "--user", "restart", SERVICE)
+            health()
         raise
+    if change:
+        change.finish()
     if previous != target:
         git(root, "update-ref", "refs/scmm/previous", previous)
     print(f"Production main: {target[:12]}; previous: {previous[:12]}")
+
+
+def update_development(values, target, **options):
+    with server_operation(values.get("dev_server_config")):
+        _update_development(values, target, **options)
+
+
+def _update_development(values, target, *, strict_checkpoint=None, resource_config=None):
+    from scMM.application.maintenance_runner import ResourceChange, healthy
+
+    root = values["dev"]
+    previous = git(root, "rev-parse", "HEAD")
+    change = ResourceChange(resource_config) if resource_config else None
+    if strict_checkpoint:
+        verify_strict_update(values, "dev", strict_checkpoint)
+    else:
+        prepare_deployment(values, "dev")
+    pointer, checkpoint = recovery_checkpoint(values["dev_server_config"])
+    unit = "scmm-dev.service"
+    stopped = False
+    try:
+        run("systemctl", "--user", "stop", unit)
+        stopped = True
+        if change:
+            change.apply()
+        git(root, "merge", "--ff-only", target)
+        sync(values, "dev")
+        run("systemctl", "--user", "start", unit)
+        healthy(5007)
+    except Exception:
+        if stopped:
+            run("systemctl", "--user", "stop", unit)
+            if change:
+                change.rollback()
+            restore_checkpoint(pointer, checkpoint)
+            git(root, "reset", "--hard", previous)
+            try:
+                sync(values, "dev")
+            finally:
+                run("systemctl", "--user", "start", unit)
+                healthy(5007)
+        else:
+            run("systemctl", "--user", "restart", unit)
+            healthy(5007)
+        raise
+    if change:
+        change.finish()
 
 
 def serve(values, name, *, debug=False):
@@ -675,6 +811,10 @@ def main():
             sub.add_argument(
                 "--approved-version", help="Require this exact remotely approved commit"
             )
+            policy = sub.add_mutually_exclusive_group()
+            policy.add_argument("--strict-checkpoint", help=argparse.SUPPRESS)
+            policy.add_argument("--deployment-first", action="store_true", help=argparse.SUPPRESS)
+            sub.add_argument("--maintenance-config", type=Path, help=argparse.SUPPRESS)
         if command == "serve":
             sub.add_argument(
                 "--debug",
@@ -735,19 +875,45 @@ def main():
         elif args.command == "update":
             name = args.name
             clean(values[name], "dev" if name == "dev" else "main")
-            if name == "dev":
+            maintained = args.strict_checkpoint or args.deployment_first
+            if maintained and not args.approved_version:
+                raise RuntimeError("Maintenance update requires an approved version")
+            resource_config = None
+            if args.maintenance_config:
+                from scMM.application.server_config import load_server_config
+
+                if (
+                    not maintained
+                    or args.maintenance_config.resolve() != values[f"{name}_server_config"]
+                ):
+                    raise RuntimeError("Maintenance update must target the configured server")
+                resource_config = load_server_config(args.maintenance_config, environ={}).validate()
+                if resource_config.values["environment"] != name:
+                    raise RuntimeError("Maintenance configuration has the wrong environment")
+            if name == "dev" and not maintained:
                 dev_idle()
             run("git", "-C", values[name], "fetch", "origin")
             target = "origin/main" if name == "prod" else "origin/dev"
-            if (
-                args.approved_version
-                and git(values[name], "rev-parse", target) != args.approved_version
-            ):
-                raise RuntimeError("Remote version changed; refusing an unapproved update")
+            if args.approved_version:
+                if git(values[name], "rev-parse", target) != args.approved_version:
+                    raise RuntimeError("Remote version changed; refusing an unapproved update")
+                target = args.approved_version
             if name == "prod":
-                deploy(values, args.approved_version or "origin/main")
+                deploy(
+                    values,
+                    target,
+                    strict_checkpoint=args.strict_checkpoint,
+                    resource_config=resource_config,
+                )
+            elif maintained:
+                update_development(
+                    values,
+                    target,
+                    strict_checkpoint=args.strict_checkpoint,
+                    resource_config=resource_config,
+                )
             else:
-                git(values[name], "merge", "--ff-only", "origin/dev")
+                git(values[name], "merge", "--ff-only", target)
                 sync(values, name)
 
 

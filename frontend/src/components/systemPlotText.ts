@@ -129,9 +129,11 @@ export function systemPlotText(figure: Figure, key: string) {
         trace.name = trace.name.replace(/^簇 (\d+) 均值$/, 'Cluster $1 mean')
     }
     if (trace.type === 'waterfall' && Array.isArray(trace.x)) {
-      if (trace.x[0] === '基准') trace.x[0] = 'Baseline'
-      if (trace.x.at(-2) === '其他特征') trace.x[trace.x.length - 2] = 'Other features'
-      if (trace.x.at(-1) === '预测输出') trace.x[trace.x.length - 1] = 'Prediction'
+      const x = [...trace.x]
+      if (x[0] === '基准') x[0] = 'Baseline'
+      if (x.at(-2) === '其他特征') x[x.length - 2] = 'Other features'
+      if (x.at(-1) === '预测输出') x[x.length - 1] = 'Prediction'
+      trace.x = x
     }
     if (rawCells && typeof trace.name === 'string')
       trace.name = trace.name

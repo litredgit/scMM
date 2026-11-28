@@ -46,7 +46,13 @@ def raw_pair(tmp_path, monkeypatch):
         wire += b"\1" + struct.pack("<iiBdi", i + 10, 1, 1, float(i), len(mz))
         wire += mz.astype("<f8").tobytes() + intensity.astype("<f8").tobytes()
     wire += b"\0" + struct.pack("<iq", 31, 310)
-    script = f"import os,base64; os.write(1,base64.b64decode({base64.b64encode(wire)!r}))"
+    script = f"""import os, base64, json, sys
+if sys.argv[1] == '--header':
+    print(json.dumps(dict(schema_version=1, scan_count=31,
+        creation_time='2026-09-22T16:04:29.9770000', instrument='Q Exactive')))
+else:
+    os.write(1, base64.b64decode({base64.b64encode(wire)!r}))
+"""
     monkeypatch.setattr(thermo_raw, "reader_command", lambda: [sys.executable, "-c", script])
     monkeypatch.delenv("SCMM_RAW_TIMEZONE", raising=False)
     raw = tmp_path / "sample.RAW"
@@ -122,7 +128,7 @@ def test_raw_web_reader_closes_on_early_scan_and_preview_error(raw_pair, monkeyp
     monkeypatch.setattr(np, "nansum", fail)
     with pytest.raises(ValueError, match="preview failure"):
         preview.total_ion_chromatogram()
-    assert len(readers) == 4
+    assert len(readers) == 3
     assert all(r.process.poll() is not None and r.process.stdout.closed for r in readers)
 
 
@@ -301,7 +307,7 @@ def test_algorithm_failure_closes_pipe(raw_pair, monkeypatch, operation):
 
     with pytest.raises(ValueError, match="algorithm failure"):
         callback()
-    assert len(created) == 2
+    assert len(created) == 1
     assert all(r.process.poll() is not None and r.process.stdout.closed for r in created)
 
 
@@ -365,18 +371,7 @@ def test_invalid_timezone_fails_before_starting_reader(raw_pair, monkeypatch):
 
 @pytest.mark.parametrize("created", ["2026-11-01T01:30:00", "2026-03-08T02:30:00"])
 def test_dst_ambiguous_and_nonexistent_acquisition_times(tmp_path, monkeypatch, created):
-    class HeaderOnly:
-        scan_count = 1
-        creation_time = created
-        instrument = "test"
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            pass
-
-    monkeypatch.setattr(raw_source, "ThermoRawReader", lambda *args: HeaderOnly())
+    monkeypatch.setattr(raw_source, "checked_raw_header", lambda *args: (1, created, "test"))
     path = tmp_path / "dst.raw"
     path.touch()
     with pytest.raises(ThermoRawError, match="Ambiguous/nonexistent"):

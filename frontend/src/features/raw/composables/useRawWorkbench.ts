@@ -21,11 +21,12 @@ export function useRawWorkbench() {
     sample,
     parameters: form.valueParams,
     invalidate() {
-      delete spectra.plots.value.cells
+      const { cells: _cells, ...otherPlots } = spectra.plots.value
+      spectra.plots.value = otherPlots
     },
     collected(value) {
       form.assignParams(value.parameters)
-      spectra.plots.value.cells = value
+      spectra.plots.value = { ...spectra.plots.value, cells: value }
       spectra.kind.value = 'cells'
     },
   })
@@ -54,7 +55,6 @@ export function useRawWorkbench() {
     fast,
     normalize,
     bins,
-    plots,
   } = spectra
   const { jobNote, cellCount } = preview
   const {
@@ -83,7 +83,6 @@ export function useRawWorkbench() {
     fast,
     normalize,
     bins,
-    plots,
     jobNote,
     cellCount,
     effectiveParameters,

@@ -73,6 +73,7 @@ def find_cell_peaks_snr(
         raise ValueError("reference_mz must contain at least one finite value")
 
     X = data.to_numpy(dtype=output_dtype, copy=False)
+    eps = np.finfo(output_dtype).eps
     if detector is None:
         reference_data = data if reference_frame is None else reference_frame
         mz_values = np.asarray(reference_data.columns, dtype=np.float64)
@@ -103,7 +104,6 @@ def find_cell_peaks_snr(
             filter=baseline_filter,
             **filter_kwargs,
         )
-        eps = np.finfo(output_dtype).eps
         reference_ratio = reference_signal / np.maximum(reference_baseline, eps)
         reference_masks = reference_ratio > float(cell_signal_threshold)
         if cell_min_signal > 0:
@@ -183,6 +183,10 @@ def find_cell_peaks_snr(
     cell_matrix = np.zeros((n_cells, n_features), dtype=output_dtype)
     feature_snr = np.zeros((n_cells, n_features), dtype=output_dtype)
     non_cell = background_mask.astype(np.float64)[:, None]
+    count = np.rint(
+        uniform_filter1d(non_cell, size=noise_window, axis=0, mode="constant", cval=0.0)
+        * noise_window
+    ).astype(np.int64)
 
     progress = tqdm(
         range(0, n_features, feature_block_size),
@@ -202,14 +206,10 @@ def find_cell_peaks_snr(
             filter=baseline_filter,
             **filter_kwargs,
         )
-        residual = X_block - baseline
+        residual = X_block.astype(np.float64, copy=False) - baseline
         if baseline_full is not None:
             baseline_full[:, col_start:col_stop] = baseline
 
-        count = (
-            uniform_filter1d(non_cell, size=noise_window, axis=0, mode="constant", cval=0.0)
-            * noise_window
-        )
         sum_ = (
             uniform_filter1d(
                 residual * non_cell,
@@ -231,9 +231,20 @@ def find_cell_peaks_snr(
             * noise_window
         )
         mean = np.divide(sum_, count, out=np.zeros_like(sum_), where=count > 0)
-        variance = (
-            np.divide(sum_sq, count, out=np.zeros_like(sum_sq), where=count > 1) - mean * mean
-        )
+        mean_square = np.divide(sum_sq, count, out=np.zeros_like(sum_sq), where=count > 1)
+        square_mean = mean * mean
+        variance = mean_square - square_mean
+        # Moment subtraction is ill-conditioned when the variance approaches
+        # the roundoff of the two terms. Recompute only affected coordinates.
+        tolerance = 64 * np.finfo(np.float64).eps * (np.abs(mean_square) + square_mean)
+        uncertain = (count > 1) & (tolerance > 0) & (variance <= tolerance)
+        for row in np.flatnonzero(uncertain.any(axis=1)):
+            start = max(0, row - noise_window // 2)
+            stop = min(len(residual), row + (noise_window + 1) // 2)
+            selected = background_mask[start:stop]
+            columns = np.flatnonzero(uncertain[row])
+            window = residual[start:stop][np.ix_(selected, columns)]
+            variance[row, columns] = np.var(window - window[0], axis=0, dtype=np.float64)
         noise = np.sqrt(np.maximum(variance, 0.0))
 
         background = residual[background_mask]

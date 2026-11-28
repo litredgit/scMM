@@ -55,7 +55,7 @@
   },
   "credentials": "No matches for scanned credential patterns; not a guarantee of absence.",
   "decision": "Audit and prepare a reviewable plan only; no ref rewrites or force-push.",
-  "plan": "docs/development.md#开源敏感信息检查与历史清理计划",
+  "plan": "docs/development.md#发布前的敏感信息检查",
   "current": {
     "patterns_matched": 0,
     "distribution_archive_findings": 0,

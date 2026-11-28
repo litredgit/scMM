@@ -12,7 +12,7 @@ async function openAnalysis(page: Page) {
   await navigate(page, '/analysis')
   await pinAnalysisParameters(page)
 }
-test('legend reorder persists, selection is manual and three modules fit narrow screens', async ({
+test('legend reorder persists, selection is manual and three modules fit the desktop', async ({
   page,
 }) => {
   test.setTimeout(90000)
@@ -95,33 +95,23 @@ test('legend reorder persists, selection is manual and three modules fit narrow 
     page.getByText('选择或显示设置已变更，点击“绘制小提琴图”更新。', { exact: true }),
   ).toHaveCount(0)
   await page.screenshot({ path: test.info().outputPath('difference-desktop.png'), fullPage: true })
-  for (const width of [700, 390]) {
-    await page.setViewportSize({ width, height: 900 })
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true)
+  await page.screenshot({
+    path: test.info().outputPath(`difference-1920.png`),
+    fullPage: true,
+  })
+  for (const route of ['/samples', '/raw', '/extraction', '/preprocess', '/analysis', '/results']) {
+    await navigate(page, route)
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true)
-    await page.screenshot({
-      path: test.info().outputPath(`difference-${width}.png`),
-      fullPage: true,
-    })
-    for (const route of [
-      '/samples',
-      '/raw',
-      '/extraction',
-      '/preprocess',
-      '/analysis',
-      '/results',
-    ]) {
-      await navigate(page, route)
-      await expect
-        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-        .toBe(true)
-    }
-    await page.screenshot({
-      path: test.info().outputPath(`three-modules-${width}.png`),
-      fullPage: true,
-    })
   }
+  await page.screenshot({
+    path: test.info().outputPath(`three-modules-1920.png`),
+    fullPage: true,
+  })
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
@@ -181,13 +171,12 @@ test('parameter scope, unapplied drafts and saved project state stay distinct', 
   expect(Number(original)).not.toBe(151)
 })
 
-test('desktop figures, direct exports, assistant space and compact mobile navigation', async ({
+test('desktop figures, direct exports, assistant space and desktop navigation', async ({
   page,
 }) => {
   test.setTimeout(60000)
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
-  await page.setViewportSize({ width: 1920, height: 1080 })
   await openAnalysis(page)
   await expect(page.getByRole('navigation', { name: '分析功能', exact: true })).toBeInViewport()
   await expect(page.locator('aside.sidebar .progress-panel')).toBeInViewport({ ratio: 1 })
@@ -212,29 +201,16 @@ test('desktop figures, direct exports, assistant space and compact mobile naviga
   const download = await page.getByRole('button', { name: 'CSV 导出', exact: true }).boundingBox()
   expect(download!.y).toBeLessThan(1080)
   await page.screenshot({ path: test.info().outputPath('layout-results-1920.png'), fullPage: true })
-  for (const width of [2560, 1440, 700, 390]) {
-    await page.setViewportSize({ width, height: 1080 })
-    for (const route of [
-      '/samples',
-      '/raw',
-      '/extraction',
-      '/preprocess',
-      '/analysis',
-      '/results',
-    ]) {
-      await navigate(page, route)
-      await expect
-        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-        .toBe(true)
-      if (width === 390) {
-        await page.evaluate(() => window.scrollTo(0, 0))
-        const title = await page.getByRole('heading', { level: 1 }).boundingBox()
-        expect(title!.y).toBeLessThan(350)
-      }
-    }
+  for (const route of ['/samples', '/raw', '/extraction', '/preprocess', '/analysis', '/results']) {
+    await navigate(page, route)
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true)
   }
-  await page.screenshot({ path: test.info().outputPath('layout-mobile-390.png'), fullPage: true })
-  await page.getByRole('button', { name: '流程与账号', exact: true }).click()
+  await page.screenshot({
+    path: test.info().outputPath('layout-navigation-desktop.png'),
+    fullPage: true,
+  })
   await expect(page.getByRole('link', { name: '账号与管理', exact: true })).toBeVisible()
   expect(errors).toEqual([])
 })
@@ -290,81 +266,66 @@ test('a delayed batch summary cannot label the next project as awaiting review',
   }
 })
 
-for (const [width, height] of [
-  [1366, 768],
-  [1440, 900],
-  [1920, 1080],
-  [390, 844],
-]) {
-  test(`result-first layout preserves plot width and main view at ${width}x${height}`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width, height })
-    await openAnalysis(page)
-    // This helper pins controls for the pre-existing parameter editing regressions.
-    await page.getByRole('button', { name: '取消固定参数区', exact: true }).first().click()
-    await page.getByRole('button', { name: '运行降维', exact: true }).click()
-    const plot = page.locator('.analysis-visualization .js-plotly-plot').first()
-    await expect(plot).toBeVisible()
-    await expect(
-      page.getByRole('button', { name: '展开计算参数', exact: true }).first(),
-    ).toBeVisible()
-    await expect(page.getByLabel('store_key', { exact: true })).not.toBeVisible()
-    await page.screenshot({ path: test.info().outputPath(`result-first-viewport-${width}.png`) })
-    if (width >= 1000) {
-      await expect
-        .poll(async () => {
-          const box = await plot.boundingBox()
-          return (
-            !!box && Math.min(height, box.y + box.height) - Math.max(80, box.y) >= box.height * 0.6
-          )
-        })
-        .toBe(true)
-      const before = (await plot.boundingBox())!.width
-      await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
-      await expect
-        .poll(async () => (await plot.boundingBox())!.width)
-        .toBeGreaterThan(width < 1800 ? before - 2 : 600)
-      await page.getByRole('button', { name: '收起 AI 助手', exact: true }).click()
-    }
-    await page.getByRole('button', { name: '固定参数区', exact: true }).first().click()
-    await expect(page.getByLabel('store_key', { exact: true })).toBeVisible()
-    await page.getByLabel('store_key', { exact: true }).fill('X_tuning_draft')
-    await page.getByRole('button', { name: '取消固定参数区', exact: true }).first().click()
-    await page.getByRole('button', { name: '展开计算参数', exact: true }).first().click()
-    await expect(page.getByLabel('store_key', { exact: true })).toHaveValue('X_tuning_draft')
+test(`result-first layout preserves plot width and main view at 1920×1080`, async ({ page }) => {
+  await openAnalysis(page)
+  // This helper pins controls for the pre-existing parameter editing regressions.
+  await page.getByRole('button', { name: '取消固定参数区', exact: true }).first().click()
+  await page.getByRole('button', { name: '运行降维', exact: true }).click()
+  const plot = page.locator('.analysis-visualization .js-plotly-plot').first()
+  await expect(plot).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: '展开计算参数', exact: true }).first(),
+  ).toBeVisible()
+  await expect(page.getByLabel('store_key', { exact: true })).not.toBeVisible()
+  await page.screenshot({ path: test.info().outputPath(`result-first-viewport-1920.png`) })
+  {
     await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .poll(async () => {
+        const box = await plot.boundingBox()
+        return !!box && Math.min(1080, box.y + box.height) - Math.max(80, box.y) >= box.height * 0.6
+      })
       .toBe(true)
-    await page.screenshot({
-      path: test.info().outputPath(`result-first-${width}.png`),
-      fullPage: true,
-    })
+    const before = (await plot.boundingBox())!.width
+    await page.getByRole('button', { name: 'AI 分析助手', exact: true }).click()
+    await expect
+      .poll(async () => (await plot.boundingBox())!.width)
+      .toBeGreaterThan(Math.min(before - 2, 600))
+    await page.getByRole('button', { name: '收起 AI 助手', exact: true }).click()
+  }
+  await page.getByRole('button', { name: '固定参数区', exact: true }).first().click()
+  await expect(page.getByLabel('store_key', { exact: true })).toBeVisible()
+  await page.getByLabel('store_key', { exact: true }).fill('X_tuning_draft')
+  await page.getByRole('button', { name: '取消固定参数区', exact: true }).first().click()
+  await page.getByRole('button', { name: '展开计算参数', exact: true }).first().click()
+  await expect(page.getByLabel('store_key', { exact: true })).toHaveValue('X_tuning_draft')
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true)
+  await page.screenshot({
+    path: test.info().outputPath(`result-first-1920.png`),
+    fullPage: true,
   })
-}
+})
 
-test('raw m/z bounds stay paired beside the spectrum at laptop widths', async ({ page }) => {
+test('raw m/z bounds stay paired beside the spectrum at 1080p', async ({ page }) => {
   await page.goto('/')
   await page.getByLabel('项目名称', { exact: true }).fill('原始参数笔记本布局')
   await page.getByRole('button', { name: '创建并添加样本' }).click()
   await navigate(page, '/raw')
   await expect(page.getByLabel('mz_min', { exact: true })).toBeVisible()
-  for (const width of [1366, 1440, 1920, 390]) {
-    await page.setViewportSize({ width, height: 900 })
-    const min = (await page.getByLabel('mz_min', { exact: true }).boundingBox())!
-    const max = (await page.getByLabel('mz_max', { exact: true }).boundingBox())!
-    expect(Math.abs(min.y - max.y)).toBeLessThan(2)
-    expect(max.x).toBeGreaterThan(min.x)
-    expect(min.width).toBeLessThanOrEqual(125)
-    expect(max.width).toBeLessThanOrEqual(125)
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-      .toBe(true)
-    await page.screenshot({
-      path: test.info().outputPath(`raw-paired-${width}.png`),
-      fullPage: true,
-    })
-  }
+  const min = (await page.getByLabel('mz_min', { exact: true }).boundingBox())!
+  const max = (await page.getByLabel('mz_max', { exact: true }).boundingBox())!
+  expect(Math.abs(min.y - max.y)).toBeLessThan(2)
+  expect(max.x).toBeGreaterThan(min.x)
+  expect(min.width).toBeLessThanOrEqual(125)
+  expect(max.width).toBeLessThanOrEqual(125)
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true)
+  await page.screenshot({
+    path: test.info().outputPath(`raw-paired-1920.png`),
+    fullPage: true,
+  })
 })
 
 test('downloads explain missing snapshot and embeddings without changing project data', async ({

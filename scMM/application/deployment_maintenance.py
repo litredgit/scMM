@@ -4,6 +4,7 @@
 import json
 import threading
 import time
+from copy import deepcopy
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -17,8 +18,7 @@ MAX_TOTAL_BYTES = 1024**3
 
 
 def write_json(path, value):
-    _write_json(path, value)
-    path.chmod(0o600)
+    _write_json(path, value, mode=0o600)
 
 
 def control_path(path):
@@ -53,7 +53,8 @@ def prepare(service):
             }
             service.deployment = {"phase": "collecting", "preserved": [], "failed": []}
             # Prevent retention admission and workspace creation; existing saves may finish.
-            service.manager.maintenance_frozen = True
+            with service.manager._lock:
+                service.manager.maintenance_frozen = True
             service.recovery.discard_pointer()
             service.monitor.auth.audit(None, "deployment_prepare", service.monitor.environment)
         return service.status()
@@ -65,52 +66,95 @@ def checkpoint(service):
             raise ValueError("请先启动部署维护。")
         if time.time() < service.request["deadline"]:
             raise ValueError("维护通知宽限期尚未结束。")
-        if service.deployment["phase"] != "collecting":
+        report = service.deployment
+        if report["phase"] != "collecting":
             return service.status()
         if any(service._deployment_requests.values()):
             raise ValueError("正式写入或其他受保护请求仍在执行，请等待安全结束。")
+        report["phase"] = "quiescing"
+    try:
         retention = getattr(service.manager, "retention", None)
         if retention is not None and any(retention.runtime()):
             raise ValueError("自动保留任务尚未到达安全停止点。")
         if hasattr(service.manager, "ion_jobs"):
             service.manager.ion_jobs.shutdown()
-        service.deployment["phase"] = "snapshotting"
-        service.deployment["snapshot_deadline"] = time.time() + SNAPSHOT_SECONDS
-        service._deployment_stop = threading.Event()
-        threading.Thread(
-            target=_snapshot, args=(service,), daemon=True, name="scmm-deployment-snapshot"
-        ).start()
-        return service.status()
+    except BaseException:
+        with service._control_lock:
+            report["phase"] = "collecting"
+        raise
+    with service._control_lock:
+        report["phase"] = "snapshotting"
+        report["snapshot_deadline"] = time.time() + SNAPSHOT_SECONDS
+        stop = service._deployment_stop = threading.Event()
+    timer = threading.Timer(
+        SNAPSHOT_SECONDS, finish, args=(service, report), kwargs={"deadline": True}
+    )
+    timer.daemon = True
+    timer.start()
+    threading.Thread(
+        target=_snapshot,
+        args=(service, report, stop, timer),
+        daemon=True,
+        name="scmm-deployment-snapshot",
+    ).start()
+    return service.status()
 
 
-def _snapshot(service):
+def _snapshot(service, report, stop, timer):
+    try:
+        _encode_snapshots(service, report, stop)
+    except Exception:
+        with service._control_lock:
+            if not stop.is_set():
+                handled = {row.get("id") for row in report["preserved"] + report["failed"]}
+                report["failed"].extend(
+                    {**row, "reason": "snapshot_failed"}
+                    for row in report.get("expected", [])
+                    if row["id"] not in handled
+                )
+                if not report.get("expected"):
+                    report["failed"].append({"reason": "snapshot_failed"})
+    finally:
+        try:
+            with service._control_lock:
+                if not stop.is_set():
+                    report["encoding_finished"] = True
+            finish(service, report)
+        finally:
+            timer.cancel()
+
+
+def _encode_snapshots(service, report, stop):
     manager = service.manager
     # A busy inventory must not consume an unbounded maintenance deadline.
     if not manager._lock.acquire(timeout=1):
         with service._control_lock:
-            service.deployment["failed"].append({"reason": "workspace_inventory_busy"})
+            if not stop.is_set():
+                report["failed"].append({"reason": "workspace_inventory_busy"})
         return
     try:
         items = list(manager._workspaces.values())
         pages = dict(getattr(manager, "maintenance_pages", {}))
     finally:
         manager._lock.release()
+    page_groups = {}
+    for key, draft in pages.items():
+        page_groups.setdefault(key[0], {})[key] = draft
+    units = [(f"standalone:{owner}", owner, {}, drafts) for owner, drafts in page_groups.items()]
+    units.extend((w.id, w.owner_id, {w.id: w}, {}) for w in items)
     with service._control_lock:
-        service.deployment["expected"] = [{"id": w.id, "owner_id": w.owner_id} for w in items]
+        if stop.is_set():
+            return
+        report["expected"] = [{"id": key, "owner_id": owner} for key, owner, _, _ in units]
     used_bytes = 0
-    # Preserve standalone page state even when there are no scientific workspaces.
-    for workspace in items or [None]:
+    for identity, owner, workspaces, drafts in units:
         with service._control_lock:
-            if service._deployment_stop.is_set():
+            if stop.is_set():
                 return
-        identity = workspace.id if workspace else None
-        owner = workspace.owner_id if workspace else None
         candidate = SimpleNamespace(
             _lock=threading.RLock(),
-            _workspaces={identity: workspace} if workspace else {},
-            maintenance_pages={
-                k: v for k, v in pages.items() if workspace is None or k[0] == owner
-            },
+            _workspaces=workspaces,
+            maintenance_pages=drafts,
             snapshot_byte_limit=min(MAX_SNAPSHOT_BYTES, MAX_TOTAL_BYTES - used_bytes),
         )
         try:
@@ -125,42 +169,49 @@ def _snapshot(service):
             result = {"id": identity, "owner_id": owner, "reason": "snapshot_failed"}
             failed = True
         with service._control_lock:
-            if service._deployment_stop.is_set():
+            if stop.is_set():
                 return  # A timed-out encoder can never publish a late recovery pointer.
-            service.deployment["failed" if failed else "preserved"].append(result)
+            report["failed" if failed else "preserved"].append(result)
+
+
+def finish(service, report, *, deadline=False):
+    """Publish exactly once, either on completion or at the timer deadline."""
     with service._control_lock:
-        service.deployment["encoding_finished"] = True
-
-
-def finish(service):
-    """Called during status polling; never waits for a scientific codec or data lock."""
-    report = service.deployment
-    if not report or report["phase"] != "snapshotting":
+        if service.deployment is not report or report["phase"] != "snapshotting":
+            return
+        if not deadline and not report.get("encoding_finished"):
+            return
+        service._deployment_stop.set()
+        report["phase"] = "publishing"
+        timed_out = not report.get("encoding_finished", False)
+        report.update(timed_out=timed_out, finished=time.time())
+        if timed_out:
+            handled = {r.get("id") for r in report["preserved"] + report["failed"]}
+            report["failed"].extend(
+                {**r, "reason": "snapshot_deadline_exceeded"}
+                for r in report.get("expected", [])
+                if r["id"] not in handled
+            )
+            if not report.get("expected") and not report["failed"]:
+                report["failed"].append({"reason": "snapshot_deadline_exceeded"})
+        ready = {**deepcopy(report), "phase": "ready"}
+    try:
+        payload = {"checkpoints": ready["preserved"], "report": ready}
+        sealed = service.recovery.cipher.encrypt(json.dumps(payload).encode()).decode()
+        write_json(service.recovery.root / "deployment-report.json", ready)
+        write_json(service.recovery.root / "current.json", {"deployment": sealed})
+    except Exception:
+        with service._control_lock:
+            report["phase"] = "failed"
+            report["failed"].append({"reason": "snapshot_publication_failed"})
         return
-    if not report.get("encoding_finished") and time.time() < report["snapshot_deadline"]:
-        return
-    service._deployment_stop.set()
-    timed_out = not report.get("encoding_finished", False)
-    report.update(timed_out=timed_out, finished=time.time())
-    if timed_out:
-        handled = {r.get("id") for r in report["preserved"] + report["failed"]}
-        report["failed"].extend(
-            {**r, "reason": "snapshot_deadline_exceeded"}
-            for r in report.get("expected", [])
-            if r["id"] not in handled
-        )
-        if not report.get("expected") and not report["failed"]:
-            report["failed"].append({"reason": "snapshot_deadline_exceeded"})
-    payload = {"checkpoints": report["preserved"], "report": {**report, "phase": "ready"}}
-    sealed = service.recovery.cipher.encrypt(json.dumps(payload).encode()).decode()
-    write_json(service.recovery.root / "current.json", {"deployment": sealed})
-    write_json(service.recovery.root / "deployment-report.json", {**report, "phase": "ready"})
+    with service._control_lock:
+        report["phase"] = "ready"
     service.monitor.auth.audit(
         None,
         "deployment_checkpoint",
-        f"preserved={len(report['preserved'])}; failed={len(report['failed'])}",
+        f"preserved={len(ready['preserved'])}; failed={len(ready['failed'])}",
     )
-    report["phase"] = "ready"
 
 
 def restore(service):
@@ -226,6 +277,8 @@ def restore(service):
                 {**record, "id": w.id, "owner_id": w.owner_id}
                 for w in candidate._workspaces.values()
             )
+            if getattr(candidate, "maintenance_pages", {}) and not candidate._workspaces:
+                report["restored"].append(record)
         finished = {r["checkpoint"] for r, _, _ in completed}
         report["failed"].extend(
             {**r, "reason": "restore_deadline_exceeded"}
@@ -253,10 +306,27 @@ def admit(service, path, method):
             phase = service.deployment["phase"]
             saving = path == "/api/v1/workspace/project/save" and method == "POST"
             saving = saving or (path == "/api/v1/workspace/analysis/settings" and method == "PUT")
+            saving = saving or (path == "/api/v1/ai/history" and method == "PUT")
             if phase != "collecting" or (method not in {"GET", "HEAD", "OPTIONS"} and not saving):
                 raise WorkspaceError(
                     "服务正在部署维护，请稍后重新连接。", code="maintenance", status=503
                 )
+        elif (
+            service.request
+            and method not in {"GET", "HEAD", "OPTIONS"}
+            and (path, method)
+            not in {("/api/v1/ai/history", "PUT"), ("/api/v1/workspaces/resume", "POST")}
+        ):
+            raise WorkspaceError(
+                "服务正在收集维护暂存，请等待完成或由管理员取消。",
+                code="maintenance",
+                status=503,
+            )
         identity = uuid4().hex
         service._deployment_requests[identity] = persistent_request(path, method)
         return identity
+
+
+def release_request(service, identity):
+    with service._control_lock:
+        service._deployment_requests.pop(identity, None)

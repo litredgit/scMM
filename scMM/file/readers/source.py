@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from .thermo_raw import ThermoRawError, ThermoRawReader
+from .thermo_raw import ThermoRawError, ThermoRawReader, checked_raw_header
 
 
 class ThermoRawSource:
@@ -20,10 +20,11 @@ class ThermoRawSource:
         )
         zone = ZoneInfo(self.timezone)  # Invalid configuration must not silently fall back.
         self._signature = self._stat()
-        with ThermoRawReader(self.path) as reader:
-            self.scan_count = reader.scan_count
-            self.creation_time = reader.creation_time
-            self.instrument = reader.instrument
+        self.scan_count, self.creation_time, self.instrument = checked_raw_header(
+            self.path, self._signature
+        )
+        if self._stat() != self._signature:
+            raise ThermoRawError("RAW changed during metadata validation")
         timestamp = datetime.fromisoformat(self.creation_time)
         if timestamp.tzinfo is None:
             # Do not silently choose a fold or normalize a nonexistent local time.

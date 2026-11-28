@@ -8,6 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
 SUPPORTED_RAW_SUFFIXES = frozenset({".raw", ".mzml", ".mzxml"})
+UNAVAILABLE_PATH = "所选路径不可用。请在授权目录中重新选择。"
+
+
+def _selected_path(root, selected_path):
+    windows = PureWindowsPath(str(selected_path))
+    if os.name != "nt" and (windows.drive or str(selected_path).startswith("\\")):
+        raise PermissionError(UNAVAILABLE_PATH)
+    return root.path / Path(selected_path)
 
 
 @dataclass(frozen=True)
@@ -60,29 +68,30 @@ class StorageCatalog:
         """Look up a configured root by its display label."""
         try:
             return self._roots[label]
-        except KeyError as exc:
-            raise KeyError(f"Unknown storage root: {label}") from exc
+        except KeyError:
+            raise PermissionError(UNAVAILABLE_PATH) from None
 
     def resolve(self, root_label: str, selected_path: str | Path) -> Path:
         """Resolve a selected path and reject traversal or symlink escapes."""
         root = self.root(root_label)
-        if os.name != "nt" and PureWindowsPath(str(selected_path)).is_absolute():
-            raise ValueError(
-                "Windows paths require a Windows server; on Linux select the mounted path"
-            )
-        candidate = Path(selected_path).expanduser()
-        if not candidate.is_absolute():
-            candidate = root.path / candidate
-        resolved = candidate.resolve(strict=True)
+        candidate = _selected_path(root, selected_path)
+        try:
+            resolved = candidate.resolve(strict=True)
+        except (OSError, RuntimeError, ValueError):
+            raise PermissionError(UNAVAILABLE_PATH) from None
         if not resolved.is_relative_to(root.path):
-            raise PermissionError(f"Path is outside storage root {root.label!r}: {resolved}")
+            raise PermissionError(UNAVAILABLE_PATH)
         return resolved
 
     def resolve_raw_file(self, root_label: str, selected_path: str | Path) -> Path:
         """Resolve a Thermo RAW or mzML/mzXML file below a configured root."""
         resolved = self.resolve(root_label, selected_path)
-        if not resolved.is_file():
-            raise FileNotFoundError(f"Not a file: {resolved}")
+        try:
+            is_file = resolved.is_file()
+        except (OSError, RuntimeError, ValueError):
+            raise PermissionError(UNAVAILABLE_PATH) from None
+        if not is_file:
+            raise PermissionError(UNAVAILABLE_PATH)
         if resolved.suffix.lower() not in SUPPORTED_RAW_SUFFIXES:
             raise ValueError("Only Thermo RAW, mzML and mzXML raw-data files are supported")
         return resolved
@@ -90,22 +99,20 @@ class StorageCatalog:
     def resolve_output_directory(self, root_label: str, selected_path: str | Path) -> Path:
         """Resolve an existing directory or one missing direct child for output."""
         root = self.root(root_label)
-        candidate = Path(selected_path).expanduser()
-        if not candidate.is_absolute():
-            candidate = root.path / candidate
-        if candidate.is_symlink():
-            raise PermissionError(f"Output directory cannot be a symbolic link: {candidate}")
-        if candidate.exists():
-            resolved = candidate.resolve(strict=True)
-            if not resolved.is_dir():
-                raise NotADirectoryError(resolved)
-        else:
+        candidate = _selected_path(root, selected_path)
+        try:
+            if candidate.is_symlink():
+                raise PermissionError(UNAVAILABLE_PATH)
             parent = candidate.parent.resolve(strict=True)
             if not parent.is_dir():
-                raise NotADirectoryError(parent)
-            resolved = parent / candidate.name
+                raise PermissionError(UNAVAILABLE_PATH)
+            resolved = candidate.resolve()
+            if resolved.exists() and not resolved.is_dir():
+                raise PermissionError(UNAVAILABLE_PATH)
+        except (OSError, RuntimeError, ValueError):
+            raise PermissionError(UNAVAILABLE_PATH) from None
         if not resolved.is_relative_to(root.path):
-            raise PermissionError(f"Path is outside storage root {root.label!r}: {resolved}")
+            raise PermissionError(UNAVAILABLE_PATH)
         return resolved
 
     def list_entries(
@@ -116,26 +123,31 @@ class StorageCatalog:
         """List child directories and supported raw-data files."""
         root = self.root(root_label)
         resolved = self.resolve(root_label, directory)
-        if not resolved.is_dir():
-            raise NotADirectoryError(resolved)
+        try:
+            if not resolved.is_dir():
+                raise PermissionError(UNAVAILABLE_PATH)
+            children = list(resolved.iterdir())
+        except (OSError, RuntimeError, ValueError):
+            raise PermissionError(UNAVAILABLE_PATH) from None
         entries: list[StorageEntry] = []
-        for child in resolved.iterdir():
-            if child.is_symlink():
-                try:
+        for child in children:
+            try:
+                if child.is_symlink():
                     child.resolve(strict=True).relative_to(root.path)
-                except (FileNotFoundError, ValueError):
+                is_directory = child.is_dir()
+                if not is_directory and (
+                    not child.is_file() or child.suffix.lower() not in SUPPORTED_RAW_SUFFIXES
+                ):
                     continue
-            if not child.is_dir() and (
-                not child.is_file() or child.suffix.lower() not in SUPPORTED_RAW_SUFFIXES
-            ):
+                stat = child.stat()
+            except (OSError, RuntimeError, ValueError):
                 continue
-            stat = child.stat()
             entries.append(
                 StorageEntry(
                     name=child.name,
                     relative_path=child.relative_to(root.path),
-                    is_directory=child.is_dir(),
-                    size_bytes=None if child.is_dir() else stat.st_size,
+                    is_directory=is_directory,
+                    size_bytes=None if is_directory else stat.st_size,
                 )
             )
         return tuple(sorted(entries, key=lambda item: (not item.is_directory, item.name.lower())))

@@ -5,11 +5,14 @@ import json
 import subprocess
 import threading
 import time
+from copy import deepcopy
 from functools import wraps
 from pathlib import Path
 from uuid import uuid4
 
 from .recovery import RecoveryStore
+
+MAX_STANDALONE_DRAFTS_PER_USER = 16
 
 
 def _serialized(method):
@@ -31,26 +34,38 @@ class Maintenance:
         self.acks = {}
         self.closure_review = None
         self.deployment = None
+        self._strict_snapshotting = False
         self._deployment_requests = {}
         from .deployment_maintenance import restore
 
         restore(self)
 
-    @_serialized
-    def status(self):
-        from .deployment_maintenance import finish
+    def control_state(self):
+        with self._control_lock:
+            return {
+                "request": deepcopy(self.request),
+                "completed": deepcopy(self.completed),
+                "frozen": getattr(self.manager, "maintenance_frozen", False),
+                "acknowledged": list(self.acks),
+                "deployment": deepcopy(self.deployment),
+                "restoration": deepcopy(self.restoration_report),
+            }
 
-        finish(self)
-        return {
-            "request": self.request,
-            "completed": self.completed,
-            "acknowledged": list(self.acks),
-            "deployment": self.deployment,
-            "restoration": self.restoration_report,
-            "last_operation": json.loads((self.recovery.root / "last-operation.json").read_text())
-            if (self.recovery.root / "last-operation.json").exists()
-            else None,
-        }
+    def status(self):
+        with self._control_lock:
+            completed = self.completed
+            value = self.control_state()
+        value["verified_checkpoint"] = bool(completed) and self.verified_checkpoint(
+            expected=completed
+        )
+        value.pop("frozen")
+        try:
+            value["last_operation"] = json.loads(
+                (self.recovery.root / "last-operation.json").read_text()
+            )
+        except FileNotFoundError:
+            value["last_operation"] = None
+        return value
 
     @_serialized
     def prepare(self):
@@ -82,26 +97,48 @@ class Maintenance:
         )
         if not page or page["user_id"] != owner_id:
             raise ValueError("页面身份已改变，请重新登记后重试。")
-        if self.completed or (self.deployment and self.deployment["phase"] != "collecting"):
+        if (
+            self.completed
+            or self._strict_snapshotting
+            or (self.deployment and self.deployment["phase"] != "collecting")
+        ):
             raise ValueError("会话已冻结，请取消维护后重新收集。")
         if workspace is not None:
             workspace.client_state = state
         else:
-            pages = getattr(self.manager, "maintenance_pages", {})
-            pages[(owner_id, tab_id)] = state
-            self.manager.maintenance_pages = pages
+            with self.manager._lock:
+                pages = getattr(self.manager, "maintenance_pages", {})
+                if (owner_id, tab_id) not in pages and sum(
+                    owner == owner_id for owner, _ in pages
+                ) >= MAX_STANDALONE_DRAFTS_PER_USER:
+                    raise ValueError("独立页面草稿已达 16 页上限，已有标签页仍可更新。")
+                pages[(owner_id, tab_id)] = state
+                self.manager.maintenance_pages = pages
         self.acks[page_id] = workspace.id if workspace is not None else "standalone"
 
-    @_serialized
     def checkpoint(self):
-        if self.request and self.request.get("policy") == "deployment":
-            raise ValueError("部署维护请使用限时暂存入口。")
-        if not self.request:
-            raise ValueError("请先发起维护收集。")
+        with self._control_lock:
+            if self._strict_snapshotting:
+                raise ValueError("正在验证会话暂存。")
+            self._strict_snapshotting = True
+        try:
+            return self._checkpoint()
+        finally:
+            with self._control_lock:
+                self._strict_snapshotting = False
+
+    def _checkpoint(self):
+        with self._control_lock:
+            if self.request and self.request.get("policy") == "deployment":
+                raise ValueError("部署维护请使用限时暂存入口。")
+            if not self.request:
+                raise ValueError("请先发起维护收集。")
+            acknowledged = set(self.acks)
+            was_frozen = bool(self.completed)
         # No lost/legacy page is silently considered safe.
         readiness = self.monitor.snapshot()
         pages = self.monitor.store.pages(include_ids=True)
-        missing = [p["id"] for p in pages if p["id"] not in self.acks]
+        missing = [p["id"] for p in pages if p["id"] not in acknowledged]
         if missing:
             raise ValueError("仍有页面未完成草稿暂存：" + ", ".join(missing))
         if (
@@ -122,14 +159,26 @@ class Maintenance:
         if any(t.get("status") in {"queued", "running"} for t in tasks):
             raise ValueError("仍有任务正在运行。")
         with self.manager._lock:
-            self.completed = self.recovery.snapshot(self.manager)
             self.manager.maintenance_frozen = True
+        try:
+            completed = self.recovery.snapshot(self.manager)
+        except BaseException:
+            with self.manager._lock:
+                self.manager.maintenance_frozen = was_frozen
+            raise
+        with self._control_lock:
+            self.completed = completed
         return self.status()
 
     @_serialized
     def cancel(self):
+        if self._strict_snapshotting:
+            raise ValueError("正在验证会话暂存，请等待完成。")
         if self.deployment and self.deployment["phase"] != "collecting":
             raise ValueError("部署暂存已开始，请由发布流程完成重启。")
+        if self.deployment and hasattr(self.manager, "ion_jobs"):
+            with self.manager.ion_jobs.lock:
+                self.manager.ion_jobs.closed = False
         self.manager.maintenance_frozen = False
         self.request = None
         self.completed = None
@@ -138,40 +187,43 @@ class Maintenance:
         self.deployment = None
         (self.recovery.root / "current.json").unlink(missing_ok=True)
 
-    @_serialized
-    def verified_checkpoint(self):
-        if not self.completed or not getattr(self.manager, "maintenance_frozen", False):
-            return False
-        return all(p["id"] in self.acks for p in self.monitor.store.pages(include_ids=True))
+    def verified_checkpoint(self, *, expected=None):
+        with self._control_lock:
+            completed = self.completed
+            if (
+                not completed
+                or (expected is not None and completed is not expected)
+                or not getattr(self.manager, "maintenance_frozen", False)
+            ):
+                return False
+        pages = self.monitor.store.pages(include_ids=True)
+        with self._control_lock:
+            return self.completed is completed and all(p["id"] in self.acks for p in pages)
 
-    @_serialized
     def execute(self, action, version=None, *, deployment_first=False):
-        if not deployment_first and not self.verified_checkpoint():
+        with self._control_lock:
+            completed = self.completed
+            if self._strict_snapshotting:
+                raise ValueError("正在验证会话暂存，请等待完成。")
+        if not deployment_first and (
+            completed is None or not self.verified_checkpoint(expected=completed)
+        ):
             raise ValueError("请先完成全部会话暂存验证。")
         environment = self.config.values.get("environment")
         if environment not in {"dev", "prod"}:
             raise ValueError("仅支持配置好的开发/生产服务。")
-        unit = "scmm-dev.service" if environment == "dev" else "scmm-ui.service"
-        if action == "restart":
-            command = ["systemctl", "--user", "restart", unit]
-        else:
+        repository = Path(__file__).resolve().parents[2]
+        if action == "update":
             approved = self.recovery.root / "approved.json"
             versions = json.loads(approved.read_text()) if approved.exists() else []
             if not version or version not in versions:
                 raise ValueError("请选择已经验收/授权发布的版本。")
-            repository = Path(__file__).resolve().parents[2]
+            remote_ref = "origin/main" if environment == "prod" else "origin/dev"
             expected = subprocess.check_output(
-                ["git", "-C", str(repository), "rev-parse", "origin/main"], text=True
+                ["git", "-C", str(repository), "rev-parse", remote_ref], text=True
             ).strip()
             if version != expected:
-                raise ValueError("只允许更新远端 main 中已经批准的版本。")
-            command = [
-                str(repository / ".venv/bin/python"),
-                str(repository / "scripts/scmm_env.py"),
-                "update",
-                environment,
-            ]
-        repository = Path(__file__).resolve().parents[2]
+                raise ValueError("只允许更新当前环境远端分支中已经批准的版本。")
         command = [
             str(repository / ".venv/bin/python"),
             "-m",
@@ -183,6 +235,8 @@ class Maintenance:
             command.extend(["--version", version])
         if deployment_first:
             command.append("--deployment-first")
+        else:
+            command.extend(["--strict-checkpoint", completed["id"]])
         subprocess.run(
             [
                 "systemd-run",
@@ -198,5 +252,5 @@ class Maintenance:
         return {
             "scheduled": True,
             "action": action,
-            "checkpoint": self.completed["id"] if self.completed else None,
+            "checkpoint": completed["id"] if completed else None,
         }

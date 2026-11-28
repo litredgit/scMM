@@ -121,7 +121,19 @@ def _quantiles_at_indices(
 def _local_mad_noise(residual: np.ndarray, window: int) -> np.ndarray:
     half_window = window // 2
     noise = np.empty(len(residual), dtype=np.float64)
-    for index in range(len(residual)):
+    width = 2 * half_window + 1
+    start, stop = half_window, len(residual) - half_window
+    if start < stop:
+        medians = median_filter(residual, size=width)
+        windows = np.lib.stride_tricks.sliding_window_view(residual, width)
+        block = max(1, 1_000_000 // width)
+        for left in range(start, stop, block):
+            right = min(left + block, stop)
+            deviations = np.abs(windows[left - start : right - start] - medians[left:right, None])
+            noise[left:right] = np.maximum(1.4826 * np.median(deviations, axis=1), 1e-12)
+    else:
+        start = stop = len(residual)
+    for index in (*range(start), *range(stop, len(residual))):
         local = residual[max(0, index - half_window) : min(len(residual), index + half_window + 1)]
         median = np.median(local)
         mad = np.median(np.abs(local - median))

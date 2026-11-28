@@ -47,6 +47,7 @@ class MonitorService:
         self._legacy_pages = False
         self._legacy_generation = 0
         self.registration_budget = {}
+        self.registration_lock = threading.Lock()
         self._snapshot = {
             "sampled_at": None,
             "resources": {},
@@ -283,20 +284,6 @@ class MonitorService:
             result = deepcopy(self._snapshot)
             active = list(self._active.values())
         workspaces, incomplete = self.workspaces()
-        if hasattr(self.manager, "ion_jobs"):
-            with self.manager.ion_jobs.lock:
-                result["tasks"].extend(
-                    {
-                        "id": row["id"],
-                        "status": row["status"],
-                        "owner_id": row["owner"],
-                        "workspace_id": row["workspace"],
-                        "kind": "ion_grouping",
-                        "pid": row.get("pid"),
-                        "updated_at": row.get("finished_at", row["submitted_at"]),
-                    }
-                    for row in self.manager.ion_jobs.jobs.values()
-                )
         if getattr(self.manager, "retention", None) is not None:
             retention_tasks, retention_error = self.manager.retention.runtime()
             result["tasks"].extend(retention_tasks)

@@ -19,7 +19,9 @@
   "project_root": "/srv/scmm/results",
   "session_idle_seconds": 3600,
   "session_absolute_seconds": 43200,
+  "audit_retention_days": null,
   "monitor_db": "~/.local/state/scmm/monitor.sqlite3",
+  "retention_db": null,
   "environment": "standalone",
   "monitor_peer_url": null,
   "monitor_peer_token_file": null,
@@ -30,5 +32,6 @@
   "ion_component_seconds": 30,
   "ion_max_states": 100000,
   "ion_max_hypotheses": 10000,
-  "ion_memory_mb": 16384
+  "ion_memory_mb": 16384,
+  "enabled_plugins": []
 }

@@ -222,6 +222,41 @@ def test_plugin_labeled_outputs_reject_reordered_axes_and_report_progress(workfl
     assert progress["/preprocess"] and progress["/analysis"]
 
 
+@pytest.mark.parametrize("nonfinite", [float("nan"), float("inf")])
+def test_nonfinite_preprocessing_output_is_rejected_atomically(workflow, monkeypatch, nonfinite):
+    from dataclasses import replace
+
+    from numpy import testing
+
+    import_data(workflow)
+    registry = workflow[2].plugins
+    key = f"{PLUGIN}:scale"
+    registered = registry.methods[key]
+    manager, current = workflow[2], workflow[-2]
+    identity = current()["workspace_id"]
+    with manager.access(identity) as workspace:
+        state = workspace.project.workspace
+        before = (state.token, state.data.X.copy(), state.history())
+
+    def bad_output(inputs, _):
+        values = inputs.values.copy()
+        values[0, 0] = nonfinite
+        return values
+
+    monkeypatch.setitem(
+        registry.methods,
+        key,
+        replace(registered, method=replace(registered.method, run=bad_output)),
+    )
+    response = run(workflow, "scale")
+    assert response.status_code >= 400
+    assert "有限数值" in response.json()["error"]["message"]
+    with manager.access(identity) as workspace:
+        state = workspace.project.workspace
+        assert state.token == before[0] and state.history() == before[2]
+        testing.assert_array_equal(state.data.X, before[1])
+
+
 def test_measurement_root_candidates_are_available_in_statistics(workflow):
     import_data(workflow)
     post = workflow[-1]

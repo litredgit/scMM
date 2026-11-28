@@ -4,6 +4,8 @@ import time
 from concurrent.futures import Future
 from copy import deepcopy
 from io import StringIO
+from threading import RLock
+from types import SimpleNamespace
 
 import pandas as pd
 
@@ -143,6 +145,9 @@ def test_stop_preview_blocks_collection_until_worker_reaches_safe_point(workflow
     post("/raw/open", {"sample_id": sample["id"]}).raise_for_status()
     future = Future()
     future.set_running_or_notify_cancel()
+    future.preview_guard = RLock()
+    future.preview_process = SimpleNamespace(poll=lambda: None)
+    monkeypatch.setattr("scMM.application.cell_preview.JobRunner.stop", lambda _process: None)
     path = workflow[5] / "preview-state.json"
     write_json(path, {"status": "running", "message": "test"})
     monkeypatch.setattr("scMM.application.web_raw.submit_preview", lambda _: (future, path))

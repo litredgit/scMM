@@ -177,6 +177,7 @@ dmypy.json
 # Project-local generated files
 node_modules/
 scMM/api/static/
+frontend/src/api/openapi.generated.d.ts
 frontend/playwright-report/
 frontend/test-results/
 .tmp/

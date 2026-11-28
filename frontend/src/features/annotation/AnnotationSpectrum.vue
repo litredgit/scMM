@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import PlotView from '../../components/PlotView.vue'
 import { request } from '../../api/client'
 import { useReadScope } from '../../api/readScope'
@@ -72,8 +72,8 @@ const tabs = [
   ['reviews', '审核记录'],
 ] as const
 const tab = ref<(typeof tabs)[number][0]>('candidates')
-const axis = ref<Axis>()
-const overlay = ref<Overlay>()
+const axis = shallowRef<Axis>()
+const overlay = shallowRef<Overlay>()
 const axisError = ref('')
 const overlayError = ref('')
 const axisLoading = ref(false)

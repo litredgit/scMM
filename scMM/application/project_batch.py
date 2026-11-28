@@ -8,7 +8,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import threading
 import traceback
 from dataclasses import replace
@@ -20,6 +19,7 @@ import pyopenms as oms
 
 from scMM.file._dataset_loading import DatasetState, _annotate_single_file_frames
 from scMM.file._sequential import merge_objects
+from scMM.file._spectrum import ORBITRAP_GRID_VERSION
 from scMM.file.data import CyESIData
 from scMM.file.io import align_frame, extract_peaks, load_single_file, validate_ms_file
 from scMM.plugins._extraction import (
@@ -32,6 +32,7 @@ from scMM.util.peak import filter_spectrum
 
 from . import mz_lists
 from .extraction_spectra import load_profile, save_profile, summed_profile
+from .job_runner import JobRunner
 from .naming import beijing_time
 from .preview_cache import digest_file, file_identity, reusable_preview
 from .processing import ProcessingParameters
@@ -46,6 +47,8 @@ SHARED_FIELDS = (
     "resample_points_per_fwhm",
     "ms_peak_snr_threshold",
 )
+
+ALIGNMENT_VERSION = "match_intensity_v2"
 
 FEATURE_RANGE_FIELDS = ("mz_min", "mz_max")
 
@@ -85,6 +88,8 @@ def preflight(project, storage, *, plugin_registry=None):
         )
     result = {
         "peak_algorithm": "valley_centroid_v1",
+        "grid_algorithm": ORBITRAP_GRID_VERSION,
+        "alignment_algorithm": ALIGNMENT_VERSION,
         "project_folder": str(project.folder),
         "samples": samples,
         "parameters": base.to_dict(),
@@ -159,6 +164,8 @@ def submit(project, storage, *, retry_path=None, plugin_registry=None):
         def scientific_request(value):
             return {
                 "peak_algorithm": value.get("peak_algorithm"),
+                "grid_algorithm": value.get("grid_algorithm"),
+                "alignment_algorithm": value.get("alignment_algorithm"),
                 "feature_strategy": value["feature_strategy"],
                 "mz_list": value.get("mz_list"),
                 "parameters": value["parameters"],
@@ -233,19 +240,19 @@ def submit(project, storage, *, retry_path=None, plugin_registry=None):
                 "samples": [],
             },
         )
-        env = os.environ.copy()
         source_root = str(Path(__file__).resolve().parents[2])
-        env["PYTHONPATH"] = os.pathsep.join(filter(None, (source_root, env.get("PYTHONPATH"))))
+        python_path = os.pathsep.join(filter(None, (source_root, os.environ.get("PYTHONPATH"))))
+        process = None
         try:
             with (folder / "worker.log").open("ab") as log:
-                process = subprocess.Popen(
-                    [sys.executable, "-m", "scMM.application.project_batch", "--state", str(path)],
+                process = JobRunner.start(
+                    "scMM.application.project_batch",
+                    "--state",
+                    path,
                     stdin=subprocess.DEVNULL,
                     stdout=log,
-                    stderr=subprocess.STDOUT,
                     cwd=source_root,
-                    env=env,
-                    start_new_session=True,
+                    environment={"PYTHONPATH": python_path},
                 )
             # Worker owns state after release; persist PID before allowing it to proceed.
             state = json.loads(path.read_text(encoding="utf-8"))
@@ -255,6 +262,8 @@ def submit(project, storage, *, retry_path=None, plugin_registry=None):
                 target=process.wait, daemon=True, name="scmm-project-worker-reaper"
             ).start()
         except Exception as exc:
+            if process is not None:
+                JobRunner.stop(process)
             write_json(path, {"status": "failed", "message": str(exc), "samples": []})
             raise
         return path
@@ -276,6 +285,8 @@ def run_batch(path):
         "created_at": request["created_at"],
         "message": "准备特征",
         "feature_strategy": request["feature_strategy"],
+        "grid_algorithm": request.get("grid_algorithm"),
+        "alignment_algorithm": request.get("alignment_algorithm"),
         "started_at": utc_now(),
         "stage": "preparing",
         "samples": [
@@ -504,6 +515,8 @@ def run_batch(path):
                     name=sample["name"],
                     source_file=sample["path"],
                     peak_algorithm="valley_centroid_v1",
+                    grid_algorithm=request.get("grid_algorithm", ORBITRAP_GRID_VERSION),
+                    alignment_algorithm=request.get("alignment_algorithm", ALIGNMENT_VERSION),
                     scan_selection={
                         "rt_seconds": params.rt_range,
                         "original_frames": params.frame_range,

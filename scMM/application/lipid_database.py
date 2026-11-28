@@ -8,6 +8,7 @@ import shutil
 import threading
 import urllib.request
 import zipfile
+from copy import deepcopy
 from datetime import UTC, datetime
 from functools import lru_cache
 from importlib.resources import files
@@ -56,7 +57,7 @@ def database_presets(local_files=()):
                 "id": database_id,
                 "available": True,
                 **{
-                    key: metadata[key]
+                    key: deepcopy(metadata[key])
                     for key in (
                         "label",
                         "records",
@@ -224,10 +225,17 @@ def _load_cached(path, size, modified):
     }
 
 
+def _copy_database(frame, metadata):
+    result = frame.copy(deep=True)
+    for name in result.select_dtypes(include="object"):
+        result[name] = result[name].map(deepcopy)
+    return result, deepcopy(metadata)
+
+
 def load_database(filename=""):
     if filename in BUILTIN_DATABASES:
         frame, metadata = _load_preset(filename)
-        return frame.copy(deep=True), json.loads(json.dumps(metadata))
+        return _copy_database(frame, metadata)
     root = database_root()
     with _LOCK:
         files = database_status()["files"]
@@ -244,7 +252,8 @@ def load_database(filename=""):
         if path.is_symlink() or path.resolve().parent != root:
             raise PermissionError("数据库路径不可越界或使用符号链接。")
         stat = path.stat()
-        return _load_cached(str(path), stat.st_size, stat.st_mtime_ns)
+        frame, metadata = _load_cached(str(path), stat.st_size, stat.st_mtime_ns)
+        return _copy_database(frame, metadata)
 
 
 def load_databases(filenames):

@@ -120,6 +120,16 @@ def test_cluster_standardization_distances_and_invalid_feature_are_analytical():
     assert len(time_figure(data, key="groups_a").data) == 5
 
 
+def test_identical_trends_have_no_self_edges_and_louvain_uses_resolution():
+    from scMM.plot._trend_clustering import _graph_cluster, _nearest_neighbor_edges
+
+    distances = np.zeros((5, 5))
+    assert _nearest_neighbor_edges(distances, 1) == [(0, i) for i in range(1, 5)]
+    pytest.importorskip("igraph")
+    assert len(set(_graph_cluster(distances, "louvain", {"resolution": 0.1}))) == 1
+    assert len(set(_graph_cluster(distances, "louvain", {"resolution": 10}))) == 5
+
+
 def test_graph_busy_and_real_timeout_leave_no_process_or_temporary_files(monkeypatch):
     workflow._CLUSTER_SLOT.acquire()
     try:
@@ -196,3 +206,24 @@ def test_feature_cap_and_invalid_backend_labels_never_publish(monkeypatch):
     with pytest.raises(ValueError, match="500 个特征"):
         trend_clusters(large, key="too_large", trend_key="trend_a")
     assert "too_large" not in large.uns
+
+
+def test_communication_failure_stops_worker_and_releases_slot(monkeypatch):
+    stopped = []
+
+    class Worker:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            assert stopped == [self]
+
+        def communicate(self, **_kwargs):
+            raise OSError("test communication error")
+
+    monkeypatch.setattr(workflow.JobRunner, "start", lambda *_a, **_k: Worker())
+    monkeypatch.setattr(workflow.JobRunner, "stop", stopped.append)
+    with pytest.raises(OSError, match="communication error"):
+        workflow._cluster_labels(np.zeros((2, 2)), {})
+    assert workflow._CLUSTER_SLOT.acquire(blocking=False)
+    workflow._CLUSTER_SLOT.release()

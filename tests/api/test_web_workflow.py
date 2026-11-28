@@ -93,6 +93,50 @@ def test_qc_candidate_apply_failure_history_and_complete_reset(workflow):
     )
 
 
+def test_differential_zero_effect_filters_and_strict_saved_json(workflow):
+    data = import_data(workflow)
+    data.X[:, 0] = 0
+    data.X[32:, 0] = 2
+    data.X[:, 1] = 0
+    data.X[:, 2] = 3
+    data.X[32:, 2] = 4
+    data.write_h5ad(workflow[4] / "differential-zeros.h5ad")
+    imported = workflow[-1](
+        "/dataset/import", {"root": "Output", "path": "differential-zeros.h5ad"}
+    )
+    assert imported.status_code == 200, imported.text
+    groups = {"group_key": "group", "group_a": "a", "group_b": "b"}
+    operation(workflow, "differential", groups)
+    rows = get(workflow, "/analysis/results/differential?row_filter=single_zero").json()["table"]
+    assert rows["total"] == 1
+    assert rows["rows"][0]["log2_fold_change"] is None
+    assert rows["rows"][0]["test_status"] == "estimated"
+    for method in ("ttest", "welch"):
+        operation(workflow, "differential", {**groups, "method": method})
+        rows = get(workflow, "/analysis/results/differential?row_filter=not_estimable").json()[
+            "table"
+        ]
+        assert rows["total"] == 2
+        assert {row["feature_id"] for row in rows["rows"]} == {"f0", "f2"}
+        assert all(row["p_value"] is None for row in rows["rows"])
+    plotted = workflow[-1]("/analysis/plot", {"kind": "volcano", "options": {}})
+    assert plotted.status_code == 200, plotted.text
+    assert plotted.json()["value"]["layout"]["meta"]["volcano_excluded"] == {
+        "total": 3,
+        "missing_effect": 2,
+        "missing_fdr": 2,
+    }
+    assert workflow[-1]("/project/save").status_code == 200
+    folder = Path(workflow[-2]()["project"]["path"])
+    current = json.loads((folder / "project.json").read_text())["artifacts"]["current"]
+    saved = read_h5ad(folder / current).uns["scmm_workbench"]["reports_json"]
+
+    def reject(token):
+        pytest.fail(f"Non-standard JSON constant {token}")
+
+    assert "differential" in json.loads(saved, parse_constant=reject)
+
+
 def test_analysis_plots_results_staleness_and_saved_report_reload(workflow):
     import_data(workflow)
     operation(workflow, "reduce", {"method": "pca", "store_key": "X_pca"})
@@ -312,7 +356,9 @@ def test_qc_stable_total_axis_preserves_precision_zeros_and_file_identity(workfl
     operation(workflow, "normalize", {"method": "log"})
     changed = get(workflow, "/analysis/qc").json()
     assert "range" not in changed["figure"]["layout"]["xaxis"]
-    assert all(r["detected_features"] == data.n_vars for r in changed["cells"]["rows"])
+    assert [r["detected_features"] for r in changed["cells"]["rows"]] == [
+        r["detected_features"] for r in result["cells"]["rows"]
+    ]
 
 
 def test_result_browser_latest_snapshot_excludes_baseline_and_caches(workflow):

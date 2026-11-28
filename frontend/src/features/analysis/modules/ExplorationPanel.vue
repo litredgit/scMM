@@ -2,7 +2,7 @@
 import { openCsvText } from '../../../api/csvExport'
 import NumericVariable from '../../../components/NumericVariable.vue'
 import ScientificInput from '../../../components/ScientificInput.vue'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, shallowRef } from 'vue'
 import { useAnalysisContext } from '../composables/useAnalysisContext'
 import PlotView from '../../../components/PlotView.vue'
 import type { Figure } from '../../../api/types'
@@ -24,7 +24,7 @@ const groupKey = ref(''),
   setKind = ref('auto'),
   annotation = ref('')
 const entity = ref('feature')
-const figure = ref<Figure>()
+const figure = shallowRef<Figure>()
 const grouping = computed(() => {
   if (groupKey.value && info.value?.observations[groupKey.value]) return groupKey.value
   return (
@@ -157,7 +157,6 @@ useViewState('exploration', {
   intensity,
   setKind,
   annotation,
-  figure,
 })
 </script>
 <template>

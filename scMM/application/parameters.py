@@ -44,7 +44,7 @@ ANALYSIS_SPECS = {
         "total",
         str,
         ("total", "max", "pqn", "zscore", "log", "minmax", "quantile"),
-        "每次只执行选定的一种归一化或数值变换，不自动串联。total/max 按细胞，zscore/minmax/quantile 默认按特征列；具体公式和零值影响见方法说明。",
+        "每次只执行选定的一种归一化或数值变换，不自动串联。total/max 按细胞，zscore/minmax 默认按特征列，quantile 按观测行；具体公式和零值影响见方法说明。",
     ),
     "imputation": (
         "median",
@@ -92,8 +92,8 @@ ANALYSIS_SPECS = {
     "differential_method": (
         "mannwhitney",
         str,
-        ("mannwhitney", "welch"),
-        "mannwhitney 为两组秩和比较，不应无条件解释为中位数检验；welch 为允许方差不同的两组均值比较。当前为细胞级探索，各比较内对全部特征做 BH-FDR；生物重复推断须先按重复聚合。",
+        ("mannwhitney", "welch", "ttest"),
+        "mannwhitney 为两组秩和比较，不应无条件解释为中位数检验；welch 为允许方差不同的两组均值比较，ttest 为等方差 Student t 检验。当前为细胞级探索，各比较内对全部特征做 BH-FDR；生物重复推断须先按重复聚合。",
     ),
     "model": (
         "logistic",

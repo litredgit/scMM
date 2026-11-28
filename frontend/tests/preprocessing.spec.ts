@@ -46,11 +46,9 @@ test('preprocessing preview applies and restores the full origin', async ({ page
     path: test.info().outputPath('preprocess-comparison.png'),
     fullPage: true,
   })
-  await page.setViewportSize({ width: 390, height: 900 })
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     .toBe(true)
-  await page.setViewportSize({ width: 1440, height: 1000 })
   await noError(page)
   await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
   await expect(page.locator('.workspace-feedback[role="status"]')).toHaveText(
@@ -180,7 +178,6 @@ test('matrix CSV uses editable sample labels without changing analysis groups', 
 })
 
 test('QC distributions, sample correlations and wide CSV preview on desktop', async ({ page }) => {
-  await page.setViewportSize({ width: 1920, height: 1080 })
   await importData(page, '质控与宽表浏览')
   await navigate(page, '/preprocess')
   await preprocessingStep(page, 'qc').click()

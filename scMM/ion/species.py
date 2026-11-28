@@ -6,7 +6,13 @@ from functools import cached_property
 
 import numpy as np
 
-ELECTRON_MASS = 0.000548579909065
+from scMM.util._adducts import (
+    FORMULA_ADDUCTS,
+    fine_isotope_ratios,
+    formula_mass_shift,
+    resolve_isotope_ratios,
+)
+
 CARBON13_SHIFT = 1.00335483507
 
 
@@ -46,13 +52,7 @@ class IonSpec:
 
     @cached_property
     def shift(self):
-        from pyopenms import EmpiricalFormula
-
-        return (
-            EmpiricalFormula(self.add).getMonoWeight()
-            - EmpiricalFormula(self.remove).getMonoWeight()
-            - self.charge * ELECTRON_MASS
-        )
+        return formula_mass_shift(self.add, self.remove, self.charge)
 
     def mz(self, neutral_mass, *, isotope_shift=0.0):
         if not np.isfinite(neutral_mass) or neutral_mass <= 0:
@@ -74,24 +74,29 @@ class IonSpec:
         return (self.neutral_mass(mz / (1 + ppm * 1e-6)), self.neutral_mass(mz / (1 - ppm * 1e-6)))
 
 
+def _formula_species(name, *, fragment_form=False):
+    form = FORMULA_ADDUCTS[name]
+    return IonSpec(name, form["charge"], form["add"], form["remove"], fragment_form=fragment_form)
+
+
 ION_SPECS = {
     spec.id: spec
     for spec in (
-        IonSpec("[M+H]+", 1, "H"),
-        IonSpec("[M+Na]+", 1, "Na"),
-        IonSpec("[M+K]+", 1, "K"),
-        IonSpec("[M+NH4]+", 1, "NH4"),
-        IonSpec("[M+H-H2O]+", 1, "H", "H2O", fragment_form=True),
+        _formula_species("[M+H]+"),
+        _formula_species("[M+Na]+"),
+        _formula_species("[M+K]+"),
+        _formula_species("[M+NH4]+"),
+        _formula_species("[M+H-H2O]+", fragment_form=True),
         IonSpec("[M+2H]2+", 2, "H2"),
         IonSpec("[M+H+Na]2+", 2, "HNa"),
         IonSpec("[2M+H]+", 1, "H", oligomer=2),
         IonSpec("[2M+Na]+", 1, "Na", oligomer=2),
-        IonSpec("[M-H]-", -1, remove="H"),
+        _formula_species("[M-H]-"),
         IonSpec("[M-2H]2-", -2, remove="H2"),
         IonSpec("[2M-H]-", -1, remove="H", oligomer=2),
-        IonSpec("[M+Cl]-", -1, "Cl"),
-        IonSpec("[M+HCOO]-", -1, "CHO2"),
-        IonSpec("[M+OAc]-", -1, "C2H3O2"),
+        _formula_species("[M+Cl]-"),
+        _formula_species("[M+HCOO]-"),
+        _formula_species("[M+OAc]-"),
     )
 }
 DEFAULT_POSITIVE = ("[M+H]+", "[M+Na]+", "[M+K]+", "[M+NH4]+", "[M+H-H2O]+")
@@ -100,9 +105,7 @@ DEFAULT_NEGATIVE = ("[M-H]-", "[M-2H]2-", "[2M-H]-")
 
 def resolved_isotopes(formula, spec, *, parent_mz, resolution_200, max_order=3):
     """Natural fine structure of actual ion composition, merged at one local FWHM."""
-    from pyopenms import EmpiricalFormula, FineIsotopePatternGenerator
-
-    from scMM.file._spectrum import orbitrap_fwhm_at_mz
+    from pyopenms import EmpiricalFormula
 
     if (
         not isinstance(formula, str)
@@ -120,26 +123,8 @@ def resolved_isotopes(formula, spec, *, parent_mz, resolution_200, max_order=3):
     ion = ion + EmpiricalFormula(spec.add) - EmpiricalFormula(spec.remove)
     if any(count < 0 for count in ion.getElementalComposition().values()):
         raise ValueError("ion removes unavailable atoms")
-    base_mass = ion.getMonoWeight()
-    peaks = [
-        (float(p.getMZ()) - base_mass, float(p.getIntensity()))
-        for p in ion.getIsotopeDistribution(FineIsotopePatternGenerator(1e-6)).getContainer()
-    ]
-    p0 = sum(p for delta, p in peaks if abs(delta) < 1e-5)
-    if p0 <= 0:
-        raise ValueError("monoisotopic probability unavailable")
-    clusters = []
-    for delta, probability in sorted(peaks):
-        order = round(delta)
-        if not 1 <= order <= max_order:
-            continue
-        mz = parent_mz + delta / abs(spec.charge)
-        width = orbitrap_fwhm_at_mz(mz, resolution_200)
-        ratio = probability / p0
-        if clusters and clusters[-1]["order"] == order and mz - clusters[-1]["first_mz"] <= width:
-            group = clusters[-1]
-            group["mz"] = (group["mz"] * group["ratio"] + mz * ratio) / (group["ratio"] + ratio)
-            group["ratio"] += ratio
-        else:
-            clusters.append({"order": order, "mz": mz, "first_mz": mz, "ratio": ratio})
+    fine = fine_isotope_ratios(ion, max_order)
+    clusters = resolve_isotope_ratios(fine, parent_mz, spec.charge, resolution_200)
+    for cluster in clusters:
+        del cluster["components"]
     return clusters

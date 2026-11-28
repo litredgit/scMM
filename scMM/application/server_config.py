@@ -43,6 +43,7 @@ _ENV = {
     "origins": "SCMM_ALLOWED_ORIGINS",
     "session_idle_seconds": "SCMM_SESSION_IDLE_SECONDS",
     "session_absolute_seconds": "SCMM_SESSION_ABSOLUTE_SECONDS",
+    "audit_retention_days": "SCMM_AUDIT_RETENTION_DAYS",
     "ion_task_seconds": "SCMM_ION_TASK_SECONDS",
     "ion_component_seconds": "SCMM_ION_COMPONENT_SECONDS",
     "ion_max_states": "SCMM_ION_MAX_STATES",
@@ -78,6 +79,7 @@ DEFAULTS = {
     "project_root": None,
     "session_idle_seconds": 3600,
     "session_absolute_seconds": 43200,
+    "audit_retention_days": None,
     "ion_task_seconds": 300,
     "ion_component_seconds": 30,
     "ion_max_states": 100000,
@@ -256,6 +258,12 @@ def load_server_config(path=None, overrides=None, *, environ=None):
             raise ValueError(f"{key} 必须是正整数秒数。")
     if values["session_idle_seconds"] > values["session_absolute_seconds"]:
         raise ValueError("会话空闲时限不能超过最长有效期。")
+    days = values["audit_retention_days"]
+    if isinstance(days, str) and days.isdigit():
+        days = int(days)
+    if days is not None and (type(days) is not int or days <= 0):
+        raise ValueError("audit_retention_days 必须是正整数天数或 null。")
+    values["audit_retention_days"] = days
     if not isinstance(values["origins"], list):
         raise ValueError("origins 必须是完整来源地址列表。")
     for origin in values["origins"]:

@@ -63,7 +63,10 @@ watch(
 watch(
   () => [route.path, auth.user?.id, auth.user?.must_change, store.current?.workspace_id],
   () => {
-    updatePresence(route.path, !!auth.user && !auth.user.must_change, store.current?.workspace_id)
+    const path = route.matched.find(
+      (record) => record.path === route.path && !record.redirect,
+    )?.path
+    updatePresence(path, !!auth.user && !auth.user.must_change, store.current?.workspace_id)
   },
 )
 onMounted(() => {
@@ -342,6 +345,13 @@ async function exportConflictingProject() {
   )
 }
 const viewGeneration = ref(0)
+const viewScope = computed(() =>
+  JSON.stringify([auth.user?.id, store.current?.workspace_id, store.project?.path]),
+)
+const globalRoutes = ['/projects', '/account', '/admin/monitor', '/parameters']
+const viewKey = computed(() =>
+  globalRoutes.includes(route.path) ? route.path : route.path + viewScope.value,
+)
 async function openDiskProject() {
   const path = store.project?.path
   if (!path) return
@@ -567,9 +577,11 @@ async function openDiskProject() {
               </div>
             </details>
           </section>
-          <RouterView v-slot="{ Component }"
-            ><KeepAlive :key="viewGeneration"><component :is="Component" /></KeepAlive
-          ></RouterView>
+          <RouterView v-slot="{ Component }">
+            <KeepAlive :key="viewGeneration" :max="8">
+              <component :is="Component" :key="viewKey" />
+            </KeepAlive>
+          </RouterView>
           <nav v-if="stepIndex >= 0" class="workflow-navigation" aria-label="步骤切换">
             <button v-if="previousStep" @click="router.push(previousStep.path)">
               ← 上一步：{{ previousStep.name }}

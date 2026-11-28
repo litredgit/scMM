@@ -85,9 +85,9 @@ def test_storage_catalog_rejects_paths_outside_root_and_symlink_escape(tmp_path)
     (storage / "escape.mzML").symlink_to(outside)
     catalog = StorageCatalog([StorageRoot("Raw", storage)])
 
-    with pytest.raises(PermissionError, match="outside storage root"):
+    with pytest.raises(PermissionError, match="所选路径不可用"):
         catalog.resolve_raw_file("Raw", outside)
-    with pytest.raises(PermissionError, match="outside storage root"):
+    with pytest.raises(PermissionError, match="所选路径不可用"):
         catalog.resolve_raw_file("Raw", "escape.mzML")
     assert catalog.list_entries("Raw") == ()
 
@@ -114,11 +114,11 @@ def test_storage_catalog_resolves_safe_output_directories(tmp_path) -> None:
     catalog = StorageCatalog([StorageRoot("Raw", storage)])
 
     assert catalog.resolve_output_directory("Raw", "results") == storage / "results"
-    with pytest.raises(PermissionError, match="outside storage root"):
+    with pytest.raises(PermissionError, match="所选路径不可用"):
         catalog.resolve_output_directory("Raw", outside)
 
     (storage / "escape").symlink_to(outside, target_is_directory=True)
-    with pytest.raises(PermissionError, match="symbolic link"):
+    with pytest.raises(PermissionError, match="所选路径不可用"):
         catalog.resolve_output_directory("Raw", "escape")
 
 
@@ -187,3 +187,22 @@ def test_raw_preview_validates_preview_parameters(tmp_path, method, kwargs, mess
 
     with pytest.raises(ValueError, match=message):
         getattr(preview, method)(**kwargs)
+
+
+def test_storage_os_errors_are_sanitized(tmp_path, monkeypatch):
+    catalog = StorageCatalog([StorageRoot("Raw", tmp_path)])
+    message = "/private/storage/failed"
+    original = Path.resolve
+
+    def resolve(path, *args, **kwargs):
+        if path.name == "chosen.mzML":
+            raise OSError(message)
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", resolve)
+    with pytest.raises(PermissionError, match="所选路径不可用") as error:
+        catalog.resolve_raw_file("Raw", "chosen.mzML")
+    assert message not in str(error.value)
+    with pytest.raises(PermissionError) as unknown:
+        catalog.resolve_raw_file(message, "chosen.mzML")
+    assert message not in str(unknown.value)

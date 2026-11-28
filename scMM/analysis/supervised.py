@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.special import softmax
+from scipy.special import log_expit, softmax
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.calibration import calibration_curve
 from sklearn.cross_decomposition import PLSRegression
@@ -20,6 +20,7 @@ from sklearn.metrics import (
     classification_report,
     confusion_matrix,
     f1_score,
+    log_loss,
     precision_recall_curve,
     roc_curve,
 )
@@ -32,6 +33,32 @@ from sklearn.model_selection import (
 )
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler, label_binarize
+
+
+class PLSProbabilityCalibration:
+    """Sigmoid calibration trained against grouped out-of-fold PLS scores."""
+
+    def __init__(self, scores, labels, classes):
+        columns = range(1, 2) if len(classes) == 2 else range(len(classes))
+        self.sigmoids = [
+            LogisticRegression().fit(scores[:, [i]], labels == classes[i]) for i in columns
+        ]
+
+    def predict_proba(self, scores):
+        if len(self.sigmoids) == 1:
+            positive = self.sigmoids[0].predict_proba(scores[:, [1]])[:, 1]
+            return np.column_stack([1.0 - positive, positive])
+        logits = np.column_stack(
+            [model.decision_function(scores[:, [i]]) for i, model in enumerate(self.sigmoids)]
+        )
+        return softmax(log_expit(logits), axis=1)
+
+
+def _transform_predictors(pipeline, values):
+    for name, step in pipeline.named_steps.items():
+        if name not in {"model", "smote"}:
+            values = step.transform(values)
+    return values
 
 
 class PLSDAClassifier(ClassifierMixin, BaseEstimator):
@@ -50,14 +77,21 @@ class PLSDAClassifier(ClassifierMixin, BaseEstimator):
         self.model_ = PLSRegression(n_components=max(1, components), max_iter=self.max_iter).fit(
             X, target
         )
+        self.calibration_ = None
         return self
 
-    def predict_proba(self, X):
+    def scores(self, X):
         values = np.asarray(self.model_.predict(X), dtype=float)
         if values.ndim == 1:
             values = values[:, None]
         if values.shape[1] == 1 and len(self.classes_) == 2:
             values = np.column_stack([-values[:, 0], values[:, 0]])
+        return values
+
+    def predict_proba(self, X):
+        values = self.scores(X)
+        if self.calibration_ is not None:
+            return self.calibration_.predict_proba(values)
         return softmax(values, axis=1)
 
     def predict(self, X):
@@ -174,12 +208,22 @@ class SupervisedAnalyzer:
             train, test = train_test_split(
                 indices, test_size=test_size, random_state=self.random_state, stratify=self.y
             )
-        else:
-            train, test = next(
-                GroupShuffleSplit(
-                    n_splits=1, test_size=test_size, random_state=self.random_state
-                ).split(self.X, self.y, self.groups)
+            folds = min(int(cv), int(pd.Series(self.y[train]).value_counts().min()))
+            if folds < 2:
+                raise ValueError("training data cannot support two CV folds")
+            labels = self.y[train]
+            splits = list(
+                StratifiedKFold(n_splits=folds, shuffle=True, random_state=self.random_state).split(
+                    train, labels
+                )
             )
+            if smote and any(pd.Series(labels[fit]).value_counts().min() < 6 for fit, _ in splits):
+                raise ValueError(
+                    "SMOTE needs at least six observations per class in each training fold"
+                )
+        else:
+            train, test, splits = self._grouped_holdout(indices, test_size, int(cv), smote)
+            folds = len(splits)
         X_train, X_test = self.X[train], self.X[test]
         y_train, y_test = self.y[train], self.y[test]
         names_test = self.obs_names[test]
@@ -188,32 +232,10 @@ class SupervisedAnalyzer:
             raise ValueError(
                 "holdout must contain every class in train and test; adjust groups/test_size"
             )
-        folds = min(int(cv), int(pd.Series(y_train).value_counts().min()))
-        if folds < 2:
-            raise ValueError("training data cannot support two CV folds")
         pipeline = self.build_pipeline(model, smote=smote, model_params=model_params)
-        splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=self.random_state)
         groups_train = None if self.groups is None else self.groups[train]
-        if groups_train is not None:
-            folds = min(folds, len(np.unique(groups_train)))
-            if folds < 2:
-                raise ValueError("training data cannot support two grouped CV folds")
-            splitter = StratifiedGroupKFold(
-                n_splits=folds, shuffle=True, random_state=self.random_state
-            )
-        splits = list(splitter.split(X_train, y_train, groups_train))
-        for fit_indices, validation_indices in splits:
-            if (
-                set(y_train[fit_indices]) != expected_classes
-                or set(y_train[validation_indices]) != expected_classes
-            ):
-                raise ValueError(
-                    "every CV fold must contain every class; reduce cv or revise groups"
-                )
-            if smote and pd.Series(y_train[fit_indices]).value_counts().min() < 6:
-                raise ValueError(
-                    "SMOTE needs at least six observations per class in each training fold"
-                )
+        plsda = isinstance(pipeline.named_steps["model"], PLSDAClassifier)
+        fit_calibration = plsda and groups_train is not None
         from .model_parameters import model_parameters
 
         fit_sizes = [
@@ -242,9 +264,19 @@ class SupervisedAnalyzer:
             cv=splits,
             scoring=scoring,
             return_train_score=False,
+            return_estimator=fit_calibration,
             error_score="raise",
         )
         pipeline.fit(X_train, y_train)
+        if fit_calibration:
+            estimator = pipeline.named_steps["model"]
+            scores = np.empty((len(train), len(estimator.classes_)))
+            for fold, (_, validation) in zip(cv_result.pop("estimator"), splits, strict=True):
+                fold_model = fold.named_steps["model"]
+                scores[validation] = fold_model.scores(
+                    _transform_predictors(fold, X_train[validation])
+                )
+            estimator.calibration_ = PLSProbabilityCalibration(scores, y_train, estimator.classes_)
         prediction = pipeline.predict(X_test)
         probabilities = pipeline.predict_proba(X_test)
         classes = np.asarray(pipeline.classes_)
@@ -272,10 +304,14 @@ class SupervisedAnalyzer:
             str(name): float(average_precision_score(binary[:, i], probabilities[:, i]))
             for i, name in enumerate(classes)
         }
-        brier = {
-            str(name): float(np.mean((probabilities[:, i] - binary[:, i]) ** 2))
-            for i, name in enumerate(classes)
-        }
+        brier = (
+            {
+                str(name): float(np.mean((probabilities[:, i] - binary[:, i]) ** 2))
+                for i, name in enumerate(classes)
+            }
+            if not plsda or fit_calibration
+            else {}
+        )
         self.result_ = {
             "validation_audit": {
                 **self.validation_audit,
@@ -299,6 +335,14 @@ class SupervisedAnalyzer:
                 "cv_requested": cv,
                 "cv_actual": folds,
                 "test_size": test_size,
+                "test_group_fraction": (
+                    len(np.unique(self.groups[test])) / len(np.unique(self.groups))
+                    if self.groups is not None
+                    else None
+                ),
+                "cv_reduction_reason": (
+                    "requested_cv_not_feasible_within_candidate_search" if folds < cv else None
+                ),
                 "random_state": self.random_state,
                 "calibration_bins": calibration_bins,
                 "smote": smote,
@@ -310,10 +354,21 @@ class SupervisedAnalyzer:
             "smote": bool(smote),
             "test_metrics": metrics,
             "probability_diagnostics": {
+                "probability_status": (
+                    "grouped_oof_sigmoid"
+                    if fit_calibration
+                    else "uncalibrated_score"
+                    if plsda
+                    else "model_probability"
+                ),
                 "average_precision_by_class": average_precision,
                 "average_precision_macro": float(np.mean(list(average_precision.values()))),
                 "brier_by_class": brier,
-                "brier_macro": float(np.mean(list(brier.values()))),
+                "brier_macro": float(np.mean(list(brier.values()))) if brier else None,
+                "log_loss": float(log_loss(y_test, probabilities, labels=classes))
+                if brier
+                else None,
+                "cv_output": "uncalibrated_score" if plsda else "model_probability",
                 "definition": "Held-out one-vs-rest AP and mean squared probability error; "
                 "macro is the unweighted class mean (not summed multiclass Brier).",
             },
@@ -345,6 +400,59 @@ class SupervisedAnalyzer:
                 "definition": f"Existing PLS wrapper clips requested components to input features and fitted {unit}s minus one; SMOTE fits use resampled size.",
             }
         return self.result_
+
+    def _grouped_holdout(self, indices, test_size, cv, smote):
+        labels, groups = self.y, self.groups
+        classes = np.unique(labels)
+        total = self._source_support(indices)
+        total_groups = len(np.unique(groups))
+        candidates = []
+        seen = set()
+        chooser = GroupShuffleSplit(
+            n_splits=96, test_size=test_size, random_state=self.random_state
+        )
+        for train, test in chooser.split(indices, labels, groups):
+            held = tuple(np.unique(groups[test]))
+            if held in seen:
+                continue
+            seen.add(held)
+            train_support = self._source_support(train)
+            test_support = self._source_support(test)
+            if any(
+                test_support[k]["source_groups"] < 1 or train_support[k]["source_groups"] < 2
+                for k in classes
+            ):
+                continue
+            target = len(held) / total_groups
+            imbalance = sum(
+                abs(test_support[k]["source_groups"] / total[k]["source_groups"] - target)
+                for k in classes
+            )
+            capacity = min(train_support[k]["source_groups"] for k in classes)
+            candidates.append((imbalance, held, capacity, train, test))
+        candidates.sort(key=lambda candidate: candidate[:2])
+        for folds in range(min(cv, total_groups - 1), 1, -1):
+            splitter = StratifiedGroupKFold(
+                n_splits=folds, shuffle=True, random_state=self.random_state
+            )
+            for _, _, capacity, train, test in candidates:
+                if capacity < folds:
+                    continue
+                y_train = labels[train]
+                splits = list(splitter.split(train, y_train, groups[train]))
+                min_count = 6 if smote else 1
+                if all(
+                    all(
+                        np.count_nonzero(y_train[fit] == label) >= min_count
+                        and np.any(y_train[validation] == label)
+                        for label in classes
+                    )
+                    for fit, validation in splits
+                ):
+                    return train, test, splits
+        raise ValueError(
+            "无法在所选来源组和留出比例下构造至少两折的有效划分。请调整来源组、留出比例或 SMOTE。"
+        )
 
     def _source_support(self, indices):
         return {
@@ -392,10 +500,7 @@ class SupervisedAnalyzer:
         self._require_fitted()
         if not self.supports_latent_scores:
             raise ValueError("latent scores require PLS-DA or LDA with svd/eigen (not lsqr)")
-        values = self.X.copy()
-        for name, step in self.model_.named_steps.items():
-            if name not in {"model", "smote"}:
-                values = step.transform(values)
+        values = _transform_predictors(self.model_, self.X.copy())
         scores = np.asarray(self.model_.named_steps["model"].transform(values))
         if scores.ndim == 1:
             scores = scores[:, None]
@@ -412,6 +517,9 @@ class SupervisedAnalyzer:
         not subsequently be used to tune the model on the basis of these curves.
         """
         binary = self._test_targets()
+        estimator = self.model_.named_steps["model"]
+        if isinstance(estimator, PLSDAClassifier) and estimator.calibration_ is None:
+            return {}
         curves = {}
         for i, name in enumerate(self.classes_):
             observed, predicted = calibration_curve(
@@ -521,7 +629,11 @@ class SupervisedAnalyzer:
             )
             explanation = explainer(samples)
         self.shap_output_space_ = (
-            "log_odds" if isinstance(estimator, LogisticRegression) else "probability"
+            "log_odds"
+            if isinstance(estimator, LogisticRegression)
+            else "uncalibrated_score"
+            if isinstance(estimator, PLSDAClassifier) and estimator.calibration_ is None
+            else "probability"
         )
         self.shap_background_obs_ = self.train_obs_names_[background_index]
         self.shap_parameters_ = {

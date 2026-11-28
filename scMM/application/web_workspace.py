@@ -20,35 +20,31 @@ from .annotation_evidence import AnnotationEvidenceWorkflow
 from .identity import actor
 from .projects import ProjectStore
 from .storage import StorageCatalog
-from .web_ai import AISummaryWorkflow
 from .web_analysis import AnalysisWorkflow
 from .web_ions import IonWorkflow
 from .web_lipids import LipidWorkflow
-from .web_merge import MergeWorkflow
-from .web_methods import MethodWorkflow
 from .web_projects import ProjectWorkflow
 from .web_projects import prepare_mapping as prepare_mapping
 from .web_projects import project_candidate as project_candidate
 from .web_projects import sync_metadata as sync_metadata
 from .web_raw import RawWorkflow
 from .web_results import ResultWorkflow
-from .web_time import TimeWorkflow
+from .workflows.assistant import AISummaryService
+from .workflows.merge import MergeWorkflow
+from .workflows.methods import MethodWorkflow
+from .workflows.time import TimeWorkflow
 from .workspace_state import BrowserWorkspace as BrowserWorkspace
 from .workspace_state import WorkspaceError as WorkspaceError
 
 
 class WebWorkspaceService(
     ProjectWorkflow,
-    AISummaryWorkflow,
     RawWorkflow,
     AnalysisWorkflow,
     ResultWorkflow,
     LipidWorkflow,
     AnnotationEvidenceWorkflow,
     IonWorkflow,
-    TimeWorkflow,
-    MergeWorkflow,
-    MethodWorkflow,
 ):
     def __init__(
         self,
@@ -76,6 +72,52 @@ class WebWorkspaceService(
         self._lock = threading.RLock()
         self._project_openings = {}
         self._retention_operations = set()
+        self._merge = MergeWorkflow(self)
+        self._methods = MethodWorkflow(self)
+        self._time = TimeWorkflow(self)
+
+    def publish_ai(self, workspace):
+        AISummaryService.publish(workspace)
+
+    def ai_context(self, identity, user_id, page):
+        with self._lock:
+            workspace = self._workspaces.get(identity)
+        return AISummaryService.context(workspace, user_id, page, self.idle_seconds)
+
+    def merge_inspect(self, identity, revision, specification):
+        return self._merge.merge_inspect(identity, revision, specification)
+
+    def merge_preview(self, identity, revision, options):
+        return self._merge.merge_preview(identity, revision, options)
+
+    def merge_info(self, identity):
+        return self._merge.merge_info(identity)
+
+    def merge_preview_download(self, identity, token):
+        return self._merge.merge_preview_download(identity, token)
+
+    def merge_apply(self, identity, revision, token):
+        return self._merge.merge_apply(identity, revision, token)
+
+    def run_method(self, identity, revision, method_id, version, options, **selection):
+        return self._methods.run_method(
+            identity, revision, method_id, version, options, **selection
+        )
+
+    def method_result(self, identity, key, **options):
+        return self._methods.method_result(identity, key, **options)
+
+    def time_info(self, identity, **options):
+        return self._time.time_info(identity, **options)
+
+    def time_result(self, identity, key):
+        return self._time.time_result(identity, key)
+
+    def run_time(self, identity, revision, operation, options):
+        return self._time.run_time(identity, revision, operation, options)
+
+    def time_download(self, identity, key):
+        return self._time.time_download(identity, key)
 
     def require_plugin(self, key):
         if key not in self.plugins.bundled:
@@ -85,26 +127,34 @@ class WebWorkspaceService(
 
     def _prune(self):
         now = time.monotonic()
-        for identity, workspace in list(self._workspaces.items()):
-            if now - workspace.touched <= self.idle_seconds or not workspace.lock.acquire(
-                blocking=False
-            ):
-                continue
-            try:
-                # Recheck after taking the lock: another request may just have finished.
-                if now - workspace.touched > self.idle_seconds:
-                    workspace.closed = True
-                    workspace.project = None
-                    workspace.discard_views()
-                    self._workspaces.pop(identity, None)
-            finally:
-                workspace.lock.release()
+        jobs = []
+        with self._lock:
+            for identity, workspace in list(self._workspaces.items()):
+                if now - workspace.touched <= self.idle_seconds or not workspace.lock.acquire(
+                    blocking=False
+                ):
+                    continue
+                try:
+                    if now - workspace.touched > self.idle_seconds:
+                        workspace.closed = True
+                        workspace.project = None
+                        jobs.append(workspace.detach_views())
+                        self._workspaces.pop(identity, None)
+                finally:
+                    workspace.lock.release()
+        from .cell_preview import stop_preview_job
+
+        for job in jobs:
+            if job is not None:
+                stop_preview_job(job)
 
     def create(self):
-        if getattr(self, "maintenance_frozen", False):
-            raise WorkspaceError("维护暂存已冻结，请等待服务恢复。", code="maintenance", status=503)
+        self._prune()
         with self._lock:
-            self._prune()
+            if getattr(self, "maintenance_frozen", False):
+                raise WorkspaceError(
+                    "维护暂存已冻结，请等待服务恢复。", code="maintenance", status=503
+                )
             if len(self._workspaces) >= self.capacity:
                 raise WorkspaceError(
                     "打开的工作区过多，请关闭不用的页面后重试。", code="capacity", status=503

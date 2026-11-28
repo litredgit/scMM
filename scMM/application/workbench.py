@@ -201,19 +201,31 @@ class AnalysisWorkspace:
             # Additive embeddings/annotations do not alter existing analysis inputs.
             self.results = {key: (self.token, value) for key, (_, value) in self.results.items()}
 
-    def normalize(self, method, *, scale=1.0, axis=None, reference="median", pseudo=1e-6):
+    def normalize(self, method, *, scale=1.0, axis=None, reference="median"):
         from scMM.analysis.preprocessing import normalization_options
+        from scMM.util.normalize import pqn_with_counts
 
-        params = normalization_options(
-            method, scale=scale, axis=axis, reference=reference, pseudo=pseudo
-        )
+        params = normalization_options(method, scale=scale, axis=axis, reference=reference)
         candidate = self.require_data().copy()
+        history = {"method": method, "effective_parameters": params}
         try:
             with np.errstate(over="raise", invalid="raise", divide="raise"):
-                candidate.X = normalize(dense(candidate.X), method=method, norm_kwargs=params)
+                if method == "pqn":
+                    candidate.X, counts = pqn_with_counts(dense(candidate.X), params)
+                    key = uuid4().hex
+                    metadata = candidate.uns.setdefault("scmm_workbench", {})
+                    metadata.setdefault("pqn_diagnostics", {})[key] = {
+                        "observation_ids": candidate.obs_names.to_numpy(dtype=str),
+                        "joint_detection_counts": counts,
+                    }
+                    history["pqn_diagnostic"] = key
+                else:
+                    candidate.X = normalize(dense(candidate.X), method=method, norm_kwargs=params)
         except FloatingPointError as exc:
             raise ValueError("normalization is undefined for these values and parameters") from exc
-        self._commit(candidate, "normalize", {"method": method, "effective_parameters": params})
+        if method in {"pqn", "log", "quantile"}:
+            history["method_version"] = 2
+        self._commit(candidate, "normalize", history)
 
     def impute(self, method="median", *, n_neighbors=5, weights="uniform"):
         from scMM.analysis.preprocessing import imputation_estimator
@@ -603,7 +615,15 @@ class AnalysisWorkspace:
 
         return save_latent(self, key)
 
-    def save_h5ad(self, storage, label, directory, filename):
+    def snapshot_reports(self, preserved=None):
+        from .result_catalog import portable_report
+
+        fresh = serialize_reports(
+            {name: self.result(name) for name in self.results}, identities=self._result_identities
+        )
+        return {**portable_report(preserved or {}), **fresh}
+
+    def save_h5ad(self, storage, label, directory, filename, *, reports=None):
         data = self.require_features()
         if (
             Path(filename).name != filename
@@ -617,20 +637,27 @@ class AnalysisWorkspace:
         target = folder / filename
         if target.exists() or target.is_symlink():
             raise FileExistsError(target)
+        if reports is None:
+            reports = self.snapshot_reports()
+        expected_uns = {
+            **data.uns,
+            "scmm_workbench": {
+                **data.uns["scmm_workbench"],
+                "dataset_id": self.dataset_id,
+                "revision": self.revision,
+                "source": self.source,
+                "reports_json": json.dumps(reports, allow_nan=False),
+            },
+        }
         snapshot = data.copy()
-        snapshot.uns["scmm_workbench"].update(
-            dataset_id=self.dataset_id, revision=self.revision, source=self.source
-        )
-        reports = serialize_reports(
-            {name: self.result(name) for name in self.results}, identities=self._result_identities
-        )
-        snapshot.uns["scmm_workbench"]["reports_json"] = json.dumps(
-            reports, default=lambda v: v.tolist()
-        )
+        snapshot.uns["scmm_workbench"] = deepcopy(expected_uns["scmm_workbench"])
         with NamedTemporaryFile(dir=folder, suffix=".h5ad", delete=False) as handle:
             temporary = Path(handle.name)
         try:
+            from .data_view_storage import verify_h5ad_snapshot
+
             snapshot.write_h5ad(temporary)
+            verify_h5ad_snapshot(temporary, data, expected_uns=expected_uns)
             target.hardlink_to(temporary)
         finally:
             temporary.unlink(missing_ok=True)

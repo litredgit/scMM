@@ -29,7 +29,6 @@ test('project home and read-only data editor use explicit sources and metadata',
   await expect(page.locator('pre').last()).toContainText('审核名称')
   await page.getByText('元数据修改记录', { exact: true }).click()
   await expect(page.locator('pre').first()).toContainText('人工分组')
-  await page.setViewportSize({ width: 390, height: 844 })
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     .toBe(true)

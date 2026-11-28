@@ -1,7 +1,6 @@
 """Private signed all-workspace maintenance checkpoints with verified model restore."""
 
 # ruff: noqa: RUF001
-import hashlib
 import json
 import os
 import threading
@@ -11,6 +10,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from cryptography.fernet import Fernet
+
+from scMM.util.artifacts import digest_file
 
 from .projects import Project, write_json
 from .state_codec import StateCodec
@@ -192,10 +193,7 @@ class RecoveryStore:
                     "id": directory.name,
                     "created": time.time(),
                     "workspaces": len(records),
-                    "files": {
-                        p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-                        for p in directory.iterdir()
-                    },
+                    "files": {p.name: digest_file(p) for p in directory.iterdir()},
                     "verified": True,
                 }
                 sealed = self.cipher.encrypt(json.dumps(manifest).encode())
@@ -230,7 +228,7 @@ class RecoveryStore:
             if (
                 Path(name).name != name
                 or (directory / name).is_symlink()
-                or hashlib.sha256((directory / name).read_bytes()).hexdigest() != digest
+                or digest_file(directory / name) != digest
             ):
                 raise ValueError("Recovery checksum failed")
         state = json.loads(self.cipher.decrypt((directory / "state.enc").read_bytes()))
@@ -285,8 +283,11 @@ class RecoveryStore:
                 from .raw_preview import RawPreviewService
 
                 raw = record["raw"]
-                sample = next(s for s in workspace.project.samples if s["id"] == raw["sample_id"])
                 try:
+                    samples = workspace.project.samples if workspace.project is not None else ()
+                    sample = next((s for s in samples if s["id"] == raw["sample_id"]), None)
+                    if sample is None:
+                        raise KeyError(raw["sample_id"])
                     preview = RawPreviewService(manager.storage).open(
                         sample["storage"], sample["path"]
                     )

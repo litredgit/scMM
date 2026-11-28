@@ -6,7 +6,6 @@ test('desktop analysis keeps core methods visible and follows server plugin sele
   page,
 }) => {
   test.setTimeout(60_000)
-  await page.setViewportSize({ width: 1920, height: 1000 })
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   await importDataset(page, '方法协议桌面验证')
@@ -35,7 +34,9 @@ test('desktop analysis keeps core methods visible and follows server plugin sele
     .filter({ has: page.getByText('插件方法', { exact: true }) })
   await expect(extension).toHaveCount(installed ? 1 : 0)
   if (installed) {
+    await expect(extension).toHaveAttribute('data-scmm-draft-owner', 'analysis/method/reduction')
     await nav.getByRole('button', { name: '差异与 Marker' }).click()
+    await expect(extension).toHaveAttribute('data-scmm-draft-owner', 'analysis/method/statistics')
     await extension.locator('summary').click()
     await extension.getByLabel('选择插件方法').selectOption('fixture-methods:report')
     await extension.getByLabel('分组列', { exact: true }).selectOption('group')

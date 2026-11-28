@@ -1,4 +1,4 @@
-import { ref, computed, watch, type Ref } from 'vue'
+import { ref, computed, watch, type Ref, shallowRef } from 'vue'
 import { useWorkspace } from '../../../stores/workspace'
 import { useReadScope } from '../../../api/readScope'
 import type { AnalysisTransport } from '../../analysis/types'
@@ -26,7 +26,7 @@ export function useRawSpectra(options: Options) {
     fast = ref(true),
     normalize = ref(false),
     bins = ref(20000)
-  const plots = ref<
+  const plots = shallowRef<
     Record<string, { figure: Figure; table: DataTable; detail?: Record<string, unknown> }>
   >({})
   const scanCatalog = ref<{ indices: number[]; times: number[] }>({ indices: [], times: [] })
@@ -141,7 +141,7 @@ export function useRawSpectra(options: Options) {
         detail: Record<string, unknown>
       }>('/raw/plot', body)
       if (data && api.isCurrent?.() !== false && opened.value === capture)
-        plots.value[selected] = data
+        plots.value = { ...plots.value, [selected]: data }
     } finally {
       loading = false
     }

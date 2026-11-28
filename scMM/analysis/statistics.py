@@ -40,7 +40,7 @@ def differential_features(
     """
     unit = observation_kind(data)
     if method not in {"mannwhitney", "welch", "ttest"}:
-        raise ValueError("method must be mannwhitney or welch")
+        raise ValueError("method must be mannwhitney, ttest or welch")
     if min_present < 2 or str(group_a) == str(group_b):
         raise ValueError(f"distinct groups with at least two {unit}s are required")
     labels = data.obs[group_key]
@@ -70,35 +70,55 @@ def differential_features(
     if data.n_vars == 0:
         raise ValueError("at least one feature is required")
     rows = []
-    eps = np.finfo(float).eps
     for i, name in enumerate(data.var_names):
-        abundance_a, abundance_b = X[a_mask, i], X[b_mask, i]
-        a, b = tests[a_mask, i], tests[b_mask, i]
+        abundance_a = X[a_mask, i].astype(np.float64, copy=False)
+        abundance_b = X[b_mask, i].astype(np.float64, copy=False)
+        a = tests[a_mask, i].astype(np.float64, copy=False)
+        b = tests[b_mask, i].astype(np.float64, copy=False)
+        status = "estimated"
         if np.ptp(np.concatenate([a, b])) == 0:
             statistic, p_value = 0.0, 1.0
         elif method == "mannwhitney":
             statistic, p_value = stats.mannwhitneyu(a, b, alternative="two-sided")
-        elif np.var(a) == 0 and np.var(b) == 0:
-            statistic, p_value = np.sign(a[0] - b[0]) * np.inf, 0.0
+        elif np.ptp(a) == 0 and np.ptp(b) == 0:
+            statistic, p_value, status = np.nan, np.nan, "zero_standard_error"
         else:
-            statistic, p_value = stats.ttest_ind(a, b, equal_var=False)
+            statistic, p_value = stats.ttest_ind_from_stats(
+                a.mean(),
+                a.std(ddof=1),
+                len(a),
+                b.mean(),
+                b.std(ddof=1),
+                len(b),
+                equal_var=method == "ttest",
+            )
+        mean_a, mean_b = float(abundance_a.mean()), float(abundance_b.mean())
+        effect_status = "estimated"
+        log2fc = np.nan
+        if mean_a > 0 and mean_b > 0:
+            log2fc = np.log2(mean_a) - np.log2(mean_b)
+        elif mean_a == 0 and mean_b == 0:
+            effect_status = "both_zero"
+        else:
+            effect_status = "a_zero" if mean_a == 0 else "b_zero"
         rows.append(
             {
                 "feature_id": name,
                 "mz": data.var.iloc[i].get("mz", np.nan),
-                "mean_a": float(abundance_a.mean()),
-                "mean_b": float(abundance_b.mean()),
-                "log2_fold_change": float(
-                    np.log2((abundance_a.mean() + eps) / (abundance_b.mean() + eps))
-                ),
+                "mean_a": mean_a,
+                "mean_b": mean_b,
+                "log2_fold_change": float(log2fc),
+                "effect_status": effect_status,
                 "statistic": float(statistic),
                 "p_value": float(p_value),
+                "test_status": status,
             }
         )
     result = pd.DataFrame(rows)
     result["fdr"] = _bh_fdr(result["p_value"])
     result = result.sort_values(["fdr", "p_value"], ignore_index=True)
     result.attrs["input"] = {
+        "method_version": 2,
         "effect_layer": effect_key,
         "test_layer": test_key,
         "statistical_unit": unit,

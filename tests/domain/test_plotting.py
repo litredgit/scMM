@@ -212,3 +212,10 @@ def test_plot_engine_trend_methods_save_domain_figures(tmp_path, monkeypatch) ->
 
     assert (tmp_path / "metabolite_trends_top2.svg").is_file()
     assert (tmp_path / "trend_clusters_leiden_correlation.svg").is_file()
+
+
+def test_missing_probability_has_placeholder():
+    from scMM.plot.presentation import probability_number
+
+    assert probability_number(None) == probability_number(float("nan")) == "—"
+    assert probability_number(0) == "0"

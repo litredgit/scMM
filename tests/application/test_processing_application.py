@@ -94,7 +94,7 @@ def test_processing_preflight_rejects_selected_directory_outside_storage(
         parameters=ProcessingParameters(ref_mz=100),
     )
 
-    with pytest.raises(PermissionError, match="outside storage root"):
+    with pytest.raises(PermissionError, match="所选路径不可用"):
         planner.preflight(request)
 
 

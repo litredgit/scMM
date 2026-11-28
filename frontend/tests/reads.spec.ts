@@ -1,4 +1,4 @@
-import { navigate, test, expect } from './fixtures'
+import { navigate, renderAfter, test, expect } from './fixtures'
 import { createProject, importDataset } from './support/project'
 
 for (const selection of ['switch', 'aba', 'resume'] as const) {
@@ -58,8 +58,7 @@ for (const selection of ['switch', 'aba', 'resume'] as const) {
         }
         const response = page.waitForResponse((r) => r.url().endsWith('/figures/scope_A'))
         release()
-        await response
-        await page.waitForTimeout(100)
+        await renderAfter(page, await response)
         if (selection === 'switch')
           await expect(page.locator('.legendtext').filter({ hasText: 'CURRENT_B' })).toBeVisible()
         else await expect(page.locator('.plot-shell')).toHaveCount(0)
@@ -115,11 +114,16 @@ for (const saveFirst of [false, true]) {
       })
     })
     try {
+      await page.clock.install()
+      const restoredDraft = page.waitForResponse(
+        (r) => r.url().endsWith('/maintenance/draft') && r.request().method() === 'GET',
+      )
       await page.reload()
       await expect.poll(() => loaded && restored).toBe(true)
+      await renderAfter(page, await restoredDraft)
       await expect(page.getByRole('heading', { name: '预览', exact: true })).toBeVisible()
       // The maintenance protocol applies deferred controls after 200ms.
-      await page.waitForTimeout(250)
+      await page.clock.runFor(250)
       await page.getByRole('button', { name: '展开全部参数', exact: true }).click()
       await page.getByRole('tab', { name: '参考预设', exact: true }).click()
       const draft = '{"saved-draft":151,"new-draft":152}'
@@ -209,8 +213,7 @@ test('project metadata reads coalesce and cannot replace a newer save failure af
     await expect(page.getByRole('alert')).toContainText('本次保存失败需保留')
     const response = page.waitForResponse((r) => r.url().endsWith('/api/v1/projects'))
     release()
-    await response
-    await page.waitForTimeout(100)
+    await renderAfter(page, await response)
     await expect(page.getByRole('alert')).toContainText('本次保存失败需保留')
     expect(requests).toBe(1)
   } finally {
@@ -261,8 +264,7 @@ test('a parameter read retried after page resume preserves edits made while its 
       (r) => r.url().endsWith('/workspace/parameters') && r.request().method() === 'GET',
     )
     release()
-    await response
-    await page.waitForTimeout(100)
+    await renderAfter(page, await response)
     await expect(page.getByLabel('cell_min_signal', { exact: true })).toHaveValue('42')
     await expect(page.getByLabel('参数生效状态')).toContainText('与所选范围的生效配置不同')
     await expect(page.getByRole('alert')).toHaveCount(0)
@@ -311,8 +313,7 @@ for (const lateFailure of [false, true]) {
       ])
       const response = page.waitForResponse((r) => r.url().includes('query=held'))
       release()
-      await response
-      await page.waitForTimeout(100)
+      await renderAfter(page, await response)
       await expect(page.getByLabel('Color', { exact: true }).locator('option')).toContainText([
         'CURRENT_FEATURE',
       ])
@@ -380,8 +381,7 @@ for (const lateFailure of [false, true]) {
       await navigate(page, '/extraction')
       const response = page.waitForResponse((r) => r.url().endsWith('/extraction/signal'))
       release()
-      await response
-      await page.waitForTimeout(100)
+      await renderAfter(page, await response)
       await expect(page.locator('.plot-shell')).toHaveCount(0)
       await expect(page.getByRole('alert')).toHaveCount(0)
     } finally {

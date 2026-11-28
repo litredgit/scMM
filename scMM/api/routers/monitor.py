@@ -9,26 +9,15 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from scMM.application.auth import AuthError
 
+from ..page_routes import PageRoute
+
 router = APIRouter(prefix="/api/v1", tags=["monitor"])
-Route = Literal[
-    "/projects",
-    "/samples",
-    "/raw",
-    "/extraction",
-    "/preprocess",
-    "/analysis",
-    "/results",
-    "/parameters",
-    "/account",
-    "/admin/monitor",
-    "/login",
-]
 
 
 class Page(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=r"^[a-f0-9-]{32,36}$")
-    route: Route
+    route: PageRoute | Literal["/login"]
     visibility: Literal["visible", "hidden", "suspended"]
     workspace_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{32}$")
 
@@ -53,18 +42,22 @@ def user(request):
 
 
 @router.post("/presence/register")
-async def register(body: Registration, request: Request):
+def register(body: Registration, request: Request):
     service = request.app.state.monitor
     # Source budget is bounded, without persisting addresses in monitoring records.
     key = request.client.host if request.client else "unknown"
     now = time.monotonic()
     budgets = service.registration_budget
-    count, start = budgets.get(key, (0, now))
-    if now - start > 60:
-        count, start = 0, now
-    if count >= 120 or (len(budgets) >= 4096 and key not in budgets):
-        raise AuthError("页面登记过于频繁，请稍后重试。", 429, "presence_rate_limit")
-    budgets[key] = count + 1, start
+    with service.registration_lock:
+        if len(budgets) >= 4096 and key not in budgets:
+            for expired in [host for host, (_, start) in budgets.items() if now - start > 60]:
+                del budgets[expired]
+        count, start = budgets.get(key, (0, now))
+        if now - start > 60:
+            count, start = 0, now
+        if count >= 120 or (len(budgets) >= 4096 and key not in budgets):
+            raise AuthError("页面登记过于频繁，请稍后重试。", 429, "presence_rate_limit")
+        budgets[key] = count + 1, start
     principal = user(request)
     return service.store.register(
         body.id,
@@ -81,7 +74,7 @@ async def register(body: Registration, request: Request):
 
 
 @router.post("/presence/heartbeat")
-async def heartbeat(body: Heartbeat, request: Request):
+def heartbeat(body: Heartbeat, request: Request):
     service = request.app.state.monitor
     principal = user(request)
     return service.store.heartbeat(
@@ -97,7 +90,7 @@ async def heartbeat(body: Heartbeat, request: Request):
 
 
 @router.get("/admin/monitor")
-async def monitor(request: Request):
+def monitor(request: Request):
     return {
         **request.app.state.monitor.snapshot(),
         "plugins": list(request.app.state.workspaces.plugins.status.values()),
@@ -105,7 +98,7 @@ async def monitor(request: Request):
 
 
 @router.get("/admin/monitor/history")
-async def history(request: Request):
+def history(request: Request):
     return {
         "interval_seconds": 60,
         "retention_hours": 24,

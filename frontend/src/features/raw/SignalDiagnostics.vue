@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch, shallowRef } from 'vue'
 import { restoringViews, useViewState } from '../../api/viewState'
 import { useWorkspace } from '../../stores/workspace'
 import { useReadScope } from '../../api/readScope'
@@ -25,7 +25,7 @@ const initialOptions = {
   rank_max_iter: 100,
 }
 const options = ref({ ...initialOptions })
-const result = ref<{ figure: Figure; table: DataTable }>()
+const result = shallowRef<{ figure: Figure; table: DataTable }>()
 const identity = computed(() =>
   JSON.stringify([store.current?.workspace_id, store.project?.path, props.sample, props.opened]),
 )
@@ -137,7 +137,7 @@ async function loadSaved() {
   }
 }
 watch(identity, () => void loadSaved(), { immediate: true })
-useViewState('rawDiagnostic', { options, result })
+useViewState('rawDiagnostic', { options })
 </script>
 <template>
   <details class="card">

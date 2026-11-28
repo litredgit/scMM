@@ -188,3 +188,21 @@ def test_acquisition_metadata_success_failure_and_timeout(tmp_path):
         raw_acquisition_hints(
             tmp_path / "test.raw", command=[sys.executable, str(script)], timeout=0.1
         )
+
+
+def test_header_distinguishes_old_reader_from_centroid_input(tmp_path):
+    from scMM.file.readers.thermo_raw import read_raw_header
+
+    path = tmp_path / "header.raw"
+    path.touch()
+    for code, message, expected in (
+        (2, "Usage: tool [--acquisition] file.raw", "版本过旧"),
+        (1, "Scan 90 (MS2) is centroid, not profile", "MS2.*centroid"),
+    ):
+        command = [
+            sys.executable,
+            "-c",
+            f"import sys; print({message!r}, file=sys.stderr); sys.exit({code})",
+        ]
+        with pytest.raises(ThermoRawError, match=expected):
+            read_raw_header(path, command=command)

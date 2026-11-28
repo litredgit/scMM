@@ -158,7 +158,13 @@ class Normalize(Controls):
     scale: float = Field(default=1.0, gt=0)
     axis: Literal[0, 1] | None = None
     reference: Literal["median", "mean"] = "median"
-    pseudo: float = Field(default=1e-6, ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_legacy_pseudo(cls, value):
+        if isinstance(value, dict) and "pseudo" in value:
+            raise ValueError("对数变换已改用 log1p(X)。请移除旧参数 pseudo 后重试。")
+        return value
 
     @field_validator("axis", mode="before")
     @classmethod
@@ -234,7 +240,7 @@ class Markers(Controls):
 
 
 class Differential(Markers):
-    method: Literal["mannwhitney", "welch"] = "mannwhitney"
+    method: Literal["mannwhitney", "welch", "ttest"] = "mannwhitney"
     group_a: str
     group_b: str
 

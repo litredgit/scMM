@@ -1,5 +1,5 @@
 import { openImageExport, finishExport } from './fixtures'
-import { navigate, test, expect, type Page } from './fixtures'
+import { navigate, renderAfter, test, expect, type Page } from './fixtures'
 import { createProject as create } from './support/project'
 
 test.use({ actionTimeout: 15000 })
@@ -123,21 +123,21 @@ for (const mode of ['hidden-error', 'resumed-error', 'hidden-ready'] as const) {
         )
       }
     })
+    await page.clock.install()
     await page.getByRole('button', { name: '预览细胞窗口', exact: true }).click()
     await pending
     await navigate(page, '/samples')
     if (mode === 'resumed-error') {
       await navigate(page, '/raw')
       // Longer than the 1500ms cadence: activation must not overlap a held read.
-      await page.waitForTimeout(1700)
+      await page.clock.runFor(1700)
       expect(reads).toBe(1)
     }
     const response = page.waitForResponse(
       (r) => r.url().endsWith('/raw/preview') && r.request().method() === 'GET',
     )
     release()
-    await response
-    await page.waitForTimeout(100)
+    await renderAfter(page, await response)
     expect(collects).toBe(0)
     await expect(page.getByRole('alert')).toHaveCount(0)
   })
@@ -301,6 +301,7 @@ test('raw zoom, reset then zoom, and full-range SVG share one explicit export po
   const plot = page.locator('.plot-shell').first()
   await expect(plot.locator('.js-plotly-plot')).toBeVisible()
   const drag = plot.locator('.nsewdrag').first()
+  await drag.scrollIntoViewIfNeeded()
   const box = (await drag.boundingBox())!
   await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.1)
   await page.mouse.down()

@@ -72,6 +72,24 @@ def context(ai):
     return response.json()
 
 
+def test_summary_keeps_normalization_provenance_and_reopened_reports(ai):
+    workflow = ai[0]
+    import_data(workflow)
+    operation(workflow, "normalize", {"method": "pqn", "reference": "mean"})
+    operation(workflow, "differential", {"group_key": "group", "group_a": "a", "group_b": "b"})
+    before = context(ai)["summary"]
+    assert before["applied_parameters"]["normalize"]["method_version"] == 2
+    assert before["applied_parameters"]["normalize"]["reference"] == "mean"
+    saved = workflow[-1]("/project/save")
+    saved.raise_for_status()
+    workflow[-1]("/project/open", {"path": saved.json()["project"]["path"]}).raise_for_status()
+    after = context(ai)["summary"]
+    assert after["applied_parameters"]["normalize"] == before["applied_parameters"]["normalize"]
+    assert after["results"]["differential"] == before["results"]["differential"]
+    assert after["results"]["differential"]["valid"]
+    json.dumps(after, allow_nan=False)
+
+
 def test_encryption_replace_delete_and_relogin(ai, caplog):
     w, app, _, body = ai
     client = w[0]

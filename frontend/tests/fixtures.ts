@@ -4,9 +4,20 @@ import {
   type Page,
   type APIRequestContext,
   type Locator,
+  type Response,
 } from '@playwright/test'
 export type { Page } from '@playwright/test'
 export { expect }
+
+export async function renderAfter(page: Page, response: Response) {
+  await response.finished()
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      }),
+  )
+}
 
 export function preprocessingStep(page: Page, key: string) {
   const labels: Record<string, string> = {

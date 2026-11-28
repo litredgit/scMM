@@ -48,50 +48,73 @@ def norm_max(X, params):
 
 @register_norm("quantile")
 def norm_quantile(X, params):
-
     X = _check_array(X)
-
-    sorted_X = np.sort(X, axis=0)
-    mean_quantiles = sorted_X.mean(axis=1)
-
+    active = np.flatnonzero(np.any(X != 0, axis=1))
     Xn = np.zeros_like(X)
-    for j in range(X.shape[1]):
-        order = np.argsort(X[:, j], kind="stable")
-        values = X[order, j]
+    if not len(active) or not X.shape[1]:
+        return Xn
+    mean_quantiles = np.sort(X[active], axis=1).mean(axis=0)
+    for i in active:
+        order = np.argsort(X[i], kind="stable")
+        values = X[i, order]
         starts = np.r_[0, np.flatnonzero(np.diff(values)) + 1]
         stops = np.r_[starts[1:], len(values)]
         for start, stop in zip(starts, stops, strict=True):
-            Xn[order[start:stop], j] = mean_quantiles[start:stop].mean()
+            Xn[i, order[start:stop]] = mean_quantiles[start:stop].mean()
 
     return Xn
 
 
 @register_norm("pqn")
 def norm_pqn(X, params):
-    """
-    Anal. Chem. 2006, 78, 13, 4281-4290
-    """
+    return pqn_with_counts(X, params)[0]
+
+
+def _abundance(X):
     X = _check_array(X)
+    if not np.isfinite(X).all() or (X < 0).any():
+        raise ValueError("归一化输入必须是有限的非负强度。")
+    return X
 
+
+def pqn_with_counts(X, params):
+    """Normalize by the median ratio over paired positive detections."""
+    X = _abundance(X)
+    present = X > 0
+    active = present.any(axis=1)
     reference = params.get("reference", "median")
-
-    if isinstance(reference, str) and reference == "median":
-        ref = np.median(X, axis=0)
-    elif isinstance(reference, str) and reference == "mean":
-        ref = np.mean(X, axis=0)
+    if isinstance(reference, str):
+        reducers = {"median": np.nanmedian, "mean": np.nanmean}
+        if reference not in reducers:
+            raise ValueError("PQN reference must be median, mean or a feature vector")
+        defined = present.any(axis=0)
+        ref = np.zeros(X.shape[1])
+        if defined.any():
+            detections = X[np.ix_(active, defined)]
+            detections[detections == 0] = np.nan
+            ref[defined] = reducers[reference](detections, axis=0)
     else:
-        ref = np.array(reference, dtype=float, copy=True)
+        ref = np.asarray(reference, dtype=float)
 
     if ref.shape != (X.shape[1],):
         raise ValueError("PQN reference must have one value per feature")
 
-    ref[ref == 0] = 1.0
-
-    quotients = X / ref
-    scale = np.median(quotients, axis=1, keepdims=True)
-    scale[scale == 0] = 1.0
-
-    return X / scale
+    if not np.isfinite(ref).all() or (ref < 0).any():
+        raise ValueError("PQN 参考必须为有限非负强度。")
+    shared = present & (ref > 0)
+    counts = shared.sum(axis=1)
+    missing = np.flatnonzero(active & (counts == 0))
+    if len(missing):
+        examples = ", ".join(str(index + 1) for index in missing[:10])
+        raise ValueError(f"PQN 有 {len(missing)} 行缺少共同检出特征。行号示例 {examples}。")
+    scale = np.ones(len(X))
+    if active.any():
+        ratios = np.full((int(active.sum()), X.shape[1]), np.nan)
+        np.divide(X[active], ref, where=shared[active], out=ratios)
+        scale[active] = np.nanmedian(ratios, axis=1)
+    if not np.isfinite(scale).all() or (scale <= 0).any():
+        raise ValueError("PQN 缩放因子必须为有限正数。")
+    return X / scale[:, None], counts
 
 
 @register_norm("zscore")
@@ -110,13 +133,9 @@ def norm_zscore(X, params):
 
 @register_norm("log")
 def norm_log(X, params):
-
-    X = _check_array(X)
-    pseudo = params.get("pseudo", 1e-6)
-
-    Xp = X + pseudo
-
-    return np.log1p(Xp)
+    if "pseudo" in params:
+        raise ValueError("对数变换已改用 log1p(X)。请移除旧参数 pseudo 后重试。")
+    return np.log1p(_abundance(X))
 
 
 @register_norm("minmax")

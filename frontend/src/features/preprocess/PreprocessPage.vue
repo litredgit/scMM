@@ -70,6 +70,13 @@ const method = computed({
     }
   },
 })
+const hasAdvanced = computed(
+  () =>
+    operation.value === 'remove_outliers' ||
+    (operation.value === 'impute' && imputation.value === 'knn') ||
+    (matrixTransform.value && ['total', 'max', 'zscore', 'minmax', 'pqn'].includes(method.value)),
+)
+
 const availableMethods = computed(() =>
   operation.value === 'transform'
     ? ['log']
@@ -81,7 +88,6 @@ const advanced = ref({
   scale: 1,
   axis: null as number | null,
   reference: 'median',
-  pseudo: 1e-6,
   n_neighbors: 5,
   weights: 'uniform',
   n_estimators: 100,
@@ -177,7 +183,6 @@ function options() {
           scale: advanced.value.scale,
           axis: advanced.value.axis,
           reference: advanced.value.reference,
-          pseudo: advanced.value.pseudo,
         }
       : operation.value === 'impute'
         ? {
@@ -383,7 +388,7 @@ useViewState('preprocess', {
             </p>
           </details>
         </div>
-        <details v-if="!['filter', 'subset'].includes(operation)" class="preprocessing-advanced">
+        <details v-show="hasAdvanced" class="preprocessing-advanced">
           <summary>预处理高级参数</summary>
           <details class="inline-explanation">
             <summary>查看说明</summary>
@@ -413,23 +418,13 @@ useViewState('preprocess', {
                 </select></label
               >
               <label v-if="method === 'pqn'"
-                ><span title="reference：使用全体细胞中位数或均值参考谱；自定义向量使用 Python API"
+                ><span title="reference：各特征仅用检出值构造参考谱；自定义向量使用 Python API"
                   >参考谱</span
                 ><select aria-label="PQN参考谱" v-model="advanced.reference" :disabled="store.busy">
                   <option value="median">中位数</option>
                   <option value="mean">均值</option>
                 </select></label
               >
-              <label v-if="method === 'log'"
-                ><span title="pseudo：先加此偏移再 log1p，须非负且变换输入大于 -1">对数偏移</span
-                ><input
-                  aria-label="对数偏移"
-                  type="number"
-                  min="0"
-                  step="any"
-                  v-model.number="advanced.pseudo"
-                  :disabled="store.busy"
-              /></label>
             </template>
             <template v-if="operation === 'impute' && imputation === 'knn'">
               <label

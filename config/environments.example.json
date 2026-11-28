@@ -4,6 +4,7 @@
   "raw": "/srv/scmm/raw",
   "prod_results": "/srv/scmm/results",
   "state": "~/.local/state/scmm",
+  "address": "0.0.0.0",
   "dev_server_config": "~/.config/scmm/dev.json",
   "prod_server_config": "~/.config/scmm/prod.json"
 }

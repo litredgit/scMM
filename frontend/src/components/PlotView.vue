@@ -7,7 +7,7 @@ import resultContract from '../features/analysis/results.contract.json'
 import { useLegendOrder } from './useLegendOrder'
 import { useViewState, restoringViews } from '../api/viewState'
 import { applyViewport } from './plotViewport'
-import { applyLegend } from './plotPresentation'
+import { applyLegend, copyFigure, plotChartKey, plotHeight } from './plotPresentation'
 import { isMassSpectrum, spectrumPresentation, type SpectrumSettings } from './spectrumPresentation'
 import { systemPlotText } from './systemPlotText'
 import { useWorkspace } from '../stores/workspace'
@@ -75,39 +75,10 @@ const spectrumDescription = computed(() => {
   )
   return parts.join(' · ')
 })
-const chartKey = computed(
-  () =>
-    props.viewKey ??
-    (
-      {
-        embedding: 'analysis.embedding_plot',
-        network_plot: 'analysis.network_plot',
-        shap_plot: 'analysis.shap_plot',
-        qc_plot: 'analysis.qc_plot',
-        volcano: 'analysis.volcano',
-        violin: 'analysis.violin',
-        network: 'analysis.network_plot',
-        shap: 'analysis.shap_plot',
-        roc: 'analysis.roc',
-        pr: 'analysis.pr',
-        calibration: 'analysis.calibration',
-        'current-qc': 'analysis.qc_plot',
-        'raw-tic': 'raw.tic_pane',
-        'raw-eic': 'raw.eic_pane',
-        'raw-sum': 'raw.spectrum_pane',
-        'raw-single': 'raw.scan_pane',
-        'raw-cells': 'raw.cell_pane',
-      } as Record<string, string>
-    )[props.name] ??
-    props.name,
-)
+const chartKey = computed(() => plotChartKey(props.name, props.viewKey))
+const labeledFigure = computed(() => systemPlotText(copyFigure(props.figure), chartKey.value))
 const legendNames = computed(() =>
-  (
-    systemPlotText(JSON.parse(JSON.stringify(props.figure)) as Figure, chartKey.value).data as {
-      name?: string
-      showlegend?: boolean
-    }[]
-  )
+  (labeledFigure.value.data as { name?: string; showlegend?: boolean }[])
     .filter((t) => t.showlegend !== false && t.name)
     .map((t) => t.name!),
 )
@@ -117,7 +88,7 @@ const {
   reset: resetLegend,
 } = useLegendOrder(chartKey, legendNames, () => !!props.readonly)
 function orderedFigure(view: Record<string, unknown> = {}, full = false): Figure {
-  const copy = systemPlotText(JSON.parse(JSON.stringify(props.figure)) as Figure, chartKey.value)
+  const copy = copyFigure(labeledFigure.value)
   if (full && (copy.layout.meta as Record<string, unknown> | undefined)?.spectrum_local) {
     const xaxis = copy.layout.xaxis as Record<string, unknown>
     delete xaxis.range
@@ -149,25 +120,9 @@ const chartKind = computed(() =>
     ? 'embedding'
     : props.name.replace(/^raw-/, '').replace(/_plot$/, ''),
 )
-const chartHeight = computed(() => {
-  const width = chartWidth.value
-  if (spectrum.value && width < 680) return 560
-  if (props.figure.layout.yaxis2 && (chartKind.value === 'cells' || props.name.includes('signal')))
-    return Math.max(560, Math.min(760, width * 0.9))
-  if (['tic', 'eic', 'sum', 'single', 'cells'].includes(chartKind.value))
-    return Math.max(320, Math.min(600, width / 2.2))
-  if (['roc', 'pr', 'calibration'].includes(chartKind.value))
-    return Math.max(360, Math.min(460, width * 0.9))
-  if (chartKind.value === 'violin') return Math.max(380, Number(props.figure.layout.height) || 380)
-  if (chartKind.value === 'shap') {
-    const traces = props.figure.data as { y?: unknown[] }[]
-    return Math.max(
-      400,
-      Math.min(1200, 140 + 28 * Math.max(0, ...traces.map((t) => t.y?.length ?? 0))),
-    )
-  }
-  return Math.max(360, Math.min(460, width * (chartKind.value === 'network' ? 0.9 : 0.7)))
-})
+const chartHeight = computed(() =>
+  plotHeight(props.figure, props.name, chartKind.value, chartWidth.value, spectrum.value),
+)
 const localPosition = ref(props.legend)
 const position = computed(() =>
   props.readonly || !store.project

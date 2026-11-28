@@ -1,7 +1,6 @@
 """Select bounded excerpts from the guides distributed with this scMM version."""
 
 import re
-import sysconfig
 import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
@@ -90,7 +89,7 @@ def _guide_root():
     checkout = Path(__file__).resolve().parents[2]
     if (checkout / "pyproject.toml").is_file():
         return checkout / "docs"
-    return Path(sysconfig.get_path("data")) / "share" / "scmm" / "guides"
+    return Path(__file__).resolve().parents[1] / "resources/workbench_docs/docs"
 
 
 @lru_cache(maxsize=1)

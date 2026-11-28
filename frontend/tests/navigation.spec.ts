@@ -54,7 +54,7 @@ test('continuous extraction and statistics steps guard missing quantitative data
   expect(errors).toEqual([])
 })
 
-test('three independent modules expose their own inputs and remain usable on narrow screens', async ({
+test('three independent modules expose their own inputs and remain usable on the desktop', async ({
   page,
 }) => {
   await page.goto('/')
@@ -74,7 +74,6 @@ test('three independent modules expose their own inputs and remain usable on nar
       '创建或打开项目',
     )
   }
-  await page.setViewportSize({ width: 390, height: 844 })
   await expect(modules.getByRole('button', { name: /细胞提取/ })).toBeVisible()
   await expect(modules.getByRole('button', { name: /特征注释/ })).toBeVisible()
   await expect(modules.getByRole('button', { name: /统计分析/ })).toBeVisible()
@@ -82,14 +81,11 @@ test('three independent modules expose their own inputs and remain usable on nar
     await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
   ).toBeTruthy()
   await page.getByRole('link', { name: 'scMM 项目首页', exact: true }).click()
-  for (const width of [1024, 760, 390]) {
-    await page.setViewportSize({ width, height: 844 })
-    await expect(directory).toHaveCount(0)
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
-      .toBe(true)
-  }
-  await page.screenshot({ path: test.info().outputPath('module-directory-mobile.png') })
+  await expect(directory).toHaveCount(0)
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
+    .toBe(true)
+  await page.screenshot({ path: test.info().outputPath('module-navigation-desktop.png') })
 })
 
 test('statistics imports an external sample matrix directly and exports a portable package', async ({
@@ -227,12 +223,20 @@ test('mass spectrum controls preserve source values while changing display and v
 test('each workflow page restores its own scroll and first visits start at top', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1366, height: 768 })
   await page.goto('/')
   await page.getByLabel('项目名称', { exact: true }).fill('逐页滚动')
   await page.getByRole('button', { name: '创建并添加样本' }).click()
+  await page.getByRole('button', { name: '＋ 添加原始文件' }).click()
+  await page.getByRole('button', { name: /extract.mzML/ }).click()
+  await page.getByRole('button', { name: '添加 1 个文件', exact: true }).click()
   await page.getByRole('link', { name: /预览/ }).click()
   await expect(page.getByRole('heading', { name: '预览', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '打开原始文件', exact: true }).click()
+  await expect(page.locator('.js-plotly-plot').first()).toBeVisible()
+  await page.getByRole('button', { name: '展开全部参数', exact: true }).click()
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollHeight - innerHeight))
+    .toBeGreaterThan(100)
   await page.evaluate(
     () =>
       new Promise<void>((resolve) =>

@@ -124,7 +124,12 @@ def test_actual_spawned_worker_does_not_block_event_loop(tmp_path):
         result = future.result(timeout=30)
         assert ticks > 1
         assert result["detection"].cell_count == 2
+        from scMM.application.cell_preview import stop_preview_job
+
         assert json.loads(state.read_text(encoding="utf-8"))["pid"] != os.getpid()
+        stop_preview_job({"future": future, "state_path": state})
+        assert json.loads(state.read_text(encoding="utf-8"))["status"] == "succeeded"
+        assert not state.with_name("stop.requested").exists()
         assert batches(project) == []  # Preview status is not an extraction batch.
 
     asyncio.run(asyncio.wait_for(exercise(), timeout=30))
@@ -133,10 +138,10 @@ def test_actual_spawned_worker_does_not_block_event_loop(tmp_path):
 def test_spawn_failure_does_not_leave_queued_status(tmp_path, monkeypatch):
     project, catalog = setup_project(tmp_path)
 
-    def fail(**kwargs):
+    def fail(*args, **kwargs):
         raise OSError("no process resources")
 
-    monkeypatch.setattr("scMM.application.cell_preview.ProcessPoolExecutor", fail)
+    monkeypatch.setattr("scMM.application.job_runner.subprocess.Popen", fail)
     with pytest.raises(OSError, match="no process resources"):
         submit_preview(preview_request(project, catalog))
     paths = list((project.folder / "processing/preview-jobs").glob("*/state.json"))
@@ -201,3 +206,21 @@ def test_corrupt_detection_cache_is_recomputed_without_changing_results(tmp_path
     pd.testing.assert_frame_equal(result["detection"].traces, first["detection"].traces)
     assert result["detection"].window_ranges == first["detection"].window_ranges
     assert json.loads(state.read_text(encoding="utf-8"))["status"] == "succeeded"
+
+
+def test_preview_crash_has_pid_and_persists_failure(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+
+    project, catalog = setup_project(tmp_path)
+    spawn = subprocess.Popen
+
+    def crash(*_args, **kwargs):
+        return spawn([sys.executable, "-c", "raise SystemExit(8)"], **kwargs)
+
+    monkeypatch.setattr("scMM.application.job_runner.subprocess.Popen", crash)
+    future, state = submit_preview(preview_request(project, catalog))
+    assert json.loads(state.read_text(encoding="utf-8"))["pid"] == future.preview_process.pid
+    with pytest.raises(ValueError, match="预览子进程未完成"):
+        future.result(timeout=10)
+    assert json.loads(state.read_text(encoding="utf-8"))["status"] == "failed"

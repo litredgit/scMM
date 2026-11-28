@@ -915,10 +915,24 @@ watch(
                 <td>{{ row.ppm_band }}</td>
                 <td
                   :title="
-                    JSON.stringify({
-                      samples: row.network_samples,
-                      relations: row.network_relations,
-                    })
+                    [
+                      '支持样本 ' +
+                        (Array.isArray(row.network_samples) && row.network_samples.length
+                          ? row.network_samples.join('、')
+                          : '无'),
+                      '关系 ' +
+                        (Array.isArray(row.network_relations) && row.network_relations.length
+                          ? row.network_relations
+                              .map((relation) =>
+                                relation === 'isotope'
+                                  ? '同位素'
+                                  : relation === 'adduct'
+                                    ? '加合物'
+                                    : relation,
+                              )
+                              .join('、')
+                          : '无'),
+                    ].join(' · ')
                   "
                 >
                   {{ ['无可用支持', '单样本支持', '同条件重复支持'][Number(row.network_level ?? 0)]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import selectors
@@ -10,6 +11,8 @@ import struct
 import subprocess
 import threading
 import time
+from contextlib import suppress
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -44,6 +47,64 @@ def reader_command():
     return [str(path)]
 
 
+def read_raw_header(path, *, command=None, timeout=30):
+    """Check profile scan metadata before any spectrum arrays are streamed."""
+    try:
+        result = subprocess.run(
+            [*(command or reader_command()), "--header", str(path)],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ThermoRawError("Thermo RAW 文件头预检超时。") from exc
+    except OSError as exc:
+        raise ThermoRawError("无法启动 Thermo RAW reader。请核对配置路径。") from exc
+    if result.returncode:
+        detail = result.stderr[-4096:].decode("utf-8", errors="replace").strip()
+        usage = detail or result.stdout[-4096:].decode("utf-8", errors="replace")
+        if result.returncode == 2 and "usage" in usage.lower() and "--header" not in usage:
+            raise ThermoRawError(
+                "Thermo RAW reader 版本过旧。请按部署文档重建并更新支持 --header 的 reader。"
+            )
+        raise ThermoRawError(f"Thermo RAW 文件头预检失败: {detail}")
+    try:
+        if len(result.stdout) > 16_384:
+            raise ValueError("oversized RAW header")
+        header = json.loads(result.stdout)
+        if (
+            type(header["schema_version"]) is not int
+            or header["schema_version"] != 1
+            or type(header["scan_count"]) is not int
+            or header["scan_count"] <= 0
+            or not isinstance(header["creation_time"], str)
+            or not header["creation_time"]
+            or not isinstance(header["instrument"], str)
+        ):
+            raise ValueError("invalid RAW header fields")
+        return header["scan_count"], header["creation_time"], header["instrument"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ThermoRawError("Thermo RAW 文件头协议无效。请核对 reader 版本。") from exc
+
+
+@lru_cache(maxsize=64)
+def _cached_header(path, input_identity, command, reader_identity):
+    return read_raw_header(path, command=command)
+
+
+def checked_raw_header(path, input_identity):
+    command = tuple(reader_command())
+    reader = Path(command[-1] if len(command) == 2 and command[-1].endswith(".dll") else command[0])
+    try:
+        stat = reader.stat()
+    except OSError as exc:
+        raise ThermoRawError("无法启动 Thermo RAW reader。请核对配置路径。") from exc
+    return _cached_header(
+        path, input_identity, command, (stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    )
+
+
 class ThermoRawReader:
     """Single-use context-managed stream; arrays own immutable byte buffers.
 
@@ -62,6 +123,7 @@ class ThermoRawReader:
         self._selector = None
         self._thread = None
         self._stderr = bytearray()
+        self._stderr_lock = threading.Lock()
         self._used = False
         self._finished = False
         self._iterated = False
@@ -100,13 +162,15 @@ class ThermoRawReader:
 
     @property
     def diagnostics(self):
-        return bytes(self._stderr).decode("utf-8", errors="replace").strip()
+        with self._stderr_lock:
+            return bytes(self._stderr).decode("utf-8", errors="replace").strip()
 
     def _drain_stderr(self):
         while chunk := self.process.stderr.read(4096):
-            self._stderr.extend(chunk)
-            if len(self._stderr) > 65536:
-                del self._stderr[:-65536]
+            with self._stderr_lock:
+                self._stderr.extend(chunk)
+                if len(self._stderr) > 65536:
+                    del self._stderr[:-65536]
 
     def _read(self, size):
         chunks = bytearray()
@@ -182,11 +246,13 @@ class ThermoRawReader:
     def close(self):
         if self.process is not None:
             if self.process.poll() is None:
-                self.process.terminate()
+                with suppress(ProcessLookupError):
+                    self.process.terminate()
                 try:
                     self.process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
-                    self.process.kill()
+                    with suppress(ProcessLookupError):
+                        self.process.kill()
                     self.process.wait()
             if self._thread is not None:
                 self._thread.join(timeout=2)

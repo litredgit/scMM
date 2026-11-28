@@ -7,6 +7,8 @@ from uuid import uuid4
 
 import numpy as np
 
+from scMM.util.artifacts import digest_file as digest_file
+
 from .projects import child_path, write_json
 
 PREVIEW_FILES = ("data.h5ad", "targets.npy", "traces.csv", "detection.json")
@@ -24,17 +26,12 @@ def file_identity(path):
     }
 
 
-def digest_file(path):
-    with Path(path).open("rb") as handle:
-        return hashlib.file_digest(handle, "sha256").hexdigest()
-
-
 def signature(path, parameters, mz_list=None):
     params = parameters.to_dict() if not isinstance(parameters, dict) else dict(parameters)
     if params.get("method_plugins") == {}:
         params.pop("method_plugins")
     identity = {
-        "version": 4,
+        "version": 6,
         "file": file_identity(path),
         "parameters": json.loads(json.dumps(params)),
     }
@@ -117,7 +114,7 @@ def shared_cache_key(request):
     from .project_batch import SHARED_FIELDS
 
     payload = {
-        "version": 2,
+        "version": 4,
         "selections": [
             {k: s["parameters"].get(k) for k in ("rt_range", "frame_range")}
             for s in request["samples"]

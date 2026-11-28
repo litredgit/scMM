@@ -1,8 +1,25 @@
 import numpy as np
+import pandas as pd
 import pyopenms as oms
 import pytest
 
 from scMM.util.peak import filter_spectrum
+
+
+def test_custom_detector_uses_default_snr_quantifier():
+    from scMM.util._cell_snr import find_cell_peaks_snr
+
+    frame = pd.DataFrame({100.0: [1.0, 1.0, 50.0, 1.0, 1.0]})
+    result = find_cell_peaks_snr(
+        frame,
+        100.0,
+        detector=lambda _: [(2, 2, 2)],
+        baseline_window=3,
+        noise_window=2,
+        show_progress=False,
+    )
+    assert result["cell_df"].iloc[0, 0] == 49.0
+    assert result["feature_snr"][0, 0] > 3
 
 
 def make_spectrum(intensity: list[float]) -> oms.MSSpectrum:

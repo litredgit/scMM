@@ -787,6 +787,15 @@ def test_feature_only_mass_candidates_and_spectrum_do_not_fabricate_intensity(
     assert query(workflow, version)["candidates"]["total"] == 4
 
 
+def test_database_presets_do_not_share_nested_metadata():
+    from scMM.application.lipid_database import database_presets
+
+    preset = database_presets()[0]
+    expected = dict(preset["curation"])
+    preset["curation"]["changed"] = ["edited"]
+    assert database_presets()[0]["curation"] == expected
+
+
 def test_preset_and_additional_only_database_never_download_lmsd(workflow, monkeypatch):
     setup_lipids(workflow, monkeypatch)
     monkeypatch.setattr(

@@ -1,0 +1,800 @@
+/* Desktop work areas keep the current visual language and prioritize the figures. */
+.mobile-nav-toggle {
+  display: none;
+}
+.account-menu {
+  position: relative;
+  max-width: 180px;
+}
+.account-menu > summary {
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--control-radius);
+  padding: 5px 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-menu > summary:hover,
+.account-menu[open] > summary {
+  border-color: var(--border);
+  background: var(--panel-soft);
+}
+.account-menu-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 150px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-raised);
+  display: grid;
+  gap: 6px;
+}
+.account-menu-body > a {
+  padding: 6px 8px;
+  border-radius: var(--control-radius);
+}
+.account-menu-body > a:hover {
+  background: var(--panel-soft);
+}
+.account-menu-body p {
+  margin: 0 6px;
+}
+.alert.workspace-feedback {
+  position: sticky;
+  top: calc(var(--topbar-height) + 8px);
+  z-index: 24;
+  box-shadow: var(--shadow-card);
+}
+@media (min-width: 1800px) {
+  .assistant-expanded #main-content {
+    width: calc(100% - 460px);
+    margin-left: 0;
+    margin-right: auto;
+  }
+}
+.raw-sample-toolbar .detail-list {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 14px;
+}
+.reference-preset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.reference-preset label {
+  flex: 1 1 170px;
+}
+.parameter-state {
+  border-left: 3px solid #2a9276;
+  padding: 10px 12px;
+  background: #f2faf6;
+  font-size: 14px;
+}
+.parameter-state.pending {
+  border-color: #c18a20;
+  background: #fff9ed;
+}
+.parameter-state p {
+  margin: 4px 0 0;
+}
+.application-scope {
+  flex-basis: 100%;
+  max-width: 340px;
+  font-size: 14px;
+}
+.raw-workflow {
+  grid-template-columns: minmax(406px, 0.82fr) minmax(0, 1.7fr);
+  align-items: start;
+}
+.extraction-workspace {
+  display: flex;
+  flex-direction: column;
+}
+.extraction-workspace .page-title {
+  order: -2;
+}
+.extraction-workspace:not(.has-batch) .extraction-preparation {
+  order: -1;
+}
+.extraction-preparation > summary,
+.history-panel > summary,
+.card > summary {
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.card[open] > summary {
+  margin-bottom: 12px;
+}
+.batch-review {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.review-signal {
+  padding: 16px;
+  margin: 16px 0;
+  background: #f7f9fd;
+  border-radius: 3px;
+}
+.review-signal > select {
+  max-width: 360px;
+  margin-right: 10px;
+}
+.qc-details {
+  margin: 16px 0;
+}
+.qc-details > summary {
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+.history-panel {
+  scroll-margin-top: 110px;
+}
+.analysis-toolbar {
+  margin-bottom: 20px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel-soft);
+  align-items: end;
+}
+.analysis-toolbar label {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.analysis-toolbar select {
+  width: auto;
+}
+.analysis-toolbar button {
+  font-size: 14px;
+}
+.analysis-calculation,
+.analysis-visualization {
+  min-width: 0;
+}
+.analysis-visualization {
+  margin-top: 20px;
+}
+.analysis-content .card {
+  margin-bottom: 0;
+}
+.selected-cell-spectra {
+  margin-top: 24px;
+}
+.result-export-grid {
+  display: grid;
+  gap: 24px;
+}
+.result-export-grid > section {
+  min-width: 0;
+}
+@media (min-width: 1600px) {
+  .analysis-module-split {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.7fr) minmax(0, 1.7fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .analysis-calculation {
+    padding-right: 20px;
+    border-right: 1px solid var(--border);
+  }
+  .analysis-calculation .field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .analysis-visualization {
+    margin-top: 0;
+  }
+  .assistant-expanded .analysis-module-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .assistant-expanded .analysis-calculation {
+    border-right: 0;
+    padding-right: 0;
+  }
+  .result-export-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+@media (max-width: 1200px) {
+  .raw-workflow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.raw-file-details {
+  flex-basis: 100%;
+  font-size: 14px;
+}
+.raw-file-details > summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.embedding-variance {
+  margin-top: 20px;
+  overflow: auto;
+}
+.plot-shell > .plot {
+  margin-bottom: 12px;
+}
+
+.draft-state {
+  color: #835515;
+  font-size: var(--text-small);
+  max-width: 240px;
+}
+.state-note,
+.result-state {
+  padding: 8px 12px;
+  background: #f4f7fb;
+  border-left: 3px solid #a9bdd4;
+  margin: 8px 0;
+  font-size: 14px;
+}
+.state-note button {
+  margin-left: 8px;
+}
+
+.analysis-page .page-title {
+  margin-bottom: 10px;
+}
+.analysis-page .page-title h1 {
+  margin: 0;
+  font-size: 24px;
+}
+.analysis-page .page-title p {
+  display: none;
+}
+.analysis-page .analysis-toolbar {
+  margin-bottom: 8px;
+  padding: 6px 10px;
+}
+.analysis-page > .state-note {
+  margin: 6px 0;
+  padding: 5px 10px;
+}
+.analysis-page .analysis-module-split {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.analysis-page .analysis-calculation {
+  width: 100%;
+  border: 0;
+  padding: 0;
+}
+.analysis-page .analysis-visualization {
+  width: 100%;
+  margin: 0;
+}
+.calculation-heading {
+  margin-bottom: 8px;
+}
+.calculation-heading button {
+  font-size: 14px;
+  min-height: 30px;
+  padding: 4px 10px;
+}
+.calculation-heading .selected {
+  color: var(--blue);
+  border-color: var(--blue);
+}
+.analysis-visualization > h3,
+.embedding-view > h3 {
+  margin: 0 0 8px;
+}
+.analysis-page .field-grid {
+  margin-bottom: 10px;
+  gap: 8px 14px;
+}
+.analysis-page .plot-shell {
+  padding-top: 6px;
+}
+.display-settings {
+  margin: 6px 0;
+}
+.display-settings > summary {
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--muted);
+}
+.parameter-range {
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.parameter-range .parameter-field {
+  width: auto;
+  min-width: 0;
+}
+.parameter-range input {
+  width: 100%;
+  min-width: 0;
+}
+@media (min-width: 1100px) {
+  .analysis-page .analysis-module-split:has(> .parameters-pinned) {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.8fr);
+    align-items: start;
+  }
+  .parameters-pinned .field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.qc-plots.comparing {
+  gap: 16px;
+}
+@media (min-width: 1100px) {
+  .qc-plots.comparing {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.analysis-calculation {
+  scroll-margin-top: 95px;
+}
+
+/* Consistent task sections and compact operational views. */
+.section-nav {
+  margin: 10px 0 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.section-nav button {
+  min-height: 32px;
+  font-size: 14px;
+  padding: 5px 12px;
+}
+.task-section {
+  min-width: 0;
+  scroll-margin-top: 130px;
+  margin-top: 18px;
+}
+.task-section > h3 {
+  margin: 0 0 10px;
+}
+.task-section details > summary {
+  cursor: pointer;
+  margin: 8px 0;
+}
+.mapping-panel > summary h2 {
+  display: inline;
+  margin-right: 12px;
+  font-size: 20px;
+}
+.mapping-panel > summary .muted {
+  font-size: 14px;
+  font-weight: 400;
+}
+.mapping-panel[open] > summary {
+  margin-bottom: 14px;
+}
+.download-reasons {
+  margin: 12px 0;
+  font-size: 14px;
+}
+.download-reasons summary {
+  cursor: pointer;
+}
+.analysis-page .task-section .field-grid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.analysis-page .analysis-module-split > .section-nav {
+  width: 100%;
+}
+.analysis-page .analysis-module-split:has(> .section-nav):has(> .parameters-pinned) {
+  grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.8fr);
+}
+.analysis-module-split > .section-nav {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 761px) {
+  th,
+  td {
+    padding: 9px 12px;
+  }
+}
+.overview-grid > details.card {
+  align-self: start;
+}
+.task-section summary h4 {
+  display: inline;
+  font-size: 16px;
+  margin: 0;
+}
+
+.diagnostic-controls {
+  align-items: end;
+  margin: 10px 0;
+}
+.diagnostic-controls .field {
+  flex: 1 1 220px;
+  max-width: 360px;
+}
+
+.trash-action {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.cleanup-review {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e3b5b5;
+  border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+.artifact-list,
+.save-explanation {
+  margin-top: 16px;
+  border-top: 1px solid var(--border, #dbe3ef);
+  padding-top: 12px;
+}
+.artifact-list td,
+.save-explanation td {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.comparison-signals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.comparison-signals section {
+  min-width: 0;
+}
+
+/* Stable, semantic parameter groups; field sizes do not change while editing. */
+.raw-parameter-panel .parameter-controls {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+.raw-parameter-panel .parameter-field {
+  min-width: 0;
+}
+.raw-parameter-panel .parameter-field-full {
+  grid-column: 1 / -1;
+}
+.raw-parameter-panel .parameter-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.raw-parameter-panel .parameter-field input:not([type='checkbox']),
+.raw-parameter-panel .parameter-field select {
+  min-width: 0;
+}
+.parameter-unit {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+.parameter-section + .parameter-section {
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding-top: 4px;
+}
+.parameter-section h4 {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.raw-parameter-panel .parameter-apply-actions {
+  align-items: end;
+}
+.raw-parameter-panel .parameter-apply-actions .application-scope {
+  max-width: none;
+}
+
+/* Keep information and actions attached to their objects at every width. */
+.project-note {
+  max-width: 28rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.project-info {
+  margin-bottom: 18px;
+}
+.project-form .grow {
+  min-width: min(100%, 240px);
+}
+.sample-toolbar,
+.browser-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.file-entry-row > input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 18px;
+  min-height: 18px;
+  margin: 0 8px;
+}
+.matrix-download {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+}
+.matrix-download details {
+  margin-top: 10px;
+}
+.parameter-section > summary {
+  font-weight: 600;
+  cursor: pointer;
+  padding: 10px 0;
+}
+.parameter-section:not([open]) {
+  padding-bottom: 4px;
+}
+.selection-labels > summary {
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.selection-labels[open] > summary {
+  margin-bottom: 16px;
+}
+.selection-labels .actions {
+  flex-wrap: wrap;
+}
+
+/* Context and on-demand help sit above the working surface. */
+.workbench button,
+.workbench .button,
+.workbench input,
+.workbench select,
+.workbench textarea,
+.workbench table,
+.workbench .field,
+.workbench .field-grid label {
+  font-size: var(--text-body);
+}
+.workbench small,
+.workbench .muted {
+  font-size: var(--text-small);
+}
+.workspace-path,
+.page-overview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: var(--text-small);
+}
+.page-overview {
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.workspace-path a:hover,
+.page-overview summary:hover {
+  color: var(--teal);
+  text-decoration: underline;
+}
+.workspace-path strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.page-overview details {
+  position: relative;
+  z-index: 22;
+}
+.page-overview summary,
+.inline-explanation summary {
+  cursor: pointer;
+}
+.page-guide {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  width: min(370px, calc(100vw - 40px));
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
+  color: var(--text);
+}
+.page-guide p,
+.inline-explanation p {
+  margin: 6px 0 0;
+}
+.inline-explanation {
+  margin: 8px 0;
+  font-size: var(--text-small);
+  color: var(--muted);
+}
+
+.raw-parameter-panel .parameter-field input {
+  max-width: 140px;
+}
+.raw-parameter-panel .parameter-range {
+  max-width: 300px;
+}
+.parameter-sections .parameter-field-full {
+  grid-column: 1 / -1;
+}
+.batch-task-panel:has(> .matrix-download) {
+  container-type: inline-size;
+}
+.batch-task-panel > .field {
+  display: inline-flex;
+  max-width: 55%;
+  margin-right: 12px;
+}
+.batch-task-panel > .matrix-download {
+  display: inline-flex;
+  max-width: 42%;
+  vertical-align: bottom;
+}
+.extraction-preparation input {
+  width: 120px;
+}
+.parameter-pair {
+  display: flex;
+  gap: 6px;
+  min-width: 210px;
+}
+.extraction-preparation .parameter-pair input {
+  width: 100px;
+}
+.batch-task-panel > .matrix-download {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.batch-task-panel > .matrix-download details[open] {
+  flex-basis: 100%;
+}
+
+/* Preview fields retain stable widths based on their numeric display length. */
+.raw-parameter-panel .parameter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 12px;
+  margin: 9px 0;
+}
+.raw-parameter-panel .parameter-field {
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 100%;
+}
+.raw-parameter-panel .parameter-field .parameter-input {
+  width: max-content;
+  max-width: 100%;
+  gap: 5px;
+}
+.raw-parameter-panel .parameter-field input:not([type='checkbox']),
+.raw-parameter-panel .parameter-field select {
+  flex: 0 1 var(--compact-input);
+  width: var(--compact-input);
+  max-width: var(--compact-input);
+  font-variant-numeric: tabular-nums;
+}
+.raw-parameter-panel .parameter-field-pair .parameter-input {
+  flex-wrap: nowrap;
+}
+.raw-parameter-panel .parameter-field-mass .parameter-unit {
+  display: none;
+}
+.raw-parameter-panel .parameter-field-full {
+  flex: 1 0 100%;
+}
+.raw-parameter-panel .parameter-apply-actions .application-scope {
+  flex: 0 1 180px;
+}
+.raw-parameter-panel .parameter-controls:has([aria-label='mz_min']) {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.raw-parameter-panel .parameter-field-mass {
+  grid-column: span 2;
+  width: 100%;
+}
+.raw-parameter-panel .parameter-field-pair {
+  grid-column: span 3;
+  width: 100%;
+}
+
+.raw-parameter-panel .parameter-sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.raw-parameter-panel .parameter-section {
+  flex: 1 1 220px;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 0;
+}
+.raw-parameter-panel .parameter-section:first-of-type {
+  flex-basis: 100%;
+}
+.raw-parameter-panel .parameter-section-plain > summary {
+  display: none;
+}
+.raw-parameter-panel .parameter-state {
+  padding: 6px 8px;
+  margin: 6px 0;
+}
+.raw-parameter-panel .parameter-state p {
+  display: inline;
+  margin-right: 10px;
+}
+.raw-parameter-panel .parameter-apply-actions {
+  margin: 8px 0;
+  gap: 6px;
+}
+.reference-settings {
+  margin: 6px 0;
+}
+.batch-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+.batch-toolbar > .field {
+  flex: 1 1 260px;
+  max-width: 360px;
+  margin: 0;
+}
+.batch-toolbar .matrix-download {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+.batch-toolbar .actions {
+  margin: 0;
+  gap: 6px;
+}
+.batch-toolbar > details {
+  align-self: center;
+}
+.card > .actions {
+  flex-wrap: wrap;
+}
+
+.analysis-calculation .field-grid {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 180px));
+  gap: 8px 10px;
+}
+.analysis-calculation .actions {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  gap: 6px;
+}
+
+.matrix-download {
+  position: relative;
+}
+
+.batch-toolbar .matrix-download {
+  border-top: 0;
+}
+.batch-toolbar {
+  position: relative;
+}
+.batch-toolbar .matrix-download {
+  position: static;
+}

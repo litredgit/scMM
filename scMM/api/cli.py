@@ -146,6 +146,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             config.auth_db,
             idle_seconds=config.values["session_idle_seconds"],
             absolute_seconds=config.values["session_absolute_seconds"],
+            audit_retention_days=config.values["audit_retention_days"],
         ),
         server_config=config,
     )

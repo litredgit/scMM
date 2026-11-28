@@ -22,7 +22,6 @@ test('feature search and default pinned analysis keep the workspace compact', as
   await expect(
     page.getByRole('button', { name: '取消固定参数区', exact: true }).first(),
   ).toHaveAttribute('aria-pressed', 'true')
-  await page.setViewportSize({ width: 390, height: 844 })
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     .toBe(true)

@@ -99,12 +99,11 @@ def _graph_cluster(distances: np.ndarray, method: str, kwargs: dict) -> np.ndarr
     weights = _distance_weights(distances, edges)
     graph = ig.Graph(n=n_features, edges=edges, directed=False)
     graph.es["weight"] = weights
+    resolution = float(kwargs.get("resolution", 1.0))
     if method == "leiden":
-        return _leiden_cluster(
-            graph, float(kwargs.get("resolution", 1.0)), kwargs.get("random_state")
-        )
+        return _leiden_cluster(graph, resolution, kwargs.get("random_state"))
     partition = graph.community_multilevel(
-        weights=graph.es["weight"], return_levels=False, resolution=1
+        weights=graph.es["weight"], return_levels=False, resolution=resolution
     )
     return np.array(partition.membership, dtype=int)
 
@@ -112,7 +111,8 @@ def _graph_cluster(distances: np.ndarray, method: str, kwargs: dict) -> np.ndarr
 def _nearest_neighbor_edges(distances: np.ndarray, n_neighbors: int) -> list[tuple[int, int]]:
     edges: set[tuple[int, int]] = set()
     for index in range(distances.shape[0]):
-        neighbors = np.argsort(distances[index])[1 : n_neighbors + 1]
+        order = np.argsort(distances[index])
+        neighbors = order[order != index][:n_neighbors]
         edges.update(tuple(sorted((index, int(neighbor)))) for neighbor in neighbors)
     return sorted(edges)
 

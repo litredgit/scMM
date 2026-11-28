@@ -50,12 +50,18 @@ class BrowserWorkspace:
     ai_tasks_unknown: bool = False
     ai_reviewed: set = field(default_factory=set)
 
-    def discard_views(self):
+    def detach_views(self):
+        job, self.preview_job = self.preview_job, None
         self.merge_plan = None
         self.raw = None
-        if self.preview_job:
-            self.preview_job["future"].cancel()
-            self.preview_job = None
+        return job
+
+    def discard_views(self):
+        job = self.detach_views()
+        if job is not None:
+            from .cell_preview import stop_preview_job
+
+            stop_preview_job(job)
 
     def check(self, revision):
         if revision != self.revision:

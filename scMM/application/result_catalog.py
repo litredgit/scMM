@@ -2,7 +2,9 @@
 
 from copy import deepcopy
 from dataclasses import dataclass
+from math import isfinite
 
+import numpy as np
 import pandas as pd
 
 from scMM.util.lifecycle import stale_stored_reports
@@ -128,7 +130,19 @@ def serialize_reports(values, *, identities=None):
             payload["_result_identity"] = identities[name]
         payload["_observation_dependencies"] = sorted(metadata_dependencies(name, result, values))
         reports[name] = payload
-    return reports
+    return portable_report(reports)
+
+
+def portable_report(value):
+    if isinstance(value, (np.ndarray, np.generic)):
+        return portable_report(value.tolist())
+    if isinstance(value, dict):
+        return {key: portable_report(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [portable_report(item) for item in value]
+    if value is pd.NA or (isinstance(value, float) and not isfinite(value)):
+        return None
+    return value
 
 
 def restore_report(name, value):

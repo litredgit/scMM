@@ -42,17 +42,23 @@ def make_experiment() -> oms.MSExperiment:
 
 
 @pytest.mark.parametrize("aggregate", ["max", "sum"])
-def test_alignment_writes_original_order_into_reused_buffer(aggregate):
-    output = np.full((2, 3), -1, dtype=np.float32)
+@pytest.mark.parametrize("dtype", [np.float32, np.float64])
+def test_alignment_writes_original_order_into_reused_buffer(aggregate, dtype):
+    output = np.full((2, 3), -1, dtype=dtype)
     frame, _ = align_frame(
         make_experiment(), [200.0, 100.0, 150.0], out=output, aggregate=aggregate, distance=1
     )
     np.testing.assert_array_equal(frame.values, [[0.0, 10.0, 0.0], [0.0, 20.0, 0.0]])
+    assert frame.values.dtype == dtype
     assert np.shares_memory(frame.values, output)
     with pytest.raises(ValueError, match="shape"):
         align_frame(make_experiment(), [100.0], out=output)
-    with pytest.raises(TypeError, match="float32"):
-        align_frame(make_experiment(), [100.0], out=np.zeros((2, 1)))
+    with pytest.raises(TypeError, match="float32 or float64"):
+        align_frame(make_experiment(), [100.0], out=np.zeros((2, 1), dtype=np.int64))
+    short = np.full((1, 3), -1, dtype=dtype)
+    with pytest.raises(ValueError, match="number of selected scans"):
+        align_frame(make_experiment(), [200.0, 100.0, 150.0], out=short)
+    np.testing.assert_array_equal(short, -1)
 
 
 def test_prepare_peaks_sorts_filters_and_combines_duplicates() -> None:
@@ -222,3 +228,16 @@ def test_align_frame_restores_requested_target_order() -> None:
     assert frame.columns.tolist() == [200.0, 100.0]
     np.testing.assert_allclose(frame[200.0], 0.0)
     np.testing.assert_allclose(frame[100.0], [10.0, 20.0])
+
+
+def test_alignment_keeps_matched_intensity_precision(monkeypatch):
+    value = np.float64(16_777_217)
+    monkeypatch.setattr(
+        "scMM.file._alignment.extract_peaks",
+        lambda *_args, **_kwargs: (np.array([100.0]), np.array([value])),
+    )
+    frame, _, reference = align_frame(make_experiment(), [100.0], reference=([100.0], 10))
+    np.testing.assert_array_equal(frame.to_numpy(), value)
+    np.testing.assert_array_equal(reference.to_numpy(), value)
+    explicit, _ = align_frame(make_experiment(), [100.0], dtype=np.float32)
+    assert explicit.to_numpy()[0, 0] == np.float32(value)

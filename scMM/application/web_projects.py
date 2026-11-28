@@ -23,8 +23,10 @@ from .workspace_state import WorkspaceError
 
 def project_candidate(project):
     """Copy mutable data/annotations before importing or synchronizing metadata."""
+    from .data_views import copy_catalogue_state
+
     candidate = copy(project)
-    candidate.ion_state = deepcopy(project.ion_state)
+    candidate.ion_state = copy_catalogue_state(project.ion_state)
     candidate.manifest = deepcopy(project.manifest)
     candidate.saved_reports = deepcopy(project.saved_reports)
     candidate.views = deepcopy(project.views)
@@ -240,8 +242,8 @@ class ProjectWorkflow:
                 self._project_openings[folder] = self._project_openings.get(folder, 0) + 1
             try:
                 project = self.store.open(folder)
+                workspace.discard_views()
                 with self._lock:
-                    workspace.discard_views()
                     workspace.project = project
             finally:
                 with self._lock:

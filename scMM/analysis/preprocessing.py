@@ -28,7 +28,7 @@ def real(name, value, low=0, *, inclusive=False):
     return float(value)
 
 
-def normalization_options(method, *, scale=1.0, axis=None, reference="median", pseudo=1e-6):
+def normalization_options(method, *, scale=1.0, axis=None, reference="median"):
     if method == "total":
         return {"scale": real("scale", scale)}
     if method in {"max", "zscore", "minmax"}:
@@ -41,9 +41,7 @@ def normalization_options(method, *, scale=1.0, axis=None, reference="median", p
                 "reference must be median or mean; custom vectors use the Python normalization API"
             )
         return {"reference": reference}
-    if method == "log":
-        return {"pseudo": real("pseudo", pseudo, inclusive=True)}
-    if method != "quantile":
+    if method not in {"log", "quantile"}:
         raise ValueError("unsupported normalization method")
     return {}
 

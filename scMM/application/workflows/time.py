@@ -4,13 +4,16 @@ import json
 from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from . import time_analysis
-from .web_support import table_view
+from .. import time_analysis
+from ..web_support import table_view
 
 
 class TimeWorkflow:
+    def __init__(self, service):
+        self._service = service
+
     def time_info(self, identity, *, query="", offset=0, limit=200):
-        with self.access(identity) as workspace:
+        with self._service.access(identity) as workspace:
             data = workspace.require_project().workspace.require_data()
             rows = time_analysis.info(data)
             saved = workspace.require_project().views.get("figures", {}).get("time_plot", {})
@@ -46,7 +49,7 @@ class TimeWorkflow:
     def time_result(self, identity, key):
         from scMM.util.time_results import require_run
 
-        with self.access(identity) as workspace:
+        with self._service.access(identity) as workspace:
             data = workspace.require_project().workspace.require_data()
             run = require_run(data, key)
             return {
@@ -60,13 +63,13 @@ class TimeWorkflow:
             }
 
     def run_time(self, identity, revision, operation, options):
-        self.require_plugin("time")
+        self._service.require_plugin("time")
         from scMM.plugins._time import run_time
 
-        return run_time(self, identity, revision, operation, options)
+        return run_time(self._service, identity, revision, operation, options)
 
     def time_download(self, identity, key):
-        with self.access(identity) as workspace:
+        with self._service.access(identity) as workspace:
             data = workspace.require_project().workspace.require_data()
             tables = time_analysis.result_tables(data, key)
             metadata = time_analysis.result_metadata(data, key)

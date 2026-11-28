@@ -117,7 +117,7 @@ def test_batched_add_failure_does_not_add_first_file(api):
         headers=headers,
         json={"revision": 1, "root": "Raw", "paths": ["alpha.mzML", "missing.mzML"]},
     )
-    assert failed.status_code == 404
+    assert failed.status_code == 403
     assert client.get("/api/v1/workspace", headers=headers).json() == state
 
 

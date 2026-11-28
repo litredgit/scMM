@@ -3,7 +3,8 @@
 import json
 from typing import Literal
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import Field, field_validator
 
 from ..workflow_schemas import Controls
 from .projects import Identity, Service
@@ -21,15 +22,25 @@ class Resources(Controls):
     lipid_database_dir: str | None
 
 
-class Draft(Controls):
+class DraftState(Controls):
+    state: dict
+
+    @field_validator("state")
+    @classmethod
+    def bounded_state(cls, value):
+        encoded = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        if len(encoded.encode()) > 2 * 1024**2:
+            raise ValueError("页面草稿超过 2 MiB。请缩小草稿后重试。")
+        return value
+
+
+class Draft(DraftState):
     nonce: str
-    state: dict
-    tab_id: str
+    tab_id: str = Field(max_length=64)
 
 
-class WorkspaceDraft(Controls):
+class WorkspaceDraft(DraftState):
     revision: int
-    state: dict
     partial: bool = False
 
 
@@ -46,11 +57,12 @@ class ClosedPages(Controls):
 @router.get("/maintenance/status")
 def status(request: Request):
     service = request.app.state.maintenance
-    report = getattr(service, "restoration_report", {})
+    state = service.control_state() if service else {}
+    report = state.get("restoration", {})
     owner = request.state.principal["id"]
     return {
-        "request": service.request if service else None,
-        "completed": bool(service and service.completed),
+        "request": state.get("request"),
+        "completed": bool(state.get("completed")),
         "restoration": {
             key: sum(r.get("owner_id") == owner for r in report.get(key, []))
             for key in ("restored", "failed")
@@ -93,18 +105,25 @@ def standalone_draft(body: Draft, request: Request):
 
 @router.get("/maintenance/draft")
 def standalone_restore(request: Request, tab_id: str = Query(max_length=64)):
-    return getattr(request.app.state.workspaces, "maintenance_pages", {}).get(
-        (request.state.principal["id"], tab_id), {}
-    )
+    manager = request.app.state.workspaces
+    with manager._lock:
+        return getattr(manager, "maintenance_pages", {}).get(
+            (request.state.principal["id"], tab_id), {}
+        )
 
 
 @router.put("/workspace/draft")
 def save_workspace_draft(body: WorkspaceDraft, manager: Service, identity: Identity):
     with manager.access(identity) as workspace:
         workspace.check(body.revision)
-        workspace.client_state = (
+        candidate = (
             {**getattr(workspace, "client_state", {}), **body.state} if body.partial else body.state
         )
+        try:
+            WorkspaceDraft.bounded_state(candidate)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        workspace.client_state = candidate
     return {"saved": True}
 
 
@@ -117,22 +136,28 @@ def restore(manager: Service, identity: Identity):
 @router.get("/admin/resources")
 def resources(request: Request):
     config = request.app.state.server_config
+    from scMM.application.maintenance_runner import pending_lock
+
     pending = config.path.with_suffix(".pending.json")
+    with pending_lock(config.path):
+        staged = json.loads(pending.read_text()) if pending.exists() else None
     return {
         "active": {k: config.values[k] for k in EDITABLE},
-        "pending": json.loads(pending.read_text()) if pending.exists() else None,
+        "pending": staged,
     }
 
 
 @router.put("/admin/resources")
 def edit_resources(body: Resources, request: Request):
+    from scMM.application.maintenance_runner import pending_lock
     from scMM.application.projects import write_json
     from scMM.application.server_config import ServerConfig
 
     config = request.app.state.server_config
     values = {**config.values, **body.model_dump()}
     ServerConfig(values, config.path).validate()
-    write_json(config.path.with_suffix(".pending.json"), body.model_dump())
+    with pending_lock(config.path):
+        write_json(config.path.with_suffix(".pending.json"), body.model_dump(), mode=0o600)
     return {"saved": True, "requires_restart": True}
 
 

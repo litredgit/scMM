@@ -87,6 +87,29 @@ def test_correlations_zeros_constant_and_replicate_permutation():
     assert a.layout.meta["association"]["n"] == 3
 
 
+@pytest.mark.parametrize("method", ["spearman", "kendall"])
+def test_rank_permutations_use_the_selected_statistic(method):
+    from scipy import stats
+
+    data = dataset()
+    a, b = np.arange(6), np.array([0, 1, 1, 1, 2, 100])
+    data.obs = data.obs.assign(a=a, b=b, rep=data.obs_names)
+    statistic = {"spearman": stats.spearmanr, "kendall": stats.kendalltau}[method]
+    rng = np.random.default_rng(19)
+    observed = abs(statistic(a, b).statistic)
+    expected = (
+        1
+        + sum(
+            abs(statistic(a, rng.permutation(b)).statistic) >= observed - 1e-12 for _ in range(99)
+        )
+    ) / 100
+    figure = association(
+        data, x="obs:a", y="obs:b", replicate_key="rep", permutations=99, method=method, seed=19
+    )
+    assert figure.layout.meta["association"]["permutation_p"] == expected
+    assert figure.data[2].name == "OLS mean-response interval"
+
+
 def test_memberships_keep_stable_ids_not_names():
     data = dataset()
     data.var["name"] = ["same", "same", "other"]

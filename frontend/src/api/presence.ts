@@ -15,19 +15,6 @@ let suspended = false
 let route = '/login'
 let workspaceId: string | undefined
 let ready: Promise<void> | undefined
-const validRoutes = new Set([
-  '/projects',
-  '/samples',
-  '/raw',
-  '/extraction',
-  '/preprocess',
-  '/analysis',
-  '/results',
-  '/parameters',
-  '/account',
-  '/admin/monitor',
-  '/login',
-])
 function body(closed = false, suspended = false) {
   return {
     id: pageId,
@@ -96,15 +83,33 @@ async function send(closed = false, suspend = false) {
     sending = false
   }
 }
-export function updatePresence(path: string, authenticated: boolean, workspace?: string) {
-  route = authenticated && validRoutes.has(path) ? path : '/login'
+export function updatePresence(
+  path: string | undefined,
+  authenticated: boolean,
+  workspace?: string,
+) {
+  route = authenticated && path ? path : '/login'
   workspaceId = authenticated ? workspace : undefined
   void send()
 }
 export function startPresence() {
   ready ??= send()
-  const timer = window.setInterval(() => void send(), 20000)
-  const visibility = () => void send()
+  let timer: number
+  const schedule = () => {
+    clearTimeout(timer)
+    timer = window.setTimeout(
+      () => {
+        void send()
+        schedule()
+      },
+      document.hidden ? 30000 : 20000,
+    )
+  }
+  const visibility = () => {
+    void send()
+    schedule()
+  }
+  schedule()
   const hide = (event: PageTransitionEvent) => {
     if (!event.persisted) {
       closing = true
@@ -121,7 +126,7 @@ export function startPresence() {
   return {
     ready,
     stop: () => {
-      clearInterval(timer)
+      clearTimeout(timer)
       document.removeEventListener('visibilitychange', visibility)
       window.removeEventListener('pagehide', hide)
       window.removeEventListener('pageshow', show)

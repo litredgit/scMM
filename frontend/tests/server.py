@@ -162,13 +162,13 @@ def main():
         )
         os.environ["SCMM_LIPID_DATABASE_DIR"] = str(database)
         os.environ["SCMM_PREFERENCES"] = str(root / "preferences.json")
-        # Load the review files into this temporary preset store, never the live one.
-        from scMM.application.web_lipids import save_rules_preset
+        from scMM.application.web_lipids import rules_presets
 
-        rules_root = Path(__file__).resolve().parents[2] / "rules/lipids"
-        for path in sorted(rules_root.glob("*.review-v1.json")):
-            rules = json.loads(path.read_text(encoding="utf-8"))
-            save_rules_preset(rules["name"], rules)
+        rules_root = Path(__file__).resolve().parents[2] / "scMM/resources/lipid_rules"
+        rule_files = sorted(rules_root.glob("*.review-v1.json"))
+        expected = {json.loads(path.read_text(encoding="utf-8"))["name"] for path in rule_files}
+        if not expected or not expected.issubset(rules_presets()):
+            raise RuntimeError("Synthetic browser fixtures require the bundled review rules")
         auth, initial = AuthStore.initialize(root / "auth.sqlite3", "browser")
         _, principal = auth.login("browser", initial, "local")
         auth.change_password(

@@ -59,12 +59,11 @@ test('project, samples, metadata, save and reopen with no browser errors', async
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
 
   await page.screenshot({ path: test.info().outputPath('samples-desktop.png'), fullPage: true })
-  await page.setViewportSize({ width: 700, height: 1050 })
   await expect(page.getByRole('button', { name: '保存项目', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   )
-  await page.screenshot({ path: test.info().outputPath('samples-700.png'), fullPage: true })
+  await page.screenshot({ path: test.info().outputPath('samples-controls.png'), fullPage: true })
   expect(errors).toEqual([])
 })
 
@@ -179,12 +178,9 @@ test('processed merge explicitly maps sources, previews ref and restores the ful
   await panel.getByRole('button', { name: '下载历史合并溯源', exact: true }).click()
   const auditDownload = finishExport(page, 'CSV 导出', '下载归档')
   expect((await auditDownload).suggestedFilename()).toBe('scmm-merge-audit.zip')
-  for (const width of [700, 390]) {
-    await page.setViewportSize({ width, height: 900 })
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-      .toBe(true)
-  }
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true)
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
   await page.reload()

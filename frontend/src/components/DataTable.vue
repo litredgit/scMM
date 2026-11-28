@@ -78,6 +78,26 @@ function span(table: DataTable, index: number) {
   while (end < table.rows.length && table.rows[end]?.source_path === row.source_path) end++
   return end - index
 }
+const rowKeys = computed(() => {
+  const occurrences = new Map<string, number>()
+  return props.table.rows.map((row) => {
+    const values = [
+      row.id,
+      row.feature_id,
+      row.cell_id,
+      row.sample_id,
+      row.group,
+      row.cluster,
+      row.source_path,
+      row.metric,
+      row.window,
+    ]
+    const key = JSON.stringify(values.some((value) => value != null) ? values : row)
+    const count = occurrences.get(key) ?? 0
+    occurrences.set(key, count + 1)
+    return `${key}:${count}`
+  })
+})
 </script>
 <template>
   <div class="data-table">
@@ -99,7 +119,7 @@ function span(table: DataTable, index: number) {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="(row, i) in table.rows" :key="i">
+        <tr v-for="(row, i) in table.rows" :key="rowKeys[i]">
           <template v-for="key in columns" :key="key"
             ><td
               v-if="

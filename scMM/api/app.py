@@ -1,6 +1,7 @@
 """Single-process ASGI host for the local scientific workbench."""
 # ruff: noqa: RUF001
 
+import asyncio
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,10 +19,12 @@ from scMM.application.projects import PROJECT_ROOT
 from scMM.application.storage import StorageRoot
 from scMM.application.web_workspace import WebWorkspaceService, WorkspaceError
 
+from .page_routes import SPA_ROUTES
 from .routers import (
     ai,
     analysis,
     auth,
+    documentation,
     exchange,
     extraction,
     ions,
@@ -153,15 +156,20 @@ def create_app(
                     and request.method == "GET"
                     and (
                         authorization.startswith("Bearer ")
-                        and auth_store.check_operations_token(authorization.removeprefix("Bearer "))
+                        and await asyncio.to_thread(
+                            auth_store.check_operations_token, authorization.removeprefix("Bearer ")
+                        )
                     )
                 )
                 if not public and not operations:
-                    principal = auth_store.authenticate(
+                    principal = await asyncio.to_thread(
+                        auth_store.authenticate,
                         request.cookies.get(server_config.cookie_name, ""),
                         activity=request.headers.get("x-scmm-activity") == "user",
                     )
-                    monitoring.note(principal, request.headers.get("x-scmm-activity") == "user")
+                    await asyncio.to_thread(
+                        monitoring.note, principal, request.headers.get("x-scmm-activity") == "user"
+                    )
                     request.state.principal = principal
                     context_token = actor.set(principal)
                     if principal["must_change"] and path not in {
@@ -190,29 +198,8 @@ def create_app(
             if maintenance_state:
                 from scMM.application.deployment_maintenance import admit
 
-                deployment_operation = admit(maintenance_state, path, request.method)
-            if (
-                maintenance_state
-                and maintenance_state.request
-                and maintenance_state.request.get("policy") != "deployment"
-                and request.method not in {"GET", "HEAD", "OPTIONS"}
-                and path.startswith("/api/")
-                and path
-                not in {
-                    "/api/v1/presence/heartbeat",
-                    "/api/v1/presence/register",
-                    "/api/v1/ai/history",
-                    "/api/v1/workspace/maintenance/draft",
-                    "/api/v1/maintenance/draft",
-                    "/api/v1/workspaces/resume",
-                }
-                and not path.startswith("/api/v1/admin/maintenance/")
-                and not path.startswith("/api/v1/auth/")
-            ):
-                raise WorkspaceError(
-                    "服务正在收集维护暂存，请等待完成或由管理员取消。",
-                    code="maintenance",
-                    status=503,
+                deployment_operation = await asyncio.to_thread(
+                    admit, maintenance_state, path, request.method
                 )
             if (
                 principal
@@ -221,7 +208,8 @@ def create_app(
                     part in path for part in ("/admin/", "/auth/", "/runtime", "/presence/")
                 )
             ):
-                operation = monitoring.begin(
+                operation = await asyncio.to_thread(
+                    monitoring.begin,
                     principal,
                     path,
                     request.headers.get("x-scmm-page-id"),
@@ -238,7 +226,9 @@ def create_app(
                 and "/auth/" not in path
                 and "/admin/" not in path
             ):
-                auth_store.audit(principal["id"], request.method, path, response.status_code)
+                await asyncio.to_thread(
+                    auth_store.audit, principal["id"], request.method, path, response.status_code
+                )
             if operation:
                 tracked = operation
                 iterator = response.body_iterator
@@ -252,22 +242,25 @@ def create_app(
                         outcome = 500
                         raise
                     finally:
-                        monitoring.end(tracked, outcome)
+                        await asyncio.to_thread(monitoring.end, tracked, outcome)
 
                 response.body_iterator = monitored_body()
                 operation = None
         except (AuthError, WorkspaceError) as exc:
             if principal:
-                auth_store.audit(principal["id"], "request_denied", path, exc.status)
+                await asyncio.to_thread(
+                    auth_store.audit, principal["id"], "request_denied", path, exc.status
+                )
             response = JSONResponse(
                 {"error": {"code": exc.code, "message": str(exc)}}, status_code=exc.status
             )
         finally:
             if deployment_operation is not None:
-                with maintenance_state._control_lock:
-                    maintenance_state._deployment_requests.pop(deployment_operation, None)
+                from scMM.application.deployment_maintenance import release_request
+
+                await asyncio.to_thread(release_request, maintenance_state, deployment_operation)
             if operation:
-                monitoring.end(operation, status)
+                await asyncio.to_thread(monitoring.end, operation, status)
             if context_token is not None:
                 actor.reset(context_token)
         if request.url.path.startswith("/api/") or response.headers.get(
@@ -275,6 +268,13 @@ def create_app(
         ).startswith("text/html"):
             response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "connect-src 'self' data: blob:; "
+            "img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; "
+            "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+        )
         response.headers["Referrer-Policy"] = "same-origin"
         return response
 
@@ -350,6 +350,7 @@ def create_app(
         raw.router,
         extraction.router,
         exchange.router,
+        documentation.router,
         analysis.router,
         methods.router,
         lipids.router,
@@ -364,25 +365,10 @@ def create_app(
             raise RuntimeError("Vue 前端尚未构建；请在 frontend/ 执行 npm ci 和 npm run build。")
         app.mount("/assets", StaticFiles(directory=static_root / "assets"), name="assets")
 
-        @app.get("/", include_in_schema=False)
-        @app.get("/projects", include_in_schema=False)
-        @app.get("/samples", include_in_schema=False)
-        @app.get("/parameters", include_in_schema=False)
-        @app.get("/results", include_in_schema=False)
-        @app.get("/raw", include_in_schema=False)
-        @app.get("/extraction", include_in_schema=False)
-        @app.get("/preprocess", include_in_schema=False)
-        @app.get("/ions", include_in_schema=False)
-        @app.get("/analysis", include_in_schema=False)
-        @app.get("/cell-extraction", include_in_schema=False)
-        @app.get("/annotation", include_in_schema=False)
-        @app.get("/annotation/evidence", include_in_schema=False)
-        @app.get("/data-check", include_in_schema=False)
-        @app.get("/data-editor", include_in_schema=False)
-        @app.get("/statistics", include_in_schema=False)
-        @app.get("/admin/monitor", include_in_schema=False)
-        @app.get("/account", include_in_schema=False)
         def index():
             return FileResponse(static_root / "index.html")
+
+        for path in SPA_ROUTES:
+            app.add_api_route(path, index, methods=["GET"], include_in_schema=False)
 
     return app

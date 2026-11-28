@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .auth import AuthError, digest
+from .sqlite_store import configure_connection, enable_wal
 
 
 class MonitorStore:
@@ -29,6 +30,8 @@ class MonitorStore:
                 self.schema(db)
             elif db.execute("PRAGMA user_version").fetchone()[0] != 1:
                 raise ValueError("监控数据库版本不受支持。")
+            else:
+                enable_wal(db)
 
     @staticmethod
     def schema(db):
@@ -65,6 +68,7 @@ class MonitorStore:
             )
             db.row_factory = sqlite3.Row
             try:
+                configure_connection(db)
                 with db:
                     yield db
             finally:

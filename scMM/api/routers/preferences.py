@@ -11,9 +11,12 @@ router = APIRouter(prefix="/api/v1", tags=["preferences"])
 
 
 @router.get("/runtime")
-async def runtime(request: Request):
+def runtime(request: Request):
     state = request.app.state.monitor.snapshot()
     decision = state["update_readiness"]
+    service = request.app.state.maintenance
+    maintenance = service.control_state() if service else {}
+    completed = maintenance.get("completed")
     return {
         "unsaved_workspaces": decision["unsaved_workspaces"],
         "busy_workspaces": decision["busy_workspaces"],
@@ -23,15 +26,13 @@ async def runtime(request: Request):
         "update_readiness": decision,
         "maintenance_checkpoint": (
             {
-                "id": request.app.state.maintenance.completed["id"],
+                "id": completed["id"],
                 "verified": True,
                 "frozen": True,
-                "created": request.app.state.maintenance.completed["created"],
+                "created": completed["created"],
                 "instance": state["instance"],
             }
-            if request.app.state.maintenance
-            and request.app.state.maintenance.completed
-            and getattr(request.app.state.workspaces, "maintenance_frozen", False)
+            if completed and maintenance.get("frozen")
             else None
         ),
     }

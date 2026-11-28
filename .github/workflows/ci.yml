@@ -4,6 +4,7 @@ on:
   push:
     branches: [dev, main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 permissions:
@@ -11,6 +12,7 @@ permissions:
 
 jobs:
   changes:
+    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
     runs-on: ubuntu-latest
     outputs:
       run: ${{ steps.plan.outputs.run }}
@@ -25,6 +27,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
+          FULL_CI: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'full-ci') }}
         run: |
           # A main fast-forward containing only commits already on dev adds no new code.
           # Unique main commits, initial pushes and PRs still receive checks.
@@ -39,7 +42,9 @@ jobs:
             fi
           fi
           echo 'run=true' >> "$GITHUB_OUTPUT"
-          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+          if [ "$FULL_CI" = true ] && [ "$EVENT_NAME" = pull_request ]; then
+            python scripts/test_blocks.py --all --ci-event "$GITHUB_EVENT_PATH" --write-plan /tmp/test-plan.json --github-output "$GITHUB_OUTPUT"
+          elif [ "$FULL_CI" = true ]; then
             python scripts/test_blocks.py --all --write-plan /tmp/test-plan.json --github-output "$GITHUB_OUTPUT"
           else
             python scripts/test_blocks.py --ci-event "$GITHUB_EVENT_PATH" --lightweight --write-plan /tmp/test-plan.json --github-output "$GITHUB_OUTPUT"
@@ -91,8 +96,8 @@ jobs:
       - name: Install frontend dependencies
         if: needs.changes.outputs.node == 'true'
         run: npm --prefix frontend ci
-      - name: Install Chromium for manual full checks
-        if: github.event_name == 'workflow_dispatch'
+      - name: Install Chromium for full checks
+        if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'full-ci')
         run: npm --prefix frontend exec -- playwright install --with-deps chromium
       - name: Run the shared check entry
         run: uv run --no-sync python scripts/test_blocks.py --plan /tmp/test-plan.json --run

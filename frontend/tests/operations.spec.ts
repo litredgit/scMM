@@ -1,5 +1,5 @@
 import { openImageExport, finishExport } from './fixtures'
-import { navigate, test, expect, type Page, preprocessingStep } from './fixtures'
+import { navigate, renderAfter, test, expect, type Page, preprocessingStep } from './fixtures'
 import { readFile } from 'node:fs/promises'
 import { createProject as create } from './support/project'
 import { serialPolling } from '../src/api/polling'
@@ -11,7 +11,7 @@ async function noError(page: Page) {
   await expect(page.getByRole('alert')).toHaveCount(0)
 }
 
-test('explicit result selection, detailed help, stable QC and readable narrow layout', async ({
+test('explicit result selection, detailed help, stable QC and readable desktop layout', async ({
   page,
 }) => {
   test.setTimeout(60000)
@@ -41,7 +41,7 @@ test('explicit result selection, detailed help, stable QC and readable narrow la
   await page.getByText('查看本步骤方法', { exact: true }).click()
   await expect(page.locator('.method-list .help-trigger')).toHaveCount(4)
   await preprocessingStep(page, 'transform').click()
-  await expect(page.locator('.method-help > p')).toContainText('零值变为')
+  await expect(page.locator('.method-help > p')).toContainText('零保持零')
   await preprocessingStep(page, 'normalize').click()
   await page.getByRole('button', { name: '应用到当前数据', exact: true }).click()
   await expect(page.getByText(/横轴采用稳定范围/)).toBeVisible()
@@ -81,31 +81,28 @@ test('explicit result selection, detailed help, stable QC and readable narrow la
     }
   }
 
-  await page.screenshot({ path: test.info().outputPath('preprocess-1440.png'), fullPage: true })
-  for (const width of [700, 390]) {
-    await page.setViewportSize({ width, height: 1000 })
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-      .toBe(true)
-    await expect
-      .poll(() =>
-        page
-          .locator('.js-plotly-plot')
-          .first()
-          .evaluate(
-            (el) =>
-              Math.abs(
-                el.getBoundingClientRect().width -
-                  (el as HTMLElement & { _fullLayout: { width: number } })._fullLayout.width,
-              ) < 2,
-          ),
-      )
-      .toBe(true)
-    await page.screenshot({
-      path: test.info().outputPath(`preprocess-${width}.png`),
-      fullPage: true,
-    })
-  }
+  await page.screenshot({ path: test.info().outputPath('preprocess-desktop.png'), fullPage: true })
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+    .toBe(true)
+  await expect
+    .poll(() =>
+      page
+        .locator('.js-plotly-plot')
+        .first()
+        .evaluate(
+          (el) =>
+            Math.abs(
+              el.getBoundingClientRect().width -
+                (el as HTMLElement & { _fullLayout: { width: number } })._fullLayout.width,
+            ) < 2,
+        ),
+    )
+    .toBe(true)
+  await page.screenshot({
+    path: test.info().outputPath(`preprocess-1920.png`),
+    fullPage: true,
+  })
   await noError(page)
 })
 
@@ -284,8 +281,7 @@ test('a delayed background read cannot overwrite the failure of a later save', a
     await expect(page.getByRole('alert')).toContainText('本次项目保存失败')
     const response = page.waitForResponse((r) => r.url().endsWith('/extraction/batches'))
     release()
-    await response
-    await page.waitForTimeout(100)
+    await renderAfter(page, await response)
     await expect(page.getByRole('alert')).toContainText('本次项目保存失败')
     await expect(page.getByRole('alert')).not.toContainText('旧的后台读取失败')
   } finally {

@@ -16,7 +16,7 @@ from tests.support.maintenance import closure_app, stale_page
 
 def test_http_draft_freeze_and_owner_restoration(tmp_path):
     for name in ("raw", "projects", "cache", "temp", "recycle", "private"):
-        (tmp_path / name).mkdir()
+        (tmp_path / name).mkdir(mode=0o700)
     auth, credential = AuthStore.initialize(tmp_path / "private/auth.sqlite3", "tester")
     MonitorStore.initialize(tmp_path / "private/monitor.sqlite3")
     values = {
@@ -116,6 +116,25 @@ def confirm(client, reviewed):
             "reason": "Operator confirmed all reviewed tabs closed",
         },
     )
+
+
+def test_closed_page_review_and_confirmation_are_frozen_during_snapshot(tmp_path):
+    build, _auth, credential = closure_app(tmp_path)
+    app = build()
+    with TestClient(app, headers={"X-SCMM-Client": "web"}) as client:
+        login_client(client, credential)
+        stale_page(client, app)
+        reviewed = review(client)
+        service = app.state.maintenance
+        with service._control_lock:
+            service._strict_snapshotting = True
+        try:
+            assert client.post("/api/v1/admin/maintenance/closed-pages/review").status_code == 400
+            assert confirm(client, reviewed).status_code == 400
+            assert app.state.monitor.store.pages()
+        finally:
+            with service._control_lock:
+                service._strict_snapshotting = False
 
 
 def test_closed_confirmation_keeps_unsaved_workspaces_and_verifies_recovery(tmp_path):
@@ -221,3 +240,20 @@ def test_closure_confirmation_does_not_retire_live_pages_or_bypass_requests(tmp_
         checkpoint = client.post("/api/v1/admin/maintenance/checkpoint")
         assert checkpoint.status_code == 400
         assert not getattr(app.state.workspaces, "maintenance_frozen", False)
+
+
+def test_partial_draft_checks_total_bytes_and_preserves_saved_value(tmp_path):
+    build, _, credential = closure_app(tmp_path)
+    with TestClient(build(), headers={"X-SCMM-Client": "web"}) as client:
+        login_client(client, credential)
+        workspace = client.post("/api/v1/workspaces").json()["workspace_id"]
+        client.headers["X-SCMM-Workspace"] = workspace
+        existing = {"first": "稿" * 400_000}
+        draft = "/api/v1/workspace/draft"
+        client.put(draft, json={"revision": 0, "state": existing}).raise_for_status()
+        rejected = client.put(
+            draft,
+            json={"revision": 0, "partial": True, "state": {"second": "稿" * 400_000}},
+        )
+        assert rejected.status_code == 422
+        assert client.get("/api/v1/workspace/maintenance/draft").json() == existing

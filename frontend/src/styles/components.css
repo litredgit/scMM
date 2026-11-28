@@ -1,0 +1,339 @@
+/* Shared semantic actions and form guidance. */
+body {
+  font-size: var(--text-body);
+}
+.field-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+}
+.field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-weight: 400;
+}
+.help-tip {
+  display: inline-flex;
+  vertical-align: middle;
+}
+button.help-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  border: 1px solid #79889f;
+  border-radius: 50%;
+  background: #fff;
+  color: #4e607a;
+  font-size: 14px;
+  line-height: 1;
+  cursor: help;
+}
+button.help-trigger:hover {
+  background: #eaf1ff;
+  border-color: #265ddd;
+}
+.help-popover {
+  position: fixed;
+  z-index: 10000;
+  padding: 14px 16px;
+  border-radius: 3px;
+  background: #21304a;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.7;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  box-shadow: 0 6px 24px #21304a33;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+button.save,
+.button.save,
+button.download {
+  color: #176647;
+  background: #e8f5ee;
+  border-color: #a8d4be;
+}
+button.save:hover:not(:disabled),
+.button.save:hover,
+button.download:hover:not(:disabled) {
+  background: #d6eddf;
+  border-color: #35875e;
+}
+button.preview,
+.button.preview {
+  color: #6440a1;
+  background: #f1ecfa;
+  border-color: #c9b7e6;
+}
+button.preview:hover:not(:disabled),
+.button.preview:hover {
+  background: #e6dcf4;
+  border-color: #916ebd;
+}
+button.restore,
+.button.restore {
+  color: #875000;
+  background: #fff4dc;
+  border-color: #e7c17f;
+}
+button.restore:hover:not(:disabled),
+.button.restore:hover {
+  background: #ffebbd;
+  border-color: #bf8731;
+}
+button.danger {
+  color: #a62d3e;
+  background: #fff0f2;
+  border-color: #e9b7c0;
+}
+button.danger:hover:not(:disabled) {
+  background: #fbdde3;
+  border-color: #be5466;
+}
+.method-help {
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  padding: 16px;
+  border-radius: 3px;
+}
+.method-help p {
+  color: #475569;
+}
+.method-list {
+  margin-bottom: 0;
+}
+.method-list > div {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.method-list dt {
+  font-weight: 600;
+}
+.method-list dd {
+  margin: 5px 0 0;
+  color: #475569;
+}
+.plot-actions {
+  align-items: flex-end;
+  gap: 12px;
+}
+.plot-actions label {
+  font-size: 14px;
+}
+.data-table table {
+  font-size: 14px;
+}
+.check-list label {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.file-entry .file-info {
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+.file-entry strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.file-entry small {
+  display: block;
+  white-space: normal;
+}
+.file-entries .file-entry {
+  flex-shrink: 0;
+}
+.result-context,
+.latest-result {
+  padding: 14px 16px;
+  background: #eef4ff;
+  border-radius: 3px;
+  margin: 14px 0;
+  overflow-wrap: anywhere;
+}
+.result-context p,
+.latest-result p {
+  margin: 6px 0;
+}
+.selection-list li {
+  overflow-wrap: anywhere;
+}
+.file-entry-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.file-entry-row > .file-entry {
+  flex: 1;
+  min-width: 0;
+}
+.inline-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.inline-check input,
+.check-list input {
+  min-height: 0;
+}
+/* Compact extraction controls: size numeric inputs by value and keep range bounds together. */
+.parameter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+  margin: 16px 0;
+}
+.parameter-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 100%;
+}
+.parameter-field {
+  width: var(--field-width, 190px);
+  max-width: 100%;
+  min-width: 0;
+}
+.parameter-field input:not([type='checkbox']),
+.parameter-field select {
+  width: min(100%, var(--input-width, 160px));
+}
+.parameter-group-wide,
+.parameter-group-wide .parameter-field,
+.parameter-group-wide input:not([type='checkbox']) {
+  width: 100%;
+}
+.parameter-group-wide {
+  flex-basis: 100%;
+}
+button.parameter-toggle {
+  margin: 2px 0 14px;
+}
+.parameter-advanced {
+  border-top: 1px solid var(--border);
+  margin-bottom: 18px;
+  padding-top: 14px;
+}
+.parameter-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.parameter-categories button {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+.parameter-categories .selected {
+  color: var(--blue);
+  border-color: var(--blue);
+  background: #eff6ff;
+}
+.parameter-advanced [role='tabpanel'] {
+  padding-top: 4px;
+}
+.raw-parameter-panel .actions {
+  gap: 10px;
+}
+@media (max-width: 1380px) {
+  .raw-workflow {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Shared workflow layout: readable groups, local table scrolling, compact chart tools. */
+.main-shell main > section,
+.main-shell main > div {
+  min-width: 0;
+  max-width: 100%;
+}
+.card > h2:first-child,
+.card > .section-heading:first-child {
+  margin-bottom: 16px;
+}
+.card > .actions {
+  margin: 14px 0;
+}
+.field-grid {
+  align-items: end;
+}
+.actions > span,
+.actions > label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.table-scroll {
+  min-width: 0;
+  max-width: 100%;
+}
+.table-scroll th {
+  white-space: nowrap;
+}
+.data-table {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.data-table td {
+  vertical-align: top;
+}
+.data-table details {
+  max-width: min(800px, 75vw);
+  white-space: normal;
+}
+.data-table summary {
+  cursor: pointer;
+  line-height: 1.8;
+}
+.data-table details p {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.plot-shell {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.plot-actions {
+  padding: 12px;
+  background: var(--panel-soft);
+  border-radius: 3px;
+  justify-content: flex-start;
+}
+.plot-actions label {
+  flex: 1 1 150px;
+  max-width: 240px;
+}
+.table-sorting {
+  max-width: 620px;
+}
+.batch-progress {
+  padding: 16px;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  margin: 16px 0;
+}
+.batch-progress .metric-strip {
+  background: white;
+  margin-bottom: 16px;
+}
+progress {
+  width: 100%;
+  height: 12px;
+  accent-color: var(--blue);
+}
+.analysis-navigation {
+  position: sticky;
+  top: 18px;
+}

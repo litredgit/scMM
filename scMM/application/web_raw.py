@@ -15,7 +15,7 @@ from scMM.plot.raw import _peak_preserving_downsample, cell_detection_figure
 from scMM.plugins._extraction import normalize_selection, selected_packages
 
 from . import mz_lists
-from .cell_preview import initialize_ranges, submit_preview
+from .cell_preview import initialize_ranges, stop_preview_job, submit_preview
 from .parameters import automatic_mz_range
 from .preview_cache import file_identity
 from .processing import ProcessingParameters
@@ -164,13 +164,22 @@ class RawWorkflow:
                 },
             }
 
+    def raw_identity(self, sample):
+        from .storage import UNAVAILABLE_PATH
+
+        path = self.storage.resolve_raw_file(sample["storage"], sample["path"])
+        try:
+            return file_identity(path)
+        except (OSError, RuntimeError, ValueError):
+            raise PermissionError(UNAVAILABLE_PATH) from None
+
     def scan_catalog(self, identity, sample_id, ms_level):
         with self.access(identity) as workspace:
             sample = self.sample(workspace.require_project(), sample_id)
             if not workspace.raw or workspace.raw["sample_id"] != sample_id:
                 raise ValueError("请先打开当前样本。")
             preview = workspace.raw["preview"]
-            if preview.open_identity != file_identity(sample["path"]):
+            if preview.open_identity != self.raw_identity(sample):
                 raise ValueError("原始文件已改变，请重新打开。")
             frame = preview.total_ion_chromatogram(ms_level=ms_level)
             return {"indices": frame.scan_index.tolist(), "times": frame.rt_seconds.tolist()}
@@ -182,7 +191,7 @@ class RawWorkflow:
             raise ValueError("请先打开当前样本。")
         preview = workspace.raw["preview"]
         if (
-            preview.open_identity != file_identity(sample["path"])
+            preview.open_identity != self.raw_identity(sample)
             or str(preview.path) != sample["path"]
         ):
             raise ValueError("原始文件已改变，请重新打开。")
@@ -268,9 +277,7 @@ class RawWorkflow:
             if not workspace.raw or workspace.raw["sample_id"] != sample_id:
                 raise ValueError("请先打开当前样本。")
             preview = workspace.raw["preview"]
-            input_identity = file_identity(
-                self.storage.resolve_raw_file(sample["storage"], sample["path"])
-            )
+            input_identity = self.raw_identity(sample)
             if input_identity != preview.open_identity or str(preview.path) != sample["path"]:
                 raise ValueError("原始文件已改变，请重新打开。")
             revision = workspace.revision
@@ -298,8 +305,7 @@ class RawWorkflow:
             if (
                 not workspace.raw
                 or workspace.raw.get("preview") is not preview
-                or file_identity(self.storage.resolve_raw_file(sample["storage"], sample["path"]))
-                != input_identity
+                or self.raw_identity(sample) != input_identity
             ):
                 raise ValueError("诊断期间原始输入已改变，请重新打开。")
             payload = {
@@ -337,11 +343,7 @@ class RawWorkflow:
                 if project.manifest["feature_strategy"] in {"shared", "list"}
                 else [sample]
             )
-            inputs = {
-                s["path"]: file_identity(self.storage.resolve_raw_file(s["storage"], s["path"]))
-                for s in selected
-                if not s.get("result_only")
-            }
+            inputs = {s["path"]: self.raw_identity(s) for s in selected if not s.get("result_only")}
             if inputs.get(sample["path"]) != workspace.raw["preview"].open_identity:
                 raise ValueError("原始文件已改变，请重新打开。")
             request = {
@@ -398,8 +400,7 @@ class RawWorkflow:
             job = workspace.preview_job
             if not job or job["id"] != job_id or job["project_folder"] != project.folder:
                 raise ValueError("预览任务不属于当前项目。")
-            job["state_path"].with_name("stop.requested").touch()
-            job["future"].cancel()
+            stop_preview_job(job)
             return {
                 "workspace": self.view(workspace),
                 "value": self.preview_status_unlocked(workspace),
@@ -422,7 +423,11 @@ class RawWorkflow:
             if job["state_path"].with_name("stop.requested").is_file() or job["future"].cancelled():
                 raise ValueError("预览已停止，请重新运行。")
             result = job["future"].result()
-            if any(file_identity(p) != expected for p, expected in job["inputs"].items()):
+            samples = {sample["path"]: sample for sample in project.samples}
+            if any(
+                path not in samples or self.raw_identity(samples[path]) != expected
+                for path, expected in job["inputs"].items()
+            ):
                 raise ValueError("原始文件已改变，请重新预览。")
             detection = result["detection"]
             figure = figure_view(cell_detection_figure(detection))

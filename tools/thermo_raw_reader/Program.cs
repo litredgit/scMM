@@ -5,11 +5,12 @@ using System.Globalization;
 using ThermoFisher.CommonCore.Data.Business;
 using ThermoFisher.CommonCore.RawFileReader;
 
-// Spectrum mode writes only SCMMRAW1; --acquisition writes one metadata JSON.
+// Spectrum mode writes SCMMRAW1; metadata modes write one JSON document.
 bool acquisition = args.Length == 2 && args[0] == "--acquisition";
-if (args.Length != 1 && !acquisition)
+bool headerOnly = args.Length == 2 && args[0] == "--header";
+if (!acquisition && !headerOnly && (args.Length != 1 || args[0].StartsWith("--")))
 {
-    Console.Error.WriteLine("Usage: scmm-thermo-reader [--acquisition] file.raw");
+    Console.Error.WriteLine("Usage: scmm-thermo-reader [--acquisition|--header] file.raw");
     return 2;
 }
 try
@@ -27,18 +28,20 @@ try
     raw.SelectInstrument(Device.MS, 1);
     var header = raw.RunHeaderEx;
     if (header.SpectraCount <= 0) throw new InvalidDataException("RAW contains no MS spectra");
-    if (acquisition)
+    string creationTime = raw.FileHeader.CreationDate.ToString("yyyy-MM-ddTHH:mm:ss.fffffff", CultureInfo.InvariantCulture);
+    string instrument = raw.GetInstrumentData().Model ?? "";
+    if (acquisition || headerOnly)
     {
         var windows = new List<double[]>();
         var resolutions = new SortedSet<double>();
         var records = new List<object>();
         int inspected = 0;
-        for (int number = header.FirstSpectrum; number <= header.LastSpectrum && inspected < 32; number++)
+        for (int number = header.FirstSpectrum; number <= header.LastSpectrum; number++)
         {
             var filter = raw.GetFilterForScanNumber(number);
-            if ((int)filter.MSOrder != 1) continue;
-            if (raw.GetScanStatsForScanNumber(number).IsCentroidScan)
-                throw new InvalidDataException($"Scan {number} is centroid, not profile");
+            int level = (int)filter.MSOrder;
+            ValidateProfile(number, level, raw.GetScanStatsForScanNumber(number).IsCentroidScan);
+            if (headerOnly || level != 1 || inspected >= 32) continue;
             inspected++;
             for (int j = 0; j < filter.MassRangeCount; j++)
             {
@@ -47,17 +50,26 @@ try
                     windows.Add(new[] { range.Low, range.High });
             }
             var trailer = raw.GetTrailerExtraInformation(number);
-            for (int j = 0; j < trailer.Labels.Length; j++)
+            if (trailer is null || trailer.Labels is null || trailer.Values is null) continue;
+            for (int j = 0; j < Math.Min(trailer.Labels.Length, trailer.Values.Length); j++)
             {
-                string label = trailer.Labels[j];
+                string label = trailer.Labels[j] ?? "";
                 string key = label.Trim().TrimEnd(':').Trim();
                 if (!new[] { "FT Resolution", "Orbitrap Resolution", "Resolution" }.Contains(key, StringComparer.OrdinalIgnoreCase)) continue;
-                string value = trailer.Values[j];
+                string value = trailer.Values[j] ?? "";
                 records.Add(new { scan = number, label, value });
                 if (double.TryParse(value, NumberStyles.Float | NumberStyles.AllowThousands,
                     CultureInfo.InvariantCulture, out double resolution) && double.IsFinite(resolution) && resolution > 0)
                     resolutions.Add(resolution);
             }
+        }
+        if (headerOnly)
+        {
+            Console.Write(JsonSerializer.Serialize(new {
+                schema_version = 1, scan_count = header.SpectraCount,
+                creation_time = creationTime, instrument
+            }));
+            return 0;
         }
         Console.Write(JsonSerializer.Serialize(new {
             schema_version = 1,
@@ -74,20 +86,18 @@ try
     writer.Write(Encoding.ASCII.GetBytes("SCMMRAW1"));
     writer.Write(header.SpectraCount);
     // Unspecified vendor wall-clock time: do not invent a UTC offset.
-    WriteText(writer, raw.FileHeader.CreationDate.ToString("yyyy-MM-ddTHH:mm:ss.fffffff",
-        System.Globalization.CultureInfo.InvariantCulture));
-    WriteText(writer, raw.GetInstrumentData().Model ?? "");
+    WriteText(writer, creationTime);
+    WriteText(writer, instrument);
     int scans = 0;
     long points = 0;
     for (int number = header.FirstSpectrum; number <= header.LastSpectrum; number++)
     {
         var stats = raw.GetScanStatsForScanNumber(number);
-        if (stats.IsCentroidScan)
-            throw new InvalidDataException($"Scan {number} is centroid, not profile; no scans are skipped");
         var level = (int)raw.GetFilterForScanNumber(number).MSOrder;
-        if (level < 1) throw new InvalidDataException($"Unsupported MS order at scan {number}");
+        ValidateProfile(number, level, stats.IsCentroidScan);
         var scan = raw.GetSegmentedScanFromScanNumber(number, null);
-        if (scan.Positions.Length != scan.Intensities.Length)
+        if (scan is null || scan.Positions is null || scan.Intensities is null ||
+            scan.Positions.Length != scan.Intensities.Length)
             throw new InvalidDataException($"Array length mismatch at scan {number}");
         writer.Write((byte)1);
         writer.Write(number);
@@ -118,4 +128,11 @@ static void WriteText(BinaryWriter writer, string value)
     var bytes = Encoding.UTF8.GetBytes(value);
     writer.Write(bytes.Length);
     writer.Write(bytes);
+}
+
+static void ValidateProfile(int number, int level, bool centroid)
+{
+    if (level < 1) throw new InvalidDataException($"Unsupported MS order at scan {number}");
+    if (centroid)
+        throw new InvalidDataException($"Scan {number} (MS{level}) is centroid, not profile");
 }

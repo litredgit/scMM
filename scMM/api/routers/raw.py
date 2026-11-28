@@ -41,7 +41,8 @@ def detect_range(body: s.SampleRequest, manager: Service, identity: Identity):
         if not workspace.raw or workspace.raw["sample_id"] != body.sample_id:
             raise ValueError("请先打开当前样本的原始文件。")
         preview = workspace.raw["preview"]
-        if preview.open_identity != file_identity(sample["path"]):
+        path = manager.storage.resolve_raw_file(sample["storage"], sample["path"])
+        if preview.open_identity != file_identity(path):
             raise ValueError("原始文件已改变，请重新打开。")
         summary = preview.summary
         bounds = automatic_mz_range(summary.mz_min, summary.mz_max)

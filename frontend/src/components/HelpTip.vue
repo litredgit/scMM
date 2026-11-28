@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, useId, onBeforeUnmount, nextTick } from 'vue'
+import { ref, useId, onBeforeUnmount, onDeactivated, nextTick } from 'vue'
 const props = defineProps<{ text: string; label?: string }>()
 const id = useId()
 const visible = ref(false)
 const anchor = ref<HTMLElement>()
 const bubble = ref<HTMLElement>()
 let hideTimer: ReturnType<typeof setTimeout> | undefined
+let clicked = false
 const location = ref({ left: '0px', top: '0px', maxWidth: '360px' })
 function show() {
   clearTimeout(hideTimer)
@@ -17,7 +18,11 @@ function show() {
     top: `${box.bottom + 8}px`,
     maxWidth: `${width}px`,
   }
-  visible.value = true
+  if (!visible.value) {
+    window.addEventListener('scroll', follow, true)
+    window.addEventListener('resize', follow)
+    visible.value = true
+  }
   void nextTick(() => {
     const height = bubble.value?.getBoundingClientRect().height ?? 0
     if (height && box.bottom + 8 + height > window.innerHeight - 12)
@@ -30,17 +35,22 @@ function later() {
 function hide() {
   clearTimeout(hideTimer)
   visible.value = false
+  clicked = false
+  window.removeEventListener('scroll', follow, true)
+  window.removeEventListener('resize', follow)
 }
 function follow() {
   if (visible.value) show()
 }
-window.addEventListener('scroll', follow, true)
-window.addEventListener('resize', follow)
-onBeforeUnmount(() => {
-  clearTimeout(hideTimer)
-  window.removeEventListener('scroll', follow, true)
-  window.removeEventListener('resize', follow)
-})
+function toggle() {
+  if (clicked) hide()
+  else {
+    show()
+    clicked = visible.value
+  }
+}
+onBeforeUnmount(hide)
+onDeactivated(hide)
 </script>
 <template>
   <span v-if="text" class="help-tip" @mouseenter="show" @mouseleave="later">
@@ -53,7 +63,7 @@ onBeforeUnmount(() => {
       @focus="show"
       @blur="hide"
       @keydown.esc="hide"
-      @click.stop.prevent="show"
+      @click.stop.prevent="toggle"
     >
       <span aria-hidden="true">?</span>
     </button>

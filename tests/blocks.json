@@ -96,6 +96,7 @@
         "scMM/ion/identity.py",
         "scMM/ion/semantics.py",
         "scMM/ion/species.py",
+        "scMM/util/_adducts.py",
         "scMM/ion/relations.py",
         "scMM/ion/hypotheses.py",
         "scMM/ion/representation.py"
@@ -139,13 +140,13 @@
         "scMM/util/*adduct*.py",
         "scMM/util/*annotation*.py",
         "scMM/util/lipid_*.py",
+        "scMM/util/_adducts.py",
         "scMM/resources/lipid_rules/*",
         "scMM/application/lipid_database.py",
         "scMM/application/compound_database.py",
         "scMM/ion/annotation.py",
         "scMM/ion/evidence.py",
         "tools/benchmark_lipid_annotation.py",
-        "rules/lipids/*",
         "scMM/resources/lipid_databases/*"
       ],
       "downstream": ["api-lipids"],
@@ -255,7 +256,7 @@
         "scMM/application/merge_metadata.py",
         "scMM/application/merge_audit.py",
         "scMM/application/result_catalog.py",
-        "scMM/application/web_methods.py",
+        "scMM/application/workflows/methods.py",
         "scMM/application/method_annotation.py",
         "scMM/application/method_reports.py",
         "scMM/application/cell_spectra.py",
@@ -397,7 +398,6 @@
         ".github/*",
         "config/environments.example.json",
         ".gitignore",
-        ".gitattributes",
         ".python-version"
       ],
       "downstream": [],
@@ -406,7 +406,12 @@
     "docs": {
       "kind": "docs",
       "tests": ["tests/tooling/test_documentation.py"],
-      "sources": ["*.md", "docs/*", "rules/lipids/*.md"],
+      "sources": [
+        "*.md",
+        "docs/*",
+        "scMM/application/ai_docs.py",
+        "frontend/src/features/documentation/documentation.ts"
+      ],
       "downstream": [],
       "extras": []
     },
@@ -473,11 +478,7 @@
         "frontend/tests/auth.spec.ts",
         "frontend/tests/insecure-http.spec.ts"
       ],
-      "sources": [
-        "frontend/src/features/auth/*",
-        "frontend/src/api/auth.ts",
-        "frontend/src/features/account/*"
-      ],
+      "sources": ["frontend/src/features/account/*"],
       "downstream": ["browser-monitor"],
       "extras": ["web"]
     },
@@ -509,7 +510,7 @@
       "tests": ["tests/api/test_ai_assistant.py"],
       "sources": [
         "scMM/application/ai_*.py",
-        "scMM/application/web_ai.py",
+        "scMM/application/workflows/assistant.py",
         "scMM/application/web_analysis.py",
         "scMM/api/routers/ai.py",
         "docs/annotation.md",
@@ -523,7 +524,10 @@
     "browser-ai": {
       "kind": "browser",
       "tests": ["frontend/tests/assistant.spec.ts"],
-      "sources": ["frontend/src/features/assistant/*", "frontend/src/router/index.ts"],
+      "sources": [
+        "frontend/src/features/assistant/*",
+        "frontend/src/router/index.ts"
+      ],
       "downstream": [],
       "extras": ["web"]
     },
@@ -548,7 +552,7 @@
     "api-time": {
       "kind": "python",
       "tests": ["tests/api/test_time_api.py"],
-      "sources": ["scMM/application/web_time.py", "scMM/plugins/_time.py"],
+      "sources": ["scMM/application/workflows/time.py", "scMM/plugins/_time.py"],
       "downstream": ["browser-workflow"],
       "extras": ["web", "plot", "cluster"]
     },
@@ -561,6 +565,7 @@
       "sources": [
         "frontend/src/features/preprocess/PreprocessPage.vue",
         "frontend/src/features/preprocess/QualityPanel.vue",
+        "frontend/src/features/preprocess/QCComparison.vue",
         "frontend/src/features/preprocess/SelectionLabels.vue",
         "frontend/src/features/preprocess/DataInspection.vue"
       ],
@@ -649,7 +654,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/tests/server.py": [
       "browser-projects",
@@ -663,31 +669,22 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
-    ],
-    "tests/conftest.py": [
-      "ion-grouping",
-      "spectra",
-      "data",
-      "analysis",
-      "annotation",
-      "plotting",
-      "processing",
-      "projects",
-      "workbench",
-      "api",
-      "api-raw",
-      "api-lipids",
-      "auth",
-      "monitor",
-      "tooling",
-      "docs"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "tests/support/maintenance.py": ["api"],
-    "tests/support/time_analysis.py": ["time"],
-    "scMM_workflow.ipynb": ["tooling"]
+    "tests/support/time_analysis.py": ["time"]
   },
   "shared": {
+    "scMM/util/artifacts.py": ["workbench", "processing", "projects", "monitor"],
+    "scMM/application/workflows/__init__.py": ["workbench", "api"],
+    "scripts/export_openapi.py": ["api", "tooling"],
+    "frontend/scripts/*": ["browser-analysis-journey"],
+    "scMM/application/job_runner.py": ["processing", "api-time", "api-ions", "monitor", "time"],
+    "tools/scmm_build.py": ["tooling", "ai", "browser-navigation"],
+    "scMM/api/page_routes.py": ["api", "monitor"],
+    "scMM/api/routers/documentation.py": ["api", "browser-navigation"],
+    "scMM/application/sqlite_store.py": ["auth", "monitor", "ai", "workbench", "projects"],
     "scMM/application/preview_cache.py": ["processing", "projects"],
     "scMM/__init__.py": [
       "ion-grouping",
@@ -760,7 +757,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "uv.lock": [
       "ion-grouping",
@@ -792,7 +790,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/package*.json": [
       "browser-projects",
@@ -805,7 +804,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/*config*": [
       "browser-projects",
@@ -818,7 +818,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/index.html": [
       "browser-projects",
@@ -831,7 +832,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "scMM/api/static/*": [
       "browser-projects",
@@ -844,7 +846,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/App.vue": [
       "browser-projects",
@@ -858,7 +861,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/main.ts": [
       "browser-projects",
@@ -872,7 +876,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/stores/*": [
       "browser-projects",
@@ -886,7 +891,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/router/*": [
       "browser-projects",
@@ -900,7 +906,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/api/readScope.ts": [
       "browser-projects",
@@ -914,7 +921,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/tests/support/project.ts": [
       "browser-workflow",
@@ -936,7 +944,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/api/csv*.ts": [
       "browser-projects",
@@ -947,7 +956,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/api/operation.ts": [
       "browser-projects",
@@ -961,7 +971,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/api/polling.ts": [
       "browser-projects",
@@ -975,7 +986,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/api/client.ts": [
       "browser-projects",
@@ -989,7 +1001,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/api/types.ts": [
       "browser-projects",
@@ -1003,7 +1016,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/components/*": [
       "browser-projects",
@@ -1017,9 +1031,11 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
-    "frontend/src/assets/*": [
+    "frontend/src/styles.css": [
+      "browser-ions",
       "browser-projects",
       "browser-workflow",
       "browser-navigation",
@@ -1033,19 +1049,22 @@
       "browser-operations",
       "browser-analysis-journey"
     ],
-    "frontend/src/styles.css": [
+    "frontend/src/styles/*": [
+      "browser-ions",
       "browser-projects",
       "browser-workflow",
       "browser-navigation",
       "browser-auth",
       "browser-monitor",
       "browser-lipids",
+      "browser-ai",
       "browser-preprocessing",
       "browser-storage",
       "browser-raw",
       "browser-operations",
       "browser-analysis-journey"
     ],
+    "frontend/unit/*": [],
     "frontend/src/api/presence.ts": [
       "browser-projects",
       "browser-workflow",
@@ -1058,7 +1077,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/api/pageIdentity.ts": [
       "browser-projects",
@@ -1072,7 +1092,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/plotly.d.ts": [
       "browser-projects",
@@ -1085,7 +1106,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/help/*": [
       "browser-projects",
@@ -1099,7 +1121,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "scMM/api/app.py": [
       "api",
@@ -1159,7 +1182,7 @@
       "ai",
       "api-time"
     ],
-    "scMM/application/web_ai.py": [
+    "scMM/application/workflows/assistant.py": [
       "api",
       "api-raw",
       "api-lipids",
@@ -1208,7 +1231,7 @@
       "ai",
       "api-time"
     ],
-    "scMM/application/web_merge.py": [
+    "scMM/application/workflows/merge.py": [
       "api",
       "api-raw",
       "api-lipids",
@@ -1234,7 +1257,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/api/viewState.ts": [
       "browser-projects",
@@ -1248,7 +1272,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/src/features/extraction/*": ["browser-operations"],
     "frontend/src/features/results/*": ["browser-operations"]
@@ -1258,6 +1283,7 @@
     "pyproject.toml",
     "uv.lock",
     "MANIFEST.in",
+    "tools/scmm_build.py",
     "LICENSE*",
     "frontend/src/*",
     "frontend/package*.json",
@@ -1268,6 +1294,8 @@
   ],
   "frontend_sources": [
     "frontend/src/*",
+    "frontend/unit/*",
+    "frontend/scripts/*",
     "frontend/package*.json",
     "frontend/*config*",
     "frontend/index.html",
@@ -1285,7 +1313,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "frontend/tests/": [
       "browser-projects",
@@ -1298,7 +1327,8 @@
       "browser-storage",
       "browser-raw",
       "browser-operations",
-      "browser-analysis-journey"
+      "browser-analysis-journey",
+      "browser-ions"
     ],
     "tests/domain/": ["spectra", "data", "analysis", "annotation", "plotting"],
     "tests/application/": ["processing", "projects", "workbench", "time"],

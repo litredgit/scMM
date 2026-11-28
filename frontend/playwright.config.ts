@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL: `http://127.0.0.1:${port}`,
-    viewport: { width: 1440, height: 1000 },
+    viewport: { width: 1920, height: 1080 },
     launchOptions: process.env.SCMM_CHROMIUM ? { executablePath: process.env.SCMM_CHROMIUM } : {},
     trace: 'retain-on-failure',
   },

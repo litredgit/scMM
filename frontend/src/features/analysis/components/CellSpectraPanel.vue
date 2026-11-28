@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useViewState } from '../../../api/viewState'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, shallowRef } from 'vue'
 import { useWorkspace } from '../../../stores/workspace'
 import PlotView from '../../../components/PlotView.vue'
 import type { Figure } from '../../../api/types'
@@ -11,7 +11,7 @@ const source = ref('matrix'),
   normalization = ref('raw'),
   mirror = ref(false),
   average = ref(false),
-  figure = ref<Figure>()
+  figure = shallowRef<Figure>()
 watch(sampleInput, (sample) => {
   if (sample) source.value = 'matrix'
 })
@@ -32,7 +32,7 @@ async function draw() {
   })
   if (value && selected === JSON.stringify(store.selectedCells)) figure.value = value
 }
-useViewState('cell-spectra', { source, normalization, mirror, average, figure })
+useViewState('cell-spectra', { source, normalization, mirror, average })
 </script>
 <template>
   <div v-if="store.selectedCells.length" class="card selected-cell-spectra">

@@ -66,6 +66,30 @@ def test_release_rollback_and_reapply_keep_results(worktrees):
     assert calls == [(action, manager.SERVICE) for action in ("stop", "start") * 3]
 
 
+@pytest.mark.parametrize("verified", [False, True])
+def test_strict_update_consumes_verified_checkpoint_once(worktrees, monkeypatch, verified):
+    values, old, new, calls = worktrees
+    checks = []
+
+    def verify(_values, env, identity):
+        checks.append((env, identity))
+        if not verified:
+            raise RuntimeError("checkpoint changed")
+
+    monkeypatch.setattr(manager, "verify_strict_update", verify)
+    monkeypatch.setattr(manager, "prepare_deployment", lambda *_: pytest.fail("duplicate prepare"))
+    if verified:
+        manager.deploy(values, "dev", strict_checkpoint="verified")
+        assert manager.git(values["prod"], "rev-parse", "HEAD") == new
+        assert calls == [("stop", manager.SERVICE), ("start", manager.SERVICE)]
+    else:
+        with pytest.raises(RuntimeError, match="checkpoint changed"):
+            manager.deploy(values, "dev", strict_checkpoint="verified")
+        assert manager.git(values["prod"], "rev-parse", "HEAD") == old
+        assert not calls
+    assert checks == [("prod", "verified")]
+
+
 @pytest.mark.parametrize("failure", ["sync", "health"])
 def test_failed_deployment_restores_code_and_restarts(worktrees, monkeypatch, failure):
     values, old, _, calls = worktrees
@@ -460,3 +484,59 @@ def test_failed_release_recovers_last_deployed_plugin_wheels(worktrees, monkeypa
         manager.deploy(values, "dev")
     assert attempted == [[second], [first]]
     assert manager.git(values["prod"], "rev-parse", "HEAD") == old
+
+
+@pytest.mark.parametrize("name", ["dev", "prod"])
+def test_maintained_update_restores_consumed_checkpoint_and_keeps_new_pending(
+    worktrees,
+    tmp_path,
+    monkeypatch,
+    name,
+):
+    from types import SimpleNamespace
+
+    from scMM.application import maintenance_runner as runner
+    from scMM.util.artifacts import write_json
+
+    values, old, new, calls = worktrees
+    if name == "dev":
+        manager.git(values[name], "reset", "--hard", old)
+    config = tmp_path / (name + ".json")
+    config.write_text('{"cache_root":"old"}')
+    values[f"{name}_server_config"] = config
+    pending = config.with_suffix(".pending.json")
+    pending.write_text('{"cache_root":"candidate"}')
+    recovery = tmp_path / (name + ".recovery")
+    recovery.mkdir()
+    pointer = recovery / "current.json"
+    prepared = []
+
+    def prepare(_values, environment="prod"):
+        prepared.append(environment)
+        pointer.write_text('{"id":"this-round"}')
+        return {"discard_pointer": False}
+
+    checked = []
+
+    def health(*_):
+        checked.append(True)
+        if len(checked) == 1:
+            assert json.loads(config.read_text())["cache_root"] == "candidate"
+            pointer.unlink()
+            write_json(pending, {"cache_root": "submitted-during-startup"})
+            raise RuntimeError("failed after consuming checkpoint")
+        assert json.loads(pointer.read_text()) == {"id": "this-round"}
+        assert json.loads(config.read_text()) == {"cache_root": "old"}
+
+    monkeypatch.setattr(manager, "prepare_deployment", prepare)
+    monkeypatch.setattr(manager, "health", health)
+    monkeypatch.setattr(runner, "healthy", health)
+    monkeypatch.setattr(runner, "ServerConfig", lambda *_: SimpleNamespace(validate=lambda: None))
+    active = SimpleNamespace(path=config, values={"cache_root": "old"})
+    update = manager.update_development if name == "dev" else manager.deploy
+    with pytest.raises(RuntimeError, match="consuming checkpoint"):
+        update(values, new, resource_config=active)
+    assert prepared == [name] and len(checked) == 2
+    assert manager.git(values[name], "rev-parse", "HEAD") == old
+    assert json.loads(pending.read_text()) == {"cache_root": "submitted-during-startup"}
+    assert calls[-1][0] == "start"

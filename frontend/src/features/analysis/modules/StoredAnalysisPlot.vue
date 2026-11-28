@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import CalculationPanel from '../components/CalculationPanel.vue'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, shallowRef } from 'vue'
 import { useAnalysisContext } from '../composables/useAnalysisContext'
-import { useViewState } from '../../../api/viewState'
 import PlotView from '../../../components/PlotView.vue'
 import type { Figure } from '../../../api/types'
 const props = withDefaults(
@@ -15,7 +14,7 @@ const props = withDefaults(
   { ready: true },
 )
 const { store, info, refreshAnalysis } = useAnalysisContext()
-const figure = ref<Figure>()
+const figure = shallowRef<Figure>()
 const reloaded = ref(false)
 let generation = 0
 const identity = () =>
@@ -57,7 +56,6 @@ async function draw(saved = false) {
     }
   })
 }
-useViewState(props.kind, { figure, reloaded })
 </script>
 <template>
   <div class="card analysis-module-split">

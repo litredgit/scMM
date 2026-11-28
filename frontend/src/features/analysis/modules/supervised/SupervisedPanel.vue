@@ -38,6 +38,11 @@ const validationWarnings = computed(() => {
   const audit = modelReport.value?.validation_audit as { warnings?: string[] } | undefined
   return audit?.warnings ?? []
 })
+const probabilityStatus = computed(
+  () =>
+    (modelReport.value?.probability_diagnostics as { probability_status?: string } | undefined)
+      ?.probability_status,
+)
 async function showDiagnostic(kind: 'roc' | 'pr' | 'calibration' | 'confusion') {
   await draw(kind)
   if (figures.value[kind]) diagnostic.value = kind
@@ -48,7 +53,7 @@ async function showConfusion(normalize: boolean) {
     options: { normalize },
   })
   if (value) {
-    figures.value.confusion = value
+    figures.value = { ...figures.value, confusion: value }
     diagnostic.value = 'confusion'
   }
 }
@@ -58,7 +63,7 @@ async function showShap(kind: string) {
     options: { ...shapView, feature: shapView.feature || null },
   })
   if (value) {
-    figures.value[kind] = value
+    figures.value = { ...figures.value, [kind]: value }
     shapDisplay.value = kind
   }
 }
@@ -210,6 +215,12 @@ async function showShap(kind: string) {
       <h3>模型诊断与结果</h3>
       <p class="page-note">
         细胞数不等于生物重复；分组验证不能补救全数据预处理泄漏，反复调参后留出集不再是独立测试。
+      </p>
+      <p v-if="probabilityStatus === 'uncalibrated_score'" class="state-note">
+        PLS-DA 使用未校准分数，提供分类和排序诊断。校准曲线需要独立来源分组。
+      </p>
+      <p v-else-if="probabilityStatus === 'grouped_oof_sigmoid'" class="muted">
+        PLS-DA 用训练集分组折外分数拟合校准器，留出集用于评价校准效果。
       </p>
       <div class="actions diagnostic-controls">
         <button

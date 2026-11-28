@@ -34,4 +34,4 @@ def figure_view(figure):
 def json_view(value):
     if isinstance(value, pd.DataFrame):
         return table_view(value)
-    return json.loads(json.dumps(value, default=lambda item: item.tolist()))
+    return json.loads(json.dumps(value, cls=PlotlyJSONEncoder))

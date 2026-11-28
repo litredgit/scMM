@@ -72,7 +72,14 @@ def select(files, config, *, explicit=(), all_blocks=False):
 
     for name in blocks if all_blocks else explicit:
         add(name, "explicit --all" if all_blocks else "explicit --block")
+    renamed = {
+        "scMM/application/web_ai.py": "scMM/application/workflows/assistant.py",
+        "scMM/application/web_merge.py": "scMM/application/workflows/merge.py",
+        "scMM/application/web_methods.py": "scMM/application/workflows/methods.py",
+        "scMM/application/web_time.py": "scMM/application/workflows/time.py",
+    }
     for path in files:
+        path = renamed.get(path, path)
         # Moving a test must select both its former and current owner. The basename
         # alias also handles the former flat layout without keeping duplicate rules.
         owners = [
@@ -181,8 +188,23 @@ def select(files, config, *, explicit=(), all_blocks=False):
         and p.endswith((".ts", ".vue", ".css", ".html", ".json", ".mjs"))
         and (ROOT / p).is_file()
     )
+    lint_files = files
+    if all_blocks and not files:
+        lint_files = git(
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "scMM",
+            "tests",
+            "scripts",
+            "tools",
+            "frontend/tests",
+        ).split("\0")
     return {
         "files": files,
+        "scan_all": all_blocks and not files,
         "selected": selected,
         "reasons": {n: sorted(reasons[n]) for n in selected},
         "skipped": [n for n in blocks if n not in reasons],
@@ -201,7 +223,9 @@ def select(files, config, *, explicit=(), all_blocks=False):
         "browser_extras": sorted(
             {e for n in selected if blocks[n]["kind"] == "browser" for e in blocks[n]["extras"]}
         ),
-        "lint_paths": sorted(p for p in files if p.endswith(".py") and (ROOT / p).is_file()),
+        "lint_paths": sorted(
+            set(p for p in lint_files if p.endswith(".py") and (ROOT / p).is_file())
+        ),
         "format_paths": format_paths,
     }
 
@@ -211,7 +235,6 @@ def document_inputs(files):
     guides = [
         *ROOT.glob("*.md"),
         *(ROOT / "docs").rglob("*.md"),
-        *(ROOT / "rules" / "lipids").glob("*.md"),
     ]
     changed = set(files)
     chosen = set(p for p in guides if p.relative_to(ROOT).as_posix() in changed)
@@ -259,6 +282,7 @@ def commands(plan, phase):
                 *[f"frontend/{p}" for p in plan["format_paths"]],
             ]
         if plan["frontend"]:
+            yield ["npm", "--prefix", "frontend", "run", "test:unit"]
             yield [
                 "npm",
                 "--prefix",
@@ -277,31 +301,25 @@ def commands(plan, phase):
             *[Path(p).name for p in plan["browser_paths"]],
         ]
     if phase == "package" and plan["package"]:
-        yield ["uv", "build", "--no-sources"]
-    if phase == "scan" and plan["files"]:
-        yield [sys.executable, "scripts/check_sensitive.py", "--files", *plan["files"]]
+        yield ["uv", "build", "--sdist", "--no-sources"]
+        yield ["uv", "build", "--wheel", "--no-sources"]
+    if phase == "scan":
+        if plan.get("scan_all"):
+            yield [sys.executable, "scripts/check_sensitive.py"]
+        elif plan["files"]:
+            yield [sys.executable, "scripts/check_sensitive.py", "--files", *plan["files"]]
     if phase == "artifacts" and plan["frontend"] and not plan.get("typecheck_only"):
         yield [sys.executable, "scripts/check_sensitive.py", "--artifacts-only"]
 
 
 def lightweight(plan):
-    """Automatic CI checks contracts in a clean tree; full plan remains local/manual."""
+    """Keep affected Python tests and frontend checks without browser or package builds."""
     plan = dict(plan)
     # Packaging implies a frontend build locally, but automatic CI does not package.
     # Retain typechecking only for actual frontend inputs, using the same mapping.
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     plan["frontend"] = any(matches(p, config["frontend_sources"]) for p in plan["files"])
     plan["node"] = plan["frontend"] or bool(plan["format_paths"])
-    plan["python_paths"] = (
-        [
-            "tests/tooling/test_test_blocks.py",
-            "tests/api/test_server_config.py",
-        ]
-        if plan["python"] or plan["frontend"]
-        else []
-    )
-    plan["python"] = bool(plan["python_paths"])
-    plan["extras"] = ["web"] if plan["python_paths"] else []
     plan["browser_paths"] = []
     plan["browser_extras"] = []
     plan["package"] = False

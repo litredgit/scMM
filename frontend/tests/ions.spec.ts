@@ -99,17 +99,26 @@ test('manual ion review, quantitative views, candidate overlay and complete expo
   await spectrum.getByRole('button', { name: '查看完整谱图', exact: true }).click()
   await expect(spectrum.getByRole('button', { name: '返回局部谱图', exact: true })).toBeVisible()
   await expect(graph).toContainText('Full feature spectrum')
-  const markerIndex = await graph.evaluate((element) => {
-    const traces = (element as HTMLElement & { data: { customdata?: string[][] }[] }).data
-    return traces
-      .flatMap((trace) => trace.customdata ?? [])
-      .findIndex((item) => item[0] === 'f_iso')
+  await graph.scrollIntoViewIfNeeded()
+  const point = await graph.evaluate((element) => {
+    type Axis = { _offset: number; l2p: (value: number) => number }
+    const plot = element as HTMLElement & {
+      data: { x: number[]; y: number[]; customdata?: string[][] }[]
+      _fullLayout: { xaxis: Axis; yaxis: Axis }
+    }
+    const trace = plot.data.find((series) => series.customdata?.some(([id]) => id === 'f_iso'))
+    const index = trace?.customdata?.findIndex(([id]) => id === 'f_iso') ?? -1
+    if (!trace || index === -1) throw new Error('Missing f_iso marker in rendered spectrum')
+    const bounds = element.getBoundingClientRect()
+    const { xaxis, yaxis } = plot._fullLayout
+    return {
+      x: bounds.left + xaxis._offset + xaxis.l2p(trace.x[index]!),
+      y: bounds.top + yaxis._offset + yaxis.l2p(trace.y[index]!),
+    }
   })
-  expect(markerIndex).toBeGreaterThanOrEqual(0)
-  await graph
-    .locator('.scatterlayer .trace .points path.point')
-    .nth(markerIndex)
-    .click({ force: true })
+  await page.mouse.move(point.x, point.y)
+  await expect(graph.locator('.hoverlayer')).toContainText('f_iso')
+  await page.mouse.click(point.x, point.y)
   await expect(spectrum.locator('.selected-peak')).toContainText('选中 f_iso')
   await spectrum.getByRole('button', { name: '返回局部谱图', exact: true }).click()
   await expect(spectrum.locator('.selected-peak')).toContainText('选中 f_iso')

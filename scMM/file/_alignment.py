@@ -16,7 +16,7 @@ def align_frame(
     ppm: float = 10.0,
     ms_level: int = 1,
     aggregate: str = "max",
-    dtype=np.float64,
+    dtype=None,
     out=None,
     rt_range=None,
     frame_range=None,
@@ -30,16 +30,28 @@ def align_frame(
         raise ValueError("mz_list must be a non-empty 1D array-like.")
     sorted_targets, restore_order = _sorted_targets(targets)
     original_columns = np.argsort(restore_order)
+    peak_dtype = np.float64 if dtype is None else dtype
+    if out is not None and (
+        not isinstance(out, np.ndarray)
+        or out.dtype not in (np.dtype("float32"), np.dtype("float64"))
+    ):
+        raise TypeError("out must be a float32 or float64 numpy array")
+    dtype = np.dtype(
+        out.dtype if dtype is None and out is not None else np.float64 if dtype is None else dtype
+    )
+    if dtype not in (np.dtype("float32"), np.dtype("float64")):
+        raise TypeError("dtype must be float32 or float64")
     if out is not None:
-        if not isinstance(out, np.ndarray) or out.dtype != np.float32:
-            raise TypeError("out must be a float32 numpy array")
+        if out.dtype != dtype:
+            raise TypeError("out and dtype must agree")
         if out.ndim != 2 or out.shape[1] != len(targets) or not out.flags.writeable:
             raise ValueError("out must be writable with shape (selected scans, targets)")
-    rows, frame_ids, retention_times = [], [], []
-    if reference is not None:
-        reference_targets, reference_ppm = reference
-        reference_targets = np.unique(reference_targets)
-        reference_rows = []
+    frame_ids, retention_times = [], []
+    reference_targets = np.unique(reference[0]) if reference is not None else np.empty(0)
+    width = len(targets) + len(reference_targets)
+    buffer_size = len(out) if out is not None else 256
+    block = np.empty((buffer_size, width), dtype=dtype)
+    blocks = []
     peak_options = _peak_options(kwargs)
     from .selection import selected_frames
 
@@ -47,10 +59,18 @@ def align_frame(
         selected_frames(exp, ms_level=ms_level, rt_range=rt_range, frame_range=frame_range)
     ) as spectra:
         for frame_id, spectrum in spectra:
-            row = np.zeros(len(targets), dtype=np.float32)
-            if reference is not None:
-                reference_row = np.zeros(len(reference_targets), dtype=np.float32)
-            mz, intensity = extract_peaks(spectrum, dtype=dtype, **peak_options)
+            row_index = len(frame_ids)
+            if out is not None and row_index >= buffer_size:
+                raise ValueError("out must match the number of selected scans")
+            slot = row_index % buffer_size
+            if slot == 0 and row_index:
+                blocks.append(block)
+                block = np.empty_like(block)
+            combined = block[slot]
+            combined.fill(0)
+            row = combined[: len(targets)]
+            reference_row = combined[len(targets) :]
+            mz, intensity = extract_peaks(spectrum, dtype=peak_dtype, **peak_options)
             if mz.size:
                 mz, intensity = _sort_extracted_peaks(mz, intensity)
                 target_indices, matched_intensity = _match_target_peaks(
@@ -64,29 +84,32 @@ def align_frame(
                 )
                 if reference is not None:
                     indices, values = _match_target_peaks(
-                        reference_targets, mz, intensity, reference_ppm
+                        reference_targets, mz, intensity, reference[1]
                     )
                     _aggregate_target_intensity(reference_row, indices, values, aggregate)
-            if reference is not None:
-                reference_rows.append(reference_row)
-            rows.append(row)
             frame_ids.append(frame_id)
             retention_times.append(spectrum.getRT())
             del spectrum
-    if not rows:
+    if not frame_ids:
         raise ValueError("No spectra found.")
-    if out is None:
-        values = np.asarray(rows, dtype=np.float32)
+    used = (len(frame_ids) - 1) % buffer_size + 1
+    if out is not None and len(out) != len(frame_ids):
+        raise ValueError("out must match the number of selected scans")
+    if blocks:
+        aligned = np.concatenate([*blocks, block[:used]])
     else:
-        if out.shape != (len(rows), len(targets)):
-            raise ValueError(f"out must be writable with shape {(len(rows), len(targets))}")
+        aligned = block[:used].copy() if used < buffer_size else block
+    values = aligned[:, : len(targets)]
+    if out is not None:
+        out[:] = values
         values = out
-        values[:] = rows
     frame = pd.DataFrame(values, index=frame_ids, columns=targets, copy=False)
     frame.index.name = "frame"
     metadata = pd.DataFrame({"rt": retention_times}, index=frame_ids)
     if reference is not None:
-        reference_frame = pd.DataFrame(reference_rows, index=frame.index, columns=reference_targets)
+        reference_frame = pd.DataFrame(
+            aligned[:, len(targets) :], index=frame.index, columns=reference_targets, copy=False
+        )
         return frame, metadata, reference_frame
     return frame, metadata
 
@@ -139,7 +162,7 @@ def _match_target_peaks(
     best_indices = np.where(choose_left, left_indices, right_indices)
     best_ppm = np.where(choose_left, left_ppm, right_ppm)
     matched = (best_indices >= 0) & (best_indices < len(targets)) & (best_ppm <= ppm)
-    return best_indices[matched], intensity[matched].astype(np.float32)
+    return best_indices[matched], intensity[matched]
 
 
 def _candidate_ppm(targets: np.ndarray, mz: np.ndarray, indices: np.ndarray) -> np.ndarray:

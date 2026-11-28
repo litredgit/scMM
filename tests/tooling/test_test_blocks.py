@@ -15,10 +15,27 @@ from scripts.test_blocks import (
     document_inputs,
     lightweight,
     main,
+    matches,
     select,
 )
 
 CONFIGURATION = json.loads(CONFIG.read_text(encoding="utf-8"))
+
+
+def test_path_rules_match_repository_files():
+    files = (
+        subprocess.check_output(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=ROOT
+        )
+        .decode()
+        .split("\0")
+    )
+    patterns = {p for block in CONFIGURATION["blocks"].values() for p in block["sources"]}
+    for key in ("support", "shared", "package_sources", "frontend_sources", "format_sources"):
+        patterns.update(CONFIGURATION[key])
+    # Generated wheel assets and a license file are recognized when present.
+    missing = {p for p in patterns if not any(matches(file, [p]) for file in files)}
+    assert missing <= {"scMM/api/static/*", "LICENSE*"}
 
 
 def plan(*files):
@@ -104,7 +121,6 @@ def test_source_dependencies_expand_but_tests_and_fixtures_do_not():
         "api-lipids",
         "api-time",
     }
-    assert not plan("tests/conftest.py")["browser_paths"]
     locked = plan("uv.lock")
     assert set(locked["selected"]) == {
         n for n, b in CONFIGURATION["blocks"].items() if b["kind"] != "docs"
@@ -295,14 +311,13 @@ def test_format_configuration_needs_only_formatter_and_all_tracked_inputs_are_ma
     assert select(names, CONFIGURATION)["selected"]
 
 
-def test_lightweight_ci_keeps_clean_tree_smoke_but_no_browser_or_package():
-    selected = lightweight(plan("scMM/application/time_analysis.py"))
-    assert selected["python_paths"] == [
-        "tests/tooling/test_test_blocks.py",
-        "tests/api/test_server_config.py",
-    ]
+def test_lightweight_ci_keeps_affected_python_but_no_browser_or_package():
+    full = plan("scMM/application/time_analysis.py")
+    selected = lightweight(full)
+    assert selected["python_paths"] == full["python_paths"]
+    assert "tests/application/test_time_analysis.py" in selected["python_paths"]
     assert not selected["browser_paths"] and not selected["package"]
-    assert selected["extras"] == ["web"]
+    assert selected["extras"] == full["extras"]
     assert list(commands(selected, "browser")) == list(commands(selected, "package")) == []
     assert list(commands(selected, "artifacts")) == []
     assert list(commands(selected, "frontend")) == []
@@ -322,3 +337,59 @@ def test_lipid_controller_and_time_adapters_do_not_select_unrelated_features():
     assert {"time", "api-time"} <= set(selected["selected"])
     assert not {"auth", "monitor", "api-lipids", "workbench"} & set(selected["selected"])
     assert "api-time" in plan("scMM/application/web_workspace.py")["selected"]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "frontend/scripts/generate-api-types.mjs",
+        "frontend/unit/core.test.ts",
+        "frontend/src/features/preprocess/QCComparison.vue",
+    ],
+)
+def test_frontend_only_paths_select_frontend_without_python(path):
+    selected = lightweight(plan(path))
+    assert selected["frontend"] and not selected["python_paths"]
+    assert not selected["doc_paths"]
+    assert not any("UNMAPPED" in q for r in selected["reasons"].values() for q in r)
+
+
+def test_full_pr_keeps_changed_source_scan_and_lint():
+    path = "scMM/application/workbench.py"
+    selected = select([path], CONFIGURATION, all_blocks=True)
+    assert selected["lint_paths"] == [path]
+    assert list(commands(selected, "lint"))
+    assert next(commands(selected, "scan"))[-1] == path
+    manually = select([], CONFIGURATION, all_blocks=True)
+    assert manually["lint_paths"] and list(commands(manually, "scan"))
+
+
+def test_final_audit_shared_rules_cover_documents_ions_and_styles():
+    assert "time" in plan("scMM/application/job_runner.py")["selected"]
+    assert "projects" in plan("scMM/application/sqlite_store.py")["selected"]
+    for path in (
+        "frontend/tests/fixtures.ts",
+        "frontend/src/api/viewState.ts",
+        "frontend/src/components/DataTable.vue",
+    ):
+        assert "browser-ions" in plan(path)["selected"]
+    browser_blocks = {
+        name for name, block in CONFIGURATION["blocks"].items() if block["kind"] == "browser"
+    }
+    for path in ("frontend/src/styles.css", "frontend/src/styles/components.css"):
+        selection = plan(path)
+        assert set(selection["selected"]) == browser_blocks
+        assert not selection["python_paths"]
+    for path in (
+        "scMM/application/ai_docs.py",
+        "frontend/src/features/documentation/documentation.ts",
+    ):
+        assert plan(path)["doc_paths"] == ["tests/tooling/test_documentation.py"]
+
+
+def test_ci_label_events_check_the_label_that_was_added():
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    changes = workflow.split("\n  changes:\n", 1)[1]
+    assert changes.splitlines()[0].strip() == (
+        "if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'"
+    )

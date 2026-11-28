@@ -72,7 +72,7 @@ export function usePlotRenderer({
   spectrumSettings,
   spectrumHistory,
 }: RenderOptions) {
-  let plotly: (typeof import('plotly.js-dist-min'))['default'] | undefined
+  let plotly: (typeof import('plotly.js-strict-dist-min'))['default'] | undefined
   let observer: ResizeObserver | undefined
   let active = true
   let generation = 0
@@ -81,7 +81,7 @@ export function usePlotRenderer({
   async function draw() {
     const token = ++generation
     try {
-      plotly ??= (await import('plotly.js-dist-min')).default
+      plotly ??= (await import('plotly.js-strict-dist-min')).default
       if (!active || !element.value || token !== generation) return
       const copy = orderedFigure(viewport.value)
       const spectrum = isMassSpectrum(copy)

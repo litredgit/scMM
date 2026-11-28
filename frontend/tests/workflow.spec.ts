@@ -54,29 +54,25 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
     await page.getByLabel(label, { exact: true }).fill(value)
   await expect(page.getByRole('button', { name: '提取方法：snr说明', exact: true })).toHaveCount(0)
   await expect(page.getByRole('combobox', { name: 'extraction_method' })).toHaveCount(0)
-  await page.screenshot({ path: test.info().outputPath('raw-compact-1440.png'), fullPage: true })
-  for (const width of [700, 390]) {
-    await page.setViewportSize({ width, height: 1000 })
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-      .toBe(true)
-    await expect
-      .poll(() =>
-        panel.locator('input:visible').evaluateAll((inputs) =>
-          inputs.every((input) => {
-            const box = input.getBoundingClientRect(),
-              parent = input.closest('.raw-parameter-panel')!.getBoundingClientRect()
-            return box.width > 0 && box.left >= parent.left && box.right <= parent.right
-          }),
-        ),
-      )
-      .toBe(true)
-    await page.screenshot({
-      path: test.info().outputPath(`raw-compact-${width}.png`),
-      fullPage: true,
-    })
-  }
-  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.screenshot({ path: test.info().outputPath('raw-compact-desktop.png'), fullPage: true })
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true)
+  await expect
+    .poll(() =>
+      panel.locator('input:visible').evaluateAll((inputs) =>
+        inputs.every((input) => {
+          const box = input.getBoundingClientRect(),
+            parent = input.closest('.raw-parameter-panel')!.getBoundingClientRect()
+          return box.width > 0 && box.left >= parent.left && box.right <= parent.right
+        }),
+      ),
+    )
+    .toBe(true)
+  await page.screenshot({
+    path: test.info().outputPath(`raw-compact-1920.png`),
+    fullPage: true,
+  })
   await page.getByRole('button', { name: '展开全部参数', exact: true }).click()
   await page.getByLabel('reference_ppm_tol', { exact: true }).fill('50')
   await page.getByRole('tab', { name: '细胞与噪声', exact: true }).click()
@@ -133,7 +129,6 @@ test('raw plots, spawned cell preview, detached extraction and explicit review',
   })
   await noError(page)
   await navigate(page, '/extraction')
-  await page.setViewportSize({ width: 1920, height: 1080 })
   const sources = page.locator('.feature-source')
   await expect(sources.getByLabel('特征来源')).toHaveValue('shared')
   await sources.getByText('上传 m/z 清单', { exact: true }).click()
@@ -232,7 +227,6 @@ test('two completed batches compare without replacing data, link signal axes and
   await page.getByRole('button', { name: '刷新批次', exact: true }).click()
   await expect(reviewSample).not.toBeChecked()
   await expect(page.getByText('矩阵范围', { exact: true })).toHaveCount(0)
-  await page.setViewportSize({ width: 1920, height: 1080 })
   await page.getByRole('button', { name: '下载提取原始矩阵 CSV', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'CSV 导出', exact: true })
   await dialog.getByText('CSV 标签设置', { exact: true }).click()

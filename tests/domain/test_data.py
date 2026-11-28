@@ -204,7 +204,8 @@ def test_deisotope_builds_missing_feature_metadata_without_side_effects() -> Non
     audit = dataset.deisotope(ppm_tol=1.0, inplace=False)
 
     assert not hasattr(dataset, "feature_meta")
-    assert audit["feature_meta"]["mz"].tolist() == [100.0]
+    assert audit["feature_meta"]["mz"].tolist() == [100.0, 101.003355]
+    assert audit["candidate_table"]["joint_detections"].tolist() == [2]
 
 
 def test_deisotope_rejects_invalid_missing_mask_shape() -> None:
@@ -654,3 +655,13 @@ def test_outlier_rng_record_and_current_length_survive_legacy_json():
     pd.testing.assert_frame_equal(left.data, right.data)
     assert left.file_meta["length"] == len(left.data)
     assert left.file_meta["outlier"]["input_cells"] == 4
+
+
+def test_anticorrelated_positive_peaks_are_not_isotopes():
+    dataset = make_dataset(
+        "anticorrelated",
+        [[100.0, 4.0], [200.0, 3.0], [300.0, 2.0], [400.0, 1.0]],
+        [100.0, 101.003355],
+    )
+    dataset.deisotope(ppm_tol=1, r_square_threshold=0.99)
+    assert list(dataset.data.columns) == [100.0, 101.003355]

@@ -138,17 +138,26 @@ def association(
     )
     p = None
     if permutations:
-        if len(a) * permutations > 20_000_000:
+        budget = 500_000 if method == "kendall" else 20_000_000
+        if len(a) * permutations > budget:
             raise ValueError("置换计算超过上限，请减少置换次数。")
         rng = np.random.default_rng(seed)
-        ac = a - a.mean()
-        bc = b - b.mean()
-        denominator = np.linalg.norm(ac) * np.linalg.norm(bc)
-        observed = abs(ac @ bc / denominator)
-        exceed = sum(
-            abs(ac @ rng.permutation(bc) / denominator) >= observed - 1e-12
-            for _ in range(permutations)
-        )
+        if method == "kendall":
+            observed = abs(coefficient)
+            exceed = sum(
+                abs(stats.kendalltau(a, rng.permutation(b), method="asymptotic").statistic)
+                >= observed - 1e-12
+                for _ in range(permutations)
+            )
+        else:
+            av, bv = (stats.rankdata(a), stats.rankdata(b)) if method == "spearman" else (a, b)
+            ac, bc = av - av.mean(), bv - bv.mean()
+            denominator = np.linalg.norm(ac) * np.linalg.norm(bc)
+            observed = abs(ac @ bc / denominator)
+            exceed = sum(
+                abs(ac @ rng.permutation(bc) / denominator) >= observed - 1e-12
+                for _ in range(permutations)
+            )
         p = (exceed + 1) / (permutations + 1)
     figure = go.Figure(
         go.Scatter(x=a, y=b, mode="markers", name="Replicate means" if replicate_key else "Cells")
@@ -161,7 +170,7 @@ def association(
             fill="toself",
             line_width=0,
             opacity=0.2,
-            name="Mean-response interval",
+            name="OLS mean-response interval",
         )
     )
     lines = pd.DataFrame(

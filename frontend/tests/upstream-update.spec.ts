@@ -83,7 +83,6 @@ test('reversible cell labels and lasso selection events', async ({ page }) => {
   await expect(panel.getByText('cell_keep_review · 已启用')).toBeVisible()
   await panel.getByRole('button', { name: '关闭筛选', exact: true }).click()
   await expect(panel.getByText('cell_keep_review · 未启用')).toBeVisible()
-  await page.setViewportSize({ width: 1920, height: 1080 })
   await preprocessingStep(page, 'gate').click()
   await expect(panel).toHaveAttribute('open', '')
   await panel.getByLabel('标签来源').selectOption('lasso')
@@ -94,9 +93,10 @@ test('reversible cell labels and lasso selection events', async ({ page }) => {
   await expect(panel.locator('.js-plotly-plot')).toBeVisible()
   const graph = panel.locator('.js-plotly-plot')
   await graph.scrollIntoViewIfNeeded()
-  const point = await graph.evaluate((element) => {
+  await expect(graph.locator('.nsewdrag').first()).toBeVisible()
+  const points = await graph.evaluate((element) => {
     const g = element as unknown as {
-      _fullData: { x: number[]; y: number[] }[]
+      _fullData: { x: number[]; y: number[]; customdata: string[][] }[]
       _fullLayout: {
         dragmode: string
         xaxis: { _offset: number; l2p: (v: number) => number }
@@ -106,17 +106,29 @@ test('reversible cell labels and lasso selection events', async ({ page }) => {
     const layout = g._fullLayout
     if (layout.dragmode !== 'lasso') throw new Error('Selection plot must start in lasso mode')
     const box = element.getBoundingClientRect()
-    return {
-      x: box.left + layout.xaxis._offset + layout.xaxis.l2p(g._fullData[0]!.x[3]!),
-      y: box.top + layout.yaxis._offset + layout.yaxis.l2p(g._fullData[0]!.y[3]!),
-    }
+    return Array.from(g._fullData[0]!.x, (value, index) => ({
+      x: box.left + layout.xaxis._offset + layout.xaxis.l2p(value),
+      y: box.top + layout.yaxis._offset + layout.yaxis.l2p(g._fullData[0]!.y[index]!),
+      id: g._fullData[0]!.customdata[index]![0]!,
+    }))
   })
-  await page.mouse.move(point.x - 9, point.y - 9)
+  const drag = (await graph.locator('.nsewdrag').first().boundingBox())!
+  const inset = 20
+  const point = points.find(
+    ({ x, y }) =>
+      x > drag.x + inset &&
+      x < drag.x + drag.width - inset &&
+      y > drag.y + inset &&
+      y < drag.y + drag.height - inset,
+  )
+  expect(point).toBeDefined()
+  const { x, y } = point!
+  await page.mouse.move(x - inset, y - inset)
   await page.mouse.down()
-  await page.mouse.move(point.x + 9, point.y - 9, { steps: 5 })
-  await page.mouse.move(point.x + 9, point.y + 9, { steps: 5 })
-  await page.mouse.move(point.x - 9, point.y + 9, { steps: 5 })
-  await page.mouse.move(point.x - 9, point.y - 9, { steps: 5 })
+  await page.mouse.move(x + inset, y - inset, { steps: 5 })
+  await page.mouse.move(x + inset, y + inset, { steps: 5 })
+  await page.mouse.move(x - inset, y + inset, { steps: 5 })
+  await page.mouse.move(x - inset, y - inset, { steps: 5 })
   await page.mouse.up()
   await expect(panel.getByText(/已选 [1-9]\d* 个细胞/)).toBeVisible()
   await panel.getByLabel('选择方向').selectOption({ label: '保留未选中项' })
@@ -125,7 +137,7 @@ test('reversible cell labels and lasso selection events', async ({ page }) => {
   )
   await panel.getByRole('button', { name: '保存标签', exact: true }).click()
   const body = (await saved).postDataJSON()
-  expect(body.ids).toContain('c3')
+  expect(body.ids).toContain(point!.id)
   expect(body.invert).toBe(true)
   await expect(panel.getByText('cell_keep_review · 已启用')).toBeVisible()
   await expect(page.locator('.project-heading')).toContainText(`${64 - body.ids.length} 细胞`)

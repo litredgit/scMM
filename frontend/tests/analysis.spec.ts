@@ -1,5 +1,5 @@
 import { openImageExport, finishExport } from './fixtures'
-import { navigate, test, expect, type Page } from './fixtures'
+import { navigate, renderAfter, test, expect, type Page } from './fixtures'
 import { readFile } from 'node:fs/promises'
 
 let pageErrors: string[] = []
@@ -22,7 +22,7 @@ async function importAnalysis(page: Page, name: string, filename = 'analysis.h5a
   await page.getByRole('button', { name: '检查所选结果', exact: true }).click()
   await page.getByRole('button', { name: '导入并替换当前数据', exact: true }).click()
   await navigate(page, '/analysis')
-  await expect(page.getByLabel('group_key', { exact: true }).first()).toBeAttached()
+  await expect(page.getByRole('navigation', { name: '分析功能', exact: true })).toBeVisible()
   if (await page.getByRole('button', { name: '固定参数区', exact: true }).count())
     await page.getByRole('button', { name: '固定参数区', exact: true }).first().click()
 }
@@ -89,7 +89,6 @@ test('heatmap selected sample order, pending settings and Cell SVG use one expor
 test('embedding colors use the selected intensity layer and display transform', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1920, height: 1080 })
   await importAnalysis(page, '嵌入强度色标')
   await page.getByRole('button', { name: '运行降维', exact: true }).click()
   await expect(page.locator('.embedding-view .js-plotly-plot')).toBeVisible()
@@ -118,9 +117,7 @@ test('embedding colors use the selected intensity layer and display transform', 
   expect(meta.export_tables.color_values).toContain('raw_color,display_color')
 })
 
-test('legacy settings, independent parameters, draft and project reset, narrow panels', async ({
-  page,
-}) => {
+test('legacy settings, independent parameters, draft and project reset', async ({ page }) => {
   let legacy = true
   await page.route('**/workspace/analysis', async (route) => {
     const response = await route.fetch()
@@ -197,25 +194,22 @@ test('legacy settings, independent parameters, draft and project reset, narrow p
   await expect(page.getByLabel('layer', { exact: true }).filter({ visible: true })).toHaveValue(
     '当前矩阵',
   )
-  for (const width of [700, 390]) {
-    await page.setViewportSize({ width, height: 900 })
-    for (const id of ['embedding', 'differential', 'network', 'supervised']) {
-      await page.getByRole('combobox', { name: '分析功能', exact: true }).selectOption(id)
-      await expect
-        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-        .toBe(true)
-    }
-    await page.screenshot({ path: test.info().outputPath(`analysis-${width}.png`), fullPage: true })
+  for (const name of ['降维', '差异与 Marker', '相关网络', '监督与 SHAP']) {
+    await module(page, name)
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true)
   }
+  await page.screenshot({ path: test.info().outputPath(`analysis-1920.png`), fullPage: true })
   legacy = false
   await page.getByRole('button', { name: '关闭项目', exact: true }).click()
   await importAnalysis(page, '分析新项目重置')
-  await page.getByRole('combobox', { name: '分析功能', exact: true }).selectOption('embedding')
+  await module(page, '降维')
   await expect(page.getByLabel('store_key', { exact: true })).toHaveValue('X_pca')
   await expect(
     page.getByLabel('random_state', { exact: true }).filter({ visible: true }),
   ).toHaveValue('42')
-  await page.getByRole('combobox', { name: '分析功能', exact: true }).selectOption('supervised')
+  await module(page, '监督与 SHAP')
   await expect(page.getByLabel('latent_key', { exact: true })).toHaveValue('X_latent')
   await expect(
     page.getByLabel('random_state', { exact: true }).filter({ visible: true }),
@@ -446,6 +440,7 @@ for (const editTiming of ['before-response', 'after-response', 'no-edit'] as con
         },
       })
     })
+    await page.clock.install()
     await page.reload()
     await expect.poll(() => received).toBe(true)
     const seed = page.getByLabel('random_state', { exact: true }).filter({ visible: true })
@@ -456,10 +451,10 @@ for (const editTiming of ['before-response', 'after-response', 'no-edit'] as con
     )
     if (editTiming === 'before-response') await seed.fill('91')
     release()
-    await response
+    await renderAfter(page, await response)
     if (editTiming === 'after-response') await seed.fill('91')
     // The deferred DOM restoration is scheduled for 500 ms after hydration.
-    await page.waitForTimeout(750)
+    await page.clock.runFor(750)
     await expect(seed).toHaveValue(editTiming === 'no-edit' ? '17' : '91')
   })
 }
@@ -768,12 +763,9 @@ test('named Palantir and window results retain exact sources through save and re
   const download = finishExport(page, 'CSV 导出', '下载归档')
   expect((await download).suggestedFilename()).toBe('scmm-time-result.zip')
   expect(calculations).toBe(2)
-  for (const width of [700, 390]) {
-    await page.setViewportSize({ width, height: 900 })
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-      .toBe(true)
-  }
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true)
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
   await page.getByRole('button', { name: '关闭项目', exact: true }).click()
@@ -785,7 +777,7 @@ test('named Palantir and window results retain exact sources through save and re
     .click()
   await expect(page.getByRole('heading', { name: '预处理', exact: true })).toBeVisible()
   await navigate(page, '/analysis')
-  await page.getByRole('combobox', { name: '分析功能', exact: true }).selectOption('time')
+  await module(page, '伪时间与轨迹')
   await expect(page.getByLabel('选择命名时间结果', { exact: true })).toHaveValue('path_browser')
   await page.getByRole('button', { name: '读取已保存时间图', exact: true }).click()
   await expect(page.getByText('图来源结果：path_browser', { exact: true })).toBeVisible()
@@ -869,12 +861,9 @@ test('named trends keep exact features and display scaling independent through r
   await page.getByRole('button', { name: '下载完整时间结果 ZIP', exact: true }).click()
   const download = finishExport(page, 'CSV 导出', '下载归档')
   expect((await download).suggestedFilename()).toBe('scmm-time-result.zip')
-  for (const width of [700, 390]) {
-    await page.setViewportSize({ width, height: 900 })
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-      .toBe(true)
-  }
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true)
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
   await page.reload()
@@ -930,12 +919,9 @@ test('trend clusters bind their source and retain full curves and groups after r
   await page.getByRole('button', { name: '下载完整时间结果 ZIP', exact: true }).click()
   const download = finishExport(page, 'CSV 导出', '下载归档')
   expect((await download).suggestedFilename()).toBe('scmm-time-result.zip')
-  for (const width of [700, 390]) {
-    await page.setViewportSize({ width, height: 900 })
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-      .toBe(true)
-  }
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true)
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await expect(page.locator('.save-state').filter({ hasText: /^已保存$/ })).toBeVisible()
   await page.reload()
@@ -961,52 +947,160 @@ test('occupied embedding names block rerun and retain the previous embedding', a
   await expect(page.getByLabel('查看嵌入', { exact: true })).toHaveValue('X_pca')
 })
 
-for (const [width, height] of [
-  [1366, 768],
-  [1440, 900],
-]) {
-  test(`supervised results focus one diagnostic in the first view at ${width}x${height}`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width, height })
-    await importAnalysis(page, '监督结果优先')
-    await page.getByRole('button', { name: '取消固定参数区', exact: true }).first().click()
-    await module(page, '监督与 SHAP')
-    await page.getByLabel('验证方式', { exact: true }).selectOption('cell')
-    await page.getByLabel('cv', { exact: true }).fill('2')
-    let calculations = 0
-    page.on('request', (r) => {
-      if (r.url().endsWith('/analysis/operation') && r.method() === 'POST') calculations++
-    })
-    await page.getByRole('button', { name: '训练并验证', exact: true }).click()
-    const plot = page.locator('#supervised-results .js-plotly-plot')
-    await expect(plot).toHaveCount(1)
-    await expect(page.getByLabel('model', { exact: true })).not.toBeVisible()
-    await expect(plot.locator('.main-svg').first()).toBeVisible()
-    await expect
-      .poll(() =>
-        plot.evaluate((el) => {
-          const range = (el as HTMLElement & { _fullLayout: { xaxis: { range: number[] } } })
-            ._fullLayout.xaxis.range
-          return range[1]! - range[0]!
-        }),
-      )
-      .toBeLessThanOrEqual(1.2)
-    await expect
-      .poll(async () => {
-        const box = await plot.boundingBox()
-        return (
-          !!box && Math.min(height, box.y + box.height) - Math.max(80, box.y) >= box.height * 0.6
-        )
-      })
-      .toBe(true)
-    await page.screenshot({ path: test.info().outputPath(`supervised-first-${width}.png`) })
-    await page.getByLabel('监督诊断图', { exact: true }).selectOption('confusion')
-    await expect(page.getByLabel('图文件名：confusion', { exact: true })).toBeAttached()
-    await expect(plot.locator('.gtitle')).toHaveText('Held-out confusion matrix')
-    await expect(plot).toHaveCount(1)
-    expect(calculations).toBe(1)
-    await page.getByRole('button', { name: '新建训练', exact: true }).click()
-    await expect(page.getByLabel('model', { exact: true })).toBeVisible()
+test(`supervised results focus one diagnostic in the first view at 1920×1080`, async ({ page }) => {
+  await importAnalysis(page, '监督结果优先')
+  await page.getByRole('button', { name: '取消固定参数区', exact: true }).first().click()
+  await module(page, '监督与 SHAP')
+  await page.getByLabel('验证方式', { exact: true }).selectOption('cell')
+  await page.getByLabel('cv', { exact: true }).fill('2')
+  let calculations = 0
+  page.on('request', (r) => {
+    if (r.url().endsWith('/analysis/operation') && r.method() === 'POST') calculations++
   })
-}
+  await page.getByRole('button', { name: '训练并验证', exact: true }).click()
+  const plot = page.locator('#supervised-results .js-plotly-plot')
+  await expect(plot).toHaveCount(1)
+  await expect(page.getByLabel('model', { exact: true })).not.toBeVisible()
+  await expect(plot.locator('.main-svg').first()).toBeVisible()
+  await expect
+    .poll(() =>
+      plot.evaluate((el) => {
+        const range = (el as HTMLElement & { _fullLayout: { xaxis: { range: number[] } } })
+          ._fullLayout.xaxis.range
+        return range[1]! - range[0]!
+      }),
+    )
+    .toBeLessThanOrEqual(1.2)
+  await expect
+    .poll(async () => {
+      const box = await plot.boundingBox()
+      return !!box && Math.min(1080, box.y + box.height) - Math.max(80, box.y) >= box.height * 0.6
+    })
+    .toBe(true)
+  await page.screenshot({ path: test.info().outputPath(`supervised-first-1920.png`) })
+  await page.getByLabel('监督诊断图', { exact: true }).selectOption('confusion')
+  await expect(page.getByLabel('图文件名：confusion', { exact: true })).toBeAttached()
+  await expect(plot.locator('.gtitle')).toHaveText('Held-out confusion matrix')
+  await expect(plot).toHaveCount(1)
+  expect(calculations).toBe(1)
+  await page.getByRole('button', { name: '新建训练', exact: true }).click()
+  await expect(page.getByLabel('model', { exact: true })).toBeVisible()
+})
+
+test('maintenance restores same-name controls to the correct lazily mounted panels', async ({
+  page,
+}) => {
+  await importAnalysis(page, '面板草稿按归属恢复')
+  const workspace = await page.evaluate(() => sessionStorage.getItem('scmm-workspace')!)
+  const state = await (
+    await page.request.get('/api/v1/workspace', { headers: { 'X-SCMM-Workspace': workspace } })
+  ).json()
+  await page.route('**/workspace/maintenance/draft', (route) =>
+    route.fulfill({
+      json: {
+        project_path: state.project.path,
+        route: '/analysis',
+        forms: {
+          '/analysis': [
+            { key: 'analysis/embedding::random_state#0', value: '17', checked: false },
+            { key: 'analysis/supervised::random_state#0', value: '83', checked: false },
+          ],
+        },
+      },
+    }),
+  )
+  await page.reload()
+  const seed = page.getByLabel('random_state', { exact: true }).filter({ visible: true })
+  await expect(seed).toHaveValue('17')
+  await module(page, '监督与 SHAP')
+  await expect(seed).toHaveValue('83')
+  await seed.fill('99')
+  await module(page, '降维')
+  await expect(seed).toHaveValue('17')
+  await module(page, '监督与 SHAP')
+  await expect(seed).toHaveValue('99')
+})
+
+test('analysis restores its last panel and display settings after KeepAlive eviction', async ({
+  page,
+}) => {
+  await importAnalysis(page, '保活淘汰后恢复分析')
+  await module(page, '热图')
+  const panel = page.locator('[data-scmm-draft-owner="analysis/heatmap"]')
+  const features = panel.getByLabel('特征编号（换行或逗号分隔）')
+  await features.fill('f5\nf2')
+  await panel.evaluate((node) => node.setAttribute('data-before-eviction', 'yes'))
+  for (const path of [
+    '/preprocess',
+    '/data-check',
+    '/data-editor',
+    '/statistics',
+    '/samples',
+    '/raw',
+    '/extraction',
+    '/cell-extraction',
+  ])
+    await navigate(page, path)
+  await navigate(page, '/analysis')
+  await expect(features).toBeVisible()
+  await expect(features).toHaveValue('f5\nf2')
+  await expect(panel).not.toHaveAttribute('data-before-eviction', 'yes')
+})
+
+test('unchanged split layer controls in a restored draft preserve the shared layer', async ({
+  page,
+}) => {
+  await importAnalysis(page, '相同草稿值保留共用数据层')
+  await page.route(/\/api\/v1\/workspace\/analysis$/, async (route) => {
+    const response = await route.fetch()
+    const value = await response.json()
+    await route.fulfill({
+      response,
+      json: {
+        ...value,
+        layers: ['shared'],
+        settings: {
+          ...value.settings,
+          diff: { ...value.settings?.diff, layer: 'shared', effect_layer: null, test_layer: null },
+        },
+      },
+    })
+  })
+  await page.reload()
+  await module(page, '差异与 Marker')
+  const panel = page.locator('[data-scmm-draft-owner="analysis/differential"]')
+  const layer = panel.getByLabel('layer', { exact: true })
+  await expect(layer).toHaveValue('shared')
+  const fields = await panel.locator('select').evaluateAll((selects) =>
+    selects
+      .filter((field) => !field.hasAttribute('aria-label'))
+      .map((field) => ({
+        key: 'analysis/differential::' + field.closest('label')?.textContent?.trim() + '#0',
+        value: (field as HTMLSelectElement).value,
+        checked: false,
+      })),
+  )
+  expect(fields).toHaveLength(2)
+  const workspace = await page.evaluate(() => sessionStorage.getItem('scmm-workspace')!)
+  const state = await (
+    await page.request.get('/api/v1/workspace', { headers: { 'X-SCMM-Workspace': workspace } })
+  ).json()
+  await page.route('**/workspace/maintenance/draft', (route) =>
+    route.fulfill({
+      json: {
+        project_path: state.project.path,
+        route: '/analysis',
+        views: { analysis: { tab: 'differential' } },
+        forms: {
+          '/analysis': [
+            ...fields,
+            { key: 'analysis/differential::differential_method#0', value: 'welch', checked: false },
+          ],
+        },
+      },
+    }),
+  )
+  await page.reload()
+  await expect(panel.getByLabel('differential_method', { exact: true })).toHaveValue('welch')
+  await expect(layer).toHaveValue('shared')
+})

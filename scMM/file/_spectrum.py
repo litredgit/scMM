@@ -30,6 +30,9 @@ def orbitrap_fwhm_at_mz(mz: float, resolution_200: float) -> float:
     return mz / orbitrap_resolution_at_mz(mz, resolution_200)
 
 
+ORBITRAP_GRID_VERSION = "orbitrap_integrated_fwhm_v2"
+
+
 def build_orbitrap_grid(
     mz_range=(100.0, 1000.0),
     resolution_200: float = 70000.0,
@@ -37,26 +40,24 @@ def build_orbitrap_grid(
 ) -> np.ndarray:
     """Build a variable-width grid at a fixed number of points per FWHM."""
     mz_min, mz_max = map(float, mz_range)
+    if not np.isfinite([mz_min, mz_max, resolution_200, points_per_fwhm]).all():
+        raise ValueError("Orbitrap grid bounds and settings must be finite.")
     if mz_min <= 0 or mz_max <= mz_min:
         raise ValueError("Invalid mz_range.")
     if resolution_200 <= 0:
         raise ValueError("resolution_200 must be positive.")
     if points_per_fwhm <= 0:
         raise ValueError("points_per_fwhm must be positive.")
-    grid = [mz_min]
-    current_mz = mz_min
-    while current_mz < mz_max:
-        spacing = orbitrap_fwhm_at_mz(current_mz, resolution_200) / points_per_fwhm
-        if spacing <= 0 or not np.isfinite(spacing):
-            raise ValueError("Invalid grid spacing encountered.")
-        current_mz += spacing
-        grid.append(current_mz)
-    result = np.asarray(grid, dtype=np.float64)
-    if result[-1] > mz_max:
-        result[-1] = mz_max
-    elif result[-1] < mz_max:
-        result = np.append(result, mz_max)
-    return result
+    # d(m/z)/di is proportional to (m/z)^(3/2), so the inverse square
+    # root of m/z is uniformly spaced on the integrated grid.
+    inverse_start, inverse_end = 1 / np.sqrt(mz_min), 1 / np.sqrt(mz_max)
+    step = 1 / (2 * resolution_200 * points_per_fwhm * np.sqrt(200.0))
+    if not np.isfinite(step) or step <= 0 or inverse_start - step >= inverse_start:
+        raise ValueError("Invalid grid spacing encountered.")
+    count = max(1, int(np.ceil((inverse_start - inverse_end) / step)))
+    interior = (inverse_start - step * np.arange(1, count, dtype=float)) ** -2
+    interior = interior[(interior > mz_min) & (interior < mz_max)]
+    return np.r_[mz_min, interior, mz_max]
 
 
 def _prepare_sorted_unique_peaks(
@@ -175,6 +176,7 @@ def _summed_spectrum(
         "mz_min": float(mz_min),
         "mz_max": float(mz_max),
         "grid_type": "orbitrap_variable_fwhm",
+        "grid_algorithm": ORBITRAP_GRID_VERSION,
         "interpolation": "linear",
         "normalized": int(bool(normalized)),
     }

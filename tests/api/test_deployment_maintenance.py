@@ -344,3 +344,149 @@ def test_oversized_temporary_state_is_skipped_without_blocking(tmp_path, monkeyp
     assert not report["preserved"]
     assert report["failed"][0]["id"] == identity
     assert not build().state.workspaces._workspaces
+
+
+def test_standalone_page_with_other_owner_and_history_survive_collection(tmp_path, monkeypatch):
+    monkeypatch.setattr(policy, "GRACE_SECONDS", 0)
+    build, _, credential = closure_app(tmp_path)
+    app = build()
+    calls = []
+    app.state.ai_config = SimpleNamespace(
+        save_history=lambda user, context, revision, payload: (
+            calls.append((user, context, revision)) or {}
+        ),
+    )
+    with TestClient(app, headers={"X-SCMM-Client": "web"}) as client:
+        login_client(client, credential)
+        token = actor.set({"id": "other-owner"})
+        try:
+            app.state.workspaces.create()
+        finally:
+            actor.reset(token)
+        # The authenticated page owner has no workspace.
+        page = stale_page(client, app)
+        prepared = client.post("/api/v1/admin/maintenance/deployment/prepare").json()
+        client.headers["X-SCMM-Page-ID"] = page["id"]
+        draft = {"route": "/parameters", "forms": {}}
+        client.put(
+            "/api/v1/maintenance/draft",
+            json={"tab_id": "standalone", "nonce": prepared["request"]["id"], "state": draft},
+        ).raise_for_status()
+        body = {"context": "account", "revision": 0, "messages": []}
+        client.put("/api/v1/ai/history", json=body).raise_for_status()
+        assert len(calls) == 1
+        client.post("/api/v1/admin/maintenance/deployment/checkpoint").raise_for_status()
+        assert len(wait_ready(app.state.maintenance)["preserved"]) == 2
+        assert client.put("/api/v1/ai/history", json=body).status_code == 503
+        cookies, headers = dict(client.cookies), dict(client.headers)
+    with TestClient(build(), cookies=cookies, headers=headers) as client:
+        assert client.get("/api/v1/maintenance/draft?tab_id=standalone").json() == draft
+        assert client.get("/api/v1/maintenance/draft?tab_id=unrelated").json() == {}
+
+
+def test_standalone_drafts_bound_tab_length_and_allow_existing_updates(tmp_path):
+    build, _, credential = closure_app(tmp_path)
+    app = build()
+    with TestClient(app, headers={"X-SCMM-Client": "web"}) as client:
+        login_client(client, credential)
+        page = stale_page(client, app)
+        client.headers["X-SCMM-Page-ID"] = page["id"]
+        prepared = client.post("/api/v1/admin/maintenance/prepare").json()
+        body = {"nonce": prepared["request"]["id"], "state": {"route": "/parameters"}}
+        route = "/api/v1/maintenance/draft"
+        assert client.put(route, json={**body, "tab_id": "x" * 65}).status_code == 422
+        client.put(route, json={**body, "tab_id": "x" * 64}).raise_for_status()
+        for index in range(15):
+            client.put(route, json={**body, "tab_id": str(index)}).raise_for_status()
+        assert client.put(route, json={**body, "tab_id": "overflow"}).status_code == 400
+        newer = {"route": "/raw"}
+        client.put(route, json={**body, "tab_id": "0", "state": newer}).raise_for_status()
+        assert client.get(route, params={"tab_id": "0"}).json() == newer
+        assert len(app.state.workspaces.maintenance_pages) == 16
+
+
+def test_unexpected_snapshot_error_finishes_without_waiting_for_deadline(tmp_path, monkeypatch):
+    monkeypatch.setattr(policy, "GRACE_SECONDS", 0)
+    build, _, _ = closure_app(tmp_path)
+    app = build()
+
+    def fail(*_args):
+        raise OSError("unexpected inventory failure")
+
+    monkeypatch.setattr(policy, "_encode_snapshots", fail)
+    service = app.state.maintenance
+    policy.prepare(service)
+    policy.checkpoint(service)
+    report = wait_ready(service)
+    assert report["failed"] == [{"reason": "snapshot_failed"}]
+    assert not report["timed_out"]
+    assert (service.recovery.root / "current.json").is_file()
+
+
+def test_cancelling_failed_ion_shutdown_reopens_admission(tmp_path, monkeypatch):
+    from scMM.application.ion_jobs import IonJobs
+
+    monkeypatch.setattr(policy, "GRACE_SECONDS", 0)
+    build, _, _ = closure_app(tmp_path)
+    app = build()
+    jobs = IonJobs(tmp_path / "ion-jobs")
+    app.state.workspaces.ion_jobs = jobs
+
+    def fail_stop():
+        with jobs.lock:
+            jobs.closed = True
+        raise ValueError("worker is still running")
+
+    monkeypatch.setattr(jobs, "shutdown", fail_stop)
+    service = app.state.maintenance
+    policy.prepare(service)
+    with pytest.raises(ValueError, match="worker is still running"):
+        policy.checkpoint(service)
+    assert service.deployment["phase"] == "collecting"
+    service.cancel()
+    assert not jobs.closed and service.request is None
+
+
+def test_interrupted_ion_jobs_keep_their_state_contract(tmp_path, monkeypatch):
+    root = tmp_path / "projects"
+    job = root / ".ion-jobs/run/job.json"
+    job.parent.mkdir(parents=True)
+    job.write_text(json.dumps({"id": "run", "status": "running", "collectible": True}))
+    monkeypatch.setattr("scMM.application.deployment_client.owned_workers", lambda _: [])
+    assert stop_workers(SimpleNamespace(values={"project_root": str(root)})) == [str(job)]
+    state = json.loads(job.read_text(encoding="utf-8"))
+    assert state["status"] == "interrupted" and not state["collectible"]
+    assert state["finished_at"] > 0 and state["reason"]
+    assert "message" not in state
+
+
+def test_expired_preview_reaper_releases_manager_lock_before_stopping(tmp_path, monkeypatch):
+    build, _, _ = closure_app(tmp_path)
+    manager = build().state.workspaces
+    identity = manager.create()["workspace_id"]
+    workspace = manager._workspaces[identity]
+    workspace.touched -= manager.idle_seconds + 1
+    job = {"id": "isolated"}
+    workspace.preview_job = job
+    started, release = threading.Event(), threading.Event()
+    stopped = []
+
+    def stop(current):
+        started.set()
+        if release.wait(5):
+            stopped.append(current)
+
+    monkeypatch.setattr("scMM.application.cell_preview.stop_preview_job", stop)
+    cleanup = threading.Thread(target=manager._prune)
+    cleanup.start()
+    try:
+        assert started.wait(5)
+        assert manager._lock.acquire(timeout=0.5)
+        try:
+            assert identity not in manager._workspaces
+        finally:
+            manager._lock.release()
+    finally:
+        release.set()
+        cleanup.join(5)
+    assert stopped == [job]

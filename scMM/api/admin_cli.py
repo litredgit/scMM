@@ -99,6 +99,10 @@ def main(argv=None):
             values[key] = str(Path(values[key]).expanduser().absolute())
         for key, directory in values["storage"].items():
             StorageRoot(key, Path(directory))
+        auth_parent = outside_repository(values["auth_db"]).parent
+        auth_parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if auth_parent.stat().st_mode & 0o077:
+            parser.error("认证数据库的父目录权限必须为 700")
         for directory in [
             values["project_root"],
             *values["output"].values(),

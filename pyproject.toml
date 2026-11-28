@@ -24,14 +24,13 @@ dependencies = [
     "pandas>=2.1,<3",
     "pygoslin>=2.2.5,<3",
     "pyopenms>=3.1,<3.4",
-    "scikit-learn>=1.4,<1.8",
+    "scikit-learn>=1.7,<1.8",
     "scipy>=1.11,<1.15",
     "tqdm>=4.66",
 ]
 
 [project.optional-dependencies]
 supervised = [
-    "scikit-learn>=1.7,<1.8",
     "imbalanced-learn>=0.14,<0.15",
     "shap>=0.45,<0.49",
     "skops>=0.14,<0.17",
@@ -60,7 +59,7 @@ web = [
     "starlette>=0.46,<1",
     "umap-learn>=0.5",
     "uvicorn>=0.30,<1",
-    "svglib==1.5.1",
+    "svglib>=1.5.1,<1.6",
     "reportlab>=4,<6",
     "defusedxml>=0.7,<1",
 ]
@@ -82,13 +81,8 @@ scmm-admin = "scMM.api.admin_cli:main"
 "scMM" = ["resources/lipid_rules/*.json", "resources/lipid_databases/*.json"]
 "scMM.api" = ["static/index.html", "static/assets/*"]
 
-[tool.setuptools.data-files]
-"share/scmm/guides" = [
-    "docs/projects-and-data.md",
-    "docs/extraction.md",
-    "docs/annotation.md",
-    "docs/statistics.md",
-]
+[tool.setuptools.cmdclass]
+build_py = "tools.scmm_build.BuildWorkbench"
 
 [tool.setuptools.packages.find]
 where = ["."]

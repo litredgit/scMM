@@ -1,4 +1,4 @@
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, shallowRef } from 'vue'
 import { request } from '../../../api/client'
 import { useReadScope } from '../../../api/readScope'
 import { useViewState } from '../../../api/viewState'
@@ -27,8 +27,8 @@ type ResultView = {
 export function useTimeAnalysis() {
   const { store, timeAnalysis: form, refreshAnalysis, selectedFeatures } = useAnalysisContext()
   const info = ref<TimeInfo>()
-  const result = ref<ResultView>()
-  const figure = ref<Figure>()
+  const result = shallowRef<ResultView>()
+  const figure = shallowRef<Figure>()
   const search = ref('')
   const readError = ref('')
   let generation = 0
@@ -237,7 +237,7 @@ export function useTimeAnalysis() {
     const key = form.selected_result
     await store.download('time_result', 'scmm-time-result.zip', key)
   }
-  useViewState('time_analysis', { figure, result, search })
+  useViewState('time_analysis', { search })
   return {
     store,
     selectedFeatures,

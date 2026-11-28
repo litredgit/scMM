@@ -111,11 +111,12 @@ def figure_check(body: s.FigureIdentity, request: Request, manager: Service):
 
 
 @router.post("/workspace/figures/data")
-def figure_data(body: s.FigureData, request: Request, manager: Service):
+def figure_data(body: s.FigureData, manager: Service, identity: Identity):
+    manager.current(identity)
     _check_figure_identity(
         body.figure.get("layout", {}).get("meta") or {},
         manager,
-        request.headers.get("x-scmm-workspace", ""),
+        identity,
     )
     from scMM.plot.export import data_archive
 
@@ -123,8 +124,9 @@ def figure_data(body: s.FigureData, request: Request, manager: Service):
 
 
 @router.post("/workspace/figures/pdf")
-def figure_pdf(body: s.FigurePDF, request: Request, manager: Service):
-    _check_figure_identity(body.identity, manager, request.headers.get("x-scmm-workspace", ""))
+def figure_pdf(body: s.FigurePDF, manager: Service, identity: Identity):
+    manager.current(identity)
+    _check_figure_identity(body.identity, manager, identity)
     from scMM.plot.export import publication_pdf
 
     return Response(
@@ -229,8 +231,11 @@ def result(
     identity: Identity,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=200, ge=1, le=1000),
+    row_filter: Literal[
+        "all", "finite_effect", "single_zero", "both_zero", "not_estimable"
+    ] = "all",
 ):
-    return manager.result_view(identity, name, offset, limit)
+    return manager.result_view(identity, name, offset, limit, row_filter=row_filter)
 
 
 @router.post("/workspace/analysis/plot")

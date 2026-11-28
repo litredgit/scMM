@@ -169,7 +169,7 @@ const questions = [
                 </button>
               </div>
             </div>
-            <article v-for="(turn, i) in messages" :key="i" :class="turn.role">
+            <article v-for="(turn, i) in messages" :key="turn.id" :class="turn.role">
               <strong>{{ turn.role === 'user' ? '你' : 'AI' }}</strong>
               <AssistantMarkdown
                 v-if="turn.role === 'assistant' && turn.content"
@@ -208,6 +208,7 @@ const questions = [
           :disabled="busy || !!blocked"
           aria-describedby="ai-message-privacy"
           placeholder="询问步骤、结果含义或下一步建议"
+          @keydown.ctrl.enter.prevent="ask()"
         />
         <div class="ai-actions">
           <button

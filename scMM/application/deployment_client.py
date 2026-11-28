@@ -15,6 +15,7 @@ import psutil
 
 from .auth import AuthStore, digest
 from .deployment_maintenance import GRACE_SECONDS, SNAPSHOT_SECONDS
+from .monitor_probe import TASK_PATHS, owned_by_roots, worker_kind
 from .projects import write_json
 from .server_config import load_server_config
 
@@ -68,12 +69,7 @@ def worker_states(config):
     ]
     states = []
     for root in roots:
-        for pattern in (
-            "*/processing/*/state.json",
-            "*/processing/preview-jobs/*/state.json",
-            "*/state.json",
-            "*/tasks/*/state.json",
-        ):
+        for pattern in TASK_PATHS:
             for path in root.glob(pattern):
                 if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
                     raise RuntimeError("Unsafe task metadata path")
@@ -81,6 +77,24 @@ def worker_states(config):
                 if state.get("status") in {"queued", "running"}:
                     states.append(path)
     return list(dict.fromkeys(states))
+
+
+def verify_strict_checkpoint(config, checkpoint):
+    """Confirm that the running service still owns the requested strict snapshot."""
+    with local_admin(config) as headers:
+        status = request(config.values["port"], headers, "/admin/maintenance/status")
+    root = config.path.parent / (config.path.stem + ".recovery")
+    pointer = root / "current.json"
+    if (
+        status.get("deployment") is not None
+        or status.get("verified_checkpoint") is not True
+        or (status.get("completed") or {}).get("id") != checkpoint
+        or not pointer.exists()
+        or json.loads(pointer.read_text()) != {"id": checkpoint}
+        or worker_states(config)
+        or owned_workers(config)
+    ):
+        raise RuntimeError("严格维护暂存已失效或仍有任务运行，请重新收集并验证会话。")
 
 
 def owned_workers(config):
@@ -94,16 +108,14 @@ def owned_workers(config):
     ).resolve()
     for process in psutil.process_iter(["cmdline"]):
         args = process.info["cmdline"] or []
-        if not any(
-            m in args for m in ("scMM.application.worker", "scMM.application.project_batch")
-        ):
+        if worker_kind(args) is None:
             continue
-        paths = [Path(a).resolve() for a in args if a.endswith(("state.json", "request.json"))]
         uses_repository = any(a.startswith(str(repository) + "/") for a in args)
         with suppress(psutil.NoSuchProcess, psutil.AccessDenied):
             uses_repository = uses_repository or Path(process.cwd()).is_relative_to(repository)
-        if uses_repository or any(p.is_relative_to(root) for p in paths for root in roots):
-            workers.append(process)
+        with suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+            if uses_repository or owned_by_roots(process, args, roots):
+                workers.append(process)
     return workers
 
 
@@ -129,7 +141,13 @@ def stop_workers(config):
     for path in worker_states(config):
         state = json.loads(path.read_text(encoding="utf-8"))
         message = "服务部署维护中断；已完成样本保留，未完成结果不可纳入。"
-        if "task_id" in state:
+        if state.get("status") not in {"queued", "running"}:
+            continue
+        if path.name == "job.json":
+            state.update(
+                status="interrupted", collectible=False, reason=message, finished_at=time.time()
+            )
+        elif "task_id" in state:
             from .tasks import utc_now
 
             state.update(
@@ -206,6 +224,8 @@ def prepare_service(config, port):
                 report = state["deployment"]
                 if report["phase"] == "ready":
                     break
+                if report["phase"] == "failed":
+                    raise RuntimeError("维护暂存结果无法发布，服务尚未更新。")
                 if time.monotonic() > deadline:
                     raise RuntimeError("维护控制接口超时；尚未确认正式写入已安全结束。")
                 time.sleep(1)

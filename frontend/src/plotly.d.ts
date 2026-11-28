@@ -1,4 +1,4 @@
-declare module 'plotly.js-dist-min' {
+declare module 'plotly.js-strict-dist-min' {
   const Plotly: {
     react: (
       element: HTMLElement,

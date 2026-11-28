@@ -7,12 +7,12 @@ from uuid import uuid4
 
 import pandas as pd
 
-from . import processed_merge
-from .merge_metadata import mapping_rows
-from .merge_sources import load_inputs, recheck
-from .project_batch import batches, read_batch
-from .web_support import table_view
-from .workbench import AnalysisWorkspace
+from .. import processed_merge
+from ..merge_metadata import mapping_rows
+from ..merge_sources import load_inputs, recheck
+from ..project_batch import batches, read_batch
+from ..web_support import table_view
+from ..workbench import AnalysisWorkspace
 
 
 def _idle(workspace):
@@ -25,15 +25,18 @@ def _idle(workspace):
 
 
 class MergeWorkflow:
+    def __init__(self, workspace_service):
+        self.workspace_service = workspace_service
+
     def merge_inspect(self, identity, revision, specification):
-        with self.access(identity, operation="merge_inspect") as workspace:
+        with self.workspace_service.access(identity, operation="merge_inspect") as workspace:
             workspace.check(revision)
             project = workspace.require_project()
-            inputs = load_inputs(self, project, [specification])
+            inputs = load_inputs(self.workspace_service, project, [specification])
             entry = inputs[0]
             data = entry["data"]
             return {
-                "workspace": self.view(workspace),
+                "workspace": self.workspace_service.view(workspace),
                 "value": {
                     "cells": data.n_obs,
                     "features": data.n_vars,
@@ -49,15 +52,15 @@ class MergeWorkflow:
             }
 
     def merge_preview(self, identity, revision, options):
-        with self.access(identity, operation="merge_preview") as workspace:
+        with self.workspace_service.access(identity, operation="merge_preview") as workspace:
             workspace.check(revision)
             project = _idle(workspace)
             workspace.merge_plan = None
-            inputs = load_inputs(self, project, options["sources"])
+            inputs = load_inputs(self.workspace_service, project, options["sources"])
             roles = processed_merge.prepare(inputs, options)
             conflicts = sum(value["ambiguous"] for value in roles.values())
             permitted = not conflicts or options["ambiguity"] == "legacy"
-            recheck(self, project, inputs)
+            recheck(self.workspace_service, project, inputs)
             token = uuid4().hex
             workspace.merge_plan = {
                 "token": token,
@@ -69,7 +72,7 @@ class MergeWorkflow:
                 "identities": [entry["identity"] for entry in inputs],
             }
             return {
-                "workspace": self.view(workspace),
+                "workspace": self.workspace_service.view(workspace),
                 "value": {
                     "token": token,
                     "can_apply": permitted,
@@ -101,15 +104,15 @@ class MergeWorkflow:
             }
 
     def merge_info(self, identity):
-        from .merge_audit import merge_info
+        from ..merge_audit import merge_info
 
-        with self.access(identity) as workspace:
+        with self.workspace_service.access(identity) as workspace:
             return merge_info(workspace.require_project().workspace.data)
 
     def merge_preview_download(self, identity, token):
-        from .merge_audit import bundle
+        from ..merge_audit import bundle
 
-        with self.access(identity) as workspace:
+        with self.workspace_service.access(identity) as workspace:
             project = workspace.require_project()
             plan = workspace.merge_plan
             if (
@@ -120,11 +123,11 @@ class MergeWorkflow:
                 or plan["project_id"] != project.manifest["id"]
             ):
                 raise ValueError("预览已过期或不属于当前项目，请重新预览")
-            inputs = load_inputs(self, project, plan["options"]["sources"])
+            inputs = load_inputs(self.workspace_service, project, plan["options"]["sources"])
             if [entry["identity"] for entry in inputs] != plan["identities"]:
                 raise ValueError("输入已改变，请重新预览")
             roles = processed_merge.prepare(inputs, plan["options"])
-            recheck(self, project, inputs)
+            recheck(self.workspace_service, project, inputs)
             return bundle(
                 {
                     "scope": "read_only_merge_preview",
@@ -139,9 +142,9 @@ class MergeWorkflow:
             )
 
     def merge_apply(self, identity, revision, token):
-        from .web_projects import project_candidate
+        from ..web_projects import project_candidate
 
-        with self.access(identity, operation="merge_processed") as workspace:
+        with self.workspace_service.access(identity, operation="merge_processed") as workspace:
             workspace.check(revision)
             project = _idle(workspace)
             plan = workspace.merge_plan
@@ -154,7 +157,7 @@ class MergeWorkflow:
                 or plan["project_id"] != project.manifest["id"]
             ):
                 raise ValueError("合并预览已过期或不属于当前项目/修订，请重新预览")
-            inputs = load_inputs(self, project, plan["options"]["sources"])
+            inputs = load_inputs(self.workspace_service, project, plan["options"]["sources"])
             if [entry["identity"] for entry in inputs] != plan["identities"]:
                 raise ValueError("预览后输入已改变或替换，请重新预览，当前数据未修改")
             roles = processed_merge.prepare(inputs, plan["options"])
@@ -208,7 +211,7 @@ class MergeWorkflow:
                         "id": str(sample_id),
                         "name": str(rows["sample"].iloc[0]),
                         "path": "",
-                        "storage": self.storage.roots[0].label,
+                        "storage": self.workspace_service.storage.roots[0].label,
                         "parameters": None,
                         "result_only": True,
                         "metadata_unresolved": [
@@ -218,7 +221,7 @@ class MergeWorkflow:
                     }
                 )
             if candidate.ion_state is not None:
-                from .data_views import replace_measurement
+                from ..data_views import replace_measurement
 
                 replace_measurement(
                     candidate, state.data, source="processed_feature_merge", origin_kind="composite"
@@ -236,9 +239,9 @@ class MergeWorkflow:
             candidate.report_token = state.token
             candidate.dirty = True
             candidate.validate_samples()
-            recheck(self, project, inputs)
+            recheck(self.workspace_service, project, inputs)
             workspace.project = candidate
             workspace.discard_views()
             workspace.merge_plan = None
             workspace.revision += 1
-            return self.view(workspace)
+            return self.workspace_service.view(workspace)

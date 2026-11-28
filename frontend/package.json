@@ -8,25 +8,30 @@
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "typecheck": "vue-tsc --noEmit",
+    "typecheck": "node scripts/generate-results-types.mjs --check && vue-tsc --noEmit",
+    "generate:results": "node scripts/generate-results-types.mjs",
+    "generate:api": "node scripts/generate-api-types.mjs",
     "format:check": "prettier --check .",
     "build": "npm run typecheck && vite build",
+    "test:unit": "vitest run unit",
     "test:e2e": "playwright test"
   },
   "dependencies": {
     "dompurify": "3.5.0",
     "markdown-it": "15.0.3",
     "pinia": "3.0.4",
-    "plotly.js-dist-min": "4.1.2",
+    "plotly.js-strict-dist-min": "4.1.2",
     "vue": "3.5.43",
     "vue-router": "4.6.4"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",
     "@vitejs/plugin-vue": "6.0.10",
+    "openapi-typescript": "7.13.0",
     "prettier": "3.9.10",
     "typescript": "5.9.3",
     "vite": "7.3.7",
+    "vitest": "4.1.12",
     "vue-tsc": "3.3.13"
   }
 }

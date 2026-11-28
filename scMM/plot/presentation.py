@@ -23,7 +23,10 @@ def count_number(value):
 
 
 def probability_number(value):
-    number = float(value)
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "—"
     if not math.isfinite(number):
         return "—"
     return "0" if number == 0 else f"{number:.2e}"

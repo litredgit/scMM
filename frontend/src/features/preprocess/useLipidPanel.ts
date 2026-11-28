@@ -2,7 +2,7 @@ import { useLipidRules } from './useLipidRules'
 import { useViewState } from '../../api/viewState'
 import { useReadScope } from '../../api/readScope'
 import type { Figure } from '../../api/types'
-import { computed, onActivated, reactive, ref, watch, type Ref } from 'vue'
+import { computed, onActivated, reactive, ref, watch, type Ref, shallowRef } from 'vue'
 import { useWorkspace } from '../../stores/workspace'
 import { useAuth } from '../../stores/auth'
 import { workspaceBlob, saveBlob } from '../../api/workspaceDownload'
@@ -39,7 +39,7 @@ export function useLipidPanel(
     limit,
   )
   const results = ref<LipidResults>()
-  const isotopeFigure = ref<Figure>()
+  const isotopeFigure = shallowRef<Figure>()
   async function viewIsotope(id: string) {
     const result = await store.command<Figure>('/lipids/isotope-spectrum', {
       source: source.value,
@@ -447,7 +447,6 @@ export function useLipidPanel(
     syncRelated,
     offset,
     relationOffset,
-    isotopeFigure,
     candidateSort,
     candidateDescending,
     relationSort,
